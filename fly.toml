@@ -1,0 +1,48 @@
+# Fly.io config for "Explore Kingston" — alternative to Render.
+# Docs: https://fly.io/docs/reference/configuration/
+#
+# One-time setup before first deploy:
+#   1. fly launch --no-deploy            # or `fly apps create explore-kingston`
+#   2. fly volumes create data --size 1 --region sea
+#        ^ creates the persistent volume named "data" mounted below at /data.
+#          Pick a region near Kingston, WA (sea = Seattle).
+#   3. fly secrets set AUTH_SECRET="$(openssl rand -hex 32)" \
+#          WSDOT_API_KEY="..." NEXT_PUBLIC_GMAPS_EMBED_KEY="..."
+#        ^ AUTH_SECRET and WSDOT_API_KEY are runtime secrets.
+#          NOTE: NEXT_PUBLIC_GMAPS_EMBED_KEY is inlined at BUILD time, so also
+#          pass it to the build, e.g.:
+#            fly deploy --build-arg NEXT_PUBLIC_GMAPS_EMBED_KEY="..."
+#          (or bake it via a build secret) — a runtime-only secret will NOT
+#          reach the client bundle.
+#   4. fly deploy
+
+app = "explore-kingston" # placeholder — rename to your real Fly app name
+primary_region = "sea"   # Seattle; nearest Fly region to Kingston, WA
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  # Point all mutable state at the mounted volume (see [mounts]).
+  DATA_DIR = "/data"
+  PORT = "3000"
+
+# Persistent volume — created out-of-band with `fly volumes create data`.
+[mounts]
+  source = "data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 3000       # matches EXPOSE / PORT in the Dockerfile
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1   # keep one machine up so the disk-backed app is warm
+
+  # Route traffic only when /api/health reports the data dir is writable.
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "20s"
+    method = "GET"
+    path = "/api/health"

@@ -17,6 +17,7 @@
 
 import { appendFile, mkdir, readFile, unlink, writeFile } from "fs/promises";
 import path from "path";
+import { dataPath } from "./data-dir";
 import { hunts as seedHunts } from "@/lib/data/hunts";
 import type { Hunt, HuntStop } from "@/lib/types";
 
@@ -50,7 +51,7 @@ export interface HuntSubmission {
 // Paths & shared constants
 // ---------------------------------------------------------------------------
 
-const DATA_ROOT = path.join(process.cwd(), ".data", "hunts");
+const DATA_ROOT = dataPath("hunts");
 const CUSTOM_FILE = path.join(DATA_ROOT, "custom-hunts.json");
 const SUBMISSIONS_FILE = path.join(DATA_ROOT, "submissions.jsonl");
 

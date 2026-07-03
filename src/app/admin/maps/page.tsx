@@ -10,7 +10,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getMapFeatures, getMapViews } from "@/lib/stores/map-store";
-import { PageHeader, Section } from "@/components/ui";
+import { PageHeader } from "@/components/ui";
 import { MapBuilder } from "./editor";
 
 export const dynamic = "force-dynamic";
@@ -34,9 +34,11 @@ export default async function AdminMapsPage() {
         title="Map builder"
         intro="Build named map views (Food & Drink, Trails, Explore…) and draw the things that go on them — markers with icons and photos, colored lines, trails, and areas. Assign each feature to one or more views, then publish."
       />
-      <Section>
+      {/* Wider than the standard Section: the map canvas is the dominant
+          element of the builder, so give it the room a laptop screen has. */}
+      <section className="mx-auto w-full max-w-[1500px] px-4 py-8">
         <MapBuilder initialViews={views} initialFeatures={features} />
-      </Section>
+      </section>
     </>
   );
 }

@@ -2,8 +2,13 @@
 
 // The Map Builder (laptop-first) — the Chamber's map CMS.
 //
-// Three columns: VIEWS (left), the leaflet+geoman CANVAS (center), and the
-// selected-FEATURE form (right).
+// Layout: a compact VIEWS strip (pills + "New view" + features dropdown) sits
+// above a dominant leaflet+geoman CANVAS. The view edit form opens as a
+// dismissible overlay on the map's left edge; the selected-FEATURE form is a
+// floating drawer on the map's right edge (≥lg) or a plain block under the
+// map (<lg). The active view's built-in source layers (restaurants, ATMs,
+// parking zones, street overlay) render as muted, non-interactive CONTEXT so
+// the admin can draw against them.
 //
 // Leaflet touches `window` at module scope, so it is imported dynamically
 // inside useEffect (same pattern as components/town-map.tsx and the parking
@@ -15,7 +20,13 @@
 // Geometry read-back on save: the currently selected feature's live leaflet
 // layer is queried directly — marker.getLatLng() for markers, and
 // polyline/polygon.getLatLngs() (walked to a flat ring) for lines/trails/areas
-// — so any geoman vertex drag or marker move is captured at Save time.
+// — so any geoman vertex drag, whole-shape drag, or marker move is captured at
+// Save time (geoman's drag mixin mutates the layer's latlngs in place).
+//
+// Moving vs reshaping: geoman can't run vertex editing and whole-layer drag on
+// the same shape at once (enableLayerDrag() disables edit mode), so selected
+// lines/areas get an explicit Reshape ⟷ Move toggle. Markers are simply
+// draggable while selected (pm.enable() on a marker enables layer drag).
 
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 
@@ -24,6 +35,7 @@ import { useRouter } from "next/navigation";
 import type {
   LatLng,
   Layer,
+  LayerGroup,
   Map as LeafletMap,
   Marker,
   Polygon,
@@ -35,6 +47,7 @@ import {
   type FeatureKind,
   type MapFeature,
   type MapView,
+  type ResolvedMapView,
 } from "@/lib/map/types";
 import { Badge } from "@/components/ui";
 
@@ -43,6 +56,14 @@ import { Badge } from "@/components/ui";
 /* ------------------------------------------------------------------ */
 
 const KINGSTON_CENTER: [number, number] = [47.7985, -122.4975];
+
+// The canvas is the dominant element of the builder.
+const MAP_HEIGHT = "clamp(560px, 72vh, 900px)";
+
+// Leaflet pane for muted built-in context layers: below the overlay pane
+// (z 400) so drawn features always sit on top, and pointer-events none so
+// clicks and geoman draws pass straight through to the canvas.
+const CONTEXT_PANE = "builtin-context";
 
 const INPUT =
   "w-full rounded-lg border border-sand bg-white px-3 py-2 text-sm text-ink focus:border-tide focus:outline-none";
@@ -167,6 +188,86 @@ function shapeStyle(f: { kind: FeatureKind; color?: string }, selected: boolean)
 }
 
 /* ------------------------------------------------------------------ */
+/* Built-in context layer styling (kept in sync with feature-map.tsx)  */
+/* ------------------------------------------------------------------ */
+
+const PARKING_RULE_COLORS: Record<string, string> = {
+  "free-2hr": "#2e9e4f",
+  "free-unrestricted": "#1E96C0",
+  paid: "#7c4dbe",
+  "park-and-ride-24h": "#e8891d",
+  prohibited: "#d43d3d",
+  "load-zone": "#f0b429",
+  permit: "#6b7280",
+};
+const FALLBACK_PARKING_COLOR = "#6b7280";
+
+function parkingColor(rule: string): string {
+  return PARKING_RULE_COLORS[rule] ?? FALLBACK_PARKING_COLOR;
+}
+
+type StreetRule =
+  | "free-2hr"
+  | "free-unrestricted"
+  | "prohibited"
+  | "ferry-holding"
+  | "default";
+
+const STREET_COLORS: Record<StreetRule, string> = {
+  "free-2hr": "#2e9e4f",
+  "free-unrestricted": "#1E96C0",
+  prohibited: "#d43d3d",
+  "ferry-holding": "#64748b",
+  default: "#8b9aa8",
+};
+
+function normalizeStreetRule(rule: string): StreetRule {
+  return rule in STREET_COLORS ? (rule as StreetRule) : "default";
+}
+
+function streetStyle(rule: StreetRule): {
+  color: string;
+  weight: number;
+  opacity: number;
+  dashArray?: string;
+} {
+  switch (rule) {
+    case "ferry-holding":
+      return { color: STREET_COLORS[rule], weight: 3, opacity: 0.45, dashArray: "4 6" };
+    case "prohibited":
+      return { color: STREET_COLORS[rule], weight: 4, opacity: 0.6 };
+    case "free-2hr":
+    case "free-unrestricted":
+      return { color: STREET_COLORS[rule], weight: 6, opacity: 0.85 };
+    default:
+      return { color: STREET_COLORS.default, weight: 3, opacity: 0.5 };
+  }
+}
+
+const ATM_COLOR = "#16405e";
+const BOUNDARY_COLOR = "#324A6D";
+
+interface StreetSegment {
+  name: string;
+  rule: string;
+  coords: [number, number][];
+  note?: string;
+}
+interface StreetData {
+  boundary: [number, number][];
+  segments: StreetSegment[];
+}
+
+/** Rounded teardrop divIcon html — same pin as the public feature-map. */
+function contextPinHtml(emoji: string, ring: string): string {
+  return `<div style="position:relative;transform:translate(-50%,-100%);">
+    <div style="width:30px;height:30px;border-radius:50% 50% 50% 0;background:#fff;border:2px solid ${ring};box-shadow:0 2px 4px rgba(0,0,0,0.3);transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;">
+      <span style="transform:rotate(45deg);font-size:15px;line-height:1;">${emoji}</span>
+    </div>
+  </div>`;
+}
+
+/* ------------------------------------------------------------------ */
 /* Builder                                                             */
 /* ------------------------------------------------------------------ */
 
@@ -193,6 +294,18 @@ const SOURCE_SHORT: Record<string, string> = {
   streets: "🛣",
 };
 
+/** Geoman's per-layer API (the browser bundle attaches `pm` to every layer). */
+type GeomanLayer = Layer & {
+  pm: {
+    enable: (opts?: Record<string, unknown>) => void;
+    disable: () => void;
+    enableLayerDrag: () => void;
+    disableLayerDrag: () => void;
+  };
+};
+
+type ShapeMode = "reshape" | "move";
+
 export function MapBuilder({
   initialViews,
   initialFeatures,
@@ -210,13 +323,13 @@ export function MapBuilder({
   const [activeViewId, setActiveViewId] = useState<string | null>(initialViews[0]?.id ?? null);
   const [showAll, setShowAll] = useState(false);
 
-  // View editing (left panel form). null = not editing a view.
+  // View editing (overlay panel on the map's left edge). null = not editing.
   const [viewDraft, setViewDraft] = useState<ViewDraft | null>(null);
   const [viewEditId, setViewEditId] = useState<string | null>(null); // null = creating
   const [viewSaving, setViewSaving] = useState(false);
   const [viewMsg, setViewMsg] = useState<Msg | null>(null);
 
-  // Feature editing (right panel form).
+  // Feature editing (floating drawer on the map's right edge / block below lg).
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -225,6 +338,17 @@ export function MapBuilder({
   const [uploading, setUploading] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [msg, setMsg] = useState<Msg | null>(null);
+  // Drawer visibility (≥lg). Collapsing keeps the selection + map editing.
+  const [panelOpen, setPanelOpen] = useState(true);
+  // Reshape (vertex edit) vs Move (whole-shape drag) for the selected shape.
+  const [shapeMode, setShapeMode] = useState<ShapeMode>("reshape");
+  // "Features (N)" dropdown in the strip above the map.
+  const [featListOpen, setFeatListOpen] = useState(false);
+  // Built-in context layers toggle (default ON).
+  const [showBuiltins, setShowBuiltins] = useState(true);
+  // Bumped when a view is saved so context layers re-render even if the
+  // active view id didn't change (its sources may have).
+  const [contextEpoch, setContextEpoch] = useState(0);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
@@ -232,6 +356,13 @@ export function MapBuilder({
   const layersRef = useRef(new Map<string, Layer>());
   // Ids drawn this session but never saved — deleting them skips the API.
   const unsavedIdsRef = useRef(new Set<string>());
+  // Muted built-in layers for the active view, grouped so a view switch
+  // clears and redraws them in one shot.
+  const contextGroupRef = useRef<LayerGroup | null>(null);
+  // Monotonic token guarding stale context fetches (view switched mid-flight).
+  const contextSeqRef = useRef(0);
+  // /geo/street-parking.json is static — fetch it once per mount.
+  const streetDataRef = useRef<StreetData | null>(null);
 
   // Mirrors for map-event callbacks (created once, must see current state).
   const featuresRef = useRef(features);
@@ -244,6 +375,10 @@ export function MapBuilder({
   activeViewIdRef.current = activeViewId;
   const showAllRef = useRef(showAll);
   showAllRef.current = showAll;
+  const showBuiltinsRef = useRef(showBuiltins);
+  showBuiltinsRef.current = showBuiltins;
+  const shapeModeRef = useRef(shapeMode);
+  shapeModeRef.current = shapeMode;
   const selectRef = useRef<(id: string) => void>(() => {});
 
   /* ---------------- which features belong on the canvas ---------------- */
@@ -278,9 +413,10 @@ export function MapBuilder({
     if (!layer) return null;
 
     layer.on("click", () => selectRef.current(f.id));
-    // pm:* events fire only while geoman editing is enabled (i.e. selected).
+    // pm:* events fire only while geoman editing/dragging is enabled.
     layer.on("pm:edit", () => setDirty(true));
     layer.on("pm:markerdragend", () => setDirty(true));
+    layer.on("pm:dragend", () => setDirty(true)); // geoman whole-layer drag
     layer.on("dragend", () => setDirty(true));
     layersRef.current.set(f.id, layer);
     return layer;
@@ -305,28 +441,190 @@ export function MapBuilder({
   }
 
   function setEditing(id: string, f: MapFeature, on: boolean) {
-    const layer = layersRef.current.get(id) as
-      | (Marker & { pm: { enable: (o?: unknown) => void; disable: () => void } })
-      | (Polyline & { pm: { enable: (o?: unknown) => void; disable: () => void } })
-      | undefined;
+    const layer = layersRef.current.get(id) as GeomanLayer | undefined;
     const L = leafletRef.current;
     if (!layer || !L) return;
     if (f.kind === "marker") {
-      (layer as Marker).setIcon(markerIcon(L, f, on));
-      if (on) (layer as Marker).pm.enable();
-      else (layer as Marker).pm.disable();
+      (layer as unknown as Marker).setIcon(markerIcon(L, f, on));
+      // pm.enable() on a marker enables layer drag (move) automatically.
+      // preventMarkerRemoval stops geoman's right-click delete, which would
+      // silently desync the layer from app state.
+      if (on) layer.pm.enable({ draggable: true, preventMarkerRemoval: true });
+      else layer.pm.disable();
+      return;
+    }
+    (layer as unknown as Polyline).setStyle(shapeStyle(f, on));
+    if (!on) {
+      layer.pm.disableLayerDrag();
+      layer.pm.disable();
+      return;
+    }
+    // Geoman can't vertex-edit and whole-layer-drag simultaneously, so the
+    // selected shape honors the Reshape ⟷ Move toggle.
+    if (shapeModeRef.current === "move") {
+      layer.pm.disable();
+      layer.pm.enableLayerDrag();
     } else {
-      (layer as Polyline).setStyle(shapeStyle(f, on));
-      if (on) (layer as Polyline).pm.enable({ allowSelfIntersection: f.kind !== "area" });
-      else (layer as Polyline).pm.disable();
+      layer.pm.disableLayerDrag();
+      layer.pm.enable({ allowSelfIntersection: f.kind !== "area" });
     }
   }
+
+  /** Switch the selected shape between vertex editing and whole-shape drag. */
+  function pickShapeMode(mode: ShapeMode) {
+    if (shapeModeRef.current === mode) return;
+    shapeModeRef.current = mode;
+    setShapeMode(mode);
+    const id = selectedIdRef.current;
+    if (!id) return;
+    const f = featuresRef.current.find((x) => x.id === id);
+    if (f && f.kind !== "marker" && layersRef.current.has(id)) setEditing(id, f, true);
+  }
+
+  /* ---------------- built-in context layers ---------------- */
+
+  // Renders the active view's built-in sources as muted, non-interactive
+  // context (same colors/shapes as the public feature-map, opacity roughly
+  // halved, no popups). Everything lives in one layerGroup on a pane below
+  // the overlay pane with pointer-events disabled, so clicks and geoman draws
+  // pass straight through.
+  async function renderContextLayers() {
+    const seq = ++contextSeqRef.current;
+    contextGroupRef.current?.remove();
+    contextGroupRef.current = null;
+
+    const L = leafletRef.current;
+    const map = mapRef.current;
+    const viewId = activeViewIdRef.current;
+    if (!L || !map || !viewId || !showBuiltinsRef.current) return;
+
+    try {
+      const res = await fetch(`/api/map/${encodeURIComponent(viewId)}`);
+      if (!res.ok) return;
+      const data = (await res.json()) as ResolvedMapView;
+      if (seq !== contextSeqRef.current || !mapRef.current) return;
+
+      // Street overlay data is fetched separately (static file, cached).
+      let street: StreetData | null = null;
+      if (data.builtins.streets) {
+        if (!streetDataRef.current) {
+          try {
+            const sres = await fetch("/geo/street-parking.json");
+            if (sres.ok) streetDataRef.current = (await sres.json()) as StreetData;
+          } catch {
+            // Context is best-effort; the canvas still works without it.
+          }
+        }
+        street = streetDataRef.current;
+        if (seq !== contextSeqRef.current || !mapRef.current) return;
+      }
+
+      const muted = { pane: CONTEXT_PANE, interactive: false } as const;
+      const group = L.layerGroup();
+
+      // Restaurants — same teardrop pins as the public map, dimmed.
+      for (const r of data.builtins.restaurants ?? []) {
+        const cat = markerCategory(r.category);
+        const icon = L.divIcon({
+          className: "",
+          html: contextPinHtml(cat.emoji, cat.color),
+          iconSize: [0, 0],
+        });
+        group.addLayer(L.marker([r.lat, r.lng], { ...muted, icon, opacity: 0.55 }));
+      }
+
+      // ATMs — navy circle markers.
+      for (const a of data.builtins.atms ?? []) {
+        group.addLayer(
+          L.circleMarker([a.lat, a.lng], {
+            ...muted,
+            radius: 6,
+            color: "#ffffff",
+            weight: 2,
+            opacity: 0.5,
+            fillColor: ATM_COLOR,
+            fillOpacity: 0.5,
+          }),
+        );
+      }
+
+      // Parking zones — polygons colored by rule (circle fallback).
+      for (const z of data.builtins.parkingZones ?? []) {
+        const color = parkingColor(z.rule);
+        if (z.polygon && z.polygon.length >= 3) {
+          group.addLayer(
+            L.polygon(z.polygon, {
+              ...muted,
+              color,
+              weight: 2,
+              opacity: 0.45,
+              fillColor: color,
+              fillOpacity: 0.18,
+            }),
+          );
+        } else {
+          group.addLayer(
+            L.circleMarker(z.center, {
+              ...muted,
+              radius: 7,
+              color: "#ffffff",
+              weight: 2,
+              opacity: 0.5,
+              fillColor: color,
+              fillOpacity: 0.45,
+            }),
+          );
+        }
+      }
+
+      // Streets — UGA boundary (dashed navy) + rule-styled segments.
+      if (street) {
+        group.addLayer(
+          L.polygon(street.boundary, {
+            ...muted,
+            color: BOUNDARY_COLOR,
+            weight: 2,
+            dashArray: "6 6",
+            fill: false,
+            opacity: 0.5,
+          }),
+        );
+        const rank = (r: StreetRule) => (r === "default" ? 0 : r === "ferry-holding" ? 1 : 2);
+        const ordered = [...street.segments].sort(
+          (a, b) => rank(normalizeStreetRule(a.rule)) - rank(normalizeStreetRule(b.rule)),
+        );
+        for (const seg of ordered) {
+          const style = streetStyle(normalizeStreetRule(seg.rule));
+          group.addLayer(
+            L.polyline(seg.coords, { ...muted, ...style, opacity: style.opacity / 2 }),
+          );
+        }
+      }
+
+      group.addTo(mapRef.current);
+      contextGroupRef.current = group;
+    } catch {
+      // Context is best-effort; drawing still works on the bare tiles.
+    }
+  }
+
+  // Redraw context whenever the active view, the toggle, or a view's saved
+  // sources change. renderContextLayers reads only refs, so the closure is
+  // never stale.
+  useEffect(() => {
+    if (!mapReady) return;
+    void renderContextLayers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapReady, activeViewId, showBuiltins, contextEpoch]);
 
   /* ---------------- selection ---------------- */
 
   function select(id: string) {
     const prev = selectedIdRef.current;
-    if (prev === id) return;
+    if (prev === id) {
+      setPanelOpen(true);
+      return;
+    }
     if (dirtyRef.current && !window.confirm("Discard unsaved changes to the current feature?")) {
       return;
     }
@@ -341,6 +639,9 @@ export function MapBuilder({
     setDraft(toDraft(f));
     setDirty(false);
     setMsg(null);
+    setPanelOpen(true);
+    shapeModeRef.current = "reshape";
+    setShapeMode("reshape");
 
     const map = mapRef.current;
     const layer = layersRef.current.get(id);
@@ -364,6 +665,8 @@ export function MapBuilder({
     setSelectedId(null);
     setDraft(null);
     setDirty(false);
+    shapeModeRef.current = "reshape";
+    setShapeMode("reshape");
   }
 
   /* ---------------- map bootstrap ---------------- */
@@ -386,6 +689,13 @@ export function MapBuilder({
         zoom: first ? first.zoom : 15,
       });
       mapRef.current = map;
+
+      // Pane for muted built-in context layers: between the tiles (z 200) and
+      // the overlay pane (z 400); pointer-events none so it never swallows a
+      // click or a geoman draw.
+      const pane = map.createPane(CONTEXT_PANE);
+      pane.style.zIndex = "350";
+      pane.style.pointerEvents = "none";
 
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
@@ -421,9 +731,11 @@ export function MapBuilder({
 
     return () => {
       cancelled = true;
+      contextSeqRef.current++; // invalidate in-flight context fetches
       mapRef.current?.remove();
       mapRef.current = null;
       layersRef.current.clear();
+      contextGroupRef.current = null;
     };
     // Features are managed imperatively after mount; re-running would tear the
     // map down mid-edit.
@@ -541,7 +853,9 @@ export function MapBuilder({
 
     // Read geometry back from the live layer where its shape matches the kind;
     // fall back to the stored geometry otherwise (e.g. line ↔ trail switch
-    // keeps the same polyline layer, so its path is still valid).
+    // keeps the same polyline layer, so its path is still valid). Geoman's
+    // vertex edits AND whole-layer drags both mutate the live layer's latlngs,
+    // so dragged positions are captured here too.
     let point = existing.point;
     let path = existing.path;
     let polygon = existing.polygon;
@@ -711,6 +1025,7 @@ export function MapBuilder({
     showAllRef.current = false;
     setViewDraft(null);
     setViewEditId(null);
+    setFeatListOpen(false);
     // Recenter on the picked view, then redraw the filtered canvas.
     const map = mapRef.current;
     const view = views.find((v) => v.id === id);
@@ -751,6 +1066,11 @@ export function MapBuilder({
       published: v.published,
     });
     setViewMsg(null);
+  }
+
+  function closeViewPanel() {
+    setViewDraft(null);
+    setViewEditId(null);
   }
 
   function patchView(patch: Partial<ViewDraft>) {
@@ -812,6 +1132,7 @@ export function MapBuilder({
       setViewEditId(null);
       setActiveViewId(saved.id);
       activeViewIdRef.current = saved.id;
+      setContextEpoch((e) => e + 1); // sources may have changed → redraw context
       setViewMsg({ kind: "ok", text: `Saved “${saved.name}”.` });
       router.refresh();
     } catch {
@@ -860,478 +1181,586 @@ export function MapBuilder({
   const selectedFeature = selectedId ? features.find((f) => f.id === selectedId) : null;
   const activeView = activeViewId ? views.find((v) => v.id === activeViewId) : null;
 
-  // Feature list scoped to the sidebar (matches canvas filter).
+  // Feature list scoped to the dropdown (matches canvas filter).
   const listedFeatures = showAll || !activeViewId
     ? features
     : features.filter((f) => f.views.includes(activeViewId));
 
-  return (
-    <div className="grid gap-4 lg:grid-cols-[260px_1fr_320px]">
-      {/* ---------------- LEFT: views ---------------- */}
-      <div className="flex min-w-0 flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold tracking-wide text-sound-deep uppercase">Views</h3>
-          <button
-            type="button"
-            onClick={newView}
-            className="rounded-full bg-sound px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-sound-deep"
-          >
-            + New view
-          </button>
-        </div>
+  /* ----- shared form bodies (rendered in an overlay ≥lg, a block <lg) ----- */
 
-        <button
-          type="button"
-          onClick={toggleShowAll}
-          className={`rounded-lg border px-3 py-2 text-left text-xs font-semibold transition-colors ${
-            showAll ? "border-tide bg-tide/10 text-tide-deep" : "border-sand bg-white text-ink-soft hover:bg-shell"
-          }`}
-        >
-          {showAll ? "✓ Showing features from all views" : "Show features from all views"}
-        </button>
-
-        <ul className="divide-y divide-sand overflow-hidden rounded-2xl border border-sand bg-white">
-          {views.length === 0 && (
-            <li className="px-3 py-4 text-sm text-ink-soft">No views yet — create one.</li>
-          )}
-          {views.map((v) => {
-            const count = features.filter((f) => f.views.includes(v.id)).length;
-            const isActive = v.id === activeViewId && !showAll;
-            return (
-              <li key={v.id}>
-                <div className={`px-3 py-2.5 transition-colors ${isActive ? "bg-tide/10" : ""}`}>
-                  <button
-                    type="button"
-                    onClick={() => pickActiveView(v.id)}
-                    className="flex w-full flex-col gap-1 text-left"
-                  >
-                    <span className="flex items-center gap-2">
-                      <span className="truncate text-sm font-medium text-ink">{v.name}</span>
-                      {!v.published && <Badge tone="sand">draft</Badge>}
-                    </span>
-                    <span className="flex flex-wrap items-center gap-1.5 text-xs text-ink-soft">
-                      <span>
-                        {count} feature{count === 1 ? "" : "s"}
-                      </span>
-                      {v.sources.length > 0 && (
-                        <span title={v.sources.join(", ")}>
-                          {v.sources.map((s) => SOURCE_SHORT[s] ?? s).join(" ")}
-                        </span>
-                      )}
-                    </span>
-                  </button>
-                  <div className="mt-1.5 flex gap-3 text-xs">
-                    <button
-                      type="button"
-                      onClick={() => editView(v)}
-                      className="font-semibold text-tide-deep hover:underline"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => deleteView(v)}
-                      className="font-semibold text-coral-deep hover:underline"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-
-        {viewMsg && (
-          <p className={`text-xs font-medium ${viewMsg.kind === "ok" ? "text-fern" : "text-coral-deep"}`}>
-            {viewMsg.text}
-          </p>
-        )}
-
-        {/* View editor form */}
-        {viewDraft && (
-          <div className="flex flex-col gap-3 rounded-2xl border border-sand bg-white p-4 shadow-[0_1px_3px_rgba(22,64,94,0.08)]">
-            <p className="text-xs font-semibold tracking-wide text-sound-deep uppercase">
-              {viewEditId ? `Edit view` : "New view"}
-            </p>
-            <Field label="Name">
-              <input
-                className={INPUT}
-                value={viewDraft.name}
-                onChange={(e) => patchView({ name: e.target.value })}
-                placeholder="e.g. Food & Drink"
-              />
-            </Field>
-            <Field label="Description">
-              <textarea
-                className={INPUT}
-                rows={2}
-                value={viewDraft.description}
-                onChange={(e) => patchView({ description: e.target.value })}
-              />
-            </Field>
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="Center lat">
-                <input
-                  className={INPUT}
-                  type="number"
-                  step="0.0001"
-                  value={viewDraft.center[0]}
-                  onChange={(e) =>
-                    patchView({ center: [Number(e.target.value), viewDraft.center[1]] })
-                  }
-                />
-              </Field>
-              <Field label="Center lng">
-                <input
-                  className={INPUT}
-                  type="number"
-                  step="0.0001"
-                  value={viewDraft.center[1]}
-                  onChange={(e) =>
-                    patchView({ center: [viewDraft.center[0], Number(e.target.value)] })
-                  }
-                />
-              </Field>
-            </div>
-            <button
-              type="button"
-              onClick={useCurrentCenter}
-              disabled={!mapReady}
-              className="rounded-full border border-sand bg-shell px-3 py-1.5 text-xs font-semibold text-sound-deep transition-colors hover:bg-sand disabled:opacity-50"
-            >
-              Use current map center
-            </button>
-            <Field label={`Zoom (10–19): ${viewDraft.zoom}`}>
-              <input
-                type="range"
-                min={10}
-                max={19}
-                step={1}
-                value={viewDraft.zoom}
-                onChange={(e) => patchView({ zoom: Number(e.target.value) })}
-                className="w-full"
-              />
-            </Field>
-            <div>
-              <span className="text-sm font-medium text-ink">Built-in layers</span>
-              <div className="mt-1.5 flex flex-col gap-1.5">
-                {SOURCE_OPTIONS.map((s) => (
-                  <label key={s.key} className="flex items-center gap-2 text-sm text-ink-soft">
-                    <input
-                      type="checkbox"
-                      checked={viewDraft.sources.includes(s.key)}
-                      onChange={() => toggleViewSource(s.key)}
-                    />
-                    {s.label}
-                  </label>
-                ))}
-              </div>
-            </div>
-            <label className="flex items-center gap-2 text-sm text-ink">
-              <input
-                type="checkbox"
-                checked={viewDraft.published}
-                onChange={(e) => patchView({ published: e.target.checked })}
-              />
-              Published (visible on the public map switcher)
-            </label>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={saveView}
-                disabled={viewSaving}
-                className="rounded-full bg-sound px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-sound-deep disabled:opacity-50"
-              >
-                {viewSaving ? "Saving…" : "Save view"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setViewDraft(null);
-                  setViewEditId(null);
-                }}
-                className="rounded-full border border-sand px-4 py-1.5 text-sm font-semibold text-ink-soft transition-colors hover:bg-shell"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
+  const featureFormBody = selectedFeature && draft && (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-mono text-xs text-ink-soft">{selectedFeature.id}</span>
+        {unsavedIdsRef.current.has(selectedFeature.id) && <Badge tone="coral">not saved</Badge>}
+        {dirty && !unsavedIdsRef.current.has(selectedFeature.id) && (
+          <Badge tone="coral">unsaved changes</Badge>
         )}
       </div>
 
-      {/* ---------------- CENTER: canvas ---------------- */}
-      <div className="flex min-w-0 flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2">
+      {draft.kind === "marker" ? (
+        <p className="rounded-lg bg-shell/70 px-3 py-2 text-xs text-ink-soft">
+          Drag the pin on the map to move it, then Save.
+        </p>
+      ) : (
+        <div>
+          <span className="text-sm font-medium text-ink">Editing mode</span>
+          <div className="mt-1.5 flex gap-2">
+            <button
+              type="button"
+              onClick={() => pickShapeMode("reshape")}
+              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                shapeMode === "reshape"
+                  ? "border-tide bg-tide/10 text-tide-deep"
+                  : "border-sand bg-white text-ink-soft hover:bg-shell"
+              }`}
+            >
+              Reshape (drag points)
+            </button>
+            <button
+              type="button"
+              onClick={() => pickShapeMode("move")}
+              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                shapeMode === "move"
+                  ? "border-tide bg-tide/10 text-tide-deep"
+                  : "border-sand bg-white text-ink-soft hover:bg-shell"
+              }`}
+            >
+              Move whole shape
+            </button>
+          </div>
+        </div>
+      )}
+
+      <Field label="Kind">
+        <select
+          className={INPUT}
+          value={draft.kind}
+          onChange={(e) => patchDraft({ kind: e.target.value as FeatureKind })}
+        >
+          {(Object.keys(KIND_LABELS) as FeatureKind[])
+            // Only allow switching between kinds sharing the same geometry
+            // (line ↔ trail). Marker and area can't change kind here.
+            .filter((k) =>
+              selectedFeature.kind === "line" || selectedFeature.kind === "trail"
+                ? k === "line" || k === "trail"
+                : k === selectedFeature.kind,
+            )
+            .map((k) => (
+              <option key={k} value={k}>
+                {KIND_LABELS[k]}
+              </option>
+            ))}
+        </select>
+      </Field>
+
+      <Field label="Title">
+        <input
+          className={INPUT}
+          value={draft.title}
+          onChange={(e) => patchDraft({ title: e.target.value })}
+        />
+      </Field>
+
+      {draft.kind === "marker" && (
+        <Field label="Icon category">
+          <select
+            className={INPUT}
+            value={draft.category}
+            onChange={(e) => patchDraft({ category: e.target.value })}
+          >
+            <option value="">— pick an icon —</option>
+            {MARKER_CATEGORIES.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.emoji} {c.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
+
+      <Field label={draft.kind === "marker" ? "Pin tint (optional)" : "Color"}>
+        <span className="flex items-center gap-2">
+          <input
+            type="color"
+            value={draft.color || (draft.kind === "marker" ? markerCategory(draft.category).color : defaultColor(draft.kind))}
+            onChange={(e) => patchDraft({ color: e.target.value })}
+            className="h-9 w-12 cursor-pointer rounded border border-sand"
+          />
+          {draft.color && (
+            <button
+              type="button"
+              onClick={() => patchDraft({ color: "" })}
+              className="text-xs font-semibold text-ink-soft hover:underline"
+            >
+              reset
+            </button>
+          )}
+        </span>
+      </Field>
+
+      <Field label="Notes">
+        <textarea
+          className={INPUT}
+          rows={3}
+          value={draft.notes}
+          onChange={(e) => patchDraft({ notes: e.target.value })}
+        />
+      </Field>
+
+      <Field label="Link (https://…)">
+        <input
+          className={INPUT}
+          value={draft.link}
+          onChange={(e) => patchDraft({ link: e.target.value })}
+          placeholder="https://"
+        />
+      </Field>
+
+      <div>
+        <span className="text-sm font-medium text-ink">Image</span>
+        {draft.imageUrl && (
+          <img
+            src={`/api/map/image?p=${encodeURIComponent(draft.imageUrl)}`}
+            alt=""
+            className="mt-1.5 h-28 w-full rounded-lg border border-sand object-cover"
+          />
+        )}
+        <div className="mt-1.5 flex items-center gap-2">
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            disabled={uploading}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) uploadImage(file);
+              e.target.value = "";
+            }}
+            className="text-xs text-ink-soft file:mr-2 file:rounded-full file:border-0 file:bg-sound file:px-3 file:py-1 file:text-xs file:font-semibold file:text-white"
+          />
+          {draft.imageUrl && (
+            <button
+              type="button"
+              onClick={() => patchDraft({ imageUrl: "" })}
+              className="text-xs font-semibold text-coral-deep hover:underline"
+            >
+              remove
+            </button>
+          )}
+        </div>
+        {uploading && <p className="mt-1 text-xs text-ink-soft">Uploading…</p>}
+      </div>
+
+      <div>
+        <span className="text-sm font-medium text-ink">Show on views</span>
+        <div className="mt-1.5 flex max-h-40 flex-col gap-1.5 overflow-y-auto rounded-lg border border-sand p-2">
+          {views.length === 0 && <p className="text-xs text-ink-soft">No views yet.</p>}
+          {views.map((v) => (
+            <label key={v.id} className="flex items-center gap-2 text-sm text-ink-soft">
+              <input
+                type="checkbox"
+                checked={draft.views.includes(v.id)}
+                onChange={() => toggleDraftView(v.id)}
+              />
+              <span className="truncate">{v.name}</span>
+              {!v.published && <Badge tone="sand">draft</Badge>}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={save}
+          disabled={saving || !dirty}
+          className="rounded-full bg-sound px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-sound-deep disabled:opacity-50"
+        >
+          {saving ? "Saving…" : "Save feature"}
+        </button>
+        <button
+          type="button"
+          onClick={remove}
+          disabled={saving}
+          className="rounded-full border border-coral px-3 py-2 text-sm font-semibold text-coral-deep transition-colors hover:bg-coral/10 disabled:opacity-50"
+        >
+          Delete
+        </button>
+      </div>
+
+      {msg && (
+        <p className={`text-sm font-medium ${msg.kind === "ok" ? "text-fern" : "text-coral-deep"}`}>
+          {msg.text}
+        </p>
+      )}
+    </div>
+  );
+
+  const viewFormBody = viewDraft && (
+    <div className="flex flex-col gap-3">
+      <Field label="Name">
+        <input
+          className={INPUT}
+          value={viewDraft.name}
+          onChange={(e) => patchView({ name: e.target.value })}
+          placeholder="e.g. Food & Drink"
+        />
+      </Field>
+      <Field label="Description">
+        <textarea
+          className={INPUT}
+          rows={2}
+          value={viewDraft.description}
+          onChange={(e) => patchView({ description: e.target.value })}
+        />
+      </Field>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Center lat">
+          <input
+            className={INPUT}
+            type="number"
+            step="0.0001"
+            value={viewDraft.center[0]}
+            onChange={(e) =>
+              patchView({ center: [Number(e.target.value), viewDraft.center[1]] })
+            }
+          />
+        </Field>
+        <Field label="Center lng">
+          <input
+            className={INPUT}
+            type="number"
+            step="0.0001"
+            value={viewDraft.center[1]}
+            onChange={(e) =>
+              patchView({ center: [viewDraft.center[0], Number(e.target.value)] })
+            }
+          />
+        </Field>
+      </div>
+      <button
+        type="button"
+        onClick={useCurrentCenter}
+        disabled={!mapReady}
+        className="rounded-full border border-sand bg-shell px-3 py-1.5 text-xs font-semibold text-sound-deep transition-colors hover:bg-sand disabled:opacity-50"
+      >
+        Use current map center
+      </button>
+      <Field label={`Zoom (10–19): ${viewDraft.zoom}`}>
+        <input
+          type="range"
+          min={10}
+          max={19}
+          step={1}
+          value={viewDraft.zoom}
+          onChange={(e) => patchView({ zoom: Number(e.target.value) })}
+          className="w-full"
+        />
+      </Field>
+      <div>
+        <span className="text-sm font-medium text-ink">Built-in layers</span>
+        <div className="mt-1.5 flex flex-col gap-1.5">
+          {SOURCE_OPTIONS.map((s) => (
+            <label key={s.key} className="flex items-center gap-2 text-sm text-ink-soft">
+              <input
+                type="checkbox"
+                checked={viewDraft.sources.includes(s.key)}
+                onChange={() => toggleViewSource(s.key)}
+              />
+              {s.label}
+            </label>
+          ))}
+        </div>
+      </div>
+      <label className="flex items-center gap-2 text-sm text-ink">
+        <input
+          type="checkbox"
+          checked={viewDraft.published}
+          onChange={(e) => patchView({ published: e.target.checked })}
+        />
+        Published (visible on the public map switcher)
+      </label>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={saveView}
+          disabled={viewSaving}
+          className="rounded-full bg-sound px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-sound-deep disabled:opacity-50"
+        >
+          {viewSaving ? "Saving…" : "Save view"}
+        </button>
+        <button
+          type="button"
+          onClick={closeViewPanel}
+          className="rounded-full border border-sand px-4 py-1.5 text-sm font-semibold text-ink-soft transition-colors hover:bg-shell"
+        >
+          Cancel
+        </button>
+        {viewEditId && (
+          <button
+            type="button"
+            onClick={() => {
+              const v = views.find((x) => x.id === viewEditId);
+              if (v) deleteView(v);
+            }}
+            className="rounded-full border border-coral px-4 py-1.5 text-sm font-semibold text-coral-deep transition-colors hover:bg-coral/10"
+          >
+            Delete view
+          </button>
+        )}
+      </div>
+      {viewMsg && (
+        <p className={`text-xs font-medium ${viewMsg.kind === "ok" ? "text-fern" : "text-coral-deep"}`}>
+          {viewMsg.text}
+        </p>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="flex min-w-0 flex-col gap-3">
+      {/* ---------------- views strip ---------------- */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold tracking-wide text-sound-deep uppercase">Views</span>
+        {views.length === 0 && (
+          <span className="text-sm text-ink-soft">No views yet — create one.</span>
+        )}
+        {views.map((v) => {
+          const count = features.filter((f) => f.views.includes(v.id)).length;
+          const isActive = v.id === activeViewId && !showAll;
+          return (
+            <button
+              key={v.id}
+              type="button"
+              onClick={() => pickActiveView(v.id)}
+              title={v.sources.length > 0 ? `Built-ins: ${v.sources.join(", ")}` : undefined}
+              className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                isActive
+                  ? "border-tide bg-tide/10 text-tide-deep"
+                  : "border-sand bg-white text-ink-soft hover:bg-shell"
+              }`}
+            >
+              <span className="max-w-40 truncate">{v.name}</span>
+              <span className="font-normal">· {count}</span>
+              {v.sources.length > 0 && (
+                <span aria-hidden className="font-normal">
+                  {v.sources.map((s) => SOURCE_SHORT[s] ?? s).join("")}
+                </span>
+              )}
+              {!v.published && <Badge tone="sand">draft</Badge>}
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          onClick={toggleShowAll}
+          className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+            showAll
+              ? "border-tide bg-tide/10 text-tide-deep"
+              : "border-sand bg-white text-ink-soft hover:bg-shell"
+          }`}
+        >
+          {showAll ? "✓ All views" : "All views"}
+        </button>
+        <button
+          type="button"
+          onClick={newView}
+          className="rounded-full bg-sound px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-sound-deep"
+        >
+          + New view
+        </button>
+        {activeView && !showAll && (
+          <button
+            type="button"
+            onClick={() => editView(activeView)}
+            className="rounded-full border border-sand bg-white px-3 py-1.5 text-xs font-semibold text-tide-deep transition-colors hover:bg-shell"
+          >
+            ✎ Edit view
+          </button>
+        )}
+
+        {/* Features (N) dropdown — pans/selects on click */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setFeatListOpen((o) => !o)}
+            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+              featListOpen
+                ? "border-tide bg-tide/10 text-tide-deep"
+                : "border-sand bg-white text-ink-soft hover:bg-shell"
+            }`}
+          >
+            {showAll || !activeView ? "All features" : "Features"} ({listedFeatures.length}) {featListOpen ? "▴" : "▾"}
+          </button>
+          {featListOpen && (
+            <div className="absolute left-0 top-full z-20 mt-1 max-h-72 w-72 overflow-y-auto rounded-xl border border-sand bg-white shadow-lg">
+              <ul className="divide-y divide-sand">
+                {listedFeatures.length === 0 && (
+                  <li className="px-3 py-3 text-sm text-ink-soft">Nothing here yet — draw something.</li>
+                )}
+                {listedFeatures.map((f) => (
+                  <li key={f.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFeatListOpen(false);
+                        select(f.id);
+                      }}
+                      className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-shell ${
+                        f.id === selectedId ? "bg-tide/10" : ""
+                      }`}
+                    >
+                      <span aria-hidden>
+                        {f.kind === "marker" ? markerCategory(f.category).emoji : KIND_EMOJI[f.kind]}
+                      </span>
+                      <span className="truncate text-ink">{f.title}</span>
+                      {unsavedIdsRef.current.has(f.id) && <Badge tone="coral">new</Badge>}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {!viewDraft && viewMsg && (
+        <p className={`text-xs font-medium ${viewMsg.kind === "ok" ? "text-fern" : "text-coral-deep"}`}>
+          {viewMsg.text}
+        </p>
+      )}
+
+      {/* ---------------- draw tools + context toggle ---------------- */}
+      <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
+        <div className="flex min-w-0 flex-col gap-1.5">
           <span className="text-sm font-semibold text-sound-deep">
             {showAll
               ? "Drawing onto: all views"
               : activeView
                 ? `Active view: ${activeView.name}`
                 : "No active view — pick or create one"}
+            <span className="ml-2 text-xs font-normal text-ink-soft">
+              New shapes get assigned to the active view.
+            </span>
           </span>
-          <span className="text-xs text-ink-soft">New shapes get assigned to the active view.</span>
+          <div className="flex flex-wrap gap-2">
+            {(["marker", "line", "trail", "area"] as FeatureKind[]).map((k) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => toggleDraw(k)}
+                disabled={!mapReady}
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${
+                  drawing === k
+                    ? "border border-coral bg-coral/10 text-coral-deep"
+                    : "bg-sound text-white hover:bg-sound-deep"
+                }`}
+                title={
+                  k === "trail"
+                    ? "Draw a polyline; it starts as a trail (dashed). Lines and trails share the same draw tool."
+                    : undefined
+                }
+              >
+                {drawing === k ? "✕ Cancel" : `${KIND_EMOJI[k]} Draw ${k}`}
+              </button>
+            ))}
+          </div>
         </div>
-
-        <div className="flex flex-wrap gap-2">
-          {(["marker", "line", "trail", "area"] as FeatureKind[]).map((k) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => toggleDraw(k)}
-              disabled={!mapReady}
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${
-                drawing === k
-                  ? "border border-coral bg-coral/10 text-coral-deep"
-                  : "bg-sound text-white hover:bg-sound-deep"
-              }`}
-              title={
-                k === "trail"
-                  ? "Draw a polyline; it starts as a trail (dashed). Lines and trails share the same draw tool."
-                  : undefined
-              }
-            >
-              {drawing === k ? "✕ Cancel" : `${KIND_EMOJI[k]} Draw ${k}`}
-            </button>
-          ))}
+        <div className="ml-auto flex flex-col items-end gap-0.5 text-right">
+          <label className="flex items-center gap-2 text-xs font-semibold text-ink">
+            <input
+              type="checkbox"
+              checked={showBuiltins}
+              onChange={(e) => setShowBuiltins(e.target.checked)}
+            />
+            Show this view’s built-in layers
+          </label>
+          <span className="text-[11px] text-ink-soft">
+            context only — edit parking zones at /admin/map, listings in the portals.
+          </span>
         </div>
+      </div>
 
+      {/* ---------------- canvas + floating panels ---------------- */}
+      <div className="relative">
         <div
           ref={containerRef}
-          style={{ height: "560px" }}
+          style={{ height: MAP_HEIGHT }}
           className="relative z-0 w-full overflow-hidden rounded-2xl border border-sand"
           role="region"
           aria-label="Editable map canvas for the selected view"
         />
 
-        <p className="text-xs text-ink-soft">
-          Draw with the buttons above (or geoman’s toolbar, top-left). Click any feature to select
-          and reshape it — drag vertices/markers, then Save on the right. “Trail” and “Line” use the
-          same polyline tool; switch between them in the feature form.
-        </p>
-      </div>
-
-      {/* ---------------- RIGHT: feature form ---------------- */}
-      <div className="flex min-w-0 flex-col gap-3">
-        <h3 className="text-sm font-semibold tracking-wide text-sound-deep uppercase">Feature</h3>
-
-        {!selectedFeature && (
-          <div className="rounded-2xl border border-dashed border-sand bg-shell/50 p-6 text-center text-sm text-ink-soft">
-            Draw a shape or pick a feature on the map to edit it here.
-          </div>
-        )}
-
-        {selectedFeature && draft && (
-          <div className="flex flex-col gap-4 rounded-2xl border border-sand bg-white p-4 shadow-[0_1px_3px_rgba(22,64,94,0.08)]">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="font-mono text-xs text-ink-soft">{selectedFeature.id}</span>
-              {unsavedIdsRef.current.has(selectedFeature.id) && <Badge tone="coral">not saved</Badge>}
-              {dirty && !unsavedIdsRef.current.has(selectedFeature.id) && (
-                <Badge tone="coral">unsaved changes</Badge>
-              )}
-            </div>
-
-            <Field label="Kind">
-              <select
-                className={INPUT}
-                value={draft.kind}
-                onChange={(e) => patchDraft({ kind: e.target.value as FeatureKind })}
-              >
-                {(Object.keys(KIND_LABELS) as FeatureKind[])
-                  // Only allow switching between kinds sharing the same geometry
-                  // (line ↔ trail). Marker and area can't change kind here.
-                  .filter((k) =>
-                    selectedFeature.kind === "line" || selectedFeature.kind === "trail"
-                      ? k === "line" || k === "trail"
-                      : k === selectedFeature.kind,
-                  )
-                  .map((k) => (
-                    <option key={k} value={k}>
-                      {KIND_LABELS[k]}
-                    </option>
-                  ))}
-              </select>
-            </Field>
-
-            <Field label="Title">
-              <input
-                className={INPUT}
-                value={draft.title}
-                onChange={(e) => patchDraft({ title: e.target.value })}
-              />
-            </Field>
-
-            {draft.kind === "marker" && (
-              <Field label="Icon category">
-                <select
-                  className={INPUT}
-                  value={draft.category}
-                  onChange={(e) => patchDraft({ category: e.target.value })}
-                >
-                  <option value="">— pick an icon —</option>
-                  {MARKER_CATEGORIES.map((c) => (
-                    <option key={c.key} value={c.key}>
-                      {c.emoji} {c.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            )}
-
-            <Field
-              label={draft.kind === "marker" ? "Pin tint (optional)" : "Color"}
-            >
-              <span className="flex items-center gap-2">
-                <input
-                  type="color"
-                  value={draft.color || (draft.kind === "marker" ? markerCategory(draft.category).color : defaultColor(draft.kind))}
-                  onChange={(e) => patchDraft({ color: e.target.value })}
-                  className="h-9 w-12 cursor-pointer rounded border border-sand"
-                />
-                {draft.color && (
-                  <button
-                    type="button"
-                    onClick={() => patchDraft({ color: "" })}
-                    className="text-xs font-semibold text-ink-soft hover:underline"
-                  >
-                    reset
-                  </button>
-                )}
+        {/* View edit panel — dismissible overlay on the map's left edge,
+            offset past the geoman toolbar. */}
+        {viewDraft && (
+          <div className="absolute top-4 left-14 z-10 flex max-h-[calc(100%-2rem)] w-80 max-w-[calc(100%-5rem)] flex-col overflow-hidden rounded-2xl border border-sand bg-white/95 shadow-xl backdrop-blur">
+            <div className="flex items-center justify-between gap-2 border-b border-sand px-4 py-2">
+              <span className="text-xs font-semibold tracking-wide text-sound-deep uppercase">
+                {viewEditId ? "Edit view" : "New view"}
               </span>
-            </Field>
-
-            <Field label="Notes">
-              <textarea
-                className={INPUT}
-                rows={3}
-                value={draft.notes}
-                onChange={(e) => patchDraft({ notes: e.target.value })}
-              />
-            </Field>
-
-            <Field label="Link (https://…)">
-              <input
-                className={INPUT}
-                value={draft.link}
-                onChange={(e) => patchDraft({ link: e.target.value })}
-                placeholder="https://"
-              />
-            </Field>
-
-            <div>
-              <span className="text-sm font-medium text-ink">Image</span>
-              {draft.imageUrl && (
-                <img
-                  src={`/api/map/image?p=${encodeURIComponent(draft.imageUrl)}`}
-                  alt=""
-                  className="mt-1.5 h-28 w-full rounded-lg border border-sand object-cover"
-                />
-              )}
-              <div className="mt-1.5 flex items-center gap-2">
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif"
-                  disabled={uploading}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) uploadImage(file);
-                    e.target.value = "";
-                  }}
-                  className="text-xs text-ink-soft file:mr-2 file:rounded-full file:border-0 file:bg-sound file:px-3 file:py-1 file:text-xs file:font-semibold file:text-white"
-                />
-                {draft.imageUrl && (
-                  <button
-                    type="button"
-                    onClick={() => patchDraft({ imageUrl: "" })}
-                    className="text-xs font-semibold text-coral-deep hover:underline"
-                  >
-                    remove
-                  </button>
-                )}
-              </div>
-              {uploading && <p className="mt-1 text-xs text-ink-soft">Uploading…</p>}
-            </div>
-
-            <div>
-              <span className="text-sm font-medium text-ink">Show on views</span>
-              <div className="mt-1.5 flex max-h-40 flex-col gap-1.5 overflow-y-auto rounded-lg border border-sand p-2">
-                {views.length === 0 && <p className="text-xs text-ink-soft">No views yet.</p>}
-                {views.map((v) => (
-                  <label key={v.id} className="flex items-center gap-2 text-sm text-ink-soft">
-                    <input
-                      type="checkbox"
-                      checked={draft.views.includes(v.id)}
-                      onChange={() => toggleDraftView(v.id)}
-                    />
-                    <span className="truncate">{v.name}</span>
-                    {!v.published && <Badge tone="sand">draft</Badge>}
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={save}
-                disabled={saving || !dirty}
-                className="rounded-full bg-sound px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-sound-deep disabled:opacity-50"
+                onClick={closeViewPanel}
+                aria-label="Close the view editor"
+                className="rounded-full px-1.5 text-sm font-semibold text-ink-soft transition-colors hover:bg-shell"
               >
-                {saving ? "Saving…" : "Save feature"}
-              </button>
-              <button
-                type="button"
-                onClick={remove}
-                disabled={saving}
-                className="rounded-full border border-coral px-3 py-2 text-sm font-semibold text-coral-deep transition-colors hover:bg-coral/10 disabled:opacity-50"
-              >
-                Delete
+                ✕
               </button>
             </div>
-
-            {msg && (
-              <p className={`text-sm font-medium ${msg.kind === "ok" ? "text-fern" : "text-coral-deep"}`}>
-                {msg.text}
-              </p>
-            )}
+            <div className="overflow-y-auto p-4">{viewFormBody}</div>
           </div>
         )}
 
-        {!selectedFeature && msg && (
-          <p className={`text-sm font-medium ${msg.kind === "ok" ? "text-fern" : "text-coral-deep"}`}>
-            {msg.text}
-          </p>
+        {/* Feature drawer — floats over the map's right edge at ≥lg. */}
+        {selectedFeature && draft && panelOpen && (
+          <div className="absolute top-4 right-4 z-10 hidden max-h-[calc(100%-2rem)] w-80 max-w-sm flex-col overflow-hidden rounded-2xl border border-sand bg-white/95 shadow-xl backdrop-blur lg:flex">
+            <div className="flex items-center justify-between gap-2 border-b border-sand px-4 py-2">
+              <span className="text-xs font-semibold tracking-wide text-sound-deep uppercase">Feature</span>
+              <button
+                type="button"
+                onClick={() => setPanelOpen(false)}
+                aria-label="Collapse the feature panel"
+                className="rounded-full px-1.5 text-sm font-semibold text-ink-soft transition-colors hover:bg-shell"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="overflow-y-auto p-4">{featureFormBody}</div>
+          </div>
         )}
 
-        {/* Feature list for the current filter */}
-        <div className="rounded-2xl border border-sand bg-white">
-          <p className="border-b border-sand px-3 py-2 text-xs font-semibold tracking-wide text-ink-soft uppercase">
-            {showAll || !activeView ? "All features" : `On “${activeView.name}”`} ({listedFeatures.length})
-          </p>
-          <ul className="max-h-64 divide-y divide-sand overflow-y-auto">
-            {listedFeatures.length === 0 && (
-              <li className="px-3 py-3 text-sm text-ink-soft">Nothing here yet — draw something.</li>
-            )}
-            {listedFeatures.map((f) => (
-              <li key={f.id}>
-                <button
-                  type="button"
-                  onClick={() => select(f.id)}
-                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-shell ${
-                    f.id === selectedId ? "bg-tide/10" : ""
-                  }`}
-                >
-                  <span aria-hidden>
-                    {f.kind === "marker" ? markerCategory(f.category).emoji : KIND_EMOJI[f.kind]}
-                  </span>
-                  <span className="truncate text-ink">{f.title}</span>
-                  {unsavedIdsRef.current.has(f.id) && <Badge tone="coral">new</Badge>}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
+        {/* Collapsed drawer → small reopen chip so the map stays unobstructed. */}
+        {selectedFeature && draft && !panelOpen && (
+          <button
+            type="button"
+            onClick={() => setPanelOpen(true)}
+            className="absolute top-4 right-4 z-10 hidden items-center gap-1.5 rounded-full border border-sand bg-white/95 px-3 py-1.5 text-xs font-semibold text-sound-deep shadow-lg backdrop-blur transition-colors hover:bg-shell lg:flex"
+          >
+            ✎ <span className="max-w-48 truncate">Edit “{selectedFeature.title}”</span>
+          </button>
+        )}
       </div>
+
+      <p className="text-xs text-ink-soft">
+        Draw with the buttons above (or geoman’s toolbar, top-left). Click any feature to select
+        it — drag its vertices (or switch to “Move whole shape”), drag marker pins, then Save.
+        “Trail” and “Line” use the same polyline tool; switch between them in the feature form.
+      </p>
+
+      {!selectedFeature && msg && (
+        <p className={`text-sm font-medium ${msg.kind === "ok" ? "text-fern" : "text-coral-deep"}`}>
+          {msg.text}
+        </p>
+      )}
+
+      {/* Below lg the feature form is a normal block under the map. */}
+      {selectedFeature && draft && (
+        <div className="rounded-2xl border border-sand bg-white p-4 shadow-[0_1px_3px_rgba(22,64,94,0.08)] lg:hidden">
+          <p className="mb-3 text-xs font-semibold tracking-wide text-sound-deep uppercase">Feature</p>
+          {featureFormBody}
+        </div>
+      )}
     </div>
   );
 }

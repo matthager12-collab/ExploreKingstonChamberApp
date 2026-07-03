@@ -7,6 +7,7 @@
 
 import { appendFile, mkdir, readFile } from "fs/promises";
 import path from "path";
+import { dataPath } from "./data-dir";
 import type { SurveyResponse } from "./types";
 
 export interface SurveyStore {
@@ -22,7 +23,7 @@ export interface SurveySummary {
   totalLodgingNights: number;
 }
 
-const DATA_FILE = path.join(process.cwd(), ".data", "ltac-responses.jsonl");
+const DATA_FILE = dataPath("ltac-responses.jsonl");
 
 class FileSurveyStore implements SurveyStore {
   async save(response: SurveyResponse): Promise<void> {

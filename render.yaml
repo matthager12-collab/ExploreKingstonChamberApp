@@ -1,0 +1,48 @@
+# Render Blueprint for "Explore Kingston".
+# Docs: https://render.com/docs/blueprint-spec
+#
+# Deploy: push this repo to GitHub, then in Render create a new Blueprint
+# instance pointed at it. Render builds the Dockerfile, attaches the disk, and
+# wires the env vars below. Set the sync:false secrets in the dashboard on the
+# first deploy (they are intentionally NOT stored in git).
+services:
+  - type: web
+    name: explore-kingston
+    runtime: docker # build from Dockerfile rather than a native buildpack
+    dockerfilePath: ./Dockerfile
+    plan: starter # persistent disks require a paid instance type (not free)
+    region: oregon # closest Render region to Kingston, WA; change if desired
+    # Render polls this path and only routes traffic once it returns 200.
+    # /api/health returns 503 until the /data volume is writable.
+    healthCheckPath: /api/health
+
+    # Persistent disk mounted at /data — survives deploys and restarts. This is
+    # where DATA_DIR points, so accounts / portal edits / hunt photos persist.
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
+
+    envVars:
+      # Session-signing secret for lib/auth.ts. Render generates a strong random
+      # value once and keeps it stable across deploys (do not rotate casually —
+      # rotating invalidates all existing sessions).
+      - key: AUTH_SECRET
+        generateValue: true
+
+      # Free WSDOT access code for live Edmonds–Kingston ferry data (lib/wsf.ts).
+      # Without it the app serves the bundled fallback schedule. Set in dashboard.
+      - key: WSDOT_API_KEY
+        sync: false
+
+      # Google Maps Embed key (components/town-map.tsx). NOTE: this is a
+      # NEXT_PUBLIC_* var, so it is inlined at BUILD time, not read at runtime.
+      # For Render to bake it into the client bundle it must be present as a
+      # build-time env var — setting it here (sync:false, entered in dashboard)
+      # makes it available during `npm run build` inside the Docker build.
+      - key: NEXT_PUBLIC_GMAPS_EMBED_KEY
+        sync: false
+
+      # Point all mutable state at the mounted disk above.
+      - key: DATA_DIR
+        value: /data

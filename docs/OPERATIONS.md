@@ -1,7 +1,9 @@
 # Operations Runbook
 
 How to run, back up, deploy, and maintain Explore Kingston. Written July 2026.
-Companion docs: [ARCHITECTURE.md](ARCHITECTURE.md) (code layout),
+Companion docs: [DEPLOY.md](DEPLOY.md) (authoritative deploy guide — the
+two-phase plan, host steps, backups, pre-launch checklist),
+[ARCHITECTURE.md](ARCHITECTURE.md) (code layout),
 [DATA_SOURCES.md](DATA_SOURCES.md) (every upstream source + gotchas),
 [SYNDICATION.md](SYNDICATION.md) (outbound-channel plan).
 
@@ -27,6 +29,7 @@ the working copy's `.env.local` — reference that, don't reprint secrets.
 | `WSDOT_API_KEY` | No (app falls back to the bundled schedule, labeled not-live) | Free access code from <https://wsdot.wa.gov/traffic/api/> — enter an email, code issued instantly. Current code registered under matt.hager12@gmail.com; already in `.env.local`. Rotating = registering again. |
 | `AUTH_SECRET` | Yes for the portals (`src/lib/auth.ts` throws without it) | Any long random string, e.g. `openssl rand -hex 32`. Already in `.env.local`. **Changing it invalidates every portal session** (see Troubleshooting). |
 | `NEXT_PUBLIC_GMAPS_EMBED_KEY` | No (map falls back to free Street View deep links) | Google Maps **Embed API** key (that API is free/unlimited, but any Google key needs a billing account with a card — hard-cap quotas and restrict the key by HTTP referrer). Not currently set. Used only by `src/components/town-map.tsx`. |
+| `DATA_DIR` | No locally (defaults to `./.data`); **required in production** | Absolute path to the directory that holds all mutable state, resolved via `src/lib/data-dir.ts`. Locally, leave it unset and state lands in `<repo>/.data`. In production it **must** be an absolute path to the mounted persistent volume (e.g. `/data` on Render/Fly, `/srv/vk-data` on a VPS) or redeploys wipe accounts, portal edits, and photos. See [DEPLOY.md](DEPLOY.md). |
 
 ### First run
 
@@ -77,7 +80,10 @@ subsystem hasn't been used yet.
   holds password hashes and player photos). Do not "fix" that by committing it.
 - Backup = `cp -R .data /some/backup/location` (or `tar czf`), via cron or
   by hand. Restore = put the directory back and restart the server. There is
-  nothing else to back up.
+  nothing else to back up. **In production, the backup surface is whatever
+  `DATA_DIR` points at (the mounted volume), not `.data/`** — use
+  `scripts/backup-data.sh` and see [DEPLOY.md](DEPLOY.md) §d for the scheduled
+  backup and restore procedure.
 
 Example cron (daily, keep 14 days):
 
@@ -103,49 +109,65 @@ Stop the dev server first to avoid a write racing the delete.
 
 ## 3. Deployment to production
 
-Target: Vercel (Hobby tier fits) at **app.explorekingstonwa.com**.
+**Two-phase plan** at **app.explorekingstonwa.com**. The full step-by-step
+lives in **[DEPLOY.md](DEPLOY.md)** — this section is the summary and the
+blocker status.
 
-### Steps
+- **Phase 1 — persistent-disk host, now (Render / Fly.io / Railway / VPS).**
+  Ship the current code unchanged. The file store works as-is because
+  `DATA_DIR` (`src/lib/data-dir.ts`) points at a **mounted persistent volume**
+  and `/api/health` verifies that volume is writable. Recommended host:
+  Render (Docker web service + a 1 GB Disk mounted at `/data`, health check
+  `/api/health`) via the `render.yaml` blueprint. See DEPLOY.md §b.
+- **Phase 2 — Vercel, later.** Serverless has no persistent filesystem, so
+  this requires migrating every store behind `data-dir.ts` to a database +
+  object storage, and moving rate limiting to a shared store. The store
+  modules are the exact, enumerated swap points — see DEPLOY.md §a.
 
-1. `npx vercel` from the repo root (link/create the project on first run),
-   then `npx vercel --prod`.
-2. In Vercel project settings → Environment Variables, set:
-   `WSDOT_API_KEY`, `AUTH_SECRET` (generate a fresh production value — do
-   not reuse the dev secret), and optionally `NEXT_PUBLIC_GMAPS_EMBED_KEY`.
-3. Add the domain `app.explorekingstonwa.com` to the Vercel project.
-4. **DNS (verified 2026-07-02):** in the NameHero cPanel **Zone Editor**, add
-   `CNAME  app.explorekingstonwa.com  →  cname.vercel-dns.com`.
-   **Do NOT move nameservers.** The NameHero VPS (165.140.69.20) serves the
-   WordPress site, the domain's DNS, **and email** (MX + SPF point at the
-   same box) — changing nameservers breaks Chamber mail. A single CNAME in
-   the existing zone has zero impact on WordPress, the apex, or email. If
-   the app ever replaces the WP site entirely, swap the apex A record to
-   Vercel (76.76.21.21) at cutover time — not before.
+**DNS (verified 2026-07-02):** in the NameHero cPanel **Zone Editor**, add
+**one** record — `CNAME app.explorekingstonwa.com → the host's target`
+(Render gives an `onrender.com` hostname; Fly gives an app hostname/IP).
+**Do NOT move nameservers.** The NameHero VPS (165.140.69.20) serves the
+WordPress site, the domain's DNS, **and email** (MX + SPF point at the same
+box) — changing nameservers breaks Chamber mail. A single CNAME in the
+existing zone has zero impact on WordPress, the apex, or email. Swap the apex
+A record only at a full cutover, later — not before. Details in DEPLOY.md §c.
 
-### Hard blockers before real users
+### Hard blockers — status
 
-Local-first works because `.data/` sits on a real disk. Vercel serverless
-has no persistent filesystem — writes land on an ephemeral instance and
-vanish. Do not invite real businesses onto a serverless deployment until:
+The deploy seam that used to be the top blocker now **exists in code**:
 
-1. **Migrate every `.data/` file store to Postgres/Supabase.** This is not
-   just the survey store — it's auth (`src/lib/auth.ts`), the portal
-   overlays (`src/lib/stores/json-store.ts`), hunts + photos
-   (`src/lib/hunt-store.ts`), analytics (`src/lib/analytics-store.ts`), and
-   the survey (`src/lib/survey-store.ts`). The store interfaces are the
-   seam: each module already isolates reads/writes behind exported
-   functions (e.g. `SurveyStore`, `readMerged`/`writeOverlayRecord`), so the
-   swap is per-module internals, not a UI change. Photos need object
-   storage (Supabase Storage / Vercel Blob), not a table.
-2. **Rate-limit auth.** `/api/auth` login and invite redemption currently
-   allow unlimited attempts against scrypt hashes. Add per-IP + per-email
-   throttling before the portal is on the public internet.
-3. **Resend DNS records** so invite email works: SPF + DKIM for
-   `mail.explorekingstonwa.com` at NameHero (same Zone Editor session as
-   the CNAME). Resend free tier: 3,000/month, 100/day, transactional only.
+- **DONE — the `DATA_DIR` filesystem seam.** `src/lib/data-dir.ts` routes
+  every store's reads/writes through one absolute path; on a persistent-disk
+  host this makes file storage production-safe with no code changes.
+- **DONE — the health probe.** `src/app/api/health/route.ts` returns 200 only
+  when `DATA_DIR` is writable (503 otherwise) — wire it as the host health
+  check to catch an unmounted/read-only volume before users do.
+- **IN PROGRESS — rate limiting.** `src/lib/rate-limit.ts` throttles
+  `/api/auth` login and invite redemption in process memory. Sufficient for a
+  single Phase-1 instance; **must move to a shared store (Upstash/KV) in
+  Phase 2** (per-instance memory counters don't hold across serverless
+  instances).
 
-Until all three land, production is demo-grade: fine for showing the
-Chamber, not for accounts that matter.
+Still pending:
+
+- **PENDING (before businesses self-serve) — Resend email.** SPF + DKIM for
+  `mail.explorekingstonwa.com` at NameHero (same Zone Editor session as the
+  CNAME) so invite email works. Free tier: 3,000/month, 100/day,
+  transactional only. Until then, hand invite codes over directly. See
+  [SYNDICATION.md](SYNDICATION.md) "Email".
+- **PENDING (Phase 2 / Vercel only) — the DB + object-storage migration.**
+  Every `.data/` store — auth (`src/lib/auth.ts`), portal overlays
+  (`src/lib/stores/json-store.ts`), hunts + photos (`src/lib/hunt-store.ts`),
+  analytics (`src/lib/analytics-store.ts`), survey (`src/lib/survey-store.ts`),
+  and maps (`src/lib/stores/map-store.ts`) — reimplemented against a
+  database, with photos/images in object storage. Not needed for Phase 1.
+  Enumerated with per-module targets in DEPLOY.md §a.
+
+The full **pre-launch checklist** (what must be green before real accounts) is
+in DEPLOY.md §f: persistent volume + `/api/health` green, fresh `AUTH_SECRET`,
+rate limiting deployed, automated backup scheduled, and — only when businesses
+self-serve — Resend wired.
 
 ---
 

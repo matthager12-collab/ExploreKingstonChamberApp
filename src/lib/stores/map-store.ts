@@ -5,6 +5,7 @@
 
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
+import { dataPath } from "../data-dir";
 import type { MapFeature, MapView } from "../map/types";
 import { mapViews as viewSeed } from "../data/map-views";
 import { mapFeatures as featureSeed } from "../data/map-features";
@@ -12,7 +13,7 @@ import { readMerged, writeOverlayRecord } from "./json-store";
 
 const VIEW_STORE = "map-views";
 const FEATURE_STORE = "map-features";
-const IMAGE_DIR = path.join(process.cwd(), ".data", "map", "images");
+const IMAGE_DIR = dataPath("map", "images");
 
 export async function getMapViews(): Promise<MapView[]> {
   return readMerged<MapView>(VIEW_STORE, viewSeed);

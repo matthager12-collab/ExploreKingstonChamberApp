@@ -6,7 +6,8 @@
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 
-const STORES_DIR = path.join(process.cwd(), ".data", "stores");
+import { dataPath } from "../data-dir";
+const STORES_DIR = dataPath("stores");
 
 export type WithId = { id: string };
 export type Overlay<T extends WithId> = (T & { _deleted?: boolean })[];

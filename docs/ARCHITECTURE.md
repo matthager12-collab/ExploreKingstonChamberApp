@@ -158,11 +158,25 @@ data the Chamber can refine.
 secrets in `.env.local` (WSDOT_API_KEY, AUTH_SECRET, optional
 NEXT_PUBLIC_GMAPS_EMBED_KEY).
 
-**Target:** Vercel app at `app.explorekingstonwa.com` via one CNAME at
-NameHero (**never** a nameserver move — the VPS also serves the domain's
-DNS and mail). Blockers before real users, in order: store layer →
-Postgres/Supabase (the interfaces are the seam), auth rate limiting +
-reset flow, Resend DNS for invite email. Full runbook: OPERATIONS.md.
+**Target — two phases (DEPLOY.md is the step-by-step):**
+
+- **Phase 1 (now): persistent-disk host** — Docker `output: "standalone"`
+  image on Render/Fly/Railway/VPS with `DATA_DIR` pointed at a mounted
+  volume, so the file stores work unchanged. Health probe at `/api/health`
+  (checks the volume is writable). Auth endpoints are rate-limited
+  (`src/lib/rate-limit.ts`, in-memory — correct for a single instance).
+  Reached via one CNAME at NameHero. Still pending before real users: an
+  automated `.data` backup schedule and Resend DNS for invite email.
+- **Phase 2 (later): Vercel** — serverless has no persistent disk, so the
+  store modules behind `src/lib/data-dir.ts` (auth, json-store overlays,
+  hunts+photos, analytics, survey, maps) migrate to Postgres/Supabase +
+  object storage, and `rate-limit.ts` moves to a shared KV. `data-dir.ts`
+  and each store's exported functions are the exact swap seam — nothing
+  above them changes.
+
+**DNS both phases:** one CNAME at NameHero (**never** a nameserver move —
+the VPS also serves the domain's DNS and mail). Full runbook: OPERATIONS.md;
+deploy guide: DEPLOY.md.
 
 ## 9. Known debt & risks (honest list)
 

@@ -13,6 +13,7 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
+import { dataPath } from "./data-dir";
 import { cookies } from "next/headers";
 
 export type Role = "business" | "nonprofit" | "admin";
@@ -37,7 +38,7 @@ export interface InviteCode {
   usedBy?: string;
 }
 
-const AUTH_DIR = path.join(process.cwd(), ".data", "auth");
+const AUTH_DIR = dataPath("auth");
 const USERS_FILE = path.join(AUTH_DIR, "users.json");
 const INVITES_FILE = path.join(AUTH_DIR, "invites.json");
 const SESSION_COOKIE = "vk-session";

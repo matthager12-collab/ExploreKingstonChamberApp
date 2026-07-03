@@ -26,6 +26,7 @@
 import { appendFile, mkdir, readFile } from "fs/promises";
 import path from "path";
 
+import { dataPath } from "./data-dir";
 export type GeoSource = "vercel-headers" | "dev-local" | "unknown";
 
 /** Coarse, connection-derived geography. Never an address or coordinates. */
@@ -185,7 +186,7 @@ export interface AnalyticsSummary {
   byDay: { day: string; pageviews: number; outboundClicks: number; sessions: number }[];
 }
 
-const DATA_FILE = path.join(process.cwd(), ".data", "analytics", "events.jsonl");
+const DATA_FILE = dataPath("analytics", "events.jsonl");
 
 export async function saveEvent(event: AnalyticsEvent): Promise<void> {
   await mkdir(path.dirname(DATA_FILE), { recursive: true });

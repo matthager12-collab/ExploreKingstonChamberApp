@@ -1,7 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { findUserByEmail, makeSessionToken, sessionCookie, verifyPassword } from "@/lib/auth";
+import { checkRateLimit, clientKey } from "@/lib/rate-limit";
+
+function tooMany(retryAfterSeconds: number): NextResponse {
+  return NextResponse.json(
+    { error: "too many attempts, please try again later" },
+    { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } },
+  );
+}
 
 export async function POST(request: NextRequest) {
+  // Rate-limit by client IP so no single source can brute-force scrypt hashes.
+  const ipLimit = checkRateLimit(clientKey(request, "login"));
+  if (!ipLimit.ok) return tooMany(ipLimit.retryAfterSeconds);
+
   let body: { email?: string; password?: string };
   try {
     body = await request.json();
@@ -11,6 +23,11 @@ export async function POST(request: NextRequest) {
   if (!body.email || !body.password) {
     return NextResponse.json({ error: "email and password required" }, { status: 400 });
   }
+
+  // Also rate-limit per submitted account so a single targeted email can't be
+  // ground down from many IPs. Normalize to match findUserByEmail's lookup.
+  const emailLimit = checkRateLimit("login:" + body.email.trim().toLowerCase());
+  if (!emailLimit.ok) return tooMany(emailLimit.retryAfterSeconds);
 
   const user = await findUserByEmail(body.email);
   if (!user || !verifyPassword(body.password, user.passwordHash)) {

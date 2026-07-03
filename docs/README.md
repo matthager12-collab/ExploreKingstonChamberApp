@@ -11,6 +11,7 @@ Kingston platform. Written July 2026 against the implemented v1.
 | [DATA_SOURCES.md](DATA_SOURCES.md) | Every external data source: endpoints, access, costs, verified facts, gotchas (WCF dates, GTFS expiry, fare seasons), Chamber action items, hosting/DNS plan | Touching any adapter; seasonal maintenance; wiring a new source |
 | [SYNDICATION.md](SYNDICATION.md) | The verified truth about pushing updates to Google / Apple / Yelp / Meta / TikTok, and the shipped feeds/embeds/JSON-LD | Building outbound integrations; setting business expectations |
 | [OPERATIONS.md](OPERATIONS.md) | Runbook: setup, env vars, `.data/` backup/reset, deploy steps + blockers, the dated seasonal maintenance calendar, human action items, troubleshooting | Running the thing; onboarding an operator |
+| [DEPLOY.md](DEPLOY.md) | Two-phase go-live: Phase 1 persistent-disk host now (Docker/Render/Fly, `DATA_DIR` volume, `/api/health`, DNS CNAME, backups); Phase 2 Vercel later (the store-module DB/blob migration seam) | Deploying to production; planning the Vercel move |
 | [ROADMAP-V2.md](ROADMAP-V2.md) | Prioritized (P0/P1/P2) improvement backlog — mobile/PWA hardening first, DB migration, auth hardening, syndication adapters, quality engineering — plus keep/change guidance for a from-scratch rebuild | Planning the next phase or a v2 rewrite |
 | [GIT_SETUP.md](GIT_SETUP.md) | Keeping this personal repo separate from the owner's work identity; 1Password-backed credentials | Git/GitHub account changes |
 
