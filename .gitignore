@@ -42,3 +42,6 @@ next-env.d.ts
 
 # LTAC survey responses (local store)
 .data/
+
+# Local git credential (token) — never commit
+.env.git

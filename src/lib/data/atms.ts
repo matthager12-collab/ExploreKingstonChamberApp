@@ -6,9 +6,8 @@
 // kitsapbank.com locations (site blocks bots — verified via Apr 2026 archive snapshot;
 // mid-merger into Heritage Bank, systems conversion expected Q3 2026), Speedway,
 // Gliding Eagle Market and The Point Casino operator pages, OSM/Yelp for the ARCO
-// and Chevron stations, branchspot for the Kingston Center grocery in-store ATM
-// (the 10978 plaza grocery has been listed as both Grocery Outlet and Kingston
-// Food Market/IGA — the ATM entry stays store-name-neutral until confirmed).
+// and Chevron stations, branchspot for the Kingston Center grocery in-store ATM.
+// The 10978 Kingston Center grocery is Grocery Outlet (confirmed locally 2026-07-03).
 //
 // Corrections baked in (verify pass):
 //   - Bank of America's nearest full financial center is EDMONDS (~5.7 mi via ferry),
@@ -16,13 +15,11 @@
 //     with cardless/tap and deposits — all verified.
 //   - Hwy 104 address numbers DECREASE going uphill/away from the water (11264 near
 //     the dock → 10978 at Kingston Center). Never say numbers increase going up.
-//   - Ferry cash story is HEDGED: the self-serve ticket KIOSKS are card-only (verified).
-//     Whether Kingston's staffed tollbooth takes cash is UNVERIFIED and conflicts with
-//     official WSF policy (WSF's ticket page says cash is accepted at staffed tollbooths
-//     system-wide; some tourism sites call the Kingston dock "cashless"). Either way,
-//     walking on FROM Kingston is free (passenger fares are collected at Edmonds), so
-//     most walk-on visitors pay nothing at the Kingston dock. The 3% card surcharge
-//     (since March 1, 2026) and ORCA-avoids-surcharge are verified. See ferry-info.ts.
+//   - Ferry cash: the self-serve ticket KIOSKS are card-only, but the STAFFED
+//     tollbooth DOES take cash (confirmed locally 2026-07-03), and cash avoids the
+//     3% card surcharge. Walking on FROM Kingston is free (passenger fares are
+//     collected at Edmonds). The 3% card surcharge (since March 1, 2026) and
+//     ORCA-avoids-surcharge are verified. See ferry-info.ts.
 //   - There is NO Chevron in downtown Kingston; the only Kingston Chevron is at the
 //     Hwy 104 / Bond Rd junction ~3.8 mi west. The near-downtown station is the
 //     24-hour ARCO / Kingston Mini-Mart (its ATM is unverified — field-check).
@@ -66,14 +63,14 @@ export const atms: Atm[] = [
   },
   {
     id: "kingston-food-market-iga",
-    name: "Kingston Center grocery — in-store ATM",
-    operator: "In-store ATM at the Kingston Center grocery (confirm the current store name on arrival — the plaza has been listed as both Grocery Outlet and Kingston Food Market/IGA)",
+    name: "Grocery Outlet (Kingston Center) — in-store ATM",
+    operator: "Grocery Outlet in-store ATM",
     address: "10978 NE State Hwy 104, Kingston, WA 98346",
     feeNote:
       "Independent in-store ATM — expect a ~$3 surcharge plus your own bank's fee. Not on any surcharge-free network. Fee-free alternative: ask for cash-back at the register when you buy something with a debit card.",
     walkMinutesFromFerry: 11,
     notes:
-      "Inside the grocery store in the same Kingston Center lot as the BofA drive-up ATM — a 10–12 minute uphill walk or 2-minute drive from the dock. Store hours only (not 24-hour), so it closes when the store does. Handy if you're already grabbing groceries; the register cash-back beats the ATM fee.",
+      "Inside Grocery Outlet, in the same Kingston Center lot as the BofA drive-up ATM — a 10–12 minute uphill walk or 2-minute drive from the dock. Store hours only (not 24-hour), so it closes when the store does. Handy if you're already grabbing groceries; the register cash-back beats the ATM fee.",
     lat: 47.8018,
     lng: -122.5009,
   },
@@ -204,7 +201,7 @@ export const atmMeta: Record<string, AtmMeta> = {
     access: "store hours only",
     surchargeFreeNetwork: "none",
     walkRoute:
-      "Same route as the BofA drive-up: up NE State Hwy 104 about 0.5 mi from the ferry walk-off to the Kingston Center plaza (numbers count down as you climb — 11264 near the dock → 10978). The ATM is inside the Kingston Food Market/IGA. ~10–12 min uphill.",
+      "Same route as the BofA drive-up: up NE State Hwy 104 about 0.5 mi from the ferry walk-off to the Kingston Center plaza (numbers count down as you climb — 11264 near the dock → 10978). The ATM is inside Grocery Outlet. ~10–12 min uphill.",
     driveRoute:
       "Up NE State Hwy 104 ~0.5 mi to the Kingston Center plaza lot on the north side; park and use the ATM inside the store. Same lot as the BofA drive-up. ~2 min.",
   },

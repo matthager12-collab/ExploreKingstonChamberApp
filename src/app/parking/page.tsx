@@ -239,14 +239,16 @@ export default async function ParkingPage() {
         <div className="max-w-2xl space-y-3 text-ink-soft">
           <p>
             Do you even need cash? Less than you might think. {FERRY_PAYMENT.freeLegNote}{" "}
-            The Kitsap Transit fast ferry farebox takes exact cash — the crew carries no change —
-            and cash is handy in town, but you can pay the car ferry entirely by card or ORCA.
+            You can pay the car ferry by card or ORCA — or by cash at the staffed tollbooth,
+            which is the one way to dodge the 3% card surcharge. The Kitsap Transit fast ferry
+            farebox takes exact cash too (the crew carries no change), and cash stays handy in
+            town for tips, the Sunday market, and small shops.
           </p>
           <p>
             There is <span className="font-medium text-ink">no ATM at the ferry terminal</span>{" "}
             and no bank branch in walkable downtown Kingston. The one confirmed 24-hour bank ATM
             is a 10–12 minute walk up the hill; the full-service branches are a short drive west
-            at George&apos;s Corner. In a pinch, the grocery at Kingston Center and Safeway
+            at George&apos;s Corner. In a pinch, Grocery Outlet (Kingston Center) and Safeway
             (George&apos;s Corner) give debit cash-back at the register — fee-free.
           </p>
         </div>

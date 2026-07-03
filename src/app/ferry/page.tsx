@@ -184,11 +184,12 @@ export default async function FerryPage() {
         <Callout title="Money on the boat">
           <p>
             Cards (Visa, Mastercard, Amex, Discover) work at the WSF tollbooths, but every
-            credit/debit purchase carries a 3% surcharge (since March 2026). The self-serve ticket
-            kiosks are card-only. A pre-loaded ORCA card skips the surcharge (as long as you didn&rsquo;t
-            load it at a WSF facility). Best of all: walking on from Kingston is free — fares are
-            collected at Edmonds — so most walk-on visitors pay nothing at the dock. Good To Go! is
-            highway tolling only — it will not pay for a ferry.
+            credit/debit purchase carries a 3% surcharge (since March 2026). Two ways to skip it:
+            pay <span className="font-medium">cash at the staffed tollbooth</span> (the self-serve
+            ticket kiosks are card-only, but the booth takes bills), or tap a pre-loaded ORCA card
+            (as long as you didn&rsquo;t load it at a WSF facility). Best of all: walking on from
+            Kingston is free — fares are collected at Edmonds — so most walk-on visitors pay nothing
+            at the dock. Good To Go! is highway tolling only — it will not pay for a ferry.
           </p>
           <p className="mt-2">
             Driving on? During peak periods (daily 8 am–8 pm in season, plus weekends and holidays)
