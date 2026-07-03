@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { VisitorSurvey } from "@/components/visitor-survey";
+import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
+import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
 import { Callout, Card, ExternalLink, PageHeader, Section } from "@/components/ui";
 
 export const metadata: Metadata = {
@@ -9,13 +11,24 @@ export const metadata: Metadata = {
     "Visit Kingston is a free, ad-free community project built with the Greater Kingston Chamber of Commerce — and an honest look at what we track and why.",
 };
 
-export default function AboutPage() {
+// Copy and visibility are admin-editable — refresh within a minute like the
+// other public pages.
+export const revalidate = 60;
+
+export default async function AboutPage() {
+  const hiddenPreview = await assertPageVisible("/about");
+  const copy = await getCopyOverrides();
   return (
     <>
+      {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
-        eyebrow="The story"
-        title="About Visit Kingston"
-        intro="This site is a community project, built with the Greater Kingston Chamber of Commerce by people who live here. It's free to use and free of ads — no sponsored placements, no pay-to-rank listings. If it's on the site, it's because it's useful."
+        eyebrow={copyText(copy, "about.header.eyebrow", "The story")}
+        title={copyText(copy, "about.header.title", "About Visit Kingston")}
+        intro={copyText(
+          copy,
+          "about.header.intro",
+          "This site is a community project, built with the Greater Kingston Chamber of Commerce by people who live here. It's free to use and free of ads — no sponsored placements, no pay-to-rank listings. If it's on the site, it's because it's useful.",
+        )}
       />
 
       <Section title="Why your visit counts">

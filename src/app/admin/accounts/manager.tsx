@@ -1,9 +1,10 @@
 "use client";
 
-// Client half of /admin/accounts: accounts table, invite list, and the
-// create-invite form. Deliberately plain (fetch + local state, no reload) in
-// the same spirit as portal/forms.tsx. All authorization is server-side —
-// this UI just talks to /api/portal/invites, which requires role admin.
+// Client half of /admin/accounts: accounts table (with password resets),
+// invite list, and the create-invite form. Deliberately plain (fetch + local
+// state, no reload) in the same spirit as portal/forms.tsx. All authorization
+// is server-side — this UI talks to /api/portal/invites and
+// /api/portal/users, both of which require role admin.
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Badge, Card, Section } from "@/components/ui";
@@ -107,6 +108,49 @@ export function AccountsManager({
   useEffect(() => setOrigin(window.location.origin), []);
   const joinUrl = `${origin}/portal/join`;
 
+  // ---------- password reset state ----------
+  //
+  // The temp password exists only in this response/state — the server keeps
+  // just its hash — so it is shown once and gone after a reload.
+
+  const [resetResult, setResetResult] = useState<{
+    user: SafeUser;
+    tempPassword: string;
+  } | null>(null);
+  const [resetBusyId, setResetBusyId] = useState<string | null>(null);
+  const [resetError, setResetError] = useState<string | null>(null);
+
+  async function resetPassword(u: SafeUser) {
+    const confirmed = window.confirm(
+      `Reset the password for ${u.name} (${u.email})?\n\nGenerates a temporary password you hand to them — the old one stops working immediately.`,
+    );
+    if (!confirmed) return;
+    setResetBusyId(u.id);
+    setResetError(null);
+    setResetResult(null);
+    try {
+      const res = await fetch("/api/portal/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reset-password", userId: u.id }),
+      });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        tempPassword?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.ok || !data.tempPassword) {
+        setResetError(data.error ?? "Something went wrong");
+        return;
+      }
+      setResetResult({ user: u, tempPassword: data.tempPassword });
+    } catch {
+      setResetError("Network error — try again");
+    } finally {
+      setResetBusyId(null);
+    }
+  }
+
   // ---------- invites state ----------
 
   const [invites, setInvites] = useState<InviteRow[]>(() =>
@@ -193,6 +237,25 @@ export function AccountsManager({
   return (
     <>
       <Section title="Accounts" subtitle="Everyone with a portal login and what they manage.">
+        {resetResult && (
+          <Card className="mb-5 border-coral bg-coral/5">
+            <p className="text-sm font-semibold tracking-wide text-coral-deep uppercase">
+              Temporary password for {resetResult.user.name} — shown once
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <code className="rounded-lg border border-sand bg-white px-4 py-2 font-mono text-2xl font-bold tracking-widest text-sound-deep">
+                {resetResult.tempPassword}
+              </code>
+              <CopyButton text={resetResult.tempPassword} label="Copy password" />
+            </div>
+            <p className="mt-3 text-sm text-ink-soft">
+              Copy it now and hand it to{" "}
+              <span className="font-medium text-ink">{resetResult.user.email}</span> — it is never
+              stored in plaintext and won&apos;t be shown again. Their old password has already
+              stopped working; they should change this one right after signing in.
+            </p>
+          </Card>
+        )}
         <Card>
           {users.length === 0 ? (
             <p className="text-sm text-ink-soft">
@@ -200,7 +263,7 @@ export function AccountsManager({
             </p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[40rem] text-left text-sm">
+              <table className="w-full min-w-[48rem] text-left text-sm">
                 <thead>
                   <tr className="border-b border-sand text-xs font-semibold tracking-wide text-ink-soft uppercase">
                     <th className="px-3 py-2">Name</th>
@@ -208,6 +271,9 @@ export function AccountsManager({
                     <th className="px-3 py-2">Role</th>
                     <th className="px-3 py-2">Manages</th>
                     <th className="px-3 py-2">Created</th>
+                    <th className="px-3 py-2">
+                      <span className="sr-only">Actions</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -228,12 +294,28 @@ export function AccountsManager({
                       <td className="px-3 py-3 whitespace-nowrap text-ink-soft">
                         {fmtDate(u.createdAt)}
                       </td>
+                      <td className="px-3 py-3">
+                        <button
+                          type="button"
+                          onClick={() => resetPassword(u)}
+                          disabled={resetBusyId !== null}
+                          className="rounded-full border border-sand bg-white px-3 py-1 text-xs font-semibold whitespace-nowrap text-tide-deep hover:border-tide disabled:opacity-50"
+                        >
+                          {resetBusyId === u.id ? "Resetting…" : "Reset password"}
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           )}
+          {resetError && (
+            <p className="mt-3 text-sm font-medium text-coral-deep">{resetError}</p>
+          )}
+          <p className="mt-3 text-xs text-ink-soft">
+            Passwords are hashed — they can&apos;t be viewed, only reset.
+          </p>
         </Card>
       </Section>
 

@@ -4,6 +4,7 @@ import "./globals.css";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
 import { Tracker } from "@/components/tracker";
+import { getHiddenPaths } from "@/lib/stores/site-store";
 
 const roboto = Roboto({
   subsets: ["latin"],
@@ -70,11 +71,13 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Admin-hidden pages drop out of the nav and footer site-wide.
+  const hiddenPaths = await getHiddenPaths();
   return (
     <html
       lang="en"
@@ -82,9 +85,9 @@ export default function RootLayout({
     >
       <body className="flex min-h-full flex-col">
         <Tracker />
-        <SiteNav />
+        <SiteNav hiddenPaths={hiddenPaths} />
         <main className="flex-1">{children}</main>
-        <SiteFooter />
+        <SiteFooter hiddenPaths={hiddenPaths} />
       </body>
     </html>
   );

@@ -23,12 +23,23 @@ const moreLinks = [
   { href: "/portal", label: "Chamber Portal" },
 ];
 
-export function SiteNav() {
+export function SiteNav({ hiddenPaths = [] }: { hiddenPaths?: string[] }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+
+  // Admin-hidden pages drop out of every menu (home is never hideable).
+  const visible = (href: string) => !hiddenPaths.includes(href);
+  const primary = primaryLinks.filter((l) => visible(l.href));
+  const more = moreLinks.filter((l) => visible(l.href));
+  const bottomBarLinks = [
+    { href: "/", label: "Home", icon: "⌂" },
+    { href: "/ferry", label: "Ferry", icon: "⛴" },
+    { href: "/eat", label: "Eat", icon: "🍽" },
+    { href: "/events", label: "Events", icon: "📅" },
+  ].filter((l) => visible(l.href));
 
   return (
     <>
@@ -48,7 +59,7 @@ export function SiteNav() {
           </Link>
 
           <nav className="hidden items-center gap-1 md:flex" aria-label="Main">
-            {primaryLinks.map((l) => (
+            {primary.map((l) => (
               <Link
                 key={l.href}
                 href={l.href}
@@ -66,7 +77,7 @@ export function SiteNav() {
                 onClick={() => setMoreOpen((v) => !v)}
                 onBlur={() => setTimeout(() => setMoreOpen(false), 150)}
                 className={`font-nav rounded-lg px-3 py-2 text-[13px] font-semibold tracking-wide uppercase transition-colors ${
-                  moreLinks.some((l) => isActive(l.href))
+                  more.some((l) => isActive(l.href))
                     ? "bg-sound text-white"
                     : "text-ink hover:bg-seaglass/40 hover:text-sound"
                 }`}
@@ -76,7 +87,7 @@ export function SiteNav() {
               </button>
               {moreOpen && (
                 <div className="absolute right-0 mt-1 w-48 rounded-xl border border-sand bg-white py-2 shadow-lg">
-                  {moreLinks.map((l) => (
+                  {more.map((l) => (
                     <Link
                       key={l.href}
                       href={l.href}
@@ -98,13 +109,15 @@ export function SiteNav() {
         className="fixed inset-x-0 bottom-0 z-40 border-t border-sand bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
         aria-label="Mobile"
       >
-        <div className="grid grid-cols-5">
-          {[
-            { href: "/", label: "Home", icon: "⌂" },
-            { href: "/ferry", label: "Ferry", icon: "⛴" },
-            { href: "/eat", label: "Eat", icon: "🍽" },
-            { href: "/events", label: "Events", icon: "📅" },
-          ].map((l) => (
+        <div
+          className="grid"
+          style={{
+            // One equal column per surviving link plus the More button —
+            // Tailwind can't JIT a dynamic grid-cols-N class.
+            gridTemplateColumns: `repeat(${bottomBarLinks.length + 1}, minmax(0, 1fr))`,
+          }}
+        >
+          {bottomBarLinks.map((l) => (
             <Link
               key={l.href}
               href={l.href}
@@ -136,7 +149,7 @@ export function SiteNav() {
       {sheetOpen && (
         <div className="fixed inset-x-0 bottom-[calc(3.4rem+env(safe-area-inset-bottom))] z-30 border-t border-sand bg-white p-4 shadow-[0_-8px_24px_rgba(22,64,94,0.12)] md:hidden">
           <div className="grid grid-cols-2 gap-2">
-            {[...primaryLinks.filter((l) => !["/ferry", "/eat", "/events"].includes(l.href)), ...moreLinks].map(
+            {[...primary.filter((l) => !["/ferry", "/eat", "/events"].includes(l.href)), ...more].map(
               (l) => (
                 <Link
                   key={l.href}

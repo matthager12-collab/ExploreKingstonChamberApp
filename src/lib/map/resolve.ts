@@ -10,7 +10,8 @@ import type { Restaurant } from "../types";
 import { getMapView, getFeaturesForView } from "../stores/map-store";
 import { getRestaurants } from "../stores/business-store";
 import { getParkingZones } from "../stores/parking-store";
-import { atms, atmMeta } from "../data/atms";
+import { atmMeta } from "../data/atms";
+import { getAtms } from "../stores/listing-stores";
 
 /** Pick a marker-palette category so coffee/bars get their own pin, not 🍽️. */
 function restaurantCategory(r: Restaurant): string {
@@ -41,6 +42,9 @@ export async function resolveMapView(viewId: string): Promise<ResolvedMapView | 
   }
 
   if (view.sources.includes("atms")) {
+    // Admin-editable via /admin/listings (overlay over the seed); atmMeta
+    // stays a seed-keyed lookup, so admin-added ATMs just lack the 24h flag.
+    const atms = await getAtms();
     builtins.atms = atms.map((a) => ({
       id: a.id,
       name: a.name,

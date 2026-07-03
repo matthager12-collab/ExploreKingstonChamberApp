@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import type { Lodging } from "@/lib/types";
-import { lodging } from "@/lib/data/lodging";
+import { getLodging } from "@/lib/stores/listing-stores";
+import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
+import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
 import {
   PageHeader,
   Section,
@@ -10,6 +12,10 @@ import {
   ExternalLink,
   mapSearchUrl,
 } from "@/components/ui";
+
+// Lodging is admin-editable (seed + overlay via the listing store);
+// revalidate keeps admin edits fresh here.
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "Stay",
@@ -66,13 +72,20 @@ function LodgingCard({ place }: { place: Lodging }) {
   );
 }
 
-export default function StayPage() {
+export default async function StayPage() {
+  const hiddenPreview = await assertPageVisible("/stay");
+  const [lodging, copy] = await Promise.all([getLodging(), getCopyOverrides()]);
   return (
     <>
+      {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
-        eyebrow="Spend the night"
-        title="Stay the night"
-        intro="Day-trippers catch the boat home right when the light gets good. Stay over instead: watch the evening ferry cross a gold Puget Sound, walk Appletree Cove after dinner, and have the waterfront nearly to yourself at breakfast."
+        eyebrow={copyText(copy, "stay.header.eyebrow", "Spend the night")}
+        title={copyText(copy, "stay.header.title", "Stay the night")}
+        intro={copyText(
+          copy,
+          "stay.header.intro",
+          "Day-trippers catch the boat home right when the light gets good. Stay over instead: watch the evening ferry cross a gold Puget Sound, walk Appletree Cove after dinner, and have the waterfront nearly to yourself at breakfast.",
+        )}
       />
 
       <Section

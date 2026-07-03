@@ -1,7 +1,13 @@
 import type { Metadata } from "next";
 import { Callout, Card, ExternalLink, PageHeader, Section } from "@/components/ui";
-import { edmondsWebcams, kingstonWebcams } from "@/lib/data/webcams";
+import { getWebcams } from "@/lib/stores/listing-stores";
+import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
+import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
 import { WebcamGrid } from "./webcam-grid";
+
+// Webcams are admin-editable (seed + overlay via the listing store);
+// revalidate keeps admin edits fresh here.
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "Webcams",
@@ -9,13 +15,24 @@ export const metadata: Metadata = {
     "Live WSDOT camera views of the Kingston and Edmonds ferry lines, plus nearby local cams.",
 };
 
-export default function WebcamsPage() {
+export default async function WebcamsPage() {
+  const hiddenPreview = await assertPageVisible("/webcams");
+  const [cams, copy] = await Promise.all([getWebcams(), getCopyOverrides()]);
+  // Same split the seed file used: edmonds-* ids on the Edmonds side,
+  // everything else (including any admin-added local cams) on the Kingston side.
+  const kingstonCams = cams.filter((w) => !w.id.startsWith("edmonds-"));
+  const edmondsCams = cams.filter((w) => w.id.startsWith("edmonds-"));
   return (
     <>
+      {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
-        eyebrow="Check before you drive"
-        title="Webcams"
-        intro="Eleven WSDOT cameras watch the Edmonds–Kingston run. They're still images, not video — most update about once a minute — but they'll tell you how long the ferry line is before you commit to getting in it."
+        eyebrow={copyText(copy, "webcams.header.eyebrow", "Check before you drive")}
+        title={copyText(copy, "webcams.header.title", "Webcams")}
+        intro={copyText(
+          copy,
+          "webcams.header.intro",
+          "Eleven WSDOT cameras watch the Edmonds–Kingston run. They're still images, not video — most update about once a minute — but they'll tell you how long the ferry line is before you commit to getting in it.",
+        )}
       />
 
       <Section>
@@ -38,14 +55,14 @@ export default function WebcamsPage() {
         title="Kingston side"
         subtitle="In order along the approach — Lindvog Road is the first checkpoint, the terminal cam is the boat itself."
       >
-        <WebcamGrid cams={kingstonWebcams} />
+        <WebcamGrid cams={kingstonCams} />
       </Section>
 
       <Section
         title="Edmonds side"
         subtitle="Heading to Kingston? The holding-lanes cam tells you most of what you need to know."
       >
-        <WebcamGrid cams={edmondsWebcams} />
+        <WebcamGrid cams={edmondsCams} />
       </Section>
 
       <Section

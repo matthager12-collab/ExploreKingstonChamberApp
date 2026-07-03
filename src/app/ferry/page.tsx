@@ -21,6 +21,8 @@ import {
   getVesselLocations,
 } from "@/lib/wsf";
 import { FAST_FERRY_FACTS, getFastFerrySailings } from "@/lib/kitsap";
+import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
+import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
 import { FerryBoard } from "./ferry-board";
 import { FerryVesselMap } from "@/components/ferry-vessel-map";
 import { FerryLineInfo } from "@/components/ferry-line-info";
@@ -46,11 +48,13 @@ function transitDirectionsUrl(destination: string): string {
 }
 
 export default async function FerryPage() {
-  const [carFerry, kingston, edmonds, alerts] = await Promise.all([
+  const hiddenPreview = await assertPageVisible("/ferry");
+  const [carFerry, kingston, edmonds, alerts, copy] = await Promise.all([
     getTodaysSailings(),
     getTerminalStatus("kingston"),
     getTerminalStatus("edmonds"),
     getRouteAlerts(),
+    getCopyOverrides(),
   ]);
   const fastFerry = getFastFerrySailings();
   const vessels = await getVesselLocations();
@@ -58,10 +62,15 @@ export default async function FerryPage() {
 
   return (
     <>
+      {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
-        eyebrow="Getting here and back"
-        title="Ferry times"
-        intro="Two boats serve Kingston: the Edmonds–Kingston car ferry — about 30 minutes, every day, walk-ons welcome — and a passengers-only fast ferry straight to downtown Seattle in 39 minutes."
+        eyebrow={copyText(copy, "ferry.header.eyebrow", "Getting here and back")}
+        title={copyText(copy, "ferry.header.title", "Ferry times")}
+        intro={copyText(
+          copy,
+          "ferry.header.intro",
+          "Two boats serve Kingston: the Edmonds–Kingston car ferry — about 30 minutes, every day, walk-ons welcome — and a passengers-only fast ferry straight to downtown Seattle in 39 minutes.",
+        )}
       />
 
       {alerts.length > 0 && (

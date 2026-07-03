@@ -5,6 +5,7 @@ import { getFastFerrySailings } from "@/lib/kitsap";
 import { getForecast } from "@/lib/weather";
 import { getTodaysTides } from "@/lib/tides";
 import { getEvents } from "@/lib/stores/event-store";
+import { getCopyOverrides, copyText, getHiddenPaths } from "@/lib/stores/site-store";
 import { formatPacificDate, formatPacificTime, todayPacific } from "@/lib/time";
 import { Badge, Card, ExternalLink, Section } from "@/components/ui";
 import { VisitorSurvey } from "@/components/visitor-survey";
@@ -36,13 +37,17 @@ function nextDeparture(
 }
 
 export default async function Home() {
-  const [carFerry, forecast, tides, events] = await Promise.all([
+  const [carFerry, forecast, tides, events, copy, hiddenPaths] = await Promise.all([
     getTodaysSailings(),
     getForecast(2),
     getTodaysTides(),
     getEvents(),
+    getCopyOverrides(),
+    getHiddenPaths(),
   ]);
   const fastFerry = getFastFerrySailings();
+  // Admin-hidden pages drop out of the feature grid.
+  const visibleFeatures = features.filter((f) => !hiddenPaths.includes(f.href));
 
   const nextToEdmonds = nextDeparture(carFerry.sailings, "from-kingston");
   const nextToKingston = nextDeparture(carFerry.sailings, "to-kingston");
@@ -76,30 +81,33 @@ export default async function Home() {
         />
         <div className="mx-auto max-w-5xl px-4 pt-14 pb-10 sm:pt-20 sm:pb-16">
           <p className="font-nav text-sm font-semibold tracking-[0.25em] text-seaglass uppercase">
-            Gateway to the Kitsap & Olympic Peninsulas
+            {copyText(copy, "home.hero.eyebrow", "Gateway to the Kitsap & Olympic Peninsulas")}
           </p>
           <h1 className="font-display mt-3 max-w-2xl text-5xl leading-tight font-semibold sm:text-6xl">
-            You made the boat.
+            {copyText(copy, "home.hero.title1", "You made the boat.")}
             <br />
-            Now make the most of{" "}
+            {copyText(copy, "home.hero.title2", "Now make the most of")}{" "}
             <span className="font-script text-[1.15em] font-normal">Kingston</span>.
           </h1>
           <p className="mt-4 max-w-xl text-lg text-white">
-            Ferry times, food worth walking to, and everything happening in our
-            little town on Appletree Cove — from the folks who live here.
+            {copyText(
+              copy,
+              "home.hero.intro",
+              "Ferry times, food worth walking to, and everything happening in our little town on Appletree Cove — from the folks who live here.",
+            )}
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
             <Link
               href="/ferry"
               className="rounded-full bg-coral px-6 py-3 font-semibold text-white shadow hover:bg-coral-deep"
             >
-              Next boats →
+              {copyText(copy, "home.hero.ctaPrimary", "Next boats →")}
             </Link>
             <Link
               href="/itineraries"
               className="rounded-full border border-seaglass/60 px-6 py-3 font-semibold text-white hover:bg-white/10"
             >
-              Plan my day
+              {copyText(copy, "home.hero.ctaSecondary", "Plan my day")}
             </Link>
           </div>
         </div>
@@ -165,7 +173,7 @@ export default async function Home() {
       {/* Feature grid */}
       <Section title="Everything in town, one tap away">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {features.map((f) => (
+          {visibleFeatures.map((f) => (
             <Link
               key={f.href}
               href={f.href}

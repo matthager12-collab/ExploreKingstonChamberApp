@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getAllHunts } from "@/lib/hunt-store";
+import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
+import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
 import { Badge, Callout, Card, ExternalLink, PageHeader, Section, mapDirectionsUrl } from "@/components/ui";
 
 // Hunts can be created/edited by the Chamber in the admin builder at any
@@ -29,14 +31,20 @@ const steps = [
 ];
 
 export default async function HuntPage() {
-  const hunts = await getAllHunts();
+  const hiddenPreview = await assertPageVisible("/hunt");
+  const [hunts, copy] = await Promise.all([getAllHunts(), getCopyOverrides()]);
 
   return (
     <>
+      {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
-        eyebrow="Get out and play"
-        title="Kingston Scavenger Hunt"
-        intro="Free, self-guided, and built for your phone. Solve riddles around town and post a photo at each spot to check in. No app to download, no account to make — just heads up that posted photos go to the hunt organizers."
+        eyebrow={copyText(copy, "hunt.header.eyebrow", "Get out and play")}
+        title={copyText(copy, "hunt.header.title", "Kingston Scavenger Hunt")}
+        intro={copyText(
+          copy,
+          "hunt.header.intro",
+          "Free, self-guided, and built for your phone. Solve riddles around town and post a photo at each spot to check in. No app to download, no account to make — just heads up that posted photos go to the hunt organizers.",
+        )}
       />
 
       <Section title="How it works">

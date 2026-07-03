@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import type { Charity, EventItem } from "@/lib/types";
 import { getCharities, getVolunteerNeeds } from "@/lib/stores/charity-store";
 import { getEvents } from "@/lib/stores/event-store";
+import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
+import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
 import {
   PageHeader,
   Section,
@@ -44,10 +46,12 @@ function pacificDateKey(iso: string): string {
 export const revalidate = 60;
 
 export default async function GiveBackPage() {
-  const [charities, volunteerNeeds, events] = await Promise.all([
+  const hiddenPreview = await assertPageVisible("/give");
+  const [charities, volunteerNeeds, events, copy] = await Promise.all([
     getCharities(),
     getVolunteerNeeds(),
     getEvents(),
+    getCopyOverrides(),
   ]);
   const charityById = new Map(charities.map((c) => [c.id, c]));
   const today = todayPacific();
@@ -76,15 +80,24 @@ export default async function GiveBackPage() {
 
   return (
     <>
+      {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
-        eyebrow="Give back"
-        title="Kingston runs on volunteers"
-        intro="The fireworks, the market, the food bank, the Village Green — none of it happens without neighbors raising their hands. Here's who does the work, where help is needed this summer, and a shared calendar so two good causes don't book the same day."
+        eyebrow={copyText(copy, "give.header.eyebrow", "Give back")}
+        title={copyText(copy, "give.header.title", "Kingston runs on volunteers")}
+        intro={copyText(
+          copy,
+          "give.header.intro",
+          "The fireworks, the market, the food bank, the Village Green — none of it happens without neighbors raising their hands. Here's who does the work, where help is needed this summer, and a shared calendar so two good causes don't book the same day.",
+        )}
       />
 
       <Section
         title="Nonprofit directory"
-        subtitle="The orgs doing the heavy lifting around town. Reach out directly — they're small, friendly, and always short a pair of hands."
+        subtitle={copyText(
+          copy,
+          "give.directory.subtitle",
+          "The orgs doing the heavy lifting around town. Reach out directly — they're small, friendly, and always short a pair of hands.",
+        )}
       >
         <div className="grid gap-4 sm:grid-cols-2">
           {charities.map((c) => (
@@ -114,7 +127,11 @@ export default async function GiveBackPage() {
 
       <Section
         title="Volunteer right now"
-        subtitle="Real shifts this summer, a couple hours each. No account needed — v1 keeps it simple: you contact the org, they put you to work."
+        subtitle={copyText(
+          copy,
+          "give.volunteer.subtitle",
+          "Real shifts this summer, a couple hours each. No account needed — v1 keeps it simple: you contact the org, they put you to work.",
+        )}
       >
         {sortedNeeds.length === 0 && (
           <Card>
@@ -198,7 +215,11 @@ export default async function GiveBackPage() {
 
       <Section
         title="Planning a fundraiser? Deconflict first"
-        subtitle="Two good causes on the same day split the same crowd — and the same wallets. Scan the dates below before you book yours."
+        subtitle={copyText(
+          copy,
+          "give.deconflict.subtitle",
+          "Two good causes on the same day split the same crowd — and the same wallets. Scan the dates below before you book yours.",
+        )}
       >
         {dateEntries.length === 0 ? (
           <Card>

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getItinerary, itineraries } from "@/lib/data/itineraries";
+import { getItinerary } from "@/lib/stores/itinerary-store";
 import {
   Badge,
   Callout,
@@ -11,9 +11,9 @@ import {
   mapSearchUrl,
 } from "@/components/ui";
 
-export function generateStaticParams() {
-  return itineraries.map((it) => ({ slug: it.slug }));
-}
+// Admin-created itineraries must appear immediately, so no static params —
+// every request reads the store (seed merged with the admin overlay).
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({
   params,
@@ -21,7 +21,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const itinerary = getItinerary(slug);
+  const itinerary = await getItinerary(slug);
   if (!itinerary) return { title: "Itinerary not found" };
   return {
     title: itinerary.title,
@@ -41,7 +41,7 @@ export default async function ItineraryPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const itinerary = getItinerary(slug);
+  const itinerary = await getItinerary(slug);
   if (!itinerary) notFound();
 
   const mode = modeLabels[itinerary.mode];

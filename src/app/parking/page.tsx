@@ -11,7 +11,10 @@ import {
 } from "@/components/ui";
 import { FeatureMap } from "@/components/feature-map";
 import { resolveMapView } from "@/lib/map/resolve";
-import { atms, atmMeta } from "@/lib/data/atms";
+import { atmMeta } from "@/lib/data/atms";
+import { getAtms } from "@/lib/stores/listing-stores";
+import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
+import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
 import { FERRY_PAYMENT, BOARDING_PASS, SOURCES } from "@/lib/data/ferry-info";
 
 // The parking map is the Chamber's live "parking-cash" map-CMS view, built and
@@ -30,19 +33,32 @@ export const metadata: Metadata = {
 /* ------------------------------------------------------------------ */
 
 export default async function ParkingPage() {
+  const hiddenPreview = await assertPageVisible("/parking");
   const parkingMap = await resolveMapView("parking-cash");
+  // ATMs are admin-editable (seed + overlay). atmMeta stays a static lookup
+  // keyed by seed id; admin-added ATMs simply render without meta badges.
+  const [atms, copy] = await Promise.all([getAtms(), getCopyOverrides()]);
 
   return (
     <>
+      {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
-        eyebrow="Plan your visit"
-        title="Parking & ATMs"
-        intro="Kingston's parking universe is small but full of gotchas: a paid Port lot by the marina, a commuter lot one block up, a strictly enforced free 2-hour row, a couple of genuinely unrestricted streets, and two free park & rides. The Chamber's live parking map shows where to leave the car — color-coded by type, with owner, payment, and time-limit details — plus where to find cash."
+        eyebrow={copyText(copy, "parking.header.eyebrow", "Plan your visit")}
+        title={copyText(copy, "parking.header.title", "Parking & ATMs")}
+        intro={copyText(
+          copy,
+          "parking.header.intro",
+          "Kingston's parking universe is small but full of gotchas: a paid Port lot by the marina, a commuter lot one block up, a strictly enforced free 2-hour row, a couple of genuinely unrestricted streets, and two free park & rides. The Chamber's live parking map shows where to leave the car — color-coded by type, with owner, payment, and time-limit details — plus where to find cash.",
+        )}
       />
 
       <Section
         title="The map"
-        subtitle="The Chamber's live parking map, built and kept current in the portal. Tap any lot for its type, owner, how to pay, and time limits. Colors are set automatically by parking type."
+        subtitle={copyText(
+          copy,
+          "parking.map.subtitle",
+          "The Chamber's live parking map, built and kept current in the portal. Tap any lot for its type, owner, how to pay, and time limits. Colors are set automatically by parking type.",
+        )}
       >
         {parkingMap ? (
           <FeatureMap resolved={parkingMap} height="500px" />

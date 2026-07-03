@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import type { EventCategory, EventItem } from "@/lib/types";
 import { getEvents } from "@/lib/stores/event-store";
+import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
+import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
 import { formatPacificDate, formatPacificTime, todayPacific } from "@/lib/time";
 import {
   Badge,
@@ -130,7 +132,8 @@ function EventCard({ event }: { event: EventItem }) {
 }
 
 export default async function EventsPage() {
-  const events = await getEvents();
+  const hiddenPreview = await assertPageVisible("/events");
+  const [events, copy] = await Promise.all([getEvents(), getCopyOverrides()]);
   const today = todayPacific();
   const upcoming = events
     .filter((event) => dateOf(event.start) >= today)
@@ -149,10 +152,15 @@ export default async function EventsPage() {
 
   return (
     <>
+      {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
-        eyebrow="What's happening"
-        title="Events"
-        intro="Markets on the marina lawn, free concerts two nights a week in high summer, and the whole town out for the 4th. Most of it is a short walk from the ferry."
+        eyebrow={copyText(copy, "events.header.eyebrow", "What's happening")}
+        title={copyText(copy, "events.header.title", "Events")}
+        intro={copyText(
+          copy,
+          "events.header.intro",
+          "Markets on the marina lawn, free concerts two nights a week in high summer, and the whole town out for the 4th. Most of it is a short walk from the ferry.",
+        )}
       />
 
       {thisWeekend.length === 0 && byMonth.size === 0 && (

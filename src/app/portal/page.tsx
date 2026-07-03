@@ -28,6 +28,12 @@ export default async function PortalPage() {
   }
 
   const cards: { href: string; title: string; blurb: string }[] = [];
+  // Every role gets this one — it's the self-service account page.
+  cards.push({
+    href: "/portal/account",
+    title: "My account",
+    blurb: "Update your name, email, and password.",
+  });
   if (user.role === "business" || user.role === "admin") {
     cards.push({
       href: "/portal/business",
@@ -73,6 +79,21 @@ export default async function PortalPage() {
         href: "/admin/maps",
         title: "Map builder",
         blurb: "Create map views and drop markers, trails, and areas onto them.",
+      },
+      {
+        href: "/admin/content",
+        title: "Site content",
+        blurb: "Edit page text and show or hide entire pages.",
+      },
+      {
+        href: "/admin/itineraries",
+        title: "Itineraries",
+        blurb: "Build and edit the ready-made day plans.",
+      },
+      {
+        href: "/admin/listings",
+        title: "Lodging, webcams & ATMs",
+        blurb: "Edit the remaining listings data.",
       },
     );
   }

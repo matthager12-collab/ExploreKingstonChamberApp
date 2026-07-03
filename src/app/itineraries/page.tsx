@@ -1,7 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { itineraries } from "@/lib/data/itineraries";
+import { getItineraries } from "@/lib/stores/itinerary-store";
+import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
+import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
 import { Badge, Card, PageHeader, Section } from "@/components/ui";
+
+// Itineraries are admin-editable (seed + overlay via the itinerary store);
+// revalidate keeps admin edits fresh here.
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "Itineraries",
@@ -15,13 +21,20 @@ const modeLabels: Record<string, { label: string; tone: "green" | "navy" | "teal
   either: { label: "Car optional", tone: "teal" },
 };
 
-export default function ItinerariesPage() {
+export default async function ItinerariesPage() {
+  const hiddenPreview = await assertPageVisible("/itineraries");
+  const [itineraries, copy] = await Promise.all([getItineraries(), getCopyOverrides()]);
   return (
     <>
+      {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
-        eyebrow="Plan your day"
-        title="Itineraries"
-        intro="Four ready-made Kingston days, built around real ferry arrivals and real local spots. Steal one whole or mix and match — everything downtown is within a few blocks of the dock."
+        eyebrow={copyText(copy, "itineraries.header.eyebrow", "Plan your day")}
+        title={copyText(copy, "itineraries.header.title", "Itineraries")}
+        intro={copyText(
+          copy,
+          "itineraries.header.intro",
+          "Four ready-made Kingston days, built around real ferry arrivals and real local spots. Steal one whole or mix and match — everything downtown is within a few blocks of the dock.",
+        )}
       />
       <Section>
         <div className="grid gap-4 sm:grid-cols-2">

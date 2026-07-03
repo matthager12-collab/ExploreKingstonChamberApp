@@ -1,7 +1,24 @@
 import Image from "next/image";
 import Link from "next/link";
 
-export function SiteFooter() {
+const planLinks = [
+  { href: "/ferry", label: "Ferry schedules" },
+  { href: "/parking", label: "Parking & ATMs" },
+  { href: "/webcams", label: "Webcams" },
+  { href: "/itineraries", label: "Itineraries" },
+];
+
+const communityLinks = [
+  { href: "/events", label: "Events calendar" },
+  { href: "/give", label: "Volunteer & give back" },
+  { href: "/hunt", label: "Scavenger hunt" },
+  { href: "/about", label: "About this site" },
+];
+
+export function SiteFooter({ hiddenPaths = [] }: { hiddenPaths?: string[] }) {
+  // Admin-hidden pages drop out of the footer lists too.
+  const plan = planLinks.filter((l) => !hiddenPaths.includes(l.href));
+  const community = communityLinks.filter((l) => !hiddenPaths.includes(l.href));
   return (
     <footer className="mt-12 bg-sound-deep text-white">
       <div className="mx-auto grid max-w-5xl gap-8 px-4 py-10 sm:grid-cols-3">
@@ -35,19 +52,21 @@ export function SiteFooter() {
         <div>
           <p className="font-nav text-sm font-semibold tracking-widest text-seaglass uppercase">Plan</p>
           <ul className="mt-2 space-y-1.5 text-sm">
-            <li><Link href="/ferry" className="hover:underline">Ferry schedules</Link></li>
-            <li><Link href="/parking" className="hover:underline">Parking &amp; ATMs</Link></li>
-            <li><Link href="/webcams" className="hover:underline">Webcams</Link></li>
-            <li><Link href="/itineraries" className="hover:underline">Itineraries</Link></li>
+            {plan.map((l) => (
+              <li key={l.href}>
+                <Link href={l.href} className="hover:underline">{l.label}</Link>
+              </li>
+            ))}
           </ul>
         </div>
         <div>
           <p className="font-nav text-sm font-semibold tracking-widest text-seaglass uppercase">Community</p>
           <ul className="mt-2 space-y-1.5 text-sm">
-            <li><Link href="/events" className="hover:underline">Events calendar</Link></li>
-            <li><Link href="/give" className="hover:underline">Volunteer &amp; give back</Link></li>
-            <li><Link href="/hunt" className="hover:underline">Scavenger hunt</Link></li>
-            <li><Link href="/about" className="hover:underline">About this site</Link></li>
+            {community.map((l) => (
+              <li key={l.href}>
+                <Link href={l.href} className="hover:underline">{l.label}</Link>
+              </li>
+            ))}
             <li><Link href="/portal" className="font-medium hover:underline">Chamber &amp; business portal →</Link></li>
           </ul>
         </div>
