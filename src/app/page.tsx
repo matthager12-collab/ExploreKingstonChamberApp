@@ -18,7 +18,7 @@ const features = [
   { href: "/eat", title: "Eat & Drink", blurb: "Menus & ordering, all walkable", icon: "🦪" },
   { href: "/events", title: "Events", blurb: "What's on this week", icon: "🎉" },
   { href: "/itineraries", title: "Itineraries", blurb: "Ready-made Kingston days", icon: "🗺️" },
-  { href: "/parking", title: "Parking & ATMs", blurb: "Where to leave the car", icon: "🅿️" },
+  { href: "/parking", title: "Parking", blurb: "Where to leave the car", icon: "🅿️" },
   { href: "/webcams", title: "Webcams", blurb: "Eyes on the ferry line", icon: "📷" },
   { href: "/stay", title: "Stay", blurb: "Inns, rentals, moorage", icon: "🌙" },
   { href: "/hunt", title: "Scavenger Hunt", blurb: "Free family adventure", icon: "🔎" },

@@ -4,7 +4,6 @@
 // every fare block links to its authoritative source.
 
 import type { Metadata } from "next";
-import Link from "next/link";
 import {
   Badge,
   Callout,
@@ -218,15 +217,14 @@ export default async function FerryPage() {
       </Section>
 
       <Section>
-        <Callout title="Money on the boat">
+        <Callout title="Paying for the ferry">
           <p>
-            Cards (Visa, Mastercard, Amex, Discover) work at the WSF tollbooths, but every
-            credit/debit purchase carries a 3% surcharge (since March 2026). Two ways to skip it:
-            pay <span className="font-medium">cash at the staffed tollbooth</span> (the self-serve
-            ticket kiosks are card-only, but the booth takes bills), or tap a pre-loaded ORCA card
-            (as long as you didn&rsquo;t load it at a WSF facility). Best of all: walking on from
-            Kingston is free — fares are collected at Edmonds — so most walk-on visitors pay nothing
-            at the dock. Good To Go! is highway tolling only — it will not pay for a ferry.
+            Cards (Visa, Mastercard, Amex, Discover) and ORCA work at the WSF tollbooths, but every
+            credit/debit purchase carries a 3% surcharge (since March 2026). To skip it, tap a
+            pre-loaded ORCA card (as long as you didn&rsquo;t load it at a WSF facility). Best of
+            all: walking on from Kingston is free — fares are collected at Edmonds — so most walk-on
+            visitors pay nothing at the dock. Good To Go! is highway tolling only — it will not pay
+            for a ferry.
           </p>
           <p className="mt-2">
             Driving on? During peak periods (daily 8 am–8 pm in season, plus weekends and holidays)
@@ -235,18 +233,7 @@ export default async function FerryPage() {
             cyclists, and motorcycles are exempt.
           </p>
           <p className="mt-2">
-            On the fast ferry: tap a card or phone, use ORCA, or bring exact cash — the crew
-            carries no change.
-          </p>
-          <p className="mt-2">
-            Need bills, or the full cash-and-boarding rundown? See the{" "}
-            <Link
-              href="/parking#atms"
-              className="font-medium text-tide-deep underline decoration-seaglass underline-offset-2 hover:text-sound"
-            >
-              cash &amp; boarding guide for Kingston
-            </Link>
-            . Full payment details:{" "}
+            Full payment details:{" "}
             <ExternalLink href={WSF_TICKETS_URL}>WSF ticket information</ExternalLink>.
           </p>
         </Callout>

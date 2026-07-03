@@ -14,7 +14,7 @@ import { getSessionUser } from "@/lib/auth";
 import type { BuiltInSource, MapView } from "@/lib/map/types";
 import { deleteMapView, getMapView, getMapViews, saveMapView } from "@/lib/stores/map-store";
 
-const SOURCES: BuiltInSource[] = ["restaurants", "atms", "parking-zones", "streets"];
+const SOURCES: BuiltInSource[] = ["restaurants", "parking-zones", "streets"];
 
 // Greater Kingston, WA — anything outside this box is a data-entry mistake.
 const LAT_MIN = 47.5;
@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
   if (body.sources != null) {
     if (!Array.isArray(body.sources) || !body.sources.every((s) => SOURCES.includes(s as BuiltInSource))) {
       return NextResponse.json(
-        { error: "sources must be a subset of restaurants, atms, parking-zones, streets" },
+        { error: "sources must be a subset of restaurants, parking-zones, streets" },
         { status: 400 },
       );
     }

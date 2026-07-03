@@ -62,7 +62,7 @@ h3,
   }
 }
 
-/* In-page anchors (e.g. /parking#atms) should clear the sticky header. */
+/* In-page anchors (e.g. /page#section) should clear the sticky header. */
 html {
   scroll-padding-top: 5.5rem;
 }

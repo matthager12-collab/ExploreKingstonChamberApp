@@ -19,7 +19,7 @@ export const HIDEABLE_PAGES: { path: string; label: string }[] = [
   { path: "/events", label: "Events" },
   { path: "/itineraries", label: "Itineraries" },
   { path: "/stay", label: "Stay" },
-  { path: "/parking", label: "Parking & ATMs" },
+  { path: "/parking", label: "Parking" },
   { path: "/webcams", label: "Webcams" },
   { path: "/map", label: "Town Map" },
   { path: "/give", label: "Give Back" },

@@ -98,7 +98,6 @@ function streetStyle(rule: StreetRule): {
   }
 }
 
-const ATM_COLOR = "#16405e";
 const BOUNDARY_COLOR = "#324A6D";
 const LINE_COLOR = "#2a7f8a";
 const TRAIL_COLOR = "#4a7c59";
@@ -227,12 +226,6 @@ function restaurantPopupHtml(r: { name: string; walkMinutesFromFerry: number }):
       googleSearchUrl(r.name),
     )}" target="_blank" rel="noopener noreferrer">Open in Google Maps →</a></p>
   </div>`;
-}
-
-function atmPopupHtml(a: { name: string; open24h: boolean }): string {
-  const parts = [`<p style="margin:0;font-weight:600;font-size:0.95rem;">💵 ${esc(a.name)}</p>`];
-  if (a.open24h) parts.push(`<p style="margin:4px 0 0;">Open 24 hours</p>`);
-  return `<div style="font-size:0.8rem;line-height:1.35;max-width:230px;">${parts.join("")}</div>`;
 }
 
 // ---- legend entry model ----
@@ -443,22 +436,6 @@ export function FeatureMap({
           shape: "pin",
           emoji: cat.emoji,
         });
-      }
-
-      // ---- built-ins: ATMs ----
-      for (const a of data.builtins.atms ?? []) {
-        L.circleMarker([a.lat, a.lng], {
-          radius: 6,
-          color: "#ffffff",
-          weight: 2,
-          fillColor: ATM_COLOR,
-          fillOpacity: 1,
-        })
-          .addTo(map)
-          .bindTooltip(`💵 ${a.name}`, { direction: "top", offset: [0, -6] })
-          .bindPopup(atmPopupHtml(a), { maxWidth: 240 });
-        pts.push([a.lat, a.lng]);
-        addLegend({ key: "builtin-atm", label: "ATM / cash", color: ATM_COLOR, shape: "dot" });
       }
 
       // ---- built-ins: parking zones ----

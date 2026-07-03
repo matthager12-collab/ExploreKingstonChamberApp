@@ -92,7 +92,7 @@ export default async function PortalPage() {
       },
       {
         href: "/admin/listings",
-        title: "Lodging, webcams & ATMs",
+        title: "Lodging & webcams",
         blurb: "Edit the remaining listings data.",
       },
     );

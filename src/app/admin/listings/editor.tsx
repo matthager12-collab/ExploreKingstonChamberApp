@@ -1,8 +1,8 @@
 "use client";
 
-// Schema-driven listings workbench for the Chamber admin: Lodging, Webcams,
-// and ATMs in one plain, robust editor. Each domain declares its fields once
-// (label + key + kind) matching the Lodging/Webcam/Atm types in src/lib/types;
+// Schema-driven listings workbench for the Chamber admin: Lodging and Webcams
+// in one plain, robust editor. Each domain declares its fields once
+// (label + key + kind) matching the Lodging/Webcam types in src/lib/types;
 // the form, validation, and save payload are all generated from that schema.
 // Saves go through /api/admin/content-records, the same overlay-backed API
 // the itinerary builder uses.
@@ -13,13 +13,13 @@
 
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import type { Atm, Lodging, Webcam } from "@/lib/types";
+import type { Lodging, Webcam } from "@/lib/types";
 import { Badge, Card } from "@/components/ui";
 
 const INPUT =
   "w-full rounded-lg border border-sand bg-white px-3 py-2 text-sm text-ink focus:border-tide focus:outline-none";
 
-type DomainKey = "lodging" | "webcams" | "atms";
+type DomainKey = "lodging" | "webcams";
 
 /** One record as the editor sees it — id plus whatever the domain's type holds. */
 type GenericRecord = { id: string } & Record<string, unknown>;
@@ -53,7 +53,7 @@ type DomainDef = {
 };
 
 /* ------------------------- the per-domain schemas ------------------------- */
-// Field lists mirror the Lodging / Webcam / Atm interfaces in src/lib/types.
+// Field lists mirror the Lodging / Webcam interfaces in src/lib/types.
 
 const DOMAINS: DomainDef[] = [
   {
@@ -146,34 +146,6 @@ const DOMAINS: DomainDef[] = [
         defaultValue: "60",
         help: "How often the image updates at the source (15–3600).",
       },
-    ],
-  },
-  {
-    key: "atms",
-    label: "ATMs",
-    noun: "ATM",
-    publicPath: "/parking#atms",
-    fields: [
-      { key: "name", label: "Name", kind: "text", required: true },
-      { key: "operator", label: "Operator", kind: "text", placeholder: "Bank of America" },
-      { key: "address", label: "Address", kind: "text", wide: true },
-      {
-        key: "feeNote",
-        label: "Fee note",
-        kind: "textarea",
-        wide: true,
-        placeholder: "Free for X customers; everyone else pays ~$3 plus their bank's fee.",
-      },
-      {
-        key: "walkMinutesFromFerry",
-        label: "Walk minutes from ferry",
-        kind: "number",
-        defaultValue: "10",
-        help: "25 or less shows a walk badge; more shows a drive badge.",
-      },
-      { key: "lat", label: "Latitude", kind: "number", defaultValue: "47.7985" },
-      { key: "lng", label: "Longitude", kind: "number", defaultValue: "-122.4985" },
-      { key: "notes", label: "Notes (optional)", kind: "textarea", optional: true, wide: true },
     ],
   },
 ];
@@ -269,14 +241,13 @@ export function ListingsEditor({
   initial,
   seedIds,
 }: {
-  initial: { lodging: Lodging[]; webcams: Webcam[]; atms: Atm[] };
+  initial: { lodging: Lodging[]; webcams: Webcam[] };
   seedIds: Record<DomainKey, string[]>;
 }) {
   const router = useRouter();
   const [records, setRecords] = useState<Record<DomainKey, GenericRecord[]>>({
     lodging: initial.lodging as unknown as GenericRecord[],
     webcams: initial.webcams as unknown as GenericRecord[],
-    atms: initial.atms as unknown as GenericRecord[],
   });
   const [activeKey, setActiveKey] = useState<DomainKey>("lodging");
   const [draft, setDraft] = useState<Draft | null>(null);

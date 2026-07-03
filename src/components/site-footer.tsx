@@ -3,7 +3,7 @@ import Link from "next/link";
 
 const planLinks = [
   { href: "/ferry", label: "Ferry schedules" },
-  { href: "/parking", label: "Parking & ATMs" },
+  { href: "/parking", label: "Parking" },
   { href: "/webcams", label: "Webcams" },
   { href: "/itineraries", label: "Itineraries" },
 ];

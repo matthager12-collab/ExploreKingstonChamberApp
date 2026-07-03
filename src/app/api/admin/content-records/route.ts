@@ -1,37 +1,34 @@
 // Admin content-records API — one endpoint for the remaining seed-backed
-// content domains: itineraries, lodging, webcams, and ATMs. Backs the
+// content domains: itineraries, lodging, and webcams. Backs the
 // /admin/itineraries builder and the /admin/listings workbench.
 //
-// GET    ?domain=itineraries|lodging|webcams|atms  — merged records.
-// POST   { domain, record }                        — validate minimally, save.
-// DELETE ?domain=X&id=Y                            — tombstone (hides seed too).
+// GET    ?domain=itineraries|lodging|webcams  — merged records.
+// POST   { domain, record }                   — validate minimally, save.
+// DELETE ?domain=X&id=Y                        — tombstone (hides seed too).
 //
 // 401 signed out · 403 signed in but not admin. The /admin layout gates the
 // editor UI; these handlers re-check because API routes bypass layouts.
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
-import type { Atm, Itinerary, ItineraryStop, Lodging, Webcam } from "@/lib/types";
+import type { Itinerary, ItineraryStop, Lodging, Webcam } from "@/lib/types";
 import {
   deleteItinerary,
   getItineraries,
   saveItinerary,
 } from "@/lib/stores/itinerary-store";
 import {
-  deleteAtm,
   deleteLodging,
   deleteWebcam,
-  getAtms,
   getLodging,
   getWebcams,
-  saveAtm,
   saveLodging,
   saveWebcam,
 } from "@/lib/stores/listing-stores";
 
 export const dynamic = "force-dynamic";
 
-const DOMAINS = ["itineraries", "lodging", "webcams", "atms"] as const;
+const DOMAINS = ["itineraries", "lodging", "webcams"] as const;
 type Domain = (typeof DOMAINS)[number];
 
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/i;
@@ -198,37 +195,6 @@ function sanitizeWebcam(body: Record<string, unknown>): Webcam | string {
   };
 }
 
-function sanitizeAtm(body: Record<string, unknown>): Atm | string {
-  const id = str(body.id);
-  if (!ID_RE.test(id)) return "id required: letters, numbers, and dashes (max 64 chars)";
-  const name = str(body.name);
-  if (!name) return "name required";
-  const walkMinutesFromFerry = Math.round(num(body.walkMinutesFromFerry));
-  if (!Number.isFinite(walkMinutesFromFerry) || walkMinutesFromFerry < 0) {
-    return "walkMinutesFromFerry must be a number of minutes (0 or more)";
-  }
-  const lat = num(body.lat);
-  const lng = num(body.lng);
-  if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
-    return "lat must be a number between -90 and 90";
-  }
-  if (!Number.isFinite(lng) || lng < -180 || lng > 180) {
-    return "lng must be a number between -180 and 180";
-  }
-  const notes = optStr(body.notes);
-  return {
-    id,
-    name,
-    operator: str(body.operator),
-    address: str(body.address),
-    feeNote: str(body.feeNote),
-    walkMinutesFromFerry,
-    lat,
-    lng,
-    ...(notes ? { notes } : {}),
-  };
-}
-
 /* --------------------------------- handlers -------------------------------- */
 
 export async function GET(request: NextRequest) {
@@ -243,9 +209,7 @@ export async function GET(request: NextRequest) {
       ? await getItineraries()
       : domain === "lodging"
         ? await getLodging()
-        : domain === "webcams"
-          ? await getWebcams()
-          : await getAtms();
+        : await getWebcams();
 
   return NextResponse.json({ records });
 }
@@ -278,15 +242,9 @@ export async function POST(request: NextRequest) {
     await saveLodging(record);
     return NextResponse.json({ ok: true, record });
   }
-  if (domain === "webcams") {
-    const record = sanitizeWebcam(raw);
-    if (typeof record === "string") return bad(record);
-    await saveWebcam(record);
-    return NextResponse.json({ ok: true, record });
-  }
-  const record = sanitizeAtm(raw);
+  const record = sanitizeWebcam(raw);
   if (typeof record === "string") return bad(record);
-  await saveAtm(record);
+  await saveWebcam(record);
   return NextResponse.json({ ok: true, record });
 }
 
@@ -304,17 +262,14 @@ export async function DELETE(request: NextRequest) {
       ? await getItineraries()
       : domain === "lodging"
         ? await getLodging()
-        : domain === "webcams"
-          ? await getWebcams()
-          : await getAtms();
+        : await getWebcams();
   if (!records.some((r) => r.id === id)) {
     return NextResponse.json({ error: "Record not found" }, { status: 404 });
   }
 
   if (domain === "itineraries") await deleteItinerary(id);
   else if (domain === "lodging") await deleteLodging(id);
-  else if (domain === "webcams") await deleteWebcam(id);
-  else await deleteAtm(id);
+  else await deleteWebcam(id);
 
   return NextResponse.json({ ok: true });
 }

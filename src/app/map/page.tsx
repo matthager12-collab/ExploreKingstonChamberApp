@@ -8,7 +8,7 @@ import { MapSwitcher } from "./switcher";
 export const metadata: Metadata = {
   title: "Map",
   description:
-    "Interactive maps of Kingston, WA — food and drink, parking and cash, trails, and more, all walkable from the Edmonds–Kingston ferry.",
+    "Interactive maps of Kingston, WA — food and drink, parking, trails, and more, all walkable from the Edmonds–Kingston ferry.",
 };
 
 export const revalidate = 60;

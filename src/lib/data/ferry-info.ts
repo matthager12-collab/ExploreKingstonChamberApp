@@ -1,13 +1,11 @@
 // Ferry payment + vehicle boarding-pass facts for Kingston, WA.
 // Verified July 3, 2026 (adversarial verify pass applied). Rendered by
-// /parking (#atms) and /ferry. Keep this the single source of truth so the
-// two pages never drift.
+// /ferry. Keep this the single source of truth so the pages never drift.
 //
 // Key corrections baked in:
-//   - The self-serve ticket KIOSKS are card-only. The STAFFED tollbooth DOES
-//     take cash (confirmed locally 2026-07-03), and paying cash avoids the 3%
-//     card surcharge. Either way, walking on FROM Kingston is free (fares are
-//     collected at Edmonds), so most walk-on visitors pay nothing at the dock.
+//   - The self-serve ticket KIOSKS are card-only. Walking on FROM Kingston is
+//     free (fares are collected at Edmonds), so most walk-on visitors pay
+//     nothing at the dock.
 //   - The 3% card surcharge (since March 1, 2026) and ORCA-avoids-surcharge are
 //     verified. No compass words for the free leg — it's "from Kingston,"
 //     collected "at Edmonds."
@@ -27,9 +25,7 @@ export const FERRY_PAYMENT = {
     "Wave2Go ticket bought online in advance (a card purchase, so the 3% still applies)",
   ] as string[],
   kioskNote:
-    "The self-serve ticket kiosks at the Kingston terminal are card-only — they do not take cash.",
-  cashNote:
-    "The staffed tollbooth takes cash — and paying cash avoids the 3% card surcharge, so it's the cheapest way to buy a fare in person. (Only the self-serve kiosks are card-only.) Cash is also handy in town for tips, the Sunday market, and small shops.",
+    "The self-serve ticket kiosks at the Kingston terminal are card-only.",
   surchargeNote:
     "Since March 1, 2026, every credit/debit card ferry fare carries a 3% surcharge (per RCW 47.60.860). The reliable way to skip it is a pre-loaded ORCA card that wasn't loaded at a WSF facility.",
   freeLegNote:
@@ -58,20 +54,9 @@ export const BOARDING_PASS = {
     "Current note (as of early July 2026): the automated dispenser has been down, so a uniformed traffic-control officer is handing passes out by hand at the Lindvog Road staging area instead.",
 } as const;
 
-export const CASH_TIPS: string[] = [
-  "The staffed tollbooth takes cash; only the self-serve ticket kiosks are card-only. Bring a card, a tap-to-pay phone, an ORCA card, or cash.",
-  "There's a 3% surcharge on all credit/debit card ferry fares (since March 1, 2026). Paying cash at the staffed tollbooth avoids it, and so does a pre-loaded ORCA card (loaded somewhere other than a WSF facility).",
-  "Walking on from Kingston is free — passenger fares are collected at Edmonds — so day-trippers usually board the return leg without paying anything at the dock.",
-  "The only confirmed 24-hour ATM in town is the Bank of America drive-up at Kingston Center, ~0.5 mi (10–12 min) up the hill on NE State Hwy 104 — non-BofA cards pay a fee. The same lot's Grocery Outlet has an in-store ATM (store hours only), and gives fee-free debit cash-back at the register.",
-  "For surcharge-free cash, CO-OP-network credit-union members can use the Kitsap Credit Union walk-up ATM inside Safeway at George's Corner — but that's ~2.5 mi west, drive-only, and lobby hours are weekdays only.",
-  "Downtown ATMs are independent (~$3 surcharge). Grocery/store cash-back at the register is a fee-free workaround if you're buying something anyway.",
-  "Driving on during peak times? You'll need a vehicle boarding pass (8 a.m.–8 p.m., in season plus weekends/holidays). As of early July an officer may be handing passes out by hand because the machine is down.",
-  "Cash is still handy in town for tips, the Sunday Kingston Public Market at Mike Wallace Park (May–Oct, right by the walk-off ramp), and small shops — just don't rely on it for the boat.",
-];
-
 export const SOURCES: Source[] = [
   {
-    label: "WSF — ticket information (3% surcharge; cash excludes self-serve kiosks)",
+    label: "WSF — ticket information (3% card surcharge)",
     url: "https://wsdot.wa.gov/travel/washington-state-ferries/tickets/ticket-information",
   },
   {

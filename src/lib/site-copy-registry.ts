@@ -12,9 +12,12 @@
 
 export interface CopyBlock {
   key: string;
+  /** Group heading in the admin editor — a page name or a component name. */
   page: string;
   label: string;
   multiline?: boolean;
+  /** Block supports **bold** and [links](url), rendered via <RichText/>. */
+  rich?: boolean;
   fallback: string;
 }
 
@@ -186,27 +189,27 @@ export const COPY_BLOCKS: CopyBlock[] = [
   // ----------------------------------------------------------- /parking
   {
     key: "parking.header.eyebrow",
-    page: "Parking & ATMs",
+    page: "Parking",
     label: "Header eyebrow",
     fallback: "Plan your visit",
   },
   {
     key: "parking.header.title",
-    page: "Parking & ATMs",
+    page: "Parking",
     label: "Page title",
-    fallback: "Parking & ATMs",
+    fallback: "Parking",
   },
   {
     key: "parking.header.intro",
-    page: "Parking & ATMs",
+    page: "Parking",
     label: "Header intro",
     multiline: true,
     fallback:
-      "Kingston's parking universe is small but full of gotchas: a paid Port lot by the marina, a commuter lot one block up, a strictly enforced free 2-hour row, a couple of genuinely unrestricted streets, and two free park & rides. The Chamber's live parking map shows where to leave the car — color-coded by type, with owner, payment, and time-limit details — plus where to find cash.",
+      "Kingston's parking universe is small but full of gotchas: a paid Port lot by the marina, a commuter lot one block up, a strictly enforced free 2-hour row, a couple of genuinely unrestricted streets, and two free park & rides. The Chamber's live parking map shows where to leave the car — color-coded by type, with owner, payment, and time-limit details.",
   },
   {
     key: "parking.map.subtitle",
-    page: "Parking & ATMs",
+    page: "Parking",
     label: "Map section subtitle",
     multiline: true,
     fallback:

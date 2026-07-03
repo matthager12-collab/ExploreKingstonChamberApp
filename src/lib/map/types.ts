@@ -3,7 +3,7 @@
 // A MapView is a named, reusable map configuration ("food-drink", "parking",
 // "trails", …). A MapFeature is a drawn thing (marker, line, trail, area) that
 // declares which views it appears on. Views can also pull in built-in data
-// layers (restaurants, ATMs, parking zones, street overlay) so the Chamber
+// layers (restaurants, parking zones, street overlay) so the Chamber
 // doesn't re-enter data that already lives in the app.
 //
 // Everything is portal-editable: seed views/features ship in src/lib/data,
@@ -12,7 +12,7 @@
 export type FeatureKind = "marker" | "line" | "trail" | "area";
 
 /** Built-in data layers a view can include without re-entering data. */
-export type BuiltInSource = "restaurants" | "atms" | "parking-zones" | "streets";
+export type BuiltInSource = "restaurants" | "parking-zones" | "streets";
 
 export interface MapView {
   id: string; // slug, e.g. "food-drink"
@@ -97,7 +97,6 @@ export const MARKER_CATEGORIES = [
   { key: "shop", label: "Shop", emoji: "🛍️", color: "#7c4dbe" },
   { key: "lodging", label: "Lodging", emoji: "🛏️", color: "#324a6d" },
   { key: "parking", label: "Parking", emoji: "🅿️", color: "#2a7f8a" },
-  { key: "atm", label: "ATM / cash", emoji: "💵", color: "#16405e" },
   { key: "restroom", label: "Restroom", emoji: "🚻", color: "#4a7c59" },
   { key: "viewpoint", label: "Viewpoint", emoji: "📸", color: "#1e96c0" },
   { key: "beach", label: "Beach", emoji: "🏖️", color: "#e8a13a" },
@@ -133,7 +132,6 @@ export interface ResolvedMapView {
       /** MARKER_CATEGORIES key chosen server-side from cuisine/tags. */
       category: string;
     }[];
-    atms?: { id: string; name: string; lat: number; lng: number; open24h: boolean }[];
     parkingZones?: {
       id: string;
       name: string;

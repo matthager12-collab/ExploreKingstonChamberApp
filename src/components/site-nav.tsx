@@ -16,7 +16,7 @@ const primaryLinks = [
 const moreLinks = [
   { href: "/map", label: "Map" },
   { href: "/webcams", label: "Webcams" },
-  { href: "/parking", label: "Parking & ATMs" },
+  { href: "/parking", label: "Parking" },
   { href: "/hunt", label: "Scavenger Hunt" },
   { href: "/give", label: "Give Back" },
   { href: "/about", label: "About" },

@@ -6,7 +6,7 @@
 // above a dominant leaflet+geoman CANVAS. The view edit form opens as a
 // dismissible overlay on the map's left edge; the selected-FEATURE form is a
 // floating drawer on the map's right edge (≥lg) or a plain block under the
-// map (<lg). The active view's built-in source layers (restaurants, ATMs,
+// map (<lg). The active view's built-in source layers (restaurants,
 // parking zones, street overlay) render as muted, non-interactive CONTEXT so
 // the admin can draw against them.
 //
@@ -281,7 +281,6 @@ function streetStyle(rule: StreetRule): {
   }
 }
 
-const ATM_COLOR = "#16405e";
 const BOUNDARY_COLOR = "#324A6D";
 
 interface StreetSegment {
@@ -319,14 +318,12 @@ type ViewDraft = {
 
 const SOURCE_OPTIONS: { key: string; label: string }[] = [
   { key: "restaurants", label: "Restaurants" },
-  { key: "atms", label: "ATMs" },
   { key: "parking-zones", label: "Parking zones" },
   { key: "streets", label: "Street overlay" },
 ];
 
 const SOURCE_SHORT: Record<string, string> = {
   restaurants: "🍽",
-  atms: "💵",
   "parking-zones": "🅿️",
   streets: "🛣",
 };
@@ -572,21 +569,6 @@ export function MapBuilder({
           iconSize: [0, 0],
         });
         group.addLayer(L.marker([r.lat, r.lng], { ...muted, icon, opacity: 0.55 }));
-      }
-
-      // ATMs — navy circle markers.
-      for (const a of data.builtins.atms ?? []) {
-        group.addLayer(
-          L.circleMarker([a.lat, a.lng], {
-            ...muted,
-            radius: 6,
-            color: "#ffffff",
-            weight: 2,
-            opacity: 0.5,
-            fillColor: ATM_COLOR,
-            fillOpacity: 0.5,
-          }),
-        );
       }
 
       // Parking zones — polygons colored by rule (circle fallback).

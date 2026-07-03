@@ -4,7 +4,8 @@ import "./globals.css";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
 import { Tracker } from "@/components/tracker";
-import { getHiddenPaths } from "@/lib/stores/site-store";
+import { getHiddenPaths, getCopyOverrides } from "@/lib/stores/site-store";
+import { CopyProvider } from "@/lib/copy-context";
 
 const roboto = Roboto({
   subsets: ["latin"],
@@ -76,18 +77,25 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Admin-hidden pages drop out of the nav and footer site-wide.
-  const hiddenPaths = await getHiddenPaths();
+  // Admin-hidden pages drop out of the nav and footer site-wide; admin copy
+  // overrides are provided to client components via CopyProvider (server
+  // components read them directly with copyText()).
+  const [hiddenPaths, copyOverrides] = await Promise.all([
+    getHiddenPaths(),
+    getCopyOverrides(),
+  ]);
   return (
     <html
       lang="en"
       className={`${roboto.variable} ${robotoSlab.variable} ${poppins.variable} ${satisfy.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
-        <Tracker />
-        <SiteNav hiddenPaths={hiddenPaths} />
-        <main className="flex-1">{children}</main>
-        <SiteFooter hiddenPaths={hiddenPaths} />
+        <CopyProvider overrides={copyOverrides}>
+          <Tracker />
+          <SiteNav hiddenPaths={hiddenPaths} />
+          <main className="flex-1">{children}</main>
+          <SiteFooter hiddenPaths={hiddenPaths} />
+        </CopyProvider>
       </body>
     </html>
   );
