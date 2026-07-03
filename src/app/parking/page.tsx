@@ -165,7 +165,8 @@ export default async function ParkingPage() {
           <div>
             <h3 className="text-xl font-semibold text-sound-deep">Where not to park</h3>
             <p className="mt-1 mb-3 text-sm text-ink-soft">
-              Per the 2015 county study, these are no-parking streets — obey posted signs.
+              No-parking streets (per the 2015 county study) plus the Port&apos;s boat-launch
+              apron — obey posted signs.
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
               {prohibited.map((zone) => (

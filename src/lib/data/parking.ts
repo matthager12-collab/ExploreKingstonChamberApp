@@ -16,13 +16,20 @@
 //   - No RV parking on Port property, period (per the Port's live website — stricter
 //     than the policy PDF; we publish the conservative version).
 //   - The free 2-hour row is ~30 stalls (schematic count), not 40.
+//   - The free 2-hour row sits beside Mike Wallace Park's NW corner — an earlier
+//     draft placed it ~70 m NE at the Washington Blvd/SR-104 fork by Kiwanis
+//     Park (the wrong park). The polygon below is the corrected location.
 //   - Pennsylvania Ave is unrestricted on ONE SIDE ONLY; the other side is no-parking.
 //   - Diamond D515 is 73 stalls per WSF (Parkopedia says 71).
 //
 // Port section polygons (July 2, 2026): georeferenced from the Port's official
-// 12-30-25 schematic map against OSM anchors (±10–15 m). They are deliberately
-// hand-adjustable — a Chamber admin can drag any shape or pin to reality at
-// /admin/map (edits overlay this seed via the "parking-zones" JSON store).
+// 12-30-25 schematic map, then snapped per-zone to Esri World Imagery aerials
+// (±5–10 m — the schematic's similarity-fit residuals grow to ~15 m at the map
+// edges, hence the per-zone snapping). All Port geometry is "probable" and
+// deliberately hand-adjustable — a Chamber admin can drag any shape or pin to
+// reality at /admin/map (edits overlay this seed via the "parking-zones" JSON
+// store). Not polygonized: disabled stalls, the 3 employee stalls, Port-use
+// stalls, and the small tenant caps at the SE ends of fan rows 19–88 and 1–4.
 //
 // The Port revises rates and Diamond reprices permits — re-verify quarterly.
 
@@ -81,204 +88,166 @@ const KITSAP_TRANSIT_PR_URL =
 
 /** Caveat for every polygon georeferenced from the Port's schematic map. */
 const PORT_GEO_NOTE =
-  "Outline georeferenced from the Port's official 12-30-25 schematic map (±10–15 m) — the painted stall markings on the ground always win.";
+  "Outline georeferenced from the Port's official 12-30-25 map and aerial imagery (±10 m) — the painted stall markings on the ground always win.";
+
+/** Stronger caveat for the small shapes placed from the schematic alone. */
+const PORT_SCHEMATIC_NOTE =
+  "Placed from the Port's schematic map only — among the least certain shapes here. Field-check before relying on the outline; signs and stall markings win.";
 
 export const parkingZones: MapZone[] = [
   /* ---------------- Port of Kingston (georeferenced sections) ---------------- */
+  // Superseded (July 2, 2026): the original single port-free-2hr polygon sat
+  // ~70 m NE of the real row, at the Washington Blvd/SR-104 fork beside
+  // Kiwanis Park — the wrong park. The oval below matches the schematic's
+  // stadium shape, its position between row 214–233 and Mike Wallace Park,
+  // and the ~30-stall count visible on aerial imagery.
   {
     id: "port-free-2hr-row",
-    name: "Port free 2-hour row",
+    name: "Free 2-hour row (Mike Wallace Park)",
     rule: "free-2hr",
     summary:
-      "Free — 2 hours, strictly enforced (~30 stalls). No payment/text code. Port says do NOT use it for ferry travel.",
+      "Free, 2 hours strictly enforced (~30 stalls) — the Port says do NOT use it for ferry travel. $40 overstay ticket.",
     details:
-      "Double-loaded row between paid row 214–233 (west) and Mike Wallace Park (east), just north of the park restrooms. Overstay is a $40 ticket (doubles after 15 days). If a ferry delay traps you, call the Port office before your 2 hours expire: 360-297-3545.",
+      "The stadium-shaped island of back-to-back stalls between paid row 214–233 and Mike Wallace Park's NW corner, clearly visible on aerial imagery as an oval double row (~50 m long). Overstays are a $40 ticket (doubles after 15 days; tow possible). If a ferry delay traps you, call the Port office (360-297-3545) BEFORE the two hours expire.",
     confidence: "probable",
     sourceUrl: PORT_MAP_URL,
     sourceNote: PORT_GEO_NOTE,
     overnight: "no",
-    center: [47.79646, -122.497546],
+    center: [47.79654, -122.49752],
     polygon: [
-      [47.796653, -122.49731],
-      [47.796548, -122.497235],
-      [47.796267, -122.497781],
-      [47.796373, -122.497856],
+      [47.796517, -122.497863],
+      [47.796657, -122.497223],
+      [47.796563, -122.497177],
+      [47.796423, -122.497817],
     ],
   },
   {
-    id: "port-pokpark-main-rows",
-    name: "POKPARK main lot — spaces 1–88",
+    id: "port-pokpark-north-rows",
+    name: "POKPARK north rows (181–233 & 201–213)",
     rule: "paid",
     summary:
-      "$12/12 hr car · $6 motorcycle · $3.49/hr short-term — text POKPARK to 25023 (T2 Mobile Pay). Spaces 1–88.",
+      "$12/12 hr car · $6 motorcycle · $3.49/hr short-term — text POKPARK to 25023. Spaces 181–190, 201–213, 214–233.",
     details:
-      "The fan of seven angled rows filling the west half of the marina lot (rows 67–88, 47–66, 32–46, 19–31, 11–18, 5–10, 1–4), widest at the hill-road end and narrowing east toward the restroom island. Seaward (south) ends of most rows are marina-tenant permit stalls — see the separate permit band. Also pay at the Marina Office 8–5 or by card by phone 360-297-3545. Monthly commuter permit $139.99 (limited; daily use, not storage). Overnight for cars is never explicitly authorized — call the Port office first. No RVs on Port property.",
+      "L-shaped block of numbered rows between lower Washington Blvd and the free 2-hour island: two parallel rows (181–190 and 214–233) running ENE–WSW plus the 201–213 stub along the drive at the NE corner near the Shed and the big white building. Also contains 3 employee stalls and a disabled stall (not broken out). Pay by text (POKPARK to 25023, T2 Mobile Pay), at the Marina Office 8am–5pm, or by card by phone 360-297-3545. Overnight for cars is never explicitly authorized — call the Port office first. No RVs on Port property.",
     confidence: "probable",
     sourceUrl: PORT_PARKING_URL,
     sourceNote: PORT_GEO_NOTE,
     overnight: "confirm-first",
-    center: [47.796492, -122.498494],
+    center: [47.796677, -122.497454],
     polygon: [
-      [47.797148, -122.498662],
-      [47.79639, -122.498089],
-      [47.796264, -122.498135],
-      [47.796357, -122.498296],
-      [47.796399, -122.498549],
-      [47.796433, -122.498801],
-      [47.796452, -122.498926],
+      [47.796936, -122.497085],
+      [47.796756, -122.496941],
+      [47.796726, -122.497024],
+      [47.796687, -122.497231],
+      [47.79668, -122.497286],
+      [47.796425, -122.498005],
+      [47.796495, -122.498063],
+      [47.796593, -122.497768],
+      [47.796647, -122.497811],
+      [47.796821, -122.49733],
+    ],
+  },
+  {
+    id: "port-pokpark-main-fan",
+    name: "POKPARK main lot fan (spaces 1–88)",
+    rule: "paid",
+    summary:
+      "$12/12 hr car · $6 motorcycle · $3.49/hr short-term — text POKPARK to 25023. Spaces 1–88 in the angled rows by the marina.",
+    details:
+      "The fan of angled double rows in the SW half of the marina lot (rows 19–31/32–46/47–66/67–88, 5–10/11–18, 1–4), 2–3 min walk to the ferry. Polygon includes the internal drive aisles between rows (deliberate merge); its SE edge approximates the boundary where marina-tenant permit stalls take over at the row ends. Same payment and overnight rules as all numbered spaces: text POKPARK to 25023, and call the Port office (360-297-3545) before leaving a car overnight. Monthly commuter permit $139.99 (limited; daily use, not storage).",
+    confidence: "probable",
+    sourceUrl: PORT_PARKING_URL,
+    sourceNote: PORT_GEO_NOTE,
+    overnight: "confirm-first",
+    center: [47.796658, -122.498459],
+    polygon: [
+      [47.797102, -122.498579],
+      [47.796665, -122.4982],
+      [47.796382, -122.498085],
+      [47.796307, -122.498163],
+      [47.79649, -122.498455],
+      [47.79652, -122.498969],
+      [47.797142, -122.498764],
     ],
   },
   {
     id: "port-pokpark-89-103",
-    name: "POKPARK north strip — spaces 89–103",
+    name: "POKPARK row 89–103",
     rule: "paid",
     summary:
-      "$12/12 hr — text POKPARK to 25023. Spaces 89–103, single row along the north edge of the lot, west of the KCYC clubhouse.",
+      "$12/12 hr car — text POKPARK to 25023. Single row of 15 stalls along the drive NW of the yacht club.",
     details:
-      "Short east–west strip on the lot's north boundary, west-southwest of the Kingston Cove Yacht Club building. The eastern continuation of this same strip (closest to the clubhouse) is the KCYC-permit-only row — a separate section. Same payment options and overnight rule as the main POKPARK lot (Port office 360-297-3545).",
+      "Short numbered row (89–103) lining the loop drive northwest of the Kingston Cove Yacht Club, immediately west of the KCYC-permit-only row. Same rates, payment and overnight rules as the rest of POKPARK (call 360-297-3545 before overnight).",
     confidence: "probable",
     sourceUrl: PORT_PARKING_URL,
     sourceNote: PORT_GEO_NOTE,
     overnight: "confirm-first",
-    center: [47.797112, -122.498372],
+    center: [47.797108, -122.498495],
     polygon: [
-      [47.797299, -122.498478],
-      [47.796951, -122.498215],
-      [47.796925, -122.498265],
-      [47.797272, -122.498528],
-    ],
-  },
-  {
-    id: "port-pokpark-181-233",
-    name: "POKPARK east block — spaces 181–233",
-    rule: "paid",
-    summary:
-      "$12/12 hr — text POKPARK to 25023. Rows 181–190 and 214–233 plus row 201–213 by the Washington Blvd entrance.",
-    details:
-      "L-shaped block just inside the Washington Blvd entrance: the 201–213 row along the north edge near the entrance and Shed, and the back-to-back 181–190 / 214–233 columns running south toward the restrooms, immediately west of the free 2-hour row. Includes three employee-only stalls mid-column (Emp) and tenant/disabled stalls at the south end. Same rates, payment options and overnight rule as the rest of POKPARK (Port office 360-297-3545).",
-    confidence: "probable",
-    sourceUrl: PORT_PARKING_URL,
-    sourceNote: PORT_GEO_NOTE,
-    overnight: "confirm-first",
-    center: [47.796718, -122.497459],
-    polygon: [
-      [47.797053, -122.497042],
-      [47.79686, -122.496906],
-      [47.796732, -122.497154],
-      [47.796787, -122.497193],
-      [47.796359, -122.498027],
-      [47.796406, -122.49806],
-      [47.796543, -122.497794],
-      [47.796614, -122.497844],
-      [47.796905, -122.497277],
-      [47.796925, -122.49729],
+      [47.797247, -122.49855],
+      [47.797, -122.49835],
+      [47.79697, -122.49844],
+      [47.797214, -122.498641],
     ],
   },
   {
     id: "port-pokhill",
-    name: "POKHILL hill zone — spaces 104–162",
+    name: "POKHILL hill zone (104–162)",
     rule: "paid",
     summary:
-      "$12/12 hr — text POKHILL to 25023. Spaces 104–132 (east side) + truck/trailer overflow 133–162 (west side) on the hill above the boat launch.",
+      "$12/12 hr car ($15 truck+trailer) — text POKHILL to 25023. Spaces 104–132 plus truck/trailer overflow 133–162 on the slope.",
     details:
-      "Long north–south double-loaded strip between the two legs of the hill loop road northwest of the marina lot, climbing from the boat-launch road junction. Spaces 104–132 face the east leg; 133–162 (truck & trailer overflow) face the west leg. Same rates and text-to-pay as the main lot; overnight — call the Port office first (360-297-3545).",
+      "The long double-loaded strip west of the boat-launch access road, running from NE West Kingston Rd downhill to the main lot (~120 m). Spaces 104–132 are general parking; 133–162 are truck-and-trailer overflow for busy launch days. A few Port-use stalls sit at the very top end. Same text-to-pay system (POKHILL to 25023) and overnight rule of thumb: call the Port office first (360-297-3545).",
     confidence: "probable",
     sourceUrl: PORT_PARKING_URL,
     sourceNote: PORT_GEO_NOTE,
     overnight: "confirm-first",
-    center: [47.797744, -122.498755],
+    center: [47.797685, -122.498838],
     polygon: [
-      [47.79821, -122.498855],
-      [47.798215, -122.49866],
-      [47.79728, -122.498645],
-      [47.79727, -122.49886],
+      [47.79824, -122.49903],
+      [47.79824, -122.49874],
+      [47.79713, -122.49864],
+      [47.79713, -122.49894],
     ],
   },
   {
     id: "port-poktt",
-    name: "POKTT truck & trailer zone — spaces 301–318",
+    name: "POKTT truck & trailer zone (301–318)",
     rule: "paid",
     summary:
-      "Trucks with boat trailers ONLY — $15/12 hr or $30/24 hr. Text POKTT to 25023. Spaces 301–318 along the boat-launch road.",
+      "Trucks with boat trailers ONLY — $15/12 hr or $30/24 hr, text POKTT to 25023. Spaces 301–318 by the boat launch.",
     details:
-      "Angled long stalls hugging the southeast side of the road that descends from the hill zone to the launch ramp, ending at the ADA stalls just above the ramp. Regular cars may not park here. Trailers may not be dropped without the truck attached; unattended boats on trailers need Port approval. Multi-day: coordinate with the Port office (360-297-3545).",
+      "The westernmost band of the main lot fan, next to the launch approach drive — 18 long angled stalls (trailers clearly visible on aerial imagery). Regular cars may not park here. Trailers may not be dropped without the truck attached; unattended boats on trailers need Port approval. Disabled stalls sit at the SW (launch) end of the band. Multi-day: coordinate with the Port office (360-297-3545).",
     confidence: "probable",
     sourceUrl: PORT_PARKING_URL,
     sourceNote: PORT_GEO_NOTE,
     overnight: "confirm-first",
-    center: [47.796856, -122.498994],
+    center: [47.79682, -122.49901],
     polygon: [
-      [47.797228, -122.498836],
-      [47.796875, -122.499069],
-      [47.79653, -122.499297],
-      [47.796486, -122.49915],
-      [47.796831, -122.498922],
-      [47.797184, -122.498689],
+      [47.79712, -122.49897],
+      [47.79706, -122.49873],
+      [47.79652, -122.49905],
+      [47.79658, -122.49929],
     ],
   },
   {
     id: "port-15min-dropoff",
-    name: "15-minute dropoff — Mike Wallace Park",
+    name: "15-minute dropoff (Mike Wallace Park edge)",
     rule: "load-zone",
     summary:
-      "15-minute dropoff/loading stalls at the park's northwest corner, by the stage. Free, 15 minutes max.",
+      "15-minute dropoff/loading only — on the drive along Mike Wallace Park's west edge, east of the free 2-hour row.",
     details:
-      "Two short angled rows flanking the '15-minute Dropoff' sign on the drive between the free 2-hour row and the Mike Wallace Park stage. The outline includes the adjacent ADA (disabled) stalls in the same band. Not for ferry loading or waiting.",
+      "Hatched dropoff stalls on the short drive between the free 2-hour island's east end and Mike Wallace Park's NW boundary, with disabled stalls just SE of them along the park edge (disabled stalls not polygonized). A small feature placed from the schematic only — the least certain placement in this set; field-check recommended.",
     confidence: "probable",
     sourceUrl: PORT_MAP_URL,
-    sourceNote: PORT_GEO_NOTE,
+    sourceNote: PORT_SCHEMATIC_NOTE,
     overnight: "no",
-    center: [47.796238, -122.497326],
+    center: [47.79646, -122.49716],
     polygon: [
-      [47.796397, -122.497249],
-      [47.796092, -122.497323],
-      [47.796085, -122.497398],
-      [47.796378, -122.497335],
-    ],
-  },
-  {
-    id: "port-tenant-permit-row-ends",
-    name: "Marina tenant permit stalls (row ends)",
-    rule: "permit",
-    summary:
-      "Marina tenant permit required — the seaward ends of main-lot rows 1–88, along the promenade side. Not open to visitors.",
-    details:
-      "A diagonal band of purple-signed stalls across the south/seaward ends of the angled rows, closest to the docks. Reserved for moorage tenants with Port permits; visitors parking here risk a $40–50 ticket. Boundary between paid yellow stalls and tenant stalls varies row by row — obey stall markings.",
-    confidence: "probable",
-    sourceUrl: PORT_MAP_URL,
-    sourceNote: PORT_GEO_NOTE,
-    overnight: "no",
-    center: [47.796309, -122.498487],
-    polygon: [
-      [47.796456, -122.498925],
-      [47.796377, -122.498419],
-      [47.796318, -122.49805],
-      [47.796254, -122.498074],
-      [47.796173, -122.498231],
-      [47.79625, -122.498466],
-      [47.796288, -122.49877],
-      [47.79636, -122.49896],
-    ],
-  },
-  {
-    id: "port-tenant-permit-restrooms",
-    name: "Marina tenant permit block (by park restrooms)",
-    rule: "permit",
-    summary:
-      "Marina tenant permit required — small block between the free 2-hour row and the Mike Wallace Park restrooms.",
-    details:
-      "Purple-signed tenant stalls immediately south of the free 2-hour row and north/west of the park restrooms. Permit holders only; not visitor parking.",
-    confidence: "probable",
-    sourceUrl: PORT_MAP_URL,
-    sourceNote: PORT_GEO_NOTE,
-    overnight: "no",
-    center: [47.796178, -122.497673],
-    polygon: [
-      [47.796308, -122.497539],
-      [47.7962, -122.497509],
-      [47.796107, -122.497691],
-      [47.796116, -122.497798],
-      [47.796159, -122.497828],
+      [47.79653, -122.49719],
+      [47.7965, -122.49706],
+      [47.79639, -122.49713],
+      [47.79642, -122.49726],
     ],
   },
   {
@@ -286,42 +255,82 @@ export const parkingZones: MapZone[] = [
     name: "KCYC permit-only row",
     rule: "permit",
     summary:
-      "Kingston Cove Yacht Club permit only — eastern half of the north strip, just southwest of the KCYC clubhouse.",
+      "Kingston Cove Yacht Club permit holders only — row along the drive just NW of the clubhouse.",
     details:
-      "Red 'K' stalls continuing east from spaces 89–103 along the lot's north edge, beside the yacht club building. KCYC members with permits only.",
+      "Marked 'KCYC PERMIT ONLY' on the Port map, between public row 89–103 and the KCYC clubhouse. Not available to visitors; enforcement is the Port's standard $40–50 ticket schedule.",
     confidence: "probable",
     sourceUrl: PORT_MAP_URL,
     sourceNote: PORT_GEO_NOTE,
-    overnight: "no",
-    center: [47.796823, -122.498154],
+    overnight: "confirm-first",
+    center: [47.796802, -122.498228],
     polygon: [
-      [47.796951, -122.498215],
-      [47.796725, -122.498048],
-      [47.79669, -122.498086],
-      [47.796925, -122.498265],
+      [47.796915, -122.498263],
+      [47.796721, -122.498108],
+      [47.79669, -122.498193],
+      [47.796884, -122.498349],
+    ],
+  },
+  {
+    id: "port-tenant-row-park",
+    name: "Marina tenant row (by promenade restrooms)",
+    rule: "permit",
+    summary:
+      "Marina tenant permit required — row between the free 2-hour island and the waterfront promenade restrooms.",
+    details:
+      "Purple 'MARINA TENANT PARKING (PERMIT REQUIRED)' row on the Port map, running WSW from below the dropoff/disabled area toward the promenade restrooms inside the D-shaped loop pod. Visitors may not park here; moorage tenants use their permit.",
+    confidence: "probable",
+    sourceUrl: PORT_MAP_URL,
+    sourceNote: PORT_SCHEMATIC_NOTE,
+    overnight: "confirm-first",
+    center: [47.796262, -122.497716],
+    polygon: [
+      [47.796337, -122.497585],
+      [47.796295, -122.497551],
+      [47.796187, -122.497848],
+      [47.796229, -122.497882],
+    ],
+  },
+  {
+    id: "port-tenant-fan-block",
+    name: "Marina tenant block (fan row ends)",
+    rule: "permit",
+    summary:
+      "Marina tenant permit required — the largest tenant block, at the SE (waterfront) end of fan rows 5–18.",
+    details:
+      "The biggest of the purple tenant areas in the main fan, at the waterfront end of the 5–10/11–18 row. Smaller tenant caps also exist at the SE ends of rows 19–88 and 1–4 (not polygonized separately — they fall just outside the POKPARK fan polygon's SE cut).",
+    confidence: "probable",
+    sourceUrl: PORT_MAP_URL,
+    sourceNote: PORT_SCHEMATIC_NOTE,
+    overnight: "confirm-first",
+    center: [47.796326, -122.498538],
+    polygon: [
+      [47.796474, -122.498527],
+      [47.796419, -122.498367],
+      [47.79618, -122.498543],
+      [47.796231, -122.498714],
     ],
   },
   {
     id: "port-boat-launch-apron",
-    name: "Boat launch ramp & apron",
-    rule: "load-zone",
+    name: "Boat launch apron",
+    rule: "prohibited",
     summary:
-      "Launch/rigging apron at the public boat launch — active launching and retrieval only, no parking.",
+      "Launch ramp maneuvering apron — no parking. Launch restrooms sit at its center; ramp at the SW corner.",
     details:
-      "Paved turnaround and staging apron at the foot of the launch road, with the launch float alongside. ADA stalls sit just northeast at the end of the POKTT band. After launching, trucks with trailers must pay and park in POKTT (301–318) or the POKHILL overflow (133–162).",
+      "Paved maneuvering area between the hill-zone drive, the POKTT band and the launch ramp (ramp at ~47.7963, -122.4994). Keep clear for backing trailers; parked vehicles here block the ramp. Trucks with trailers belong in POKTT (301–318) or hill overflow (133–162).",
     confidence: "probable",
     sourceUrl: PORT_MAP_URL,
     sourceNote: PORT_GEO_NOTE,
     overnight: "no",
-    center: [47.796355, -122.49936],
+    center: [47.796418, -122.499288],
     polygon: [
-      [47.796481, -122.499328],
-      [47.796313, -122.499228],
-      [47.796233, -122.499399],
-      [47.796392, -122.499486],
+      [47.79656, -122.49928],
+      [47.79647, -122.49903],
+      [47.79636, -122.49917],
+      [47.7963, -122.49947],
+      [47.7964, -122.49949],
     ],
   },
-
   /* ---------------- Diamond / WSDOT lot ---------------- */
   {
     id: "diamond-d515",
@@ -559,10 +568,10 @@ export const parkingAreas: ParkingArea[] = [
     timeLimit: "2 hours, strictly enforced (~30 stalls)",
     notes:
       "Great for a quick lunch or a stroll on the pier — but the Port explicitly says not to use it for ferry travel. If a ferry delay traps you, call the Port office before the two hours expire to request an extension. There are also 15-minute loading zones near the marina.",
-    // Corrected July 2026: the old pin (47.79678, -122.4967) sat ~70 m northeast,
-    // on the 201–213 row by the Washington Blvd entrance.
-    lat: 47.79646,
-    lng: -122.497546,
+    // Corrected July 2026: the old pin (47.79678, -122.4967) sat ~70 m NE at the
+    // Washington Blvd/SR-104 fork by Kiwanis Park — the wrong park.
+    lat: 47.79654,
+    lng: -122.49752,
   },
   {
     id: "diamond-d515-lot",
