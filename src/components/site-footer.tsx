@@ -48,6 +48,7 @@ export function SiteFooter() {
             <li><Link href="/give" className="hover:underline">Volunteer &amp; give back</Link></li>
             <li><Link href="/hunt" className="hover:underline">Scavenger hunt</Link></li>
             <li><Link href="/about" className="hover:underline">About this site</Link></li>
+            <li><Link href="/portal" className="font-medium hover:underline">Chamber &amp; business portal →</Link></li>
           </ul>
         </div>
       </div>

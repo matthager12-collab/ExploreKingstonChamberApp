@@ -20,6 +20,7 @@ const moreLinks = [
   { href: "/hunt", label: "Scavenger Hunt" },
   { href: "/give", label: "Give Back" },
   { href: "/about", label: "About" },
+  { href: "/portal", label: "Chamber Portal" },
 ];
 
 export function SiteNav() {
