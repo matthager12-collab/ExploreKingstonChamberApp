@@ -14,6 +14,8 @@ import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 import { dataPath } from "./data-dir";
+import { hasDb } from "./db";
+import { readMerged, writeOverlayRecord } from "./stores/json-store";
 import { cookies } from "next/headers";
 
 export type Role = "business" | "nonprofit" | "admin";
@@ -43,6 +45,12 @@ const USERS_FILE = path.join(AUTH_DIR, "users.json");
 const INVITES_FILE = path.join(AUTH_DIR, "invites.json");
 const SESSION_COOKIE = "vk-session";
 const SESSION_DAYS = 30;
+
+// Overlay-table store keys for the DB backend (prod). Invites are keyed by
+// their code (mapped onto the overlay table's `id` column).
+const USERS_STORE = "auth-users";
+const INVITES_STORE = "auth-invites";
+type InviteRow = InviteCode & { id: string };
 
 function secret(): string {
   const s = process.env.AUTH_SECRET;
@@ -82,6 +90,7 @@ export function verifyPassword(password: string, stored: string): boolean {
 // ---------- users ----------
 
 export async function listUsers(): Promise<User[]> {
+  if (hasDb()) return readMerged<User>(USERS_STORE, []);
   return readJson<User[]>(USERS_FILE, []);
 }
 
@@ -114,14 +123,19 @@ export async function createUser(input: {
     passwordHash: hashPassword(input.password),
     createdAt: new Date().toISOString(),
   };
-  users.push(user);
-  await writeJson(USERS_FILE, users);
+  if (hasDb()) {
+    await writeOverlayRecord(USERS_STORE, user);
+  } else {
+    users.push(user);
+    await writeJson(USERS_FILE, users);
+  }
   return user;
 }
 
 // ---------- invites ----------
 
 export async function listInvites(): Promise<InviteCode[]> {
+  if (hasDb()) return readMerged<InviteRow>(INVITES_STORE, []);
   return readJson<InviteCode[]>(INVITES_FILE, []);
 }
 
@@ -138,8 +152,12 @@ export async function createInvite(input: {
     note: input.note,
     createdAt: new Date().toISOString(),
   };
-  invites.push(invite);
-  await writeJson(INVITES_FILE, invites);
+  if (hasDb()) {
+    await writeOverlayRecord<InviteRow>(INVITES_STORE, { ...invite, id: invite.code });
+  } else {
+    invites.push(invite);
+    await writeJson(INVITES_FILE, invites);
+  }
   return invite;
 }
 
@@ -158,7 +176,11 @@ export async function redeemInvite(
     password: account.password,
   });
   invite.usedBy = user.id;
-  await writeJson(INVITES_FILE, invites);
+  if (hasDb()) {
+    await writeOverlayRecord<InviteRow>(INVITES_STORE, { ...invite, id: invite.code });
+  } else {
+    await writeJson(INVITES_FILE, invites);
+  }
   return user;
 }
 
