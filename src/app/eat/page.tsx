@@ -10,6 +10,7 @@ import {
   ExternalLink,
   mapSearchUrl,
 } from "@/components/ui";
+import { OpenBadge, OrderTimingNote } from "@/components/open-badge";
 
 export const metadata: Metadata = {
   title: "Eat & Drink",
@@ -50,7 +51,7 @@ const groups: { title: string; subtitle: string; ids: string[] }[] = [
   {
     title: "Coffee & quick bites",
     subtitle: "Fast fuel before a sailing — all of these move quickly.",
-    ids: ["jaime-les-crepes", "cup-and-muffin", "borrowed-kitchen-bakery"],
+    ids: ["jaime-les-crepes", "kingston-coffee-company", "cup-and-muffin", "borrowed-kitchen-bakery"],
   },
   {
     title: "Drinks",
@@ -82,8 +83,9 @@ function RestaurantCard({ r }: { r: Restaurant }) {
         </p>
       </div>
 
-      <div className="mt-2">
+      <div className="mt-2 flex flex-wrap items-center gap-2">
         <Badge tone="teal">{r.walkMinutesFromFerry} min walk from ferry</Badge>
+        <OpenBadge weeklyHours={r.weeklyHours} />
       </div>
 
       <p className="mt-3 text-sm leading-relaxed text-ink-soft">{r.description}</p>
@@ -135,6 +137,9 @@ function RestaurantCard({ r }: { r: Restaurant }) {
         >
           Map
         </a>
+        {(r.orderingUrl || r.orderingPlatform === "phone-only") && (
+          <OrderTimingNote weeklyHours={r.weeklyHours} />
+        )}
       </div>
     </Card>
   );

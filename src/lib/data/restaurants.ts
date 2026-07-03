@@ -2,6 +2,18 @@
 // listings and each business's own site, verified July 2026.
 //
 // Notes for maintainers:
+// - weeklyHours were verified 2026-07-02 against two live sources per business
+//   (official site + Google/Yelp/ordering pages, cross-checked by a second
+//   pass). They power the live "Open now" badge on /eat. When a business
+//   changes hours, update BOTH weeklyHours and the human `hours` string.
+// - Known disputes (kept visible in the hours strings): Saucy Sailor Mondays
+//   (their site says open, Google/Yelp say closed — we follow their site);
+//   Filling Station Tuesdays (their own hours subpage says closed, but their
+//   homepage, Google, and Yelp all say open — we follow the majority).
+// - Friends and Neighbors is closed Mondays until ~2026-09-14 (MNF returns);
+//   restore Monday 4–8 pm then.
+// - Holiday hours vary town-wide (several businesses posted special July 4
+//   2026 hours). The badge can't know holidays — the page says "call ahead".
 // - Ordering deep links (Toast, SpotOn, SpotHopper, Revel) are mutable slugs.
 //   Sourdough Willy's Toast slug still references their OLD Angeline Ave
 //   address but works — re-verify these in a real browser periodically
@@ -10,9 +22,13 @@
 //   website link until that's fixed.
 // - Joy Luck Restaurant & Take Out is directory-listed but not independently
 //   verified; add it once confirmed with the Chamber.
+// - The Kingston Coffee Company is newly opened — hours reported but not
+//   two-source verified, so it deliberately has no weeklyHours (no badge).
 // - lat/lng are block-level approximations for map pins, not survey data.
 
 import type { Restaurant } from "../types";
+
+const VERIFIED = "2026-07-02";
 
 export const restaurants: Restaurant[] = [
   {
@@ -24,7 +40,17 @@ export const restaurants: Restaurant[] = [
     address: "11264 NE State Hwy 104, Kingston, WA 98346",
     phone: "(360) 297-5886",
     website: "https://jaimelescrepes.com",
-    hours: "Daily, about 7 am–8:30 pm",
+    hours: "Mon–Fri 6 am–8:30 pm, Sat–Sun 7 am–8:30 pm",
+    weeklyHours: {
+      mon: [["06:00", "20:30"]],
+      tue: [["06:00", "20:30"]],
+      wed: [["06:00", "20:30"]],
+      thu: [["06:00", "20:30"]],
+      fri: [["06:00", "20:30"]],
+      sat: [["07:00", "20:30"]],
+      sun: [["07:00", "20:30"]],
+    },
+    hoursVerified: VERIFIED,
     priceLevel: 1,
     tags: ["quick", "breakfast", "kid-friendly", "sweet"],
     lat: 47.7964,
@@ -43,7 +69,17 @@ export const restaurants: Restaurant[] = [
     orderingUrl:
       "https://order.toasttab.com/online/sourdough-willys-pizzeria-17766-angeline-avenue-s-ne",
     orderingPlatform: "toast",
-    hours: "Daily 12–8 pm",
+    hours: "Daily 12–8 pm (closed Easter, Thanksgiving, Dec 24–25)",
+    weeklyHours: {
+      mon: [["12:00", "20:00"]],
+      tue: [["12:00", "20:00"]],
+      wed: [["12:00", "20:00"]],
+      thu: [["12:00", "20:00"]],
+      fri: [["12:00", "20:00"]],
+      sat: [["12:00", "20:00"]],
+      sun: [["12:00", "20:00"]],
+    },
+    hoursVerified: VERIFIED,
     priceLevel: 2,
     tags: ["pizza", "kid-friendly", "takeout"],
     lat: 47.7965,
@@ -61,6 +97,18 @@ export const restaurants: Restaurant[] = [
     website: "https://thesaucysailor.com",
     orderingUrl: "https://tmt.spotapps.co/ordering-menu?spot_id=355476",
     orderingPlatform: "own-site",
+    hours:
+      "Mon–Thu 11:30 am–6:30 pm, Fri 11:30 am–7:30 pm, Sat 11 am–7:30 pm, Sun 11 am–7 pm · Mondays disputed — call first",
+    weeklyHours: {
+      mon: [["11:30", "18:30"]],
+      tue: [["11:30", "18:30"]],
+      wed: [["11:30", "18:30"]],
+      thu: [["11:30", "18:30"]],
+      fri: [["11:30", "19:30"]],
+      sat: [["11:00", "19:30"]],
+      sun: [["11:00", "19:00"]],
+    },
+    hoursVerified: VERIFIED,
     priceLevel: 2,
     tags: ["quick", "takeout", "vegan-options", "gluten-free"],
     lat: 47.7961,
@@ -78,6 +126,17 @@ export const restaurants: Restaurant[] = [
     website: "https://thekingstonalehouse.com",
     menuUrl: "https://thekingstonalehouse.com",
     orderingPlatform: "phone-only",
+    hours: "Mon–Thu 11 am–9:30 pm, Fri–Sat 11 am–midnight (bar till 1 am), Sun 11 am–9 pm",
+    weeklyHours: {
+      mon: [["11:00", "21:30"]],
+      tue: [["11:00", "21:30"]],
+      wed: [["11:00", "21:30"]],
+      thu: [["11:00", "21:30"]],
+      fri: [["11:00", "00:00"]],
+      sat: [["11:00", "00:00"]],
+      sun: [["11:00", "21:00"]],
+    },
+    hoursVerified: VERIFIED,
     priceLevel: 2,
     tags: ["pub", "beer", "seafood"],
     lat: 47.7959,
@@ -93,6 +152,17 @@ export const restaurants: Restaurant[] = [
     address: "11227 NE State Hwy 104, Kingston, WA 98346",
     phone: "(360) 297-3010",
     orderingPlatform: "phone-only",
+    hours: "Wed–Thu 4–8 pm, Fri–Sat 4–9 pm, Sun brunch 10 am–2 pm",
+    weeklyHours: {
+      mon: [],
+      tue: [],
+      wed: [["16:00", "20:00"]],
+      thu: [["16:00", "20:00"]],
+      fri: [["16:00", "21:00"]],
+      sat: [["16:00", "21:00"]],
+      sun: [["10:00", "14:00"]],
+    },
+    hoursVerified: VERIFIED,
     priceLevel: 2,
     tags: ["wine", "brunch", "date-night"],
     lat: 47.7959,
@@ -104,10 +174,20 @@ export const restaurants: Restaurant[] = [
     name: "Cellar Cat",
     cuisine: "Wine bar & jazz club",
     description:
-      "A 21+ wine bar and jazz club in the middle of the strip. Their website has been down, so call for showtimes and what's pouring.",
+      "A 21+ wine bar and jazz club in the middle of the strip — piano bar Fridays, live music Saturdays and Sunday evenings.",
     address: "11253 NE State Hwy 104, Kingston, WA 98346",
     phone: "(360) 979-7925",
-    hours: "Thu–Sun evenings",
+    hours: "Thu & Sun 3–8 pm, Fri–Sat 3–10 pm",
+    weeklyHours: {
+      mon: [],
+      tue: [],
+      wed: [],
+      thu: [["15:00", "20:00"]],
+      fri: [["15:00", "22:00"]],
+      sat: [["15:00", "22:00"]],
+      sun: [["15:00", "20:00"]],
+    },
+    hoursVerified: VERIFIED,
     priceLevel: 2,
     tags: ["wine", "live-music", "21-plus"],
     lat: 47.7962,
@@ -119,12 +199,23 @@ export const restaurants: Restaurant[] = [
     name: "Filling Station",
     cuisine: "Bar & grill",
     description:
-      "No-frills local bar and grill on the main drag. The menu lives on their site as a PDF; call if you want food to go.",
+      "No-frills local bar and grill on the main drag. The menu lives on their site as a PDF; call if you want food to go. Happy hour 3–5 pm.",
     address: "11200 NE State Hwy 104, Kingston, WA 98346",
     phone: "(360) 297-7732",
     website: "https://fillingstationkingston.com",
     menuUrl: "https://fillingstationkingston.com",
     orderingPlatform: "phone-only",
+    hours: "Daily 11 am–10 pm, Fri–Sat to midnight · Tuesdays disputed — call ahead",
+    weeklyHours: {
+      mon: [["11:00", "22:00"]],
+      tue: [["11:00", "22:00"]],
+      wed: [["11:00", "22:00"]],
+      thu: [["11:00", "22:00"]],
+      fri: [["11:00", "00:00"]],
+      sat: [["11:00", "00:00"]],
+      sun: [["11:00", "22:00"]],
+    },
+    hoursVerified: VERIFIED,
     priceLevel: 2,
     tags: ["bar", "casual"],
     lat: 47.7957,
@@ -140,6 +231,17 @@ export const restaurants: Restaurant[] = [
     address: "11130 NE State Hwy 104, Kingston, WA 98346",
     phone: "(360) 881-0147",
     orderingPlatform: "phone-only",
+    hours: "Daily 11 am–8 pm",
+    weeklyHours: {
+      mon: [["11:00", "20:00"]],
+      tue: [["11:00", "20:00"]],
+      wed: [["11:00", "20:00"]],
+      thu: [["11:00", "20:00"]],
+      fri: [["11:00", "20:00"]],
+      sat: [["11:00", "20:00"]],
+      sun: [["11:00", "20:00"]],
+    },
+    hoursVerified: VERIFIED,
     priceLevel: 1,
     tags: ["quick", "burgers", "kid-friendly", "takeout"],
     lat: 47.7953,
@@ -158,6 +260,17 @@ export const restaurants: Restaurant[] = [
     orderingUrl:
       "https://order.toasttab.com/online/nirvana-indian-nepali-cuisine-2-11171-ne-state-hwy-104",
     orderingPlatform: "toast",
+    hours: "Sun–Mon 12–8 pm · Wed–Thu 4–8:30 pm · Fri–Sat 12–9 pm · Tue closed",
+    weeklyHours: {
+      mon: [["12:00", "20:00"]],
+      tue: [],
+      wed: [["16:00", "20:30"]],
+      thu: [["16:00", "20:30"]],
+      fri: [["12:00", "21:00"]],
+      sat: [["12:00", "21:00"]],
+      sun: [["12:00", "20:00"]],
+    },
+    hoursVerified: VERIFIED,
     priceLevel: 2,
     tags: ["takeout", "delivery", "vegetarian-friendly"],
     lat: 47.7955,
@@ -169,9 +282,20 @@ export const restaurants: Restaurant[] = [
     name: "Friends and Neighbors Brewing",
     cuisine: "Brewery taproom",
     description:
-      "Kingston's taproom: 18 taps, dogs and kids welcome. Opened October 2025 in the old Downpour Brewing spot — ignore map apps that still say Downpour.",
+      "Kingston's taproom: 18 taps, dogs and kids welcome, rotating food trucks midweek. Opened October 2025 in the old Downpour Brewing spot — ignore map apps that still say Downpour.",
     address: "10991 NE State Hwy 104, Kingston, WA 98346",
     website: "https://friendsandneighborsbrewing.com",
+    hours: "Tue 4–8 pm, Wed–Fri 4–9 pm, Sat 2–9 pm, Sun 2–8 pm · Mon closed until mid-Sept",
+    weeklyHours: {
+      mon: [],
+      tue: [["16:00", "20:00"]],
+      wed: [["16:00", "21:00"]],
+      thu: [["16:00", "21:00"]],
+      fri: [["16:00", "21:00"]],
+      sat: [["14:00", "21:00"]],
+      sun: [["14:00", "20:00"]],
+    },
+    hoursVerified: VERIFIED,
     priceLevel: 2,
     tags: ["beer", "taproom", "dog-friendly", "kid-friendly"],
     lat: 47.7951,
@@ -190,6 +314,17 @@ export const restaurants: Restaurant[] = [
     orderingUrl:
       "https://order.spoton.com/so-los-tres-compadres-18180/kingston-wa/65e25569890d61039b827d87/",
     orderingPlatform: "own-site",
+    hours: "Mon–Sat 11 am–8 pm, closed Sun",
+    weeklyHours: {
+      mon: [["11:00", "20:00"]],
+      tue: [["11:00", "20:00"]],
+      wed: [["11:00", "20:00"]],
+      thu: [["11:00", "20:00"]],
+      fri: [["11:00", "20:00"]],
+      sat: [["11:00", "20:00"]],
+      sun: [],
+    },
+    hoursVerified: VERIFIED,
     priceLevel: 2,
     tags: ["kid-friendly", "takeout"],
     lat: 47.795,
@@ -201,10 +336,20 @@ export const restaurants: Restaurant[] = [
     name: "Borrowed Kitchen Bakery",
     cuisine: "Bakery & cafe",
     description:
-      "Neighborhood bakery and cafe up the hill from the dock. Closed Sunday and Monday, so save the pastry run for Tuesday through Saturday.",
+      "Neighborhood bakery and cafe up the hill from the dock. Pastries can sell out before close — go early.",
     address: "10978 NE State Hwy 104, Suite 111, Kingston, WA 98346",
     phone: "(360) 881-0207",
-    hours: "Tue–Sat",
+    hours: "Tue–Fri 8 am–5 pm, Sat 8 am–3 pm, closed Sun–Mon",
+    weeklyHours: {
+      mon: [],
+      tue: [["08:00", "17:00"]],
+      wed: [["08:00", "17:00"]],
+      thu: [["08:00", "17:00"]],
+      fri: [["08:00", "17:00"]],
+      sat: [["08:00", "15:00"]],
+      sun: [],
+    },
+    hoursVerified: VERIFIED,
     priceLevel: 1,
     tags: ["bakery", "coffee", "breakfast", "quick"],
     lat: 47.795,
@@ -220,6 +365,16 @@ export const restaurants: Restaurant[] = [
     address: "10969 NE State Hwy 104, Kingston, WA 98346",
     phone: "(360) 297-3364",
     hours: "Daily 6 am–3 pm",
+    weeklyHours: {
+      mon: [["06:00", "15:00"]],
+      tue: [["06:00", "15:00"]],
+      wed: [["06:00", "15:00"]],
+      thu: [["06:00", "15:00"]],
+      fri: [["06:00", "15:00"]],
+      sat: [["06:00", "15:00"]],
+      sun: [["06:00", "15:00"]],
+    },
+    hoursVerified: VERIFIED,
     priceLevel: 1,
     tags: ["coffee", "quick", "drive-thru", "breakfast"],
     lat: 47.7949,
@@ -231,10 +386,20 @@ export const restaurants: Restaurant[] = [
     name: "Argensol Kitchen",
     cuisine: "Argentinian",
     description:
-      "Argentinian cooking near the Village Green, on a four-day week — Thursday through Sunday only, so check before you make the walk.",
+      "Argentinian cooking near the Village Green, on a four-day week — every day closes at a different time, so glance at the hours before you make the walk.",
     address: "25923 Washington Blvd NE, Suite 101, Kingston, WA 98346",
     phone: "(360) 930-9094",
-    hours: "Thu–Sun",
+    hours: "Thu 11 am–5 pm, Fri 11 am–6 pm, Sat 10 am–6 pm, Sun 10 am–4 pm",
+    weeklyHours: {
+      mon: [],
+      tue: [],
+      wed: [],
+      thu: [["11:00", "17:00"]],
+      fri: [["11:00", "18:00"]],
+      sat: [["10:00", "18:00"]],
+      sun: [["10:00", "16:00"]],
+    },
+    hoursVerified: VERIFIED,
     priceLevel: 2,
     tags: ["takeout"],
     lat: 47.7985,
@@ -250,6 +415,17 @@ export const restaurants: Restaurant[] = [
     address: "25960 Central Ave NE, Suite 102, Kingston, WA 98346",
     phone: "(360) 638-6130",
     orderingPlatform: "phone-only",
+    hours: "Tue–Sat 11 am–7 pm, Sun 12–5 pm, closed Mon",
+    weeklyHours: {
+      mon: [],
+      tue: [["11:00", "19:00"]],
+      wed: [["11:00", "19:00"]],
+      thu: [["11:00", "19:00"]],
+      fri: [["11:00", "19:00"]],
+      sat: [["11:00", "19:00"]],
+      sun: [["12:00", "17:00"]],
+    },
+    hoursVerified: VERIFIED,
     priceLevel: 2,
     tags: ["quick", "takeout"],
     lat: 47.7996,
@@ -267,10 +443,37 @@ export const restaurants: Restaurant[] = [
     website: "https://westsidepizza.com/location/kingston/",
     orderingUrl: "https://westsidepizza.com/location/kingston/",
     orderingPlatform: "own-site",
+    hours: "Daily 11 am–9 pm",
+    weeklyHours: {
+      mon: [["11:00", "21:00"]],
+      tue: [["11:00", "21:00"]],
+      wed: [["11:00", "21:00"]],
+      thu: [["11:00", "21:00"]],
+      fri: [["11:00", "21:00"]],
+      sat: [["11:00", "21:00"]],
+      sun: [["11:00", "21:00"]],
+    },
+    hoursVerified: VERIFIED,
     priceLevel: 2,
     tags: ["pizza", "delivery", "kid-friendly"],
     lat: 47.7997,
     lng: -122.4981,
     walkMinutesFromFerry: 10,
+  },
+  {
+    id: "kingston-coffee-company",
+    name: "The Kingston Coffee Company",
+    cuisine: "Coffee & cafe",
+    description:
+      "Kingston's newest coffee shop, right on the downtown strip — espresso, matcha, paninis on house focaccia, and stuffed waffles.",
+    address: "11201 NE State Hwy 104, Kingston, WA 98346",
+    phone: "(360) 204-8090",
+    website: "https://www.thekingstoncoffeecompany.com/",
+    hours: "Daily 9:30 am–4:30 pm (new spot — confirm)",
+    priceLevel: 1,
+    tags: ["coffee", "quick", "new"],
+    lat: 47.7967,
+    lng: -122.498,
+    walkMinutesFromFerry: 3,
   },
 ];

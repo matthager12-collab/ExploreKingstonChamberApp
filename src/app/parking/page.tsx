@@ -124,14 +124,16 @@ export default function ParkingPage() {
 
       <Section
         title="The map"
-        subtitle="Tap any marker for rates, overnight rules, and directions. Rates verified July 2, 2026."
+        subtitle="Every public street in the Kingston UGA, color-coded by parking rule, plus lots, park & rides, and ATMs. Tap anything for rules, directions, and a Street View look at the actual curb. Rates verified July 2, 2026."
       >
-        <TownMap zones={parkingZones} atms={atms} height="460px" />
+        <TownMap zones={parkingZones} atms={atms} height="500px" />
         <MapLegend />
         <p className="mt-2 text-xs text-ink-soft">
-          Dark-navy dots are ATMs. Street-parking rules come from the county&apos;s 2015
-          curb inventory — the sign on the pole is always the legal authority. Markers
-          labeled &ldquo;unverified&rdquo; still need an on-the-ground check.
+          Dark-navy dots are ATMs; the dashed navy line is the Kingston urban growth
+          area (Census boundary). Green and cyan streets come from the county&apos;s 2015
+          curb inventory; gray streets have no restriction we know of — either way, the
+          sign on the pole is always the legal authority. Markers labeled
+          &ldquo;unverified&rdquo; still need an on-the-ground check.
         </p>
       </Section>
 

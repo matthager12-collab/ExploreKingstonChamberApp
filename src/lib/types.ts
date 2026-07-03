@@ -37,6 +37,23 @@ export interface Webcam {
   refreshSeconds: number;
 }
 
+/**
+ * One day's open/close spans as 24h "HH:mm" pairs, e.g. [["11:00","20:00"]].
+ * Empty array = closed. Two pairs = split shift (lunch/dinner). A close time
+ * at or before its open time means the span runs past midnight.
+ */
+export type DayHours = [string, string][];
+
+export interface WeeklyHours {
+  mon: DayHours;
+  tue: DayHours;
+  wed: DayHours;
+  thu: DayHours;
+  fri: DayHours;
+  sat: DayHours;
+  sun: DayHours;
+}
+
 export interface Restaurant {
   id: string;
   name: string;
@@ -49,6 +66,10 @@ export interface Restaurant {
   orderingUrl?: string;
   orderingPlatform?: "toast" | "square" | "doordash" | "own-site" | "phone-only";
   hours?: string;
+  /** Structured hours powering the live "Open now" badge */
+  weeklyHours?: WeeklyHours;
+  /** ISO date the hours were last verified against live sources */
+  hoursVerified?: string;
   priceLevel: 1 | 2 | 3;
   tags: string[];
   lat: number;
