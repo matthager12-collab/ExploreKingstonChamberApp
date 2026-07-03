@@ -108,6 +108,21 @@ export default async function AdminPage() {
         intro="Anonymous, aggregate counts of how people use this site — the raw material for Kingston's lodging-tax (LTAC) grant reports. No names, no cookies, no precise locations; just totals."
       />
 
+      <Section>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-sand bg-white p-4">
+          <p className="text-sm text-ink-soft">
+            Render snapshots the disk daily (7-day restore). For an off-site copy —
+            accounts, listings, events, survey &amp; analytics — download a bundle any time.
+          </p>
+          <a
+            href="/api/admin/backup"
+            className="shrink-0 rounded-full bg-sound px-4 py-2 text-sm font-semibold text-white hover:bg-sound-deep"
+          >
+            ⤓ Download backup
+          </a>
+        </div>
+      </Section>
+
       <Section title="At a glance">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
