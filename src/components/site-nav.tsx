@@ -92,9 +92,9 @@ export function SiteNav() {
         </div>
       </header>
 
-      {/* Mobile bottom bar */}
+      {/* Mobile bottom bar — pad for the iOS home-indicator inset */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-sand bg-white/95 backdrop-blur md:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-sand bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
         aria-label="Mobile"
       >
         <div className="grid grid-cols-5">
@@ -133,7 +133,7 @@ export function SiteNav() {
 
       {/* Mobile "More" sheet */}
       {sheetOpen && (
-        <div className="fixed inset-x-0 bottom-[3.4rem] z-30 border-t border-sand bg-white p-4 shadow-[0_-8px_24px_rgba(22,64,94,0.12)] md:hidden">
+        <div className="fixed inset-x-0 bottom-[calc(3.4rem+env(safe-area-inset-bottom))] z-30 border-t border-sand bg-white p-4 shadow-[0_-8px_24px_rgba(22,64,94,0.12)] md:hidden">
           <div className="grid grid-cols-2 gap-2">
             {[...primaryLinks.filter((l) => !["/ferry", "/eat", "/events"].includes(l.href)), ...moreLinks].map(
               (l) => (

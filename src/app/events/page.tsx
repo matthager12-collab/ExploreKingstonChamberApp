@@ -148,12 +148,31 @@ export default async function EventsPage() {
   }
 
   return (
-    <main>
+    <>
       <PageHeader
         eyebrow="What's happening"
         title="Events"
         intro="Markets on the marina lawn, free concerts two nights a week in high summer, and the whole town out for the 4th. Most of it is a short walk from the ferry."
       />
+
+      {thisWeekend.length === 0 && byMonth.size === 0 && (
+        <Section>
+          <Card>
+            <p className="font-semibold text-sound-deep">Nothing on the calendar right now.</p>
+            <p className="mt-1 text-sm text-ink-soft">
+              Between seasons it can go quiet here. Check the{" "}
+              <ExternalLink href="https://business.kingstonchamber.com/events">
+                Kingston Chamber calendar
+              </ExternalLink>{" "}
+              and the{" "}
+              <ExternalLink href="https://portofkingston.org/events/list/">
+                Port of Kingston calendar
+              </ExternalLink>{" "}
+              for the latest, or submit your own below.
+            </p>
+          </Card>
+        </Section>
+      )}
 
       {thisWeekend.length > 0 && (
         <Section
@@ -202,6 +221,6 @@ export default async function EventsPage() {
           details with the organizer before making the trip.
         </p>
       </Section>
-    </main>
+    </>
   );
 }

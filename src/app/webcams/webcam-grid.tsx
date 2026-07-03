@@ -63,7 +63,10 @@ function WebcamCard({ cam }: { cam: Webcam }) {
           <img
             src={`${cam.imageUrl}?t=${stamp}`}
             alt={`${cam.name} — ${cam.location}`}
-            className="h-full w-full object-cover"
+            // contain (not cover) so non-4:3 WSDOT feeds aren't cropped — the
+            // holding-lane cams are near-square and cover would hide far rows;
+            // the bg-sound/5 frame letterboxes the difference.
+            className="h-full w-full object-contain"
             loading="lazy"
             onError={() => setOffline(true)}
           />

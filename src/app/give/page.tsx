@@ -116,6 +116,15 @@ export default async function GiveBackPage() {
         title="Volunteer right now"
         subtitle="Real shifts this summer, a couple hours each. No account needed — v1 keeps it simple: you contact the org, they put you to work."
       >
+        {sortedNeeds.length === 0 && (
+          <Card>
+            <p className="font-semibold text-sound-deep">No shifts posted right now.</p>
+            <p className="mt-1 text-sm text-ink-soft">
+              Things quiet down between events — but the organizations above always welcome an
+              email from someone who wants to help. Reach out to any of them directly.
+            </p>
+          </Card>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           {sortedNeeds.map((need) => {
             const charity = charityById.get(need.charityId);

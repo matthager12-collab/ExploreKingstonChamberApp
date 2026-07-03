@@ -22,7 +22,9 @@ export function PageHeader({
   return (
     <header className="mx-auto max-w-5xl px-4 pt-10 pb-6 sm:pt-14">
       {eyebrow && (
-        <p className="mb-2 text-sm font-semibold tracking-widest text-tide uppercase">{eyebrow}</p>
+        <p className="mb-2 text-sm font-semibold tracking-widest text-tide-deep uppercase">
+          {eyebrow}
+        </p>
       )}
       <h1 className="text-4xl font-semibold text-sound-deep sm:text-5xl">{title}</h1>
       {intro && <p className="mt-4 max-w-2xl text-lg text-ink-soft">{intro}</p>}
@@ -42,7 +44,7 @@ export function Section({
   id?: string;
 }) {
   return (
-    <section id={id} className="mx-auto max-w-5xl px-4 py-8">
+    <section id={id} className="mx-auto max-w-5xl px-4 py-8 scroll-mt-24">
       {title && <h2 className="text-2xl font-semibold text-sound-deep sm:text-3xl">{title}</h2>}
       {subtitle && <p className="mt-1 mb-2 text-ink-soft">{subtitle}</p>}
       <div className={title ? "mt-5" : undefined}>{children}</div>

@@ -291,9 +291,9 @@ export default async function AdminPage() {
             evidence of reach and of traffic sent to local businesses.
           </p>
           <p className="mt-2 font-semibold text-coral-deep">
-            Heads up: this page is unlinked from the site navigation but it is NOT
-            authenticated — anyone who knows the URL can view it. Add authentication before
-            deploying publicly.
+            This dashboard is gated to admin accounts. One thing still on the to-do list before
+            a public launch: the scavenger-hunt upload routes (/api/hunts/*) aren&apos;t
+            authenticated yet, so lock those down before promoting the hunts widely.
           </p>
         </Callout>
       </Section>

@@ -259,7 +259,7 @@ export function AccountsManager({
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-ink-soft">
                   <span>
-                    Redeem at <span className="font-medium text-ink">{joinUrl}</span>
+                    Redeem at <span className="font-medium break-all text-ink">{joinUrl}</span>
                   </span>
                   <CopyButton text={joinUrl} label="Copy link" />
                 </div>
@@ -322,7 +322,7 @@ export function AccountsManager({
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-ink-soft">
               <span>
-                They redeem it at <span className="font-medium text-ink">{joinUrl}</span>
+                They redeem it at <span className="font-medium break-all text-ink">{joinUrl}</span>
               </span>
               <CopyButton text={joinUrl} label="Copy link" />
             </div>
@@ -331,7 +331,7 @@ export function AccountsManager({
                 <p className="text-sm font-semibold text-sound-deep">Paste-ready email blurb</p>
                 <CopyButton text={blurbFor(fresh)} label="Copy blurb" />
               </div>
-              <p className="mt-2 rounded-lg border border-sand bg-white p-3 text-sm text-ink">
+              <p className="mt-2 rounded-lg border border-sand bg-white p-3 text-sm break-words text-ink">
                 {blurbFor(fresh)}
               </p>
             </div>

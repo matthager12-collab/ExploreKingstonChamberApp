@@ -22,8 +22,8 @@
   --color-tide-deep: #16758f; /* darker cyan — accessible link/text variant */
   --color-sound: #324a6d; /* brand deep navy — secondary */
   --color-sound-deep: #22334d; /* darker navy — footer, hero depths */
-  --color-coral: #c97940; /* warm CTA — deepened from brand peach #FFBC7D */
-  --color-coral-deep: #a85c28; /* hover + accessible text-on-white variant */
+  --color-coral: #a85c28; /* warm CTA — AA-legible with white text (~5:1) for sunlit outdoor use */
+  --color-coral-deep: #8a4c22; /* CTA hover + text-on-white variant (~6.5:1) */
   --color-ink: #20262e; /* near-black headings/body */
   --color-ink-soft: #6b7683; /* muted body gray */
   --color-fern: #4a7c59; /* PNW evergreen — success, open-now */
@@ -55,9 +55,14 @@ h3,
   background-repeat: repeat;
 }
 
-/* Room for the fixed mobile bottom nav */
+/* Room for the fixed mobile bottom nav, plus the iOS home-indicator inset */
 @media (max-width: 767px) {
   body {
-    padding-bottom: 4.5rem;
+    padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
   }
+}
+
+/* In-page anchors (e.g. /parking#atms) should clear the sticky header. */
+html {
+  scroll-padding-top: 5.5rem;
 }
