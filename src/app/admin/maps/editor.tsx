@@ -380,6 +380,10 @@ export function MapBuilder({
   const shapeModeRef = useRef(shapeMode);
   shapeModeRef.current = shapeMode;
   const selectRef = useRef<(id: string) => void>(() => {});
+  // Deletes a feature by id — used by the drawer button and the eraser tool.
+  const deleteRef = useRef<
+    (id: string, opts?: { confirm?: boolean; alreadyRemovedFromMap?: boolean }) => Promise<void>
+  >(async () => {});
 
   /* ---------------- which features belong on the canvas ---------------- */
 
@@ -717,12 +721,28 @@ export function MapBuilder({
         dragMode: true,
         cutPolygon: false,
         rotateMode: false,
-        removalMode: false,
+        removalMode: true, // the trash tool: click a feature to delete it
       });
       map.pm.setGlobalOptions({ allowSelfIntersection: false });
 
       map.on("pm:create", (e: { shape: string; layer: Layer }) => {
         handleDrawnRef.current(e.shape, e.layer);
+      });
+
+      // Eraser tool removed a layer — reverse-look it up and delete the
+      // matching feature (context layers are non-interactive, so they never
+      // fire this; an untracked half-drawn layer is ignored).
+      map.on("pm:remove", (e: { layer: Layer }) => {
+        let removedId: string | null = null;
+        for (const [fid, layer] of layersRef.current) {
+          if (layer === e.layer) {
+            removedId = fid;
+            break;
+          }
+        }
+        if (removedId) {
+          void deleteRef.current(removedId, { confirm: false, alreadyRemovedFromMap: true });
+        }
       });
 
       renderCanvas();
@@ -951,44 +971,67 @@ export function MapBuilder({
     }
   }
 
-  async function remove() {
-    if (!selectedId) return;
-    const f = featuresRef.current.find((x) => x.id === selectedId);
+  /**
+   * Delete a feature by id. Used by the drawer "Delete" button (confirm) and
+   * the toolbar eraser tool (no confirm; geoman already pulled the layer off
+   * the map, so pass alreadyRemovedFromMap). Seed features are tombstoned
+   * server-side, not erased; unsaved drafts just drop locally.
+   */
+  async function deleteFeatureById(
+    id: string,
+    opts: { confirm?: boolean; alreadyRemovedFromMap?: boolean } = {},
+  ) {
+    const { confirm = true, alreadyRemovedFromMap = false } = opts;
+    const f = featuresRef.current.find((x) => x.id === id);
     if (!f) return;
-    if (!window.confirm(`Delete "${f.title}" from the map? (Seed features stay hidden, not erased.)`)) {
+    if (confirm && !window.confirm(`Delete "${f.title}" from the map? (Seed features stay hidden, not erased.)`)) {
       return;
     }
 
-    const wasUnsaved = unsavedIdsRef.current.has(selectedId);
+    const wasUnsaved = unsavedIdsRef.current.has(id);
     if (!wasUnsaved) {
       setSaving(true);
       setMsg(null);
       try {
-        const res = await fetch(`/api/admin/map-features?id=${encodeURIComponent(selectedId)}`, {
+        const res = await fetch(`/api/admin/map-features?id=${encodeURIComponent(id)}`, {
           method: "DELETE",
         });
         if (!res.ok && res.status !== 404) {
           const data = (await res.json()) as { error?: string };
           setMsg({ kind: "error", text: data.error ?? "Could not delete the feature." });
+          // Server refused — put the erased layer back so state stays honest.
+          if (alreadyRemovedFromMap) {
+            layersRef.current.delete(id);
+            renderCanvas();
+          }
           return;
         }
       } catch {
         setMsg({ kind: "error", text: "Could not reach the server — is the app running?" });
+        if (alreadyRemovedFromMap) {
+          layersRef.current.delete(id);
+          renderCanvas();
+        }
         return;
       } finally {
         setSaving(false);
       }
     }
 
-    const id = selectedId;
     const title = f.title;
-    deselect();
-    removeLayer(id);
+    if (selectedIdRef.current === id) deselect();
+    if (alreadyRemovedFromMap) layersRef.current.delete(id);
+    else removeLayer(id);
     unsavedIdsRef.current.delete(id);
     featuresRef.current = featuresRef.current.filter((x) => x.id !== id);
     setFeatures(featuresRef.current);
     setMsg({ kind: "ok", text: `Deleted "${title}".` });
     router.refresh();
+  }
+  deleteRef.current = deleteFeatureById;
+
+  function remove() {
+    if (selectedId) void deleteFeatureById(selectedId, { confirm: true });
   }
 
   /* ---------------- image upload ---------------- */
@@ -1229,6 +1272,12 @@ export function MapBuilder({
               Move whole shape
             </button>
           </div>
+          {shapeMode === "reshape" && (
+            <p className="mt-1.5 rounded-lg bg-shell/70 px-3 py-2 text-xs text-ink-soft">
+              Drag a point to move it. Click a faint <b>＋</b> midpoint to add a point.
+              Right-click (or two-finger tap) a point to remove it. Then Save.
+            </p>
+          )}
         </div>
       )}
 
@@ -1384,7 +1433,7 @@ export function MapBuilder({
           disabled={saving}
           className="rounded-full border border-coral px-3 py-2 text-sm font-semibold text-coral-deep transition-colors hover:bg-coral/10 disabled:opacity-50"
         >
-          Delete
+          🗑 Delete feature
         </button>
       </div>
 
@@ -1745,6 +1794,8 @@ export function MapBuilder({
       <p className="text-xs text-ink-soft">
         Draw with the buttons above (or geoman’s toolbar, top-left). Click any feature to select
         it — drag its vertices (or switch to “Move whole shape”), drag marker pins, then Save.
+        To remove a point while reshaping, right-click it; to delete a whole feature, select it
+        and hit <b>Delete</b>, or use the trash (🗑) tool in the toolbar and click the feature.
         “Trail” and “Line” use the same polyline tool; switch between them in the feature form.
       </p>
 
