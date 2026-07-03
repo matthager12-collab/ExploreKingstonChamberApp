@@ -17,11 +17,15 @@ export const mapViews: MapView[] = [
   {
     id: "parking-cash",
     name: "Parking & Cash",
-    description: "Parking zones, the street-parking overlay, and every ATM near the dock.",
-    center: [47.7985, -122.4975],
-    zoom: 15,
-    sources: ["parking-zones", "streets", "atms"],
-    published: true,
+    // A blank canvas built by hand in /admin/maps — draw the real parking areas
+    // and cash points from the ground up. Starts as a draft (hidden from the
+    // public /map switcher) until it's ready to publish. To pull in the
+    // built-in layers again, tick sources in the editor's "Edit view" panel.
+    description: "Where to park in Kingston and where to get cash — built by the Chamber.",
+    center: [47.7972, -122.498],
+    zoom: 17,
+    sources: [],
+    published: false,
   },
   {
     id: "explore",
