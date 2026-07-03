@@ -23,7 +23,8 @@ import {
 import { FAST_FERRY_FACTS, getFastFerrySailings } from "@/lib/kitsap";
 import { FerryBoard } from "./ferry-board";
 import { FerryVesselMap } from "@/components/ferry-vessel-map";
-import { AtmQuickInfo } from "@/components/atm-quick-info";
+import { FerryLineInfo } from "@/components/ferry-line-info";
+import { Sr104TrafficMap } from "@/components/sr104-traffic-map";
 
 export const metadata: Metadata = { title: "Ferry" };
 
@@ -83,11 +84,19 @@ export default async function FerryPage() {
       )}
 
       <div className="mx-auto max-w-5xl px-4 pt-2">
-        <AtmQuickInfo />
+        <FerryLineInfo />
       </div>
 
       <Section title="Next boats" subtitle="Both routes, both directions. Updates every minute while you watch.">
         <FerryBoard initial={initial} serverNow={new Date().toISOString()} />
+      </Section>
+
+      <Section
+        id="ferry-line-map"
+        title="Getting in the ferry line"
+        subtitle="Kingston's SR 104 boarding-pass system, mapped — our take on WSDOT's traffic map."
+      >
+        <Sr104TrafficMap />
       </Section>
 
       <Section

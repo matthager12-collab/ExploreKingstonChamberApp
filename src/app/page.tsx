@@ -8,7 +8,7 @@ import { getEvents } from "@/lib/stores/event-store";
 import { formatPacificDate, formatPacificTime, todayPacific } from "@/lib/time";
 import { Badge, Card, ExternalLink, Section } from "@/components/ui";
 import { VisitorSurvey } from "@/components/visitor-survey";
-import { AtmQuickInfo } from "@/components/atm-quick-info";
+import { FerryLineInfo } from "@/components/ferry-line-info";
 
 export const revalidate = 60;
 
@@ -136,9 +136,9 @@ export default async function Home() {
         </div>
       </div>
 
-      {/* Cash near the ferry */}
+      {/* Getting in the ferry line */}
       <Section>
-        <AtmQuickInfo />
+        <FerryLineInfo />
       </Section>
 
       {/* Coming up */}

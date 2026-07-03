@@ -132,6 +132,76 @@ export async function createUser(input: {
   return user;
 }
 
+/** Persist changes to an existing user (dual-backend, keyed by id). */
+export async function saveUser(user: User): Promise<void> {
+  if (hasDb()) {
+    await writeOverlayRecord(USERS_STORE, user);
+    return;
+  }
+  const users = await listUsers();
+  const idx = users.findIndex((u) => u.id === user.id);
+  if (idx < 0) throw new Error("User not found");
+  users[idx] = user;
+  await writeJson(USERS_FILE, users);
+}
+
+/**
+ * Self-service password change: verifies the current password first.
+ * Passwords are stored as one-way scrypt hashes — they can never be viewed,
+ * only replaced. (Admins reset via adminResetPassword instead.)
+ */
+export async function changeOwnPassword(
+  userId: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  if (newPassword.length < 8) throw new Error("New password must be 8+ characters");
+  const users = await listUsers();
+  const user = users.find((u) => u.id === userId);
+  if (!user) throw new Error("User not found");
+  if (!verifyPassword(currentPassword, user.passwordHash)) {
+    throw new Error("Current password is incorrect");
+  }
+  await saveUser({ ...user, passwordHash: hashPassword(newPassword) });
+}
+
+/**
+ * Admin reset: sets a random temporary password and returns it ONCE so the
+ * admin can hand it to the account holder (who should change it right away).
+ */
+export async function adminResetPassword(userId: string): Promise<string> {
+  const users = await listUsers();
+  const user = users.find((u) => u.id === userId);
+  if (!user) throw new Error("User not found");
+  const temp = randomBytes(9).toString("base64url"); // ~12 chars, URL-safe
+  await saveUser({ ...user, passwordHash: hashPassword(temp) });
+  return temp;
+}
+
+/** Self-service profile update (name/email). Email must stay unique. */
+export async function updateOwnProfile(
+  userId: string,
+  input: { name?: string; email?: string },
+): Promise<User> {
+  const users = await listUsers();
+  const user = users.find((u) => u.id === userId);
+  if (!user) throw new Error("User not found");
+  const email = input.email?.trim();
+  if (
+    email &&
+    users.some((u) => u.id !== userId && u.email.toLowerCase() === email.toLowerCase())
+  ) {
+    throw new Error("Another account already uses that email");
+  }
+  const updated: User = {
+    ...user,
+    name: input.name?.trim() || user.name,
+    email: email || user.email,
+  };
+  await saveUser(updated);
+  return updated;
+}
+
 // ---------- invites ----------
 
 export async function listInvites(): Promise<InviteCode[]> {
