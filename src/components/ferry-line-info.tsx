@@ -13,7 +13,7 @@ import Link from "next/link";
 import { mapDirectionsUrl } from "@/components/ui";
 import { RichText } from "@/components/rich-text";
 import { copyText, getCopyOverrides } from "@/lib/stores/site-store";
-import { getBoardingPassStatus } from "@/lib/wsf";
+import { getEffectiveBoardingPass } from "@/lib/stores/boarding-pass-store";
 
 const TERMINAL = "Kingston Ferry Terminal, Kingston, WA 98346";
 // When the boarding-pass system is on, drivers must NOT navigate to the dock —
@@ -23,7 +23,7 @@ const LINE_STAGING = "NE State Hwy 104 & NE Barber Cutoff Rd, Kingston, WA 98346
 
 export async function FerryLineInfo({ className = "" }: { className?: string }) {
   const copy = await getCopyOverrides();
-  const pass = getBoardingPassStatus();
+  const pass = await getEffectiveBoardingPass();
   const navDestination = pass.active ? LINE_STAGING : TERMINAL;
   return (
     <div

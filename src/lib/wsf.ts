@@ -269,9 +269,14 @@ export async function getRouteDelays(): Promise<RouteDelays> {
 const PACIFIC = "America/Los_Angeles";
 
 export interface BoardingPassStatus {
-  /** Best estimate of whether the SR-104 vehicle boarding-pass system is on now. */
+  /** Whether the SR-104 vehicle boarding-pass system should be treated as on now. */
   active: boolean;
   reason: string;
+  /**
+   * Where this verdict came from: "estimate" = the hours/season heuristic below;
+   * "override" = a Chamber-staff toggle set for today (see boarding-pass-store).
+   */
+  source: "estimate" | "override";
 }
 
 /**
@@ -280,7 +285,8 @@ export interface BoardingPassStatus {
  * day during the summer season (≈ mid-May to mid-October) or the big holiday
  * weeks. This is an ESTIMATE for routing/UX — the flashing advisory sign at
  * Barber Cutoff Rd is always the authority (and the admin-editable "machine
- * down" note covers current exceptions).
+ * down" note covers current exceptions). A same-day admin override
+ * (getEffectiveBoardingPass) can replace this verdict when staff know better.
  */
 export function getBoardingPassStatus(now: Date = new Date()): BoardingPassStatus {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -299,7 +305,11 @@ export function getBoardingPassStatus(now: Date = new Date()): BoardingPassStatu
 
   const peakHours = hour >= 8 && hour < 20;
   if (!peakHours) {
-    return { active: false, reason: "Outside peak hours (8 a.m.–8 p.m.) — no boarding pass needed." };
+    return {
+      active: false,
+      reason: "Outside peak hours (8 a.m.–8 p.m.) — no boarding pass needed.",
+      source: "estimate",
+    };
   }
 
   const isWeekend = weekday === "Sat" || weekday === "Sun";
@@ -313,10 +323,30 @@ export function getBoardingPassStatus(now: Date = new Date()): BoardingPassStatu
     (month === 12 && day >= 22) ||
     (month === 1 && day <= 2);
 
-  if (isWeekend) return { active: true, reason: "Weekend peak hours — boarding pass likely in effect." };
-  if (inSeason) return { active: true, reason: "Summer season, peak hours — boarding pass likely in effect." };
-  if (holidayWeek) return { active: true, reason: "Holiday week, peak hours — boarding pass likely in effect." };
-  return { active: false, reason: "Off-season weekday — boarding pass usually not needed." };
+  if (isWeekend)
+    return { active: true, reason: "Weekend peak hours — boarding pass likely in effect.", source: "estimate" };
+  if (inSeason)
+    return { active: true, reason: "Summer season, peak hours — boarding pass likely in effect.", source: "estimate" };
+  if (holidayWeek)
+    return { active: true, reason: "Holiday week, peak hours — boarding pass likely in effect.", source: "estimate" };
+  return { active: false, reason: "Off-season weekday — boarding pass usually not needed.", source: "estimate" };
+}
+
+/**
+ * The Pacific calendar day as "YYYY-MM-DD". A boarding-pass override is scoped to
+ * one of these strings; once the Pacific day rolls over, the stored day no longer
+ * matches and the override quietly expires back to the estimate — no timers, no
+ * DST math. Assembled from typed parts so it's independent of locale formatting.
+ */
+export function pacificDayString(now: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: PACIFIC,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
 export interface VesselPosition {

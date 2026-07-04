@@ -3,7 +3,6 @@
 // home widget hydrates from the same shape it later polls.
 
 import {
-  getBoardingPassStatus,
   getRouteAlerts,
   getRouteDelays,
   getSailingSpace,
@@ -13,6 +12,7 @@ import {
   type RouteDelays,
   type SailingSpace,
 } from "./wsf";
+import { getEffectiveBoardingPass } from "./stores/boarding-pass-store";
 import { getFastFerrySailings } from "./kitsap";
 import type { Sailing, TerminalStatus } from "./types";
 
@@ -27,7 +27,7 @@ export interface FerryStatusSnapshot {
 }
 
 export async function getFerryStatusSnapshot(): Promise<FerryStatusSnapshot> {
-  const [carFerry, kingston, edmonds, alerts, delays, spaceFromKingston, spaceFromEdmonds] =
+  const [carFerry, kingston, edmonds, alerts, delays, spaceFromKingston, spaceFromEdmonds, boardingPass] =
     await Promise.all([
       getTodaysSailings(),
       getTerminalStatus("kingston"),
@@ -36,6 +36,7 @@ export async function getFerryStatusSnapshot(): Promise<FerryStatusSnapshot> {
       getRouteDelays(),
       getSailingSpace("kingston"),
       getSailingSpace("edmonds"),
+      getEffectiveBoardingPass(),
     ]);
   return {
     carFerry,
@@ -44,6 +45,6 @@ export async function getFerryStatusSnapshot(): Promise<FerryStatusSnapshot> {
     alerts,
     delays,
     sailingSpace: { kingston: spaceFromKingston, edmonds: spaceFromEdmonds },
-    boardingPass: getBoardingPassStatus(),
+    boardingPass,
   };
 }
