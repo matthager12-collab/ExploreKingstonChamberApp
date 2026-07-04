@@ -13,13 +13,13 @@
 
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import type { Lodging, Webcam } from "@/lib/types";
+import type { Lodging, Restaurant, Webcam } from "@/lib/types";
 import { Badge, Card } from "@/components/ui";
 
 const INPUT =
   "w-full rounded-lg border border-sand bg-white px-3 py-2 text-sm text-ink focus:border-tide focus:outline-none";
 
-type DomainKey = "lodging" | "webcams";
+type DomainKey = "restaurants" | "lodging" | "webcams";
 
 /** One record as the editor sees it — id plus whatever the domain's type holds. */
 type GenericRecord = { id: string } & Record<string, unknown>;
@@ -56,6 +56,129 @@ type DomainDef = {
 // Field lists mirror the Lodging / Webcam interfaces in src/lib/types.
 
 const DOMAINS: DomainDef[] = [
+  {
+    key: "restaurants",
+    label: "Eat & Drink",
+    noun: "restaurant",
+    publicPath: "/eat",
+    fields: [
+      { key: "name", label: "Name", kind: "text", required: true },
+      {
+        key: "cuisine",
+        label: "Cuisine / type",
+        kind: "text",
+        required: true,
+        placeholder: "Pizza · Coffee & cafe · American pub",
+        help: "The short line shown next to the price on the card.",
+      },
+      {
+        key: "description",
+        label: "Description",
+        kind: "textarea",
+        wide: true,
+        help: "The blurb visitors read on the Eat & Drink card. A sentence or two.",
+      },
+      {
+        key: "hidden",
+        label: "Hide from the Eat & Drink page (keep the record to switch back on later)",
+        kind: "checkbox",
+        wide: true,
+      },
+      {
+        key: "address",
+        label: "Address",
+        kind: "text",
+        required: true,
+        wide: true,
+        placeholder: "11171 NE State Hwy 104, Kingston, WA 98346",
+      },
+      { key: "phone", label: "Phone (optional)", kind: "text", optional: true },
+      {
+        key: "website",
+        label: "Website (optional)",
+        kind: "text",
+        optional: true,
+        placeholder: "https://…",
+      },
+      {
+        key: "menuUrl",
+        label: "Menu URL (optional)",
+        kind: "text",
+        optional: true,
+        placeholder: "https://…",
+      },
+      {
+        key: "orderingUrl",
+        label: "Online-ordering URL (optional)",
+        kind: "text",
+        optional: true,
+        placeholder: "https://…",
+        help: "Powers the “Order online” button.",
+      },
+      {
+        key: "orderingPlatform",
+        label: "Ordering type",
+        kind: "select",
+        optional: true,
+        defaultValue: "",
+        options: [
+          { value: "", label: "— none —" },
+          { value: "phone-only", label: "Phone only (Call to order)" },
+          { value: "toast", label: "Toast" },
+          { value: "square", label: "Square" },
+          { value: "doordash", label: "DoorDash" },
+          { value: "own-site", label: "Own site" },
+        ],
+        help: "“Phone only” shows a Call-to-order button; the others pair with the ordering URL.",
+      },
+      {
+        key: "hours",
+        label: "Hours (free text, optional)",
+        kind: "text",
+        optional: true,
+        wide: true,
+        placeholder: "Daily 11 am–8 pm",
+        help: "The human-readable hours line. The live “Open now” badge is kept from the existing record and can't be edited here.",
+      },
+      {
+        key: "priceLevel",
+        label: "Price",
+        kind: "select",
+        defaultValue: "2",
+        options: [
+          { value: "1", label: "$ (inexpensive)" },
+          { value: "2", label: "$$ (moderate)" },
+          { value: "3", label: "$$$ (pricey)" },
+        ],
+      },
+      {
+        key: "walkMinutesFromFerry",
+        label: "Walk minutes from the ferry",
+        kind: "number",
+        defaultValue: "5",
+        help: "Sets which walk-time group the card lands in on /eat.",
+      },
+      {
+        key: "lat",
+        label: "Latitude",
+        kind: "number",
+        help: "Right-click the spot in Google Maps → the first number. e.g. 47.7973",
+      },
+      {
+        key: "lng",
+        label: "Longitude",
+        kind: "number",
+        help: "The second number from Google Maps. e.g. -122.4969",
+      },
+      {
+        key: "tags",
+        label: "Tags (comma-separated)",
+        kind: "csv-tags",
+        wide: true,
+        placeholder: "quick, takeout, kid-friendly",
+      },
+    ],
+  },
   {
     key: "lodging",
     label: "Lodging",
@@ -241,15 +364,16 @@ export function ListingsEditor({
   initial,
   seedIds,
 }: {
-  initial: { lodging: Lodging[]; webcams: Webcam[] };
+  initial: { restaurants: Restaurant[]; lodging: Lodging[]; webcams: Webcam[] };
   seedIds: Record<DomainKey, string[]>;
 }) {
   const router = useRouter();
   const [records, setRecords] = useState<Record<DomainKey, GenericRecord[]>>({
+    restaurants: initial.restaurants as unknown as GenericRecord[],
     lodging: initial.lodging as unknown as GenericRecord[],
     webcams: initial.webcams as unknown as GenericRecord[],
   });
-  const [activeKey, setActiveKey] = useState<DomainKey>("lodging");
+  const [activeKey, setActiveKey] = useState<DomainKey>("restaurants");
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(
@@ -481,6 +605,7 @@ export function ListingsEditor({
               <Badge tone={isSeed(r.id) ? "navy" : "coral"}>
                 {isSeed(r.id) ? "Seed" : "Custom"}
               </Badge>
+              {Boolean(r.hidden) && <Badge tone="sand">Hidden</Badge>}
               <span className="text-xs text-ink-soft">{r.id}</span>
               <button
                 onClick={() => edit(r)}

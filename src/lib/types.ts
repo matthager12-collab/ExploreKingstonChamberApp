@@ -75,6 +75,8 @@ export interface Restaurant {
   lat: number;
   lng: number;
   walkMinutesFromFerry: number;
+  /** Admin show/hide toggle: when true, dropped from /eat, near-me, and maps. */
+  hidden?: boolean;
 }
 
 export interface ParkingArea {

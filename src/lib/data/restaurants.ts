@@ -389,7 +389,7 @@ export const restaurants: Restaurant[] = [
     name: "Argensol Kitchen",
     cuisine: "Argentinian",
     description:
-      "Argentinian cooking near the Village Green, on a four-day week — every day closes at a different time, so glance at the hours before you make the walk.",
+      "Argentinian cooking just off the main strip on Washington Boulevard, on a four-day week — every day closes at a different time, so glance at the hours before you make the walk.",
     address: "25923 Washington Blvd NE, Suite 101, Kingston, WA 98346",
     phone: "(360) 930-9094",
     hours: "Thu 11 am–5 pm, Fri 11 am–6 pm, Sat 10 am–6 pm, Sun 10 am–4 pm",
@@ -414,7 +414,7 @@ export const restaurants: Restaurant[] = [
     name: "Da Poke Shop",
     cuisine: "Hawaiian",
     description:
-      "Poke bowls near the Village Green — some map apps still show its old name, Ono Poke Too. Call in an order for the walk back.",
+      "Poke bowls a block off the main strip — some map apps still show its old name, Ono Poke Too. Call in an order for the walk back.",
     address: "25960 Central Ave NE, Suite 102, Kingston, WA 98346",
     phone: "(360) 638-6130",
     orderingPlatform: "phone-only",
@@ -440,7 +440,7 @@ export const restaurants: Restaurant[] = [
     name: "Westside Pizza",
     cuisine: "Pizza",
     description:
-      "Reliable chain pizza by the Village Green, with online ordering and delivery if the walk back down feels long.",
+      "Reliable chain pizza just off the main strip, with online ordering and delivery if the walk back down feels long.",
     address: "25960 Ohio Ave NE, Kingston, WA 98346",
     phone: "(360) 297-6800",
     website: "https://westsidepizza.com/location/kingston/",

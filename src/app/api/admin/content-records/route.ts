@@ -1,8 +1,8 @@
 // Admin content-records API — one endpoint for the remaining seed-backed
-// content domains: itineraries, lodging, and webcams. Backs the
+// content domains: itineraries, lodging, webcams, and restaurants. Backs the
 // /admin/itineraries builder and the /admin/listings workbench.
 //
-// GET    ?domain=itineraries|lodging|webcams  — merged records.
+// GET    ?domain=itineraries|lodging|webcams|restaurants  — merged records.
 // POST   { domain, record }                   — validate minimally, save.
 // DELETE ?domain=X&id=Y                        — tombstone (hides seed too).
 //
@@ -11,7 +11,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
-import type { Itinerary, ItineraryStop, Lodging, Webcam } from "@/lib/types";
+import type { Itinerary, ItineraryStop, Lodging, Restaurant, Webcam } from "@/lib/types";
 import {
   deleteItinerary,
   getItineraries,
@@ -25,10 +25,16 @@ import {
   saveLodging,
   saveWebcam,
 } from "@/lib/stores/listing-stores";
+import {
+  deleteRestaurant,
+  getRestaurant,
+  getRestaurants,
+  saveRestaurant,
+} from "@/lib/stores/business-store";
 
 export const dynamic = "force-dynamic";
 
-const DOMAINS = ["itineraries", "lodging", "webcams"] as const;
+const DOMAINS = ["itineraries", "lodging", "webcams", "restaurants"] as const;
 type Domain = (typeof DOMAINS)[number];
 
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/i;
@@ -195,6 +201,81 @@ function sanitizeWebcam(body: Record<string, unknown>): Webcam | string {
   };
 }
 
+const ORDERING_PLATFORMS: NonNullable<Restaurant["orderingPlatform"]>[] = [
+  "toast",
+  "square",
+  "doordash",
+  "own-site",
+  "phone-only",
+];
+
+// Restaurants carry structured fields the schema editor doesn't expose
+// (weeklyHours, hoursVerified). Rebuild the record from the form's known
+// fields, then carry those hidden fields over from the existing record so
+// editing a description never silently wipes the live "Open now" badge.
+async function sanitizeRestaurant(
+  body: Record<string, unknown>,
+): Promise<Restaurant | string> {
+  const id = str(body.id);
+  if (!ID_RE.test(id)) return "id required: letters, numbers, and dashes (max 64 chars)";
+  const name = str(body.name);
+  if (!name) return "name required";
+  const cuisine = str(body.cuisine);
+  if (!cuisine) return "cuisine required";
+  const address = str(body.address);
+  if (!address) return "address required";
+
+  const priceLevel = Math.round(num(body.priceLevel));
+  if (priceLevel !== 1 && priceLevel !== 2 && priceLevel !== 3) {
+    return "priceLevel must be 1, 2, or 3";
+  }
+
+  const lat = num(body.lat);
+  const lng = num(body.lng);
+  if (!Number.isFinite(lat) || lat < -90 || lat > 90) return "lat must be between -90 and 90";
+  if (!Number.isFinite(lng) || lng < -180 || lng > 180) {
+    return "lng must be between -180 and 180";
+  }
+  const walk = Math.round(num(body.walkMinutesFromFerry));
+  if (!Number.isFinite(walk) || walk < 0 || walk > 120) {
+    return "walk minutes must be a number between 0 and 120";
+  }
+
+  let orderingPlatform: Restaurant["orderingPlatform"] | undefined;
+  const platform = str(body.orderingPlatform);
+  if (platform) {
+    if (!(ORDERING_PLATFORMS as string[]).includes(platform)) {
+      return `orderingPlatform must be one of: ${ORDERING_PLATFORMS.join(", ")}`;
+    }
+    orderingPlatform = platform as Restaurant["orderingPlatform"];
+  }
+
+  // Preserve structured hours the form can't edit.
+  const existing = await getRestaurant(id);
+
+  return {
+    id,
+    name,
+    cuisine,
+    description: str(body.description),
+    address,
+    ...(optStr(body.phone) ? { phone: optStr(body.phone) } : {}),
+    ...(httpUrl(body.website) ? { website: httpUrl(body.website) } : {}),
+    ...(httpUrl(body.menuUrl) ? { menuUrl: httpUrl(body.menuUrl) } : {}),
+    ...(httpUrl(body.orderingUrl) ? { orderingUrl: httpUrl(body.orderingUrl) } : {}),
+    ...(orderingPlatform ? { orderingPlatform } : {}),
+    ...(optStr(body.hours) ? { hours: optStr(body.hours) } : {}),
+    ...(existing?.weeklyHours ? { weeklyHours: existing.weeklyHours } : {}),
+    ...(existing?.hoursVerified ? { hoursVerified: existing.hoursVerified } : {}),
+    priceLevel,
+    tags: strArray(body.tags),
+    lat,
+    lng,
+    walkMinutesFromFerry: walk,
+    ...(body.hidden ? { hidden: true } : {}),
+  };
+}
+
 /* --------------------------------- handlers -------------------------------- */
 
 export async function GET(request: NextRequest) {
@@ -209,7 +290,9 @@ export async function GET(request: NextRequest) {
       ? await getItineraries()
       : domain === "lodging"
         ? await getLodging()
-        : await getWebcams();
+        : domain === "webcams"
+          ? await getWebcams()
+          : await getRestaurants();
 
   return NextResponse.json({ records });
 }
@@ -242,6 +325,12 @@ export async function POST(request: NextRequest) {
     await saveLodging(record);
     return NextResponse.json({ ok: true, record });
   }
+  if (domain === "restaurants") {
+    const record = await sanitizeRestaurant(raw);
+    if (typeof record === "string") return bad(record);
+    await saveRestaurant(record);
+    return NextResponse.json({ ok: true, record });
+  }
   const record = sanitizeWebcam(raw);
   if (typeof record === "string") return bad(record);
   await saveWebcam(record);
@@ -262,14 +351,17 @@ export async function DELETE(request: NextRequest) {
       ? await getItineraries()
       : domain === "lodging"
         ? await getLodging()
-        : await getWebcams();
+        : domain === "webcams"
+          ? await getWebcams()
+          : await getRestaurants();
   if (!records.some((r) => r.id === id)) {
     return NextResponse.json({ error: "Record not found" }, { status: 404 });
   }
 
   if (domain === "itineraries") await deleteItinerary(id);
   else if (domain === "lodging") await deleteLodging(id);
-  else await deleteWebcam(id);
+  else if (domain === "webcams") await deleteWebcam(id);
+  else await deleteRestaurant(id);
 
   return NextResponse.json({ ok: true });
 }

@@ -97,8 +97,8 @@ export default async function PortalPage() {
       },
       {
         href: "/admin/listings",
-        title: "Lodging & webcams",
-        blurb: "Edit the remaining listings data.",
+        title: "Restaurants, lodging & webcams",
+        blurb: "Edit Eat & Drink vendors — descriptions, show/hide, add new — plus lodging and webcams.",
       },
     );
   }

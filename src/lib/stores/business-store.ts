@@ -18,3 +18,13 @@ export async function getRestaurant(id: string): Promise<Restaurant | undefined>
 export async function saveRestaurant(record: Restaurant): Promise<void> {
   await writeOverlayRecord(STORE, record);
 }
+
+// Permanent removal: custom records vanish; seed records get a tombstone that
+// hides them from the site (restorable by clearing the overlay row). For a
+// reversible "take it off the page for now" use the `hidden` flag on the
+// record instead — that keeps it in the admin list to switch back on.
+export async function deleteRestaurant(id: string): Promise<void> {
+  await writeOverlayRecord(STORE, { id, _deleted: true } as Restaurant & {
+    _deleted: true;
+  });
+}

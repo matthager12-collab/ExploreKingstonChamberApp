@@ -40,8 +40,9 @@ const bands: { title: string; subtitle: string; maxWalk: number }[] = [
     maxWalk: 6,
   },
   {
-    title: "Up toward the Village Green",
-    subtitle: "Seven to twelve minutes up the hill — worth the walk.",
+    title: "Up the hill",
+    subtitle:
+      "Seven to twelve minutes up Highway 104 — toward Kola Kole Park, the Firehouse Theater, and the Grocery Outlet shops. Worth the walk.",
     maxWalk: Infinity,
   },
 ];
@@ -136,7 +137,9 @@ export const revalidate = 60;
 
 export default async function EatPage() {
   const hiddenPreview = await assertPageVisible("/eat");
-  const [restaurants, copy] = await Promise.all([getRestaurants(), getCopyOverrides()]);
+  const [allRestaurants, copy] = await Promise.all([getRestaurants(), getCopyOverrides()]);
+  // Admins can hide a vendor from the public page via the listings workbench.
+  const restaurants = allRestaurants.filter((r) => !r.hidden);
   const sorted = [...restaurants].sort(
     (a, b) => a.walkMinutesFromFerry - b.walkMinutesFromFerry || a.name.localeCompare(b.name),
   );
@@ -161,7 +164,7 @@ export default async function EatPage() {
         intro={copyText(
           copy,
           "eat.header.intro",
-          "Everything here is a walk from the ferry dock — two minutes to a crêpe, ten to the Village Green. Heads up: plenty of Kingston kitchens take orders by phone, not app. That's normal here.",
+          "Everything here is a walk from the ferry dock — two minutes to a crêpe, ten up the hill to the shops by Grocery Outlet. Heads up: plenty of Kingston kitchens take orders by phone, not app. That's normal here.",
         )}
       />
 

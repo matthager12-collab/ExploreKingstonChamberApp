@@ -28,7 +28,7 @@ export async function resolveMapView(viewId: string): Promise<ResolvedMapView | 
   const builtins: ResolvedMapView["builtins"] = {};
 
   if (view.sources.includes("restaurants")) {
-    const restaurants = await getRestaurants();
+    const restaurants = (await getRestaurants()).filter((r) => !r.hidden);
     builtins.restaurants = restaurants.map((r) => ({
       id: r.id,
       name: r.name,
