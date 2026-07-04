@@ -1,15 +1,15 @@
 import Image from "next/image";
 import Link from "next/link";
-import { getTodaysSailings } from "@/lib/wsf";
-import { getFastFerrySailings } from "@/lib/kitsap";
 import { getForecast } from "@/lib/weather";
 import { getTodaysTides } from "@/lib/tides";
 import { getEvents } from "@/lib/stores/event-store";
 import { getCopyOverrides, copyText, getHiddenPaths } from "@/lib/stores/site-store";
+import { getFerryStatusSnapshot } from "@/lib/ferry-status";
 import { formatPacificDate, formatPacificTime, todayPacific } from "@/lib/time";
 import { Badge, Card, ExternalLink, Section } from "@/components/ui";
 import { VisitorSurvey } from "@/components/visitor-survey";
 import { FerryLineInfo } from "@/components/ferry-line-info";
+import { NextFerries } from "@/components/next-ferries";
 
 export const revalidate = 60;
 
@@ -37,15 +37,16 @@ function nextDeparture(
 }
 
 export default async function Home() {
-  const [carFerry, forecast, tides, events, copy, hiddenPaths] = await Promise.all([
-    getTodaysSailings(),
+  const [ferry, forecast, tides, events, copy, hiddenPaths] = await Promise.all([
+    getFerryStatusSnapshot(),
     getForecast(2),
     getTodaysTides(),
     getEvents(),
     getCopyOverrides(),
     getHiddenPaths(),
   ]);
-  const fastFerry = getFastFerrySailings();
+  const carFerry = ferry.carFerry;
+  const fastFerry = ferry.fastFerry;
   // Admin-hidden pages drop out of the feature grid.
   const visibleFeatures = features.filter((f) => !hiddenPaths.includes(f.href));
 
@@ -155,6 +156,11 @@ export default async function Home() {
           )}
         </div>
       </div>
+
+      {/* Live ferry status — delays, car space, alerts, boarding pass */}
+      <Section>
+        <NextFerries initial={ferry} />
+      </Section>
 
       {/* Getting in the ferry line */}
       <Section>

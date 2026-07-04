@@ -163,6 +163,160 @@ interface WsfVessel {
   ArrivingTerminalID: number | null;
   ArrivingTerminalName: string | null;
   Eta: string | null;
+  /** WCF date the boat was scheduled to leave its departing terminal. */
+  ScheduledDeparture: string | null;
+  /** WCF date the boat actually left the dock (null while still docked). */
+  LeftDock: string | null;
+}
+
+interface WsfSailingSpaceFull {
+  DepartingSpaces: {
+    Departure: string;
+    VesselName: string;
+    MaxSpaceCount: number | null;
+    SpaceForArrivalTerminals: {
+      TerminalID: number;
+      DriveUpSpaceCount: number | null;
+    }[];
+  }[];
+}
+
+/** Open drive-up car space on one upcoming Edmonds–Kingston departure. */
+export interface SailingSpace {
+  /** ISO 8601 departure time */
+  departs: string;
+  vessel: string;
+  /** Drive-up spaces still open (null when WSF isn't reporting a count). */
+  driveUpSpaces: number | null;
+  maxSpaces: number | null;
+}
+
+/**
+ * Per-departure open car space leaving a terminal, for the upcoming sailings.
+ * This is what powers the "N car spots open" line per sailing — richer than
+ * getTerminalStatus, which only reports the very next boat.
+ */
+export async function getSailingSpace(
+  from: keyof typeof TERMINAL_IDS,
+): Promise<SailingSpace[]> {
+  const data = await wsfFetch<WsfSailingSpaceFull>(
+    `${TERMINALS_BASE}/terminalsailingspace/${TERMINAL_IDS[from]}`,
+    60,
+  );
+  if (!data?.DepartingSpaces) return [];
+  const arrivalId = from === "kingston" ? TERMINAL_IDS.edmonds : TERMINAL_IDS.kingston;
+  return data.DepartingSpaces.map((d) => {
+    const space =
+      d.SpaceForArrivalTerminals.find((s) => s.TerminalID === arrivalId) ??
+      d.SpaceForArrivalTerminals[0];
+    const count = space?.DriveUpSpaceCount;
+    return {
+      departs: parseWsdotDate(d.Departure),
+      vessel: d.VesselName,
+      driveUpSpaces: typeof count === "number" && count >= 0 ? count : null,
+      maxSpaces: d.MaxSpaceCount ?? null,
+    };
+  });
+}
+
+export interface RouteDelays {
+  /** Minutes the next Edmonds→Kingston boat is running late (0 = on time). */
+  toKingston: number | null;
+  /** Minutes the next Kingston→Edmonds boat is running late. */
+  fromKingston: number | null;
+}
+
+/**
+ * Live delay per direction, computed from the vessels feed: how late the boat
+ * currently working that direction actually left the dock (LeftDock −
+ * ScheduledDeparture), or — if it's still docked past its scheduled time — how
+ * late it is right now. null when on time or no live data.
+ */
+export async function getRouteDelays(): Promise<RouteDelays> {
+  const data = await wsfFetch<WsfVessel[]>(`${VESSELS_BASE}/vessellocations`, 30);
+  const result: RouteDelays = { toKingston: null, fromKingston: null };
+  if (!data) return result;
+  const now = Date.now();
+  const routeTerminals: number[] = [TERMINAL_IDS.edmonds, TERMINAL_IDS.kingston];
+
+  for (const v of data) {
+    if (!v.InService || !v.ScheduledDeparture) continue;
+    const onRoute =
+      routeTerminals.includes(v.DepartingTerminalID ?? -1) &&
+      routeTerminals.includes(v.ArrivingTerminalID ?? -1);
+    if (!onRoute) continue;
+
+    const scheduled = Date.parse(parseWsdotDate(v.ScheduledDeparture));
+    let lateMs: number;
+    if (v.LeftDock) {
+      lateMs = Date.parse(parseWsdotDate(v.LeftDock)) - scheduled;
+    } else if (v.AtDock && now > scheduled) {
+      lateMs = now - scheduled; // still sitting at the dock past its time
+    } else {
+      continue;
+    }
+    const lateMin = Math.round(lateMs / 60_000);
+    // Direction: departing Edmonds (8) → arriving Kingston (12) is "to Kingston".
+    const dir = v.DepartingTerminalID === TERMINAL_IDS.edmonds ? "toKingston" : "fromKingston";
+    // Keep the largest delay seen for that direction (the boat about to sail).
+    if (result[dir] === null || lateMin > (result[dir] as number)) {
+      result[dir] = Math.max(0, lateMin);
+    }
+  }
+  return result;
+}
+
+const PACIFIC = "America/Los_Angeles";
+
+export interface BoardingPassStatus {
+  /** Best estimate of whether the SR-104 vehicle boarding-pass system is on now. */
+  active: boolean;
+  reason: string;
+}
+
+/**
+ * Estimate whether Kingston's SR-104 vehicle boarding-pass system is in effect
+ * right now: peak hours 8 a.m.–8 p.m. Pacific, on any weekend year-round or any
+ * day during the summer season (≈ mid-May to mid-October) or the big holiday
+ * weeks. This is an ESTIMATE for routing/UX — the flashing advisory sign at
+ * Barber Cutoff Rd is always the authority (and the admin-editable "machine
+ * down" note covers current exceptions).
+ */
+export function getBoardingPassStatus(now: Date = new Date()): BoardingPassStatus {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: PACIFIC,
+    weekday: "short",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  const weekday = get("weekday");
+  const month = Number(get("month"));
+  const day = Number(get("day"));
+  const hour = Number(get("hour"));
+
+  const peakHours = hour >= 8 && hour < 20;
+  if (!peakHours) {
+    return { active: false, reason: "Outside peak hours (8 a.m.–8 p.m.) — no boarding pass needed." };
+  }
+
+  const isWeekend = weekday === "Sat" || weekday === "Sun";
+  // Season ≈ 2nd Sun of May → Indigenous Peoples' Day (mid-Oct). Approximate by
+  // May 10–Oct 13 so a driver is warned across the whole busy stretch.
+  const inSeason =
+    (month === 5 && day >= 10) || (month > 5 && month < 10) || (month === 10 && day <= 13);
+  // Holiday weeks: late Nov (Thanksgiving) and late Dec–early Jan.
+  const holidayWeek =
+    (month === 11 && day >= 22 && day <= 30) ||
+    (month === 12 && day >= 22) ||
+    (month === 1 && day <= 2);
+
+  if (isWeekend) return { active: true, reason: "Weekend peak hours — boarding pass likely in effect." };
+  if (inSeason) return { active: true, reason: "Summer season, peak hours — boarding pass likely in effect." };
+  if (holidayWeek) return { active: true, reason: "Holiday week, peak hours — boarding pass likely in effect." };
+  return { active: false, reason: "Off-season weekday — boarding pass usually not needed." };
 }
 
 export interface VesselPosition {

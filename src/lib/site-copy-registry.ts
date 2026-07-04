@@ -380,6 +380,12 @@ export const COPY_BLOCKS: CopyBlock[] = [
     fallback: "Navigate to the ferry →",
   },
   {
+    key: "ferryLine.navButtonPass",
+    page: "Ferry line card",
+    label: "Navigate button label (when boarding pass is active)",
+    fallback: "Get in the ferry line →",
+  },
+  {
     key: "ferryLine.mapLink",
     page: "Ferry line card",
     label: "\"see the line map\" link label",

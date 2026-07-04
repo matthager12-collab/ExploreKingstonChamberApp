@@ -13,11 +13,18 @@ import Link from "next/link";
 import { mapDirectionsUrl } from "@/components/ui";
 import { RichText } from "@/components/rich-text";
 import { copyText, getCopyOverrides } from "@/lib/stores/site-store";
+import { getBoardingPassStatus } from "@/lib/wsf";
 
 const TERMINAL = "Kingston Ferry Terminal, Kingston, WA 98346";
+// When the boarding-pass system is on, drivers must NOT navigate to the dock —
+// they get in the SR-104 line at the approach, which cars reach via Barber
+// Cutoff Rd (or Miller Bay Rd from the south). Route them to that junction.
+const LINE_STAGING = "NE State Hwy 104 & NE Barber Cutoff Rd, Kingston, WA 98346";
 
 export async function FerryLineInfo({ className = "" }: { className?: string }) {
   const copy = await getCopyOverrides();
+  const pass = getBoardingPassStatus();
+  const navDestination = pass.active ? LINE_STAGING : TERMINAL;
   return (
     <div
       className={`rounded-2xl border border-coral/40 bg-coral/5 p-5 ${className}`}
@@ -50,13 +57,21 @@ export async function FerryLineInfo({ className = "" }: { className?: string }) 
 
         <div className="flex shrink-0 flex-col items-stretch gap-1.5">
           <a
-            href={mapDirectionsUrl(TERMINAL, "driving")}
+            href={mapDirectionsUrl(navDestination, "driving")}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center justify-center gap-1.5 rounded-full bg-coral px-5 py-2.5 text-sm font-semibold text-white shadow hover:bg-coral-deep"
           >
-            {copyText(copy, "ferryLine.navButton", "Navigate to the ferry →")}
+            {pass.active
+              ? copyText(copy, "ferryLine.navButtonPass", "Get in the ferry line →")
+              : copyText(copy, "ferryLine.navButton", "Navigate to the ferry →")}
           </a>
+          {pass.active && (
+            <p className="max-w-[12rem] text-center text-xs text-coral-deep">
+              Boarding pass on — routing to the SR-104 line via Barber Cutoff / Miller Bay, not
+              the dock.
+            </p>
+          )}
           <Link
             href="/ferry#ferry-line-map"
             className="text-center text-xs font-medium text-tide-deep underline decoration-seaglass underline-offset-2 hover:text-sound"

@@ -1,21 +1,9 @@
-// Live ferry status for client-side refresh (the ferry page polls this).
+// Live ferry status for client-side refresh (the home Next-Ferries widget and
+// the /ferry board poll this). Assembly lives in lib/ferry-status so the
+// server-rendered initial state and the polled updates share one shape.
 
-import { getRouteAlerts, getTerminalStatus, getTodaysSailings } from "@/lib/wsf";
-import { getFastFerrySailings } from "@/lib/kitsap";
+import { getFerryStatusSnapshot } from "@/lib/ferry-status";
 
 export async function GET() {
-  const [wsf, kingston, edmonds, alerts] = await Promise.all([
-    getTodaysSailings(),
-    getTerminalStatus("kingston"),
-    getTerminalStatus("edmonds"),
-    getRouteAlerts(),
-  ]);
-  const fast = getFastFerrySailings();
-
-  return Response.json({
-    carFerry: wsf,
-    fastFerry: fast,
-    terminals: { kingston, edmonds },
-    alerts,
-  });
+  return Response.json(await getFerryStatusSnapshot());
 }
