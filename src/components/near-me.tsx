@@ -20,6 +20,7 @@
 import { useRef, useState } from "react";
 import type { WeeklyHours } from "@/lib/types";
 import { getOpenStatus } from "@/lib/hours";
+import { EditableText, useCopy } from "@/lib/copy-context";
 
 /** Serializable subset of Restaurant the server page maps into props. */
 export interface NearMePlace {
@@ -110,6 +111,8 @@ interface Result {
 export function NearMe({ places }: { places: NearMePlace[] }) {
   const [status, setStatus] = useState<Status>("idle");
   const [results, setResults] = useState<Result[]>([]);
+  const idleLabel = useCopy("nearme.button.idle", "What's open near me?");
+  const locatingLabel = useCopy("nearme.button.locating", "Finding you…");
   // ONE ping per page visit, even across re-taps.
   const pingSent = useRef(false);
 
@@ -153,26 +156,32 @@ export function NearMe({ places }: { places: NearMePlace[] }) {
           className="inline-flex items-center gap-1.5 rounded-full bg-sound px-5 py-2.5 text-sm font-semibold text-white hover:bg-sound-deep disabled:opacity-50"
         >
           <span aria-hidden="true">📍</span>
-          {status === "locating" ? "Finding you…" : "What's open near me?"}
+          {status === "locating" ? locatingLabel : idleLabel}
         </button>
-        <p className="text-xs text-ink-soft">
-          Uses your location once, rounded to about a block, to sort this list — helps
-          Kingston&apos;s visitor stats too.
-        </p>
+        <EditableText
+          as="p"
+          className="text-xs text-ink-soft"
+          copyKey="nearme.disclosure"
+          fallback="Uses your location once, rounded to about a block, to sort this list — helps Kingston's visitor stats too."
+        />
       </div>
 
       {status === "denied" && (
-        <p className="mt-3 text-sm text-ink-soft">
-          No problem — we never see your location unless you say yes. Everything below is
-          sorted by walk time from the ferry dock instead.
-        </p>
+        <EditableText
+          as="p"
+          className="mt-3 text-sm text-ink-soft"
+          copyKey="nearme.denied"
+          fallback="No problem — we never see your location unless you say yes. Everything below is sorted by walk time from the ferry dock instead."
+        />
       )}
 
       {status === "error" && (
-        <p className="mt-3 text-sm text-ink-soft">
-          Couldn&apos;t get a location fix just now. Kingston is small — the walk times from
-          the ferry on each card below are a good guide.
-        </p>
+        <EditableText
+          as="p"
+          className="mt-3 text-sm text-ink-soft"
+          copyKey="nearme.error"
+          fallback="Couldn't get a location fix just now. Kingston is small — the walk times from the ferry on each card below are a good guide."
+        />
       )}
 
       {status === "ready" && (

@@ -349,4 +349,213 @@ export const COPY_BLOCKS: CopyBlock[] = [
     fallback:
       "This site is a community project, built with the Greater Kingston Chamber of Commerce by people who live here. It's free to use and free of ads — no sponsored placements, no pay-to-rank listings. If it's on the site, it's because it's useful.",
   },
+  // ---- Component & structured text (added 2026-07-03) ----
+  // Ferry line card
+  {
+    key: "ferryLine.title",
+    page: "Ferry line card",
+    label: "Title (the emoji stays outside the editable text)",
+    fallback: "Driving onto the ferry?",
+  },
+  {
+    key: "ferryLine.body1",
+    page: "Ferry line card",
+    label: "Body paragraph 1",
+    multiline: true,
+    rich: true,
+    fallback: "When the overhead signs at **SR 104 & Barber Cutoff Rd** are flashing, Kingston's boarding-pass system is on. Follow the signal into the ferry lane, **take a pass at the dispenser near Lindvog Rd**, then wait for a green light to pull up to the tollbooths — leave the line and your pass is void.",
+  },
+  {
+    key: "ferryLine.body2",
+    page: "Ferry line card",
+    label: "\"Active daily …\" line",
+    multiline: true,
+    rich: true,
+    fallback: "Active daily **8 a.m.–8 p.m.** in season, plus weekends and holidays. Walk-ons, cyclists, and motorcycles skip it.",
+  },
+  {
+    key: "ferryLine.navButton",
+    page: "Ferry line card",
+    label: "Navigate button label",
+    fallback: "Navigate to the ferry →",
+  },
+  {
+    key: "ferryLine.mapLink",
+    page: "Ferry line card",
+    label: "\"see the line map\" link label",
+    fallback: "see the line map",
+  },
+  // Near-me (client)
+  {
+    key: "nearme.button.idle",
+    page: "Near-me (client)",
+    label: "Button label (idle)",
+    fallback: "What's open near me?",
+  },
+  {
+    key: "nearme.button.locating",
+    page: "Near-me (client)",
+    label: "Button label (while locating)",
+    fallback: "Finding you…",
+  },
+  {
+    key: "nearme.disclosure",
+    page: "Near-me (client)",
+    label: "Disclosure line under the button",
+    multiline: true,
+    fallback: "Uses your location once, rounded to about a block, to sort this list — helps Kingston's visitor stats too.",
+  },
+  {
+    key: "nearme.denied",
+    page: "Near-me (client)",
+    label: "Permission-denied fallback",
+    multiline: true,
+    fallback: "No problem — we never see your location unless you say yes. Everything below is sorted by walk time from the ferry dock instead.",
+  },
+  {
+    key: "nearme.error",
+    page: "Near-me (client)",
+    label: "Location-error fallback",
+    multiline: true,
+    fallback: "Couldn't get a location fix just now. Kingston is small — the walk times from the ferry on each card below are a good guide.",
+  },
+  // Webcams (client)
+  {
+    key: "webcams.card.loading",
+    page: "Webcams (client)",
+    label: "Card: initial loading label",
+    fallback: "Loading camera…",
+  },
+  {
+    key: "webcams.card.offlineTitle",
+    page: "Webcams (client)",
+    label: "Card: offline title",
+    fallback: "Camera offline",
+  },
+  {
+    key: "webcams.card.offlineBody",
+    page: "Webcams (client)",
+    label: "Card: offline explanation",
+    multiline: true,
+    fallback: "WSDOT feeds hiccup sometimes — we’ll retry automatically.",
+  },
+  {
+    key: "webcams.card.connecting",
+    page: "Webcams (client)",
+    label: "Card footer: connecting status",
+    fallback: "Connecting…",
+  },
+  {
+    key: "webcams.card.noImage",
+    page: "Webcams (client)",
+    label: "Card footer: no-image status",
+    fallback: "No image right now",
+  },
+  // Visitor survey (client)
+  {
+    key: "survey.intro.title",
+    page: "Visitor survey (client)",
+    label: "Card intro title",
+    fallback: "Quick anonymous question",
+  },
+  {
+    key: "survey.intro.subtitle",
+    page: "Visitor survey (client)",
+    label: "Card intro subtitle",
+    multiline: true,
+    fallback: "Your answer helps Kingston qualify for tourism funding. Nothing personal is stored.",
+  },
+  {
+    key: "survey.overnight.question",
+    page: "Visitor survey (client)",
+    label: "Overnight question",
+    fallback: "Are you staying overnight in the Kingston area?",
+  },
+  {
+    key: "survey.details.nightsLabel",
+    page: "Visitor survey (client)",
+    label: "Details: nights field label",
+    fallback: "Nights in the area",
+  },
+  {
+    key: "survey.details.lodgingLabel",
+    page: "Visitor survey (client)",
+    label: "Details: lodging field label",
+    fallback: "Where are you staying?",
+  },
+  {
+    key: "survey.details.partyLabel",
+    page: "Visitor survey (client)",
+    label: "Details: party-size field label",
+    fallback: "People in your group",
+  },
+  {
+    key: "survey.thankyou",
+    page: "Visitor survey (client)",
+    label: "Thank-you message",
+    multiline: true,
+    fallback: "Thank you! Answers like yours help fund the events and trails you came for. Enjoy Kingston. 🌲",
+  },
+  // Map switcher (client)
+  {
+    key: "mapswitcher.empty",
+    page: "Map switcher (client)",
+    label: "Empty state (no published maps)",
+    fallback: "No maps are published yet.",
+  },
+  // Home (live strip)
+  {
+    key: "home.strip.toEdmonds",
+    page: "Home (live strip)",
+    label: "Label: next boat to Edmonds",
+    fallback: "Next boat to Edmonds",
+  },
+  {
+    key: "home.strip.fromEdmonds",
+    page: "Home (live strip)",
+    label: "Label: next arrival from Edmonds",
+    fallback: "Next arrival from Edmonds",
+  },
+  {
+    key: "home.strip.fastFerry",
+    page: "Home (live strip)",
+    label: "Label: fast ferry to Seattle",
+    fallback: "Fast ferry to Seattle",
+  },
+  {
+    key: "home.strip.weather",
+    page: "Home (live strip)",
+    label: "Label: weather (fallback when no forecast)",
+    fallback: "Weather",
+  },
+  {
+    key: "home.strip.notLive",
+    page: "Home (live strip)",
+    label: "Not-live disclaimer line",
+    multiline: true,
+    fallback: "Schedule times, not live status — confirm at wsdot.wa.gov/ferries.",
+  },
+  // Footer
+  {
+    key: "footer.brand",
+    page: "Footer",
+    label: "Wordmark / brand line",
+    fallback: "Explore Kingston",
+  },
+  {
+    key: "footer.tagline",
+    page: "Footer",
+    label: "Tagline / description sentence",
+    multiline: true,
+    rich: true,
+    fallback: "The interactive companion to [explorekingstonwa.com](https://explorekingstonwa.com) — your community guide to Kingston, Washington, ferry gateway to the Kitsap Peninsula and the Olympic Peninsula beyond.",
+  },
+  {
+    key: "footer.credit",
+    page: "Footer",
+    label: "Bottom credit line",
+    multiline: true,
+    rich: true,
+    fallback: "Built with the Greater Kingston Chamber of Commerce, publisher of [explorekingstonwa.com](https://explorekingstonwa.com). Ferry data courtesy of WSDOT. Always confirm sailings with Washington State Ferries before traveling.",
+  },
 ];

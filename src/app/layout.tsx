@@ -94,7 +94,7 @@ export default async function RootLayout({
           <Tracker />
           <SiteNav hiddenPaths={hiddenPaths} />
           <main className="flex-1">{children}</main>
-          <SiteFooter hiddenPaths={hiddenPaths} />
+          <SiteFooter hiddenPaths={hiddenPaths} copy={copyOverrides} />
         </CopyProvider>
       </body>
     </html>

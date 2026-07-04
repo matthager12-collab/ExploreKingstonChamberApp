@@ -8,6 +8,7 @@ import {
 import { FeatureMap } from "@/components/feature-map";
 import { resolveMapView } from "@/lib/map/resolve";
 import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
+import { getFerryInfo } from "@/lib/stores/ferry-info-store";
 import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
 
 // The parking map is the Chamber's live "parking-cash" map-CMS view, built and
@@ -29,6 +30,7 @@ export default async function ParkingPage() {
   const hiddenPreview = await assertPageVisible("/parking");
   const parkingMap = await resolveMapView("parking-cash");
   const copy = await getCopyOverrides();
+  const ferryInfo = await getFerryInfo();
 
   return (
     <>
@@ -79,6 +81,11 @@ export default async function ParkingPage() {
             on, use the Port or Diamond lots — not the free 2-hour zone, which the Port
             explicitly asks ferry travelers to avoid.
           </p>
+          {ferryInfo.boardingPass.currentNote.trim() && (
+            <p className="mt-3 font-medium text-ink">
+              {ferryInfo.boardingPass.currentNote}
+            </p>
+          )}
         </Callout>
       </Section>
 

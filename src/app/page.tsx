@@ -116,19 +116,27 @@ export default async function Home() {
         <div className="border-t border-white/15 bg-sound-deep/85">
           <div className="mx-auto grid max-w-5xl grid-cols-2 gap-x-6 gap-y-3 px-4 py-4 text-sm sm:grid-cols-4">
             <div>
-              <p className="text-seaglass">Next boat to Edmonds</p>
+              <p className="text-seaglass">
+                {copyText(copy, "home.strip.toEdmonds", "Next boat to Edmonds")}
+              </p>
               <p className="text-lg font-semibold">{nextToEdmonds ?? "Done for today"}</p>
             </div>
             <div>
-              <p className="text-seaglass">Next arrival from Edmonds</p>
+              <p className="text-seaglass">
+                {copyText(copy, "home.strip.fromEdmonds", "Next arrival from Edmonds")}
+              </p>
               <p className="text-lg font-semibold">{nextToKingston ?? "Done for today"}</p>
             </div>
             <div>
-              <p className="text-seaglass">Fast ferry to Seattle</p>
+              <p className="text-seaglass">
+                {copyText(copy, "home.strip.fastFerry", "Fast ferry to Seattle")}
+              </p>
               <p className="text-lg font-semibold">{nextFastOut ?? "Not today"}</p>
             </div>
             <div>
-              <p className="text-seaglass">{weatherNow ? weatherNow.name : "Weather"}</p>
+              <p className="text-seaglass">
+                {weatherNow ? weatherNow.name : copyText(copy, "home.strip.weather", "Weather")}
+              </p>
               <p className="text-lg font-semibold">
                 {weatherNow
                   ? `${weatherNow.temperature}°${weatherNow.temperatureUnit} · ${weatherNow.shortForecast}`
@@ -138,7 +146,11 @@ export default async function Home() {
           </div>
           {!carFerry.live && (
             <p className="mx-auto max-w-5xl px-4 pb-3 text-xs text-seaglass/80">
-              Schedule times, not live status — confirm at wsdot.wa.gov/ferries.
+              {copyText(
+                copy,
+                "home.strip.notLive",
+                "Schedule times, not live status — confirm at wsdot.wa.gov/ferries.",
+              )}
             </p>
           )}
         </div>

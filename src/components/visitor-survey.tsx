@@ -4,6 +4,7 @@
 // No PII, no cookies — a localStorage flag just prevents re-asking.
 
 import { useEffect, useState } from "react";
+import { EditableText } from "@/lib/copy-context";
 
 const DISTANCE_OPTIONS = [
   { value: "local", label: "I live nearby (Kitsap)" },
@@ -61,10 +62,18 @@ export function VisitorSurvey() {
       {step !== "done" && (
         <div className="mb-3 flex items-start justify-between gap-4">
           <div>
-            <p className="font-semibold text-sound-deep">Quick anonymous question</p>
-            <p className="text-sm text-ink-soft">
-              Your answer helps Kingston qualify for tourism funding. Nothing personal is stored.
-            </p>
+            <EditableText
+              as="p"
+              className="font-semibold text-sound-deep"
+              copyKey="survey.intro.title"
+              fallback="Quick anonymous question"
+            />
+            <EditableText
+              as="p"
+              className="text-sm text-ink-soft"
+              copyKey="survey.intro.subtitle"
+              fallback="Your answer helps Kingston qualify for tourism funding. Nothing personal is stored."
+            />
           </div>
           <button onClick={dismiss} className="text-sm text-ink-soft hover:text-ink" aria-label="Dismiss survey">
             ✕
@@ -95,7 +104,12 @@ export function VisitorSurvey() {
 
       {step === "overnight" && (
         <div>
-          <p className="mb-2 text-sm font-medium text-ink">Are you staying overnight in the Kingston area?</p>
+          <EditableText
+            as="p"
+            className="mb-2 text-sm font-medium text-ink"
+            copyKey="survey.overnight.question"
+            fallback="Are you staying overnight in the Kingston area?"
+          />
           <div className="flex gap-2">
             <button
               onClick={() => {
@@ -119,7 +133,7 @@ export function VisitorSurvey() {
       {step === "details" && (
         <div className="space-y-3">
           <label className="block text-sm font-medium text-ink">
-            Nights in the area
+            <EditableText copyKey="survey.details.nightsLabel" fallback="Nights in the area" />
             <input
               type="number"
               min={1}
@@ -130,7 +144,7 @@ export function VisitorSurvey() {
             />
           </label>
           <label className="block text-sm font-medium text-ink">
-            Where are you staying?
+            <EditableText copyKey="survey.details.lodgingLabel" fallback="Where are you staying?" />
             <select
               value={lodgingType ?? ""}
               onChange={(e) => setLodgingType(e.target.value || undefined)}
@@ -143,7 +157,7 @@ export function VisitorSurvey() {
             </select>
           </label>
           <label className="block text-sm font-medium text-ink">
-            People in your group
+            <EditableText copyKey="survey.details.partyLabel" fallback="People in your group" />
             <input
               type="number"
               min={1}
@@ -163,9 +177,12 @@ export function VisitorSurvey() {
       )}
 
       {step === "done" && (
-        <p className="font-medium text-fern">
-          Thank you! Answers like yours help fund the events and trails you came for. Enjoy Kingston. 🌲
-        </p>
+        <EditableText
+          as="p"
+          className="font-medium text-fern"
+          copyKey="survey.thankyou"
+          fallback="Thank you! Answers like yours help fund the events and trails you came for. Enjoy Kingston. 🌲"
+        />
       )}
     </div>
   );

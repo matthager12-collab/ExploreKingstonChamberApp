@@ -1,5 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
+import { copyText } from "@/lib/stores/site-store";
+import { RichText } from "@/components/rich-text";
 
 const planLinks = [
   { href: "/ferry", label: "Ferry schedules" },
@@ -15,7 +17,13 @@ const communityLinks = [
   { href: "/about", label: "About this site" },
 ];
 
-export function SiteFooter({ hiddenPaths = [] }: { hiddenPaths?: string[] }) {
+export function SiteFooter({
+  hiddenPaths = [],
+  copy = {},
+}: {
+  hiddenPaths?: string[];
+  copy?: Record<string, string>;
+}) {
   // Admin-hidden pages drop out of the footer lists too.
   const plan = planLinks.filter((l) => !hiddenPaths.includes(l.href));
   const community = communityLinks.filter((l) => !hiddenPaths.includes(l.href));
@@ -36,17 +44,17 @@ export function SiteFooter({ hiddenPaths = [] }: { hiddenPaths?: string[] }) {
               className="h-16 w-auto"
             />
           </a>
-          <p className="font-display mt-3 text-lg font-semibold">Explore Kingston</p>
+          <p className="font-display mt-3 text-lg font-semibold">
+            {copyText(copy, "footer.brand", "Explore Kingston")}
+          </p>
           <p className="mt-2 text-sm text-seaglass">
-            The interactive companion to{" "}
-            <a
-              href="https://explorekingstonwa.com"
-              className="font-medium text-white underline decoration-seaglass underline-offset-2 hover:text-seaglass"
-            >
-              explorekingstonwa.com
-            </a>{" "}
-            — your community guide to Kingston, Washington, ferry gateway to
-            the Kitsap Peninsula and the Olympic Peninsula beyond.
+            <RichText
+              text={copyText(
+                copy,
+                "footer.tagline",
+                "The interactive companion to [explorekingstonwa.com](https://explorekingstonwa.com) — your community guide to Kingston, Washington, ferry gateway to the Kitsap Peninsula and the Olympic Peninsula beyond.",
+              )}
+            />
           </p>
         </div>
         <div>
@@ -73,12 +81,13 @@ export function SiteFooter({ hiddenPaths = [] }: { hiddenPaths?: string[] }) {
       </div>
       <div className="border-t border-white/10">
         <p className="mx-auto max-w-5xl px-4 py-4 text-xs text-seaglass/80">
-          Built with the Greater Kingston Chamber of Commerce, publisher of{" "}
-          <a href="https://explorekingstonwa.com" className="underline hover:text-white">
-            explorekingstonwa.com
-          </a>
-          . Ferry data courtesy of WSDOT. Always confirm sailings with
-          Washington State Ferries before traveling.
+          <RichText
+            text={copyText(
+              copy,
+              "footer.credit",
+              "Built with the Greater Kingston Chamber of Commerce, publisher of [explorekingstonwa.com](https://explorekingstonwa.com). Ferry data courtesy of WSDOT. Always confirm sailings with Washington State Ferries before traveling.",
+            )}
+          />
         </p>
       </div>
     </footer>

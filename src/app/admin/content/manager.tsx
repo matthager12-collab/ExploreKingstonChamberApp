@@ -340,6 +340,11 @@ function CopySection({
                             className={inputClass}
                           />
                         )}
+                        {b.rich && (
+                          <p className="mt-1 text-xs text-ink-soft">
+                            Supports **bold** and [links](url).
+                          </p>
+                        )}
                         {errors[b.key] && (
                           <p className="mt-1 text-sm font-medium text-coral-deep">
                             {errors[b.key]}

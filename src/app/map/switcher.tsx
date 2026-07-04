@@ -6,6 +6,7 @@
 
 import { useState } from "react";
 import { FeatureMap } from "@/components/feature-map";
+import { EditableText } from "@/lib/copy-context";
 
 interface SwitcherView {
   id: string;
@@ -18,7 +19,14 @@ export function MapSwitcher({ views }: { views: SwitcherView[] }) {
   const active = views.find((v) => v.id === selected);
 
   if (views.length === 0) {
-    return <p className="text-ink-soft">No maps are published yet.</p>;
+    return (
+      <EditableText
+        as="p"
+        className="text-ink-soft"
+        copyKey="mapswitcher.empty"
+        fallback="No maps are published yet."
+      />
+    );
   }
 
   return (

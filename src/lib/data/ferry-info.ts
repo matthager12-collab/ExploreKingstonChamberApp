@@ -18,6 +18,35 @@ export interface Source {
   url: string;
 }
 
+// Mutable field shapes for the admin-editable overlay (ferry-info-store.ts).
+// Structurally identical to the `as const` seeds below; kept here so the pure
+// data module owns the types and client components (the editor) can import
+// them without pulling in the server-only store.
+export interface FerryPayment {
+  methods: string[];
+  kioskNote: string;
+  cashNote: string;
+  surchargeNote: string;
+  freeLegNote: string;
+}
+
+export interface BoardingPass {
+  summary: string;
+  whenRequired: string;
+  where: string;
+  how: string[];
+  voids: string;
+  exempt: string;
+  currentNote: string;
+}
+
+export interface FerryInfo {
+  payment: FerryPayment;
+  boardingPass: BoardingPass;
+  cashTips: string[];
+  sources: Source[];
+}
+
 export const FERRY_PAYMENT = {
   methods: [
     "Credit or debit card (Visa, Mastercard, Amex, Discover) — subject to a 3% surcharge",
@@ -26,11 +55,22 @@ export const FERRY_PAYMENT = {
   ] as string[],
   kioskNote:
     "The self-serve ticket kiosks at the Kingston terminal are card-only.",
+  cashNote:
+    "Cash still works at the staffed tollbooths, but there's no ATM at the dock — the nearest cash machines are up in downtown Kingston. If you're paying cash, have it ready before you reach the booth.",
   surchargeNote:
     "Since March 1, 2026, every credit/debit card ferry fare carries a 3% surcharge (per RCW 47.60.860). The reliable way to skip it is a pre-loaded ORCA card that wasn't loaded at a WSF facility.",
   freeLegNote:
     "Walking on from Kingston is free — WSF collects passenger fares only at Edmonds. So most walk-on day-trippers board at the Kingston dock without paying anything there at all.",
 } as const;
+
+// Quick, scannable cash/payment tips for the dock. Kept as a plain list so the
+// Chamber can reorder or reword each line without touching prose paragraphs.
+export const CASH_TIPS: string[] = [
+  "There's no ATM at the ferry dock — get cash up in downtown Kingston first if you need it.",
+  "A pre-loaded ORCA card is the cheapest way to pay: tap to board and skip the 3% card surcharge.",
+  "Walking on from Kingston is free — passenger fares are collected at Edmonds, not here.",
+  "Good To Go! passes are for highway tolls only and will not pay a ferry fare.",
+];
 
 export const BOARDING_PASS = {
   summary:

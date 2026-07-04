@@ -21,6 +21,7 @@ import {
 } from "@/lib/wsf";
 import { FAST_FERRY_FACTS, getFastFerrySailings } from "@/lib/kitsap";
 import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
+import { getFerryInfo } from "@/lib/stores/ferry-info-store";
 import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
 import { FerryBoard } from "./ferry-board";
 import { FerryVesselMap } from "@/components/ferry-vessel-map";
@@ -48,12 +49,13 @@ function transitDirectionsUrl(destination: string): string {
 
 export default async function FerryPage() {
   const hiddenPreview = await assertPageVisible("/ferry");
-  const [carFerry, kingston, edmonds, alerts, copy] = await Promise.all([
+  const [carFerry, kingston, edmonds, alerts, copy, ferryInfo] = await Promise.all([
     getTodaysSailings(),
     getTerminalStatus("kingston"),
     getTerminalStatus("edmonds"),
     getRouteAlerts(),
     getCopyOverrides(),
+    getFerryInfo(),
   ]);
   const fastFerry = getFastFerrySailings();
   const vessels = await getVesselLocations();
@@ -104,6 +106,13 @@ export default async function FerryPage() {
         title="Getting in the ferry line"
         subtitle="Kingston's SR 104 boarding-pass system, mapped — our take on WSDOT's traffic map."
       >
+        {ferryInfo.boardingPass.currentNote.trim() && (
+          <div className="mb-4">
+            <Callout tone="coral" title="Heads up right now">
+              <p>{ferryInfo.boardingPass.currentNote}</p>
+            </Callout>
+          </div>
+        )}
         <Sr104TrafficMap />
       </Section>
 
@@ -236,6 +245,17 @@ export default async function FerryPage() {
             Full payment details:{" "}
             <ExternalLink href={WSF_TICKETS_URL}>WSF ticket information</ExternalLink>.
           </p>
+          {ferryInfo.sources.length > 0 && (
+            <p className="mt-2 text-xs">
+              Sources:{" "}
+              {ferryInfo.sources.map((s, i) => (
+                <span key={s.url}>
+                  {i > 0 && " · "}
+                  <ExternalLink href={s.url}>{s.label}</ExternalLink>
+                </span>
+              ))}
+            </p>
+          )}
         </Callout>
       </Section>
 

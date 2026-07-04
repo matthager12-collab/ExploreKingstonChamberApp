@@ -86,6 +86,11 @@ export default async function PortalPage() {
         blurb: "Edit page text and show or hide entire pages.",
       },
       {
+        href: "/admin/ferry-info",
+        title: "Ferry & cash facts",
+        blurb: "Boarding-pass hours, payment methods, the machine-down note.",
+      },
+      {
         href: "/admin/itineraries",
         title: "Itineraries",
         blurb: "Build and edit the ready-made day plans.",
