@@ -20,8 +20,9 @@ import {
   getVesselLocations,
 } from "@/lib/wsf";
 import { FAST_FERRY_FACTS, getFastFerrySailings } from "@/lib/kitsap";
-import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
+import { getCopyOverrides, copyText, getHiddenPaths } from "@/lib/stores/site-store";
 import { getFerryInfo } from "@/lib/stores/ferry-info-store";
+import { getWebcams } from "@/lib/stores/listing-stores";
 import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
 import { FerryBoard } from "./ferry-board";
 import { FerryVesselMap } from "@/components/ferry-vessel-map";
@@ -32,6 +33,7 @@ import { SideSwitcher } from "@/components/side-switcher";
 import { getEmpiricalBusyness } from "@/lib/stores/ferry-observations";
 import { getFerryPredictionAccess } from "@/lib/stores/ferry-prediction-store";
 import { FerryBusyToday } from "@/components/ferry-busy-today";
+import { FerryWebcamsBox } from "@/components/ferry-webcams-box";
 import { todayPacific } from "@/lib/time";
 
 export const metadata: Metadata = { title: "Ferry" };
@@ -55,7 +57,7 @@ function transitDirectionsUrl(destination: string): string {
 
 export default async function FerryPage() {
   const hiddenPreview = await assertPageVisible("/ferry");
-  const [carFerry, kingston, edmonds, alerts, copy, ferryInfo, side, empirical, prediction] =
+  const [carFerry, kingston, edmonds, alerts, copy, ferryInfo, side, empirical, prediction, cams, hiddenPaths] =
     await Promise.all([
       getTodaysSailings(),
       getTerminalStatus("kingston"),
@@ -66,12 +68,19 @@ export default async function FerryPage() {
       getSide(),
       getEmpiricalBusyness(),
       getFerryPredictionAccess(),
+      getWebcams(),
+      getHiddenPaths(),
     ]);
   const fastFerry = getFastFerrySailings();
   const vessels = await getVesselLocations();
   const initial = { carFerry, fastFerry, terminals: { kingston, edmonds }, alerts };
   const serverNow = new Date().toISOString();
   const today = todayPacific();
+  // Cameras for the side the visitor is on (same split as the Webcams page).
+  const sideCams = cams.filter((w) =>
+    side === "edmonds" ? w.id.startsWith("edmonds-") : !w.id.startsWith("edmonds-"),
+  );
+  const webcamsPageVisible = !hiddenPaths.includes("/webcams");
 
   return (
     <>
@@ -162,6 +171,15 @@ export default async function FerryPage() {
           <Sr104TrafficMap />
         </Section>
       )}
+
+      <Section>
+        <FerryWebcamsBox
+          cams={sideCams}
+          sideLabel={side === "edmonds" ? "the Edmonds approach" : "the Kingston approach"}
+          totalCount={cams.length}
+          webcamsPageVisible={webcamsPageVisible}
+        />
+      </Section>
 
       <Section
         title="Where are the boats right now?"
