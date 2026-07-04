@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Poppins, Roboto, Roboto_Slab, Satisfy } from "next/font/google";
+import { Inter, Outfit, Satisfy } from "next/font/google";
 import "./globals.css";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
@@ -7,20 +7,15 @@ import { Tracker } from "@/components/tracker";
 import { getHiddenPaths, getCopyOverrides } from "@/lib/stores/site-store";
 import { CopyProvider } from "@/lib/copy-context";
 
-const roboto = Roboto({
+const inter = Inter({
   subsets: ["latin"],
-  weight: ["400", "500", "700", "900"],
-  variable: "--font-roboto",
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-inter",
 });
-const robotoSlab = Roboto_Slab({
+const outfit = Outfit({
   subsets: ["latin"],
-  weight: ["400", "600", "700"],
-  variable: "--font-roboto-slab",
-});
-const poppins = Poppins({
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
-  variable: "--font-poppins",
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-outfit",
 });
 const satisfy = Satisfy({
   subsets: ["latin"],
@@ -87,7 +82,7 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`${roboto.variable} ${robotoSlab.variable} ${poppins.variable} ${satisfy.variable} h-full antialiased`}
+      className={`${inter.variable} ${outfit.variable} ${satisfy.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
         <CopyProvider overrides={copyOverrides}>

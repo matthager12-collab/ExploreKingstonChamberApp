@@ -2,14 +2,14 @@
 @import "leaflet/dist/leaflet.css";
 
 @theme inline {
-  /* Explore Kingston type system (explorekingstonwa.com)
-     - sans:    Roboto — body text
-     - display: Roboto Slab — headings (site's secondary heading face)
-     - nav:     Poppins — nav / uppercase UI labels
+  /* Type system
+     - sans:    Inter — body text
+     - display: Outfit — headings
+     - nav:     Inter — nav / uppercase UI labels
      - script:  Satisfy — big script accents ("Explore Kingston" style), use sparingly */
-  --font-sans: var(--font-roboto), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-roboto-slab), var(--font-roboto), ui-serif, Georgia, serif;
-  --font-nav: var(--font-poppins), var(--font-roboto), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-outfit), ui-serif, Georgia, serif;
+  --font-nav: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-script: var(--font-satisfy), "Brush Script MT", cursive;
 
   /* Explore Kingston palette — same token names, Chamber brand values.
