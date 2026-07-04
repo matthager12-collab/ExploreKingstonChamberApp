@@ -53,6 +53,23 @@ mobile-first, tap-friendly ferry board. Solid baseline — not the v2 bar.
   prompt and iOS Add-to-Home-Screen (icons, splash, standalone display).
 - **P2 — `prefers-reduced-motion` support.** Guard any transitions/embeds;
   small effort, accessibility win.
+- **P1 — ferry reminders, phase 2: web push.** Phase 1 shipped (commit
+  `376d4f8`): per-sailing opt-in on the home widget — a calendar `.ics` link
+  that drops the sailing (with a 20-min alarm) into any phone's calendar, plus
+  an in-page browser notification while the tab is open. Code:
+  `src/lib/ferry-reminder.ts`, `src/app/api/ferry/reminder/route.ts`,
+  `src/components/next-ferries.tsx`. **Phase 2 = notifications that fire when
+  the app is closed.** Depends on the PWA manifest + service worker (the P0
+  above), then adds: VAPID keys, a push-subscription store (privacy-review the
+  endpoint before shipping), and a scheduler to send ~20 min before departure
+  (e.g. a Render cron scanning armed subscriptions). iOS only delivers web
+  push to an installed PWA. This was the deliberately-deferred half of the
+  "both, phased" decision (2026-07-03).
+- **P2 — ferry reminders polish (phase 1 follow-ons).** All optional: surface
+  the 📅/🔔 controls on `/ferry` too (home-only today); add fast-ferry
+  (Seattle) reminders (car ferry only today); a lead-time choice (15/30/60 min
+  vs the fixed `REMINDER_LEAD_MIN = 20`); a one-line discoverability hint above
+  the sailing rows.
 
 ## 2. Data layer v2 — Postgres/Supabase migration
 
