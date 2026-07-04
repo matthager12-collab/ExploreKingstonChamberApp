@@ -151,6 +151,17 @@ function spaceFor(space: SailingSpace[], departs: string): SailingSpace | undefi
   return best;
 }
 
+/**
+ * Stable reminder key for a sailing. Normalizes the instant to canonical ISO so
+ * the same departure keyed from the live ("…Z") and fallback ("…-07:00") forms
+ * collapses to one key — otherwise a fallback→live poll would orphan the armed
+ * key (button flips back to "Remind"; a re-arm double-fires).
+ */
+function reminderKey(dir: FerryDir, departs: string): string {
+  const d = new Date(departs);
+  return `${dir}|${Number.isNaN(d.getTime()) ? departs : d.toISOString()}`;
+}
+
 function SpotsBadge({ space, t }: { space?: SailingSpace; t: Theme }) {
   if (!space || space.driveUpSpaces === null) return null;
   const n = space.driveUpSpaces;
@@ -212,7 +223,7 @@ function DirectionColumn({
       ) : (
         <ul className="mt-2 space-y-2">
           {shown.map((s) => {
-            const key = `${dir}|${s.departs}`;
+            const key = reminderKey(dir, s.departs);
             const isArmed = armed.has(key);
             return (
               <li key={s.departs} className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -270,7 +281,7 @@ export function NextFerries({
   const firedRef = useRef<Set<string>>(new Set());
 
   async function toggleNotify(dir: FerryDir, departs: string) {
-    const key = `${dir}|${departs}`;
+    const key = reminderKey(dir, departs);
     setNotifyMsg(null);
     if (armed.has(key)) {
       setArmed((prev) => {
@@ -307,30 +318,53 @@ export function NextFerries({
     );
   }
 
-  // Fire due reminders on each tick while the tab is open.
+  // Fire due reminders on each tick while the tab is open. A key fires once when
+  // `now` first reaches its lead window; keys already past a grace window (a long
+  // sleep, or a sailing that dropped out of the feed) are pruned WITHOUT firing,
+  // so no stale "leaving soon" pops hours late and orphaned keys don't linger. If
+  // a reminder comes due but notifications got turned off, we surface a message
+  // rather than swallow it.
   useEffect(() => {
     if (armed.size === 0) return;
     const leadMs = REMINDER_LEAD_MIN * 60_000;
+    const graceMs = 15 * 60_000;
+    const canNotify =
+      typeof window !== "undefined" &&
+      "Notification" in window &&
+      Notification.permission === "granted";
     const toDisarm: string[] = [];
+    let missed = false;
     armed.forEach((key) => {
       if (firedRef.current.has(key)) return;
       const sep = key.indexOf("|");
       const dir = key.slice(0, sep) as FerryDir;
       const departs = key.slice(sep + 1);
       const target = Date.parse(departs);
-      if (Number.isNaN(target)) return;
-      if (now >= target - leadMs && now <= target + 2 * 60_000) {
+      // Invalid, or too late to be useful → drop it silently.
+      if (Number.isNaN(target) || now > target + graceMs) {
         firedRef.current.add(key);
         toDisarm.push(key);
-        if ("Notification" in window && Notification.permission === "granted") {
+        return;
+      }
+      if (now >= target - leadMs) {
+        firedRef.current.add(key);
+        toDisarm.push(key);
+        if (canNotify) {
           const mins = Math.max(0, Math.round((target - now) / 60_000));
           new Notification("Ferry leaving soon", {
             body: `${FERRY_DIRS[dir]?.label ?? "Ferry"} at ${formatPacificTime(departs)} — about ${mins} min. Time to head to the dock.`,
             tag: key,
           });
+        } else {
+          missed = true;
         }
       }
     });
+    if (missed) {
+      setNotifyMsg(
+        "A ferry you're watching is leaving soon — notifications are off, so keep an eye on the times above.",
+      );
+    }
     if (toDisarm.length > 0) {
       setArmed((prev) => {
         const next = new Set(prev);
@@ -446,7 +480,14 @@ export function NextFerries({
         />
       </div>
 
-      {notifyMsg && <p className={`mt-3 text-xs ${t.note}`}>{notifyMsg}</p>}
+      {/* Always mounted so screen readers announce the Remind outcome on change. */}
+      <p
+        role="status"
+        aria-live="polite"
+        className={notifyMsg ? `mt-3 text-xs ${t.note}` : "sr-only"}
+      >
+        {notifyMsg ?? ""}
+      </p>
 
       <button
         onClick={() => setExpanded((v) => !v)}
