@@ -1,53 +1,118 @@
-# Keeping this repo out of your arda setup
+# Git & GitHub setup for this repo
 
-Current state: your **global** git identity is `Mat <mat@arda.cards>` and
-GitHub credentials come from the arda-authenticated `gh` CLI. This repo is
-local-only with one scaffold commit, so nothing has leaked anywhere — but
-any future commit/push will use the arda identity until you do one of the
-following.
+*July 2026. This repo is live and public. See also
+[DEPLOY.md](DEPLOY.md) (Render auto-deploys from GitHub on push) and
+[README.md](README.md) (doc index).*
 
-## Option A — per-repo identity (2 commands, do this first)
+## Current reality (as configured)
+
+- **Remote:** `origin` → `https://github.com/mat-arda-cards/visit-kingston.git`
+- **Visibility:** **PUBLIC** on GitHub. (Made public to bypass a
+  Render↔GitHub sync issue during Phase-1 launch. No secrets are in git —
+  every `.env*` is gitignored; the one committed sample is
+  `.env.production.example`, which contains placeholders only.)
+- **Branch:** `main`.
+- **Repo-local identity** (already set — beats the global arda identity):
+
+  ```
+  user.name  = Mat
+  user.email = matt.hager12@gmail.com
+  ```
+
+  Note the name is `Mat`, not `Matt Hager`; the personal **email** is what
+  keeps commits off the arda identity. Reset it if you want the full name:
+  `git config user.name "Matt Hager"`.
+- **GitHub account:** `mat-arda-cards` (personal, despite the arda-ish name —
+  confirmed intentional).
+- **Deploy:** Render **auto-deploys on push to `main`** from this GitHub repo
+  (Blueprint / `render.yaml`, Docker build). A push is a production deploy —
+  see [DEPLOY.md](DEPLOY.md).
+
+## Why the separation exists
+
+The owner's **work** identity is `Mat <mat@arda.cards>` (global git config +
+the arda-authenticated `gh` CLI). This community project must stay off that
+identity. The rule: **keep everything repo-local; never set the personal
+email or credentials on the global git config, and never sign personal-project
+work with `mat@arda.cards`.**
+
+Repo-local config always wins over global, so the values above are sufficient
+— no per-directory `includeIf` is currently configured (nor needed for this
+single repo).
+
+## How pushes authenticate (the credential helper)
+
+This repo does **not** use the arda `gh` CLI and does **not** prompt 1Password
+on every push. It has a **repo-local credential helper** (in `.git/config`)
+that reads a Personal Access Token from a gitignored env file:
+
+```
+[credential]
+    helper = "!f() { echo username=x-access-token; \
+      echo \"password=$(grep -m1 GITHUB_TOKEN \
+      '/Users/matatarda/chamber app/visit-kingston/.env.git' \
+      | cut -d= -f2)\"; }; f"
+```
+
+- The token lives in `visit-kingston/.env.git` as `GITHUB_TOKEN=...`.
+- `.env.git` is **gitignored** (both the broad `.env*` rule and an explicit
+  `.env.git` line in `.gitignore`) and is `chmod 600`. It is never committed.
+- Result: `git push` is instant and silent — no interactive prompt.
+
+**Source of truth for the token remains 1Password:**
+`op://Private/Github MattHager/credential`. The `.env.git` file was **seeded
+from that item** on 2026-07-03 after repeated `op read` auth-timeouts made
+pushing painful. If you prefer reading straight from 1Password instead of the
+cached file, swap the helper's `grep` for
+`op read "op://Private/Github MattHager/credential"` (slower, prompts on op
+session expiry).
+
+**Never print the token.** If it rotates, refresh `.env.git` from 1Password:
 
 ```bash
-cd "~/chamber app/visit-kingston"
-git config user.name  "Matt Hager"
-git config user.email "matt.hager12@gmail.com"
-# rewrite the scaffold commit so no arda email is in history:
-git commit --amend --reset-author --no-edit
+op read "op://Private/Github MattHager/credential" | \
+  sed 's/^/GITHUB_TOKEN=/' > "/Users/matatarda/chamber app/visit-kingston/.env.git"
+chmod 600 "/Users/matatarda/chamber app/visit-kingston/.env.git"
 ```
 
-Repo-local config always beats global. Done — commits are personal.
+(Or just edit `.env.git` by hand.) The PAT needs `repo` scope for push, or
+`repo` + `workflow` if you later add Actions.
 
-## Option B — automatic for everything under `~/chamber app/`
-
-Add to `~/.gitconfig`:
-
-```ini
-[includeIf "gitdir:~/chamber app/"]
-    path = ~/.gitconfig-personal
-```
-
-And create `~/.gitconfig-personal`:
-
-```ini
-[user]
-    name = Matt Hager
-    email = matt.hager12@gmail.com
-```
-
-Any repo you ever create under `chamber app/` picks up the personal
-identity automatically. (Option A still worth doing once for the amend.)
-
-## Pushing to a personal GitHub later
-
-The `gh` CLI supports multiple accounts:
+## Everyday workflow
 
 ```bash
-gh auth login            # log in with the personal account when prompted
-gh auth switch           # flip between arda and personal
-gh repo create visit-kingston --private --source . --push
+cd "/Users/matatarda/chamber app/visit-kingston"
+git add -A
+git commit -m "…"        # authored as matt.hager12@gmail.com automatically
+git push                 # helper supplies the PAT; Render then auto-deploys
 ```
 
-Or skip `gh` entirely for this repo with an SSH remote + a personal SSH key
-(`Host github-personal` alias in `~/.ssh/config`). Either way, do Option A
-**before** the first push so history carries the right author.
+Because a push to `main` triggers a Render production deploy, treat `main` as
+release-worthy: build/lint locally first (`npm run build`, `npm run lint`),
+and watch the Render deploy + `/api/health` after pushing (see
+[DEPLOY.md](DEPLOY.md)).
+
+## If you ever need to reset / re-clone
+
+1. Clone: `git clone https://github.com/mat-arda-cards/visit-kingston.git`.
+2. Set repo-local identity:
+   ```bash
+   git config user.email "matt.hager12@gmail.com"
+   git config user.name  "Matt Hager"   # or "Mat" to match current
+   ```
+3. Recreate `.env.git` from 1Password (see the refresh snippet above) and
+   re-add the credential helper block to `.git/config` — helper config lives
+   in `.git/config`, so it does **not** travel with a fresh clone.
+4. Confirm the arda identity did not leak in: `git config user.email` must
+   print `matt.hager12@gmail.com`, and `git log -1 --format='%ae'` on your
+   commits must not be `mat@arda.cards`.
+
+## Guardrails
+
+- **Never** commit `.env.git` (or any `.env*` except `.env.production.example`).
+- **Never** set `matt.hager12@gmail.com` or the PAT on global git config.
+- **Never** paste the token into a commit, doc, issue, or PR — the repo is
+  **public**.
+- Since the repo is public, double-check any new file for secrets before
+  `git add` (WSDOT key, AUTH_SECRET, DB URLs, Blob/Upstash tokens all belong
+  only in the host's dashboard env, never in git).

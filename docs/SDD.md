@@ -1,177 +1,189 @@
 # Software Design Document — Explore Kingston
 
-**Project:** `visit-kingston` — the interactive companion site to explorekingstonwa.com, built with the Greater Kingston Chamber of Commerce.
+**Project:** `visit-kingston` — the interactive companion to explorekingstonwa.com, built with the Greater Kingston Chamber of Commerce. Product name in the UI: **Explore Kingston**.
 **Date:** July 2026
-**Stack:** Next.js 16.2.10 (App Router), React 19.2.4, TypeScript 5, Tailwind CSS 4, Leaflet 1.9.4 (+ `@geoman-io/leaflet-geoman-free` 2.20 for the admin polygon editor), Node `fs` for persistence. ~14.8k LOC in `src/` + `scripts/` + `public/embed`.
+**Stack:** Next.js 16.2.10 (App Router, `output: "standalone"`), React 19.2, TypeScript 5, Tailwind CSS 4 (`@tailwindcss/postcss`, config-less), Leaflet 1.9 + OSM tiles, `@geoman-io/leaflet-geoman-free` (admin polygon/feature drawing). Production persistence deps: `@neondatabase/serverless`, `@vercel/blob`, `@upstash/ratelimit` + `@upstash/redis`.
 **Audience:** an engineer (or AI agent) maintaining, extending, or faithfully re-implementing the system.
 
-> Concurrency note ("map v2"): at the time of writing, the parking map is mid-refactor. The public map component (`src/components/town-map.tsx`) has already been restyled (zone polygons instead of circle markers, a `ferry-holding` street class, quick-view buttons). Two pieces are still landing: `src/lib/stores/parking-store.ts` (parking zones moving behind the same seed+overlay store pattern as the other stores) and an admin polygon editor at `/admin/map` using leaflet-geoman. Where those are referenced below they are marked **(landing in map v2)**; everything else is documented from the code as it exists.
+> **Caution for re-implementers** (`AGENTS.md`): this Next.js 16 differs from older training data. Route-handler/page `params` and `searchParams` are `Promise`s that must be awaited (visible throughout `src/app/**`). Read `node_modules/next/dist/docs/` before writing route/page code.
+
+Sibling docs: [REQUIREMENTS.md](REQUIREMENTS.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [DATA_SOURCES.md](DATA_SOURCES.md) · [SYNDICATION.md](SYNDICATION.md) · [OPERATIONS.md](OPERATIONS.md) · [DEPLOY.md](DEPLOY.md) · [MAPS.md](MAPS.md). Index: [README.md](README.md).
 
 ---
 
-## 1. Document purpose & system overview
+## 1. Purpose & one-screen system overview
 
-This document is the design reference for Explore Kingston. Every claim is grounded in the source files named beside it.
+A tourism web app for Kingston, WA (unincorporated Kitsap County; the Edmonds–Kingston car-ferry gateway to the Kitsap/Olympic Peninsulas), serving three constituencies:
 
-**What the system is.** A tourism web app for Kingston, WA (unincorporated Kitsap County; ferry gateway to the Kitsap and Olympic Peninsulas), serving three constituencies:
-
-1. **Visitors** — public pages: live ferry departures (WSDOT + Kitsap Transit), restaurants with a live "Open now" badge, an events calendar, parking/ATM map, WSDOT webcams, itineraries, lodging, a GPS-verified photo scavenger hunt, and a volunteer/give-back page.
-2. **Local businesses & nonprofits** — an invite-only portal (`/portal/**`) where they edit their own listing, weekly hours, events, and volunteer shifts, plus a "syndication" page that packages their data as JSON/iCal feeds, an embeddable widget, and copy-paste snippets for Google/Apple/Yelp/Bing.
-3. **The Chamber** — `/admin/**`: a Visitor Insights dashboard (anonymous analytics + survey aggregates for LTAC/JLARC lodging-tax reporting), account/invite management, a scavenger-hunt builder, and the parking-map polygon editor **(landing in map v2)**.
+1. **Visitors** — public pages: live ferry departures (WSDOT + Kitsap Transit), a **ferry busyness forecast + trip planner**, restaurants with a live "Open now" badge, an events calendar, a **multi-view town map** (map CMS), parking, WSDOT/ferry webcams + live vessel & SR-104 traffic maps, itineraries, lodging, a GPS-verified photo scavenger hunt, and a volunteer/give-back page. The app also reframes itself by **which side of the water** the visitor is on (Kingston vs Edmonds).
+2. **Local businesses & nonprofits** — an invite-only portal (`/portal/**`) to edit their own listing, weekly hours, events, and volunteer shifts, plus a syndication page packaging their data as JSON/iCal feeds + an embeddable widget.
+3. **The Chamber** — `/admin/**`: a Visitor Insights dashboard (privacy-first analytics + LTAC survey aggregates), account/invite management, a scavenger-hunt builder, content and map CMSs, structured ferry-fact editors, and a ferry-prediction on/off switch.
 
 **Core architectural decisions:**
 
-- **No database.** All mutable state lives in JSON/JSONL files under `.data/` (gitignored). Read paths use a *seed + overlay* merge: seed data is TypeScript checked into git (`src/lib/data/*`), portal edits are an overlay file that wins by id (§3). Every store module's exported interface is deliberately DB-shaped so a Postgres/Supabase implementation can replace the file I/O without touching callers.
-- **No third-party auth.** Self-hosted invite-based accounts, scrypt password hashes, stateless HMAC-signed session cookies (§4).
-- **Fail soft everywhere.** Every external dependency (WSDOT, NOAA, NWS, webcam images, the analytics store itself) degrades to a bundled fallback or a silent no-op rather than an error page (§5, §10).
-- **Privacy-first analytics.** Cookie-less pageview/outbound tracking with server-side coarse geo; opt-in location pings rounded to ~100 m and bucketed into named areas; an anonymous visitor survey. No PII, no IP storage (§3, §6, §8).
-- **Server components by default.** Client components are deliberate "islands" — anything that needs the browser clock, geolocation, Leaflet, localStorage, or form state (§7).
+- **Dual-backend persistence seam (§3) — the central architectural fact.** Every store branches on env presence; nothing above the store modules changes. Local / persistent-disk hosts write JSON/JSONL under `DATA_DIR` (default `.data/`); on Vercel-style serverless the same stores use Neon Postgres, Vercel Blob, and Upstash Redis, all auto-detected. **Phase 1 (filesystem) is the live production home** (Render, `/data` disk).
+- **Self-hosted auth (§4).** Invite-based accounts, scrypt password hashes, stateless HMAC-signed session cookies, rate-limited login/setup/redeem, self-service and admin password flows. No third-party auth.
+- **Fail soft everywhere (§5).** Every external dependency (WSDOT, NOAA, NWS, webcams, the stores themselves) degrades to a bundled fallback or a silent no-op, never an error page. Non-live data is always labelled (`live: boolean`, "estimate", "Schedule only").
+- **Privacy-first analytics.** Cookie-less pageview/outbound tracking with server-side coarse geo; opt-in geo-pings rounded to ~100 m and bucketed into named areas; an anonymous survey. No PII, no IP storage.
+- **Server components by default.** Client components are deliberate islands (§11) — anything needing the browser clock, geolocation, Leaflet, localStorage, or form state.
 
-**Environment.** Two secrets in `.env.local`: `WSDOT_API_KEY` (optional; without it ferry data serves from a bundled fallback schedule marked `live: false`) and `AUTH_SECRET` (required; `src/lib/auth.ts` throws if missing). Optional: `NEXT_PUBLIC_GMAPS_EMBED_KEY` enables an embedded Street View panel on the map. `next.config.ts` is empty. Path alias `@/*` → `./src/*`.
+**Environment.** `AUTH_SECRET` (required; `auth.ts` throws if missing). Optional live-data/backend vars in the table below; absence degrades gracefully.
 
-**A caution for re-implementers:** per `AGENTS.md`, this Next.js 16 differs from older training data — notably, route-handler/page `params` and `searchParams` are `Promise`s that must be awaited (visible throughout `src/app/**`), and `next/image` uses a `preload` prop (see `src/app/page.tsx`).
+| Var | Effect | Notes |
+|---|---|---|
+| `AUTH_SECRET` | signs HMAC session cookies | **required** |
+| `WSDOT_API_KEY` | live ferry data | absent → bundled fallback schedule, `live:false` |
+| `NEXT_PUBLIC_GMAPS_EMBED_KEY` | inline Street View panel on maps | **build-time** var (inlined into client bundle) |
+| `DATA_DIR` | persistent-volume path (Phase 1) | e.g. `/data`; not set on Vercel |
+| `DATABASE_URL` | Neon Postgres (Phase 2) | pooled URL (host has `-pooler`) |
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob image store (Phase 2) | — |
+| `UPSTASH_REDIS_REST_URL` / `_TOKEN` | shared rate-limit (Phase 2) | else in-process Map |
+| `FERRY_OBSERVE_TOKEN` | optional bearer gate on `/api/ferry/{observe,accuracy}` | absent → open (writes throttled, public data only) |
+
+Scale: **33 pages, 40 API route files.** Scripts: `dev/build/start/lint`, `db:setup` (psql schema), `db:migrate` (`scripts/migrate-to-db.mjs`).
 
 ---
 
 ## 2. Domain model (`src/lib/types.ts`)
 
-The header comment states the contract: *"Every feature reads these types; data adapters in src/lib/data map external sources … into them so sources can be swapped without touching UI code."* Walk-through, in file order:
+Header contract: *"Every feature reads these types; data adapters in src/lib/data map external sources … into them so sources can be swapped without touching UI code."* Walk-through in file order:
 
 | Type | Semantics & invariants |
 |---|---|
 | `FerryRoute` | `"edmonds-kingston"` (WSF car ferry) \| `"kingston-seattle-fast"` (Kitsap Transit passenger-only). |
-| `Direction` | `"to-kingston"` \| `"from-kingston"`. Every sailing is normalized to Kingston's perspective, whichever agency it came from. |
-| `Sailing` | `departs` is ISO 8601 **with local offset** (e.g. `2026-07-02T14:30:00-07:00`); optional `arrives`, `vessel`, `notes` (fallback sailings carry a "confirm with WSDOT" note). |
-| `TerminalStatus` | Per-terminal live data: `driveUpSpaces?` (undefined when WSDOT reports −1/null), `waitEstimate?` (staff-entered note text), `alerts: string[]`, **`live: boolean`** — the system-wide honesty flag: `false` means "served from the bundled fallback schedule", and every UI surfaces that. `asOf` ISO timestamp. |
-| `Webcam` | `imageUrl` is a hotlinked WSDOT JPEG (no CORS, no Cache-Control — see §5/§7); `sourceUrl` is the credit/link-back page *"per source embedding terms"*; `refreshSeconds` is the measured source cadence the client polls at. |
-| `DayHours` | `[open, close][]` of 24h `"HH:mm"` pairs. **Invariants:** empty array = closed; two pairs = split shift; *"a close time at or before its open time means the span runs past midnight"* (e.g. `["17:00","01:00"]`). This convention is honored by the hours engine (§8), the hours editor, the portal validation (which rejects only `open === close`), and the JSON-LD emitter. |
+| `Direction` | `"to-kingston"` \| `"from-kingston"`. Every sailing is normalized to Kingston's perspective. Reused throughout the ferry forecast, side classifier, and observation log. |
+| `Sailing` | `departs` ISO 8601 **with local offset**; optional `arrives`, `vessel`, `notes` (fallback sailings carry a "confirm with WSDOT" note). |
+| `TerminalStatus` | `driveUpSpaces?` (undefined when WSDOT reports −1/null), `waitEstimate?` (staff note text), `alerts: string[]`, **`live: boolean`** (the system-wide honesty flag: `false` = bundled fallback), `asOf` ISO. |
+| `Webcam` | `imageUrl` is a hotlinked WSDOT JPEG (no CORS, no Cache-Control); `sourceUrl` credit link; `refreshSeconds` the measured source cadence. Now overlay-editable (listing-stores). |
+| `DayHours` | `[open, close][]` of 24h `"HH:mm"` pairs. **Invariants:** empty = closed; two pairs = split shift; *a close at or before its open means the span runs past midnight* (`["17:00","01:00"]`). Honored by the hours engine (§12.1), hours editor, portal validation (rejects only `open === close`), and the JSON-LD emitter. |
 | `WeeklyHours` | Seven `DayHours` keyed `mon..sun`. |
-| `Restaurant` | The business-listing record. `weeklyHours?` powers the live badge; `hours?` is the human string (regenerated by the portal editor, §7); `hoursVerified?` ISO date of last verification against live sources; `orderingPlatform` enum `toast\|square\|doordash\|own-site\|phone-only` (phone-only renders a `tel:` button); `priceLevel 1\|2\|3`; `lat/lng/walkMinutesFromFerry` are Chamber-controlled placement fields (only admins may write them, §6). |
-| `ParkingArea` | The **legacy flat** parking record (`type: lot\|street\|ferry-holding`) still exported from `src/lib/data/parking.ts` for prose consumers. The rich map dataset is `MapZone` (below, defined in the data file, not types.ts). |
-| `Atm` | Cash-access point; `feeNote` is load-bearing content (surcharge honesty); `AtmMeta` (in `src/lib/data/atms.ts`) adds `open24h`, `driveMinutes`, `confidence`, `sourceUrl`. |
-| `Lodging` | `type: hotel\|vacation-rental\|bnb\|camping\|marina`; links only — no scraped OTA data (Airbnb/VRBO are search deep links per their ToS, see `src/app/stay/page.tsx`). |
+| `Restaurant` | Business listing. `weeklyHours?` powers the live badge; `hours?` the human string (regenerated by the portal editor); `hoursVerified?` ISO date of last verification; `orderingPlatform` enum (`toast\|square\|doordash\|own-site\|phone-only`); `priceLevel 1\|2\|3`; `lat/lng/walkMinutesFromFerry` admin-only placement fields; **`hidden?`** — *"admin show/hide toggle: when true, dropped from /eat, near-me, and maps"* (a reversible alternative to a tombstone delete, §3). |
 | `EventCategory` | `festival\|market\|music\|community\|charity\|sports\|arts`. |
-| `EventItem` | `start`/`end?` ISO 8601 (portal writes anchor to Pacific wall time via `pacificWallTimeToISO`); `charityId?` links nonprofit events into the charity portal; **`ownerId?` is the portal-ownership key** — the listing/org id whose account manages the event; `canEdit(user, ownerId)` gates every mutation (§4, §6). Seed-data convention: a midnight start renders "All day" (`src/app/events/page.tsx`). |
-| `ItineraryStop` / `Itinerary` | Static content; `mapQuery?` builds a Google Maps deep link; `mode: walk-on\|car\|either`. |
-| `Charity` / `VolunteerNeed` | Org profile (4 portal-editable fields) and a shift: `slotsFilled` is clamped server-side to `0..slotsTotal`; `date` is a full ISO instant (bare form dates get anchored at Pacific midnight, §6). |
-| `HuntStop` / `Hunt` | `radiusMeters` — *"how close (meters) the GPS check-in must be"* — is the verification threshold (server clamps to 20..1000, default 100); coordinates are deliberately approximate with generous radii (seed-file comment: *"GPS is an assist, not a gate"*). `difficulty: easy\|moderate`. |
-| `SurveyResponse` | *"One anonymous LTAC visitor-survey response. No PII is collected."* `distanceBand` enum (`local\|10-50mi\|50mi-plus\|out-of-state\|international`) is the only required field; `lodgingNights` capped at 60, `partySize` at 50 server-side. |
+| `EventItem` | `start`/`end?` ISO 8601 (portal writes anchor to Pacific wall time via `pacificWallTimeToISO`); `charityId?` links nonprofit events into the charity portal; **`ownerId?` is the portal-ownership key** — `canEdit(user, ownerId)` gates every mutation (§4, §9). Midnight start renders "All day". |
+| `Itinerary`/`ItineraryStop` | `mapQuery?` builds a Google Maps deep link; `mode: walk-on\|car\|either`. Overlay-editable via itinerary-store. |
+| `Charity`/`VolunteerNeed` | Org profile (4 portal-editable fields) + a shift; `slotsFilled` clamped server-side to `0..slotsTotal`; `date` a full ISO instant. |
+| `Hunt`/`HuntStop` | `radiusMeters` — the GPS check-in threshold (server clamps 20..1000, default 100); coordinates deliberately approximate (*"GPS is an assist, not a gate"*); `difficulty: easy\|moderate`. |
+| `SurveyResponse` | One anonymous LTAC visitor-survey response, no PII. `distanceBand` (`local\|10-50mi\|50mi-plus\|out-of-state\|international`) is the only required field; `lodgingNights` capped 60, `partySize` 50 server-side. |
+| `Lodging` | `type: hotel\|vacation-rental\|bnb\|camping\|marina`; links only (Airbnb/VRBO are search deep links per ToS). Overlay-editable via listing-stores. |
 
-**Domain extensions living outside types.ts** (deliberate: local modules extend rather than bloat the shared model):
+**LEGACY / ORPHANED — do NOT document as live features:**
+- **`Atm`** (types.ts:94) — orphaned. `src/lib/data/atms.ts` is **deleted**; there is no ATM/cash map anywhere. Cash guidance now lives in the structured **ferry-info `cash-tips`** record ("no ATM at the dock; nearest cash machines up in downtown Kingston") — see §8/§5-adjacent.
+- **`ParkingArea`** (types.ts:82) — the legacy flat record. It is still *imported* by `src/lib/data/parking.ts`, which exports a `parkingAreas: ParkingArea[]` array, but nothing consumes it (grep-verified). The live parking dataset is **`MapZone`** (in `src/lib/data/parking.ts`), edited through parking-store + `/admin/map`. (`ParkingArea`/`parkingAreas` are dead weight — see inconsistencies.)
 
-- `MapZone` + `ParkingRule` (`src/lib/data/parking.ts`): the rich parking dataset. `rule: free-2hr | free-unrestricted | paid | park-and-ride-24h | prohibited`; **`confidence: "verified" | "probable" | "unverified"`** with `sourceNote` — the confidence label is a first-class product feature (surfaced as badges, italic caveats, and popup captions; "probable" entries all trace to the 2015 county curb study and carry *"per 2015 county study — obey posted signs"*); `overnight: "yes" | "no" | "confirm-first"`; `center: [lat,lng]`; optional `polygon` for lots with known corners. Moving behind `parking-store.ts` **(landing in map v2)**.
-- `StoredHunt`/`StoredHuntStop`/`AdminHunt`/`HuntSubmission` (`src/lib/hunt-store.ts`): adds `referencePhoto` (relative path), `source: seed|custom`, and the submission record (§3).
-- `User`/`InviteCode`/`Role` (`src/lib/auth.ts`, §4).
-- `AnalyticsEvent`/`AnalyticsGeo`/`AreaBox`/`AnalyticsSummary` (`src/lib/analytics-store.ts`, §3, §8).
-- `SurveyStore`/`SurveySummary` (`src/lib/survey-store.ts`).
+**Domain extensions living outside types.ts** (deliberate — local modules extend rather than bloat the shared model):
 
-**Seed-data inventory** (all hand-verified against live sources, dated 2026-07-02 in file comments): 17 restaurants, 16 events, 6 charities + 4 volunteer needs, 5 lodging entries, 8 ATMs, 13 `MapZone`s + 6 legacy `ParkingArea`s, 11 webcams, 4 itineraries, 2 hunts (7 + 6 stops), plus the ferry fallback schedule.
+- **Map CMS** — `src/lib/map/types.ts`: `MapView` (a named reusable map config: `center/zoom/sources[]/published`), `MapFeature` (a drawn thing: `kind: FeatureKind = marker|line|trail|area`, geometry `point|path|polygon`, `views[]` it appears on, optional `parking: ParkingMeta`, `images[]`), `BuiltInSource = "restaurants"|"parking-zones"|"streets"`, `ParkingType`/`ParkingMeta`, the `MARKER_CATEGORIES` and `PARKING_TYPES` palettes, and `ResolvedMapView` (the render payload). Pure helpers `featureColor`, `featureImages`, `markerCategory`, `parkingTypeInfo`.
+- **`MapZone` + `ParkingRule`** (`src/lib/data/parking.ts`): the parking dataset. `rule: free-2hr | free-unrestricted | paid | park-and-ride-24h | prohibited | load-zone | permit`; **`confidence: "verified" | "probable" | "unverified"`** with `sourceNote` — a first-class product feature (badges, italic caveats, popup captions; "probable" curb entries all trace to the 2015 county study). `center: [lat,lng]`, optional `polygon`.
+- **Ferry-info facts** (`src/lib/data/ferry-info.ts`): `FerryPayment`, `BoardingPass`, `Source`, `CASH_TIPS`, and the `FerryInfo` assembly — structured, admin-editable (§8).
+- **Ferry forecast model types** (`src/lib/ferry-forecast.ts`): `BusyLevel`, `TravelMode`, `EmpiricalBucket`/`EmpiricalTable`, `ForecastAt`, `ForecastPoint`, `DayExtreme`, `LevelMeta` (§6).
+- **Auth** — `User`/`InviteCode`/`Role` (`src/lib/auth.ts`, §4).
+- **Hunt store** — `StoredHunt`/`StoredHuntStop`/`AdminHunt`/`HuntSubmission` (`src/lib/hunt-store.ts`, §3).
+- **Analytics/survey** — `AnalyticsEvent`/`AnalyticsGeo`/`AreaBox`/`AnalyticsSummary` (`analytics-store.ts`), `SurveyStore`/`SurveySummary` (`survey-store.ts`).
+- **Side** — `WaterSide` (`src/lib/side.ts`, §7).
 
 ---
 
-## 3. Persistence design
+## 3. Persistence design — the central update
 
-There is no database. Persistence is files under `.data/` (gitignored), in four idioms: **seed+overlay JSON stores**, the **hunt file tree**, **append-only JSONL**, and **plain JSON auth files**.
+The app was file-only; it now runs on a **dual-backend seam** auto-selected by env presence. The store *interfaces* are the contract; the I/O behind them is an implementation detail sized for one node or for cloud stores. Nothing above the store modules branches.
 
-### 3.1 The seed+overlay pattern — `src/lib/stores/json-store.ts`
+### 3.1 The seam files
 
-~45 lines that everything portal-editable is built on:
-
-- Overlay files live at `.data/stores/<name>.json`, each an array of records with `id` plus an optional `_deleted` flag: `type Overlay<T> = (T & { _deleted?: boolean })[]`.
-- `readOverlay(name)` — parse the file; **any error (missing, corrupt) returns `[]`** (fail-soft read).
-- `writeOverlayRecord(name, record)` — read-modify-write: replace by `id` or append, then write the whole array (`JSON.stringify(..., null, 1)`). No locking; last write wins (acceptable single-node, small-town scale — a known limitation, §11).
-- `readMerged(name, seed)` — the core merge: build a `Map<id>` from seed, then overlay each overlay record over it (overlay wins by id), filter out `_deleted`, and strip the `_deleted` key before returning. **Deletion is a tombstone**: `{ id, _deleted: true }` written to the overlay hides a seed record forever (and removes an overlay-only record from reads); the tombstone itself persists in the file as a record.
-
-Consequences worth knowing: an overlay record fully *replaces* the seed record (no field-level merge — which is why the portal PUT handlers merge onto the *stored* record before saving, §6); seeds can be edited in git and the change shows through unless an overlay shadows that id.
-
-### 3.2 The concrete stores
-
-| Store module | Overlay name(s) | Seed | API |
+| File | `hasX()` gate | File-mode backend | Cloud backend |
 |---|---|---|---|
-| `src/lib/stores/business-store.ts` | `restaurants` | `data/restaurants.ts` | `getRestaurants`, `getRestaurant(id)`, `saveRestaurant` (no delete — listings are Chamber-curated) |
-| `src/lib/stores/event-store.ts` | `events` | `data/events.ts` | `getEvents` (sorted by `start`), `getEvent`, `saveEvent`, `deleteEvent` (tombstone), `eventsSharingDate(dateIso, excludeId?)` — the deconfliction query: same `start.slice(0,10)` calendar date, excluding one id |
-| `src/lib/stores/charity-store.ts` | `charities`, `volunteer-needs` | `data/charities.ts` | `getCharities/getCharity/saveCharity`; `getVolunteerNeeds` (sorted by date) `/saveVolunteerNeed/deleteVolunteerNeed` |
-| `src/lib/stores/parking-store.ts` **(landing in map v2)** | `parking` | `data/parking.ts` (`parkingZones`) | seed+overlay like the above, so the `/admin/map` polygon editor's edits overlay the researched seed zones; the public map and parking page will read through it instead of importing `parkingZones` directly |
+| `data-dir.ts` | — | `dataDir()` = `$DATA_DIR` (resolved) or `<cwd>/.data`; `dataPath(...segs)` joins | (paths unused when a cloud store handles the domain) |
+| `db.ts` | `hasDb()` = `DATABASE_URL` set | — | Neon Postgres via `neon()` (stateless HTTP tagged-template). `db()` throws if unset (callers gate on `hasDb()`). `ensureSchema()` lazily + idempotently creates tables (memoized per warm process; a failed setup clears the memo so the next call retries). |
+| `blob-store.ts` | `hasBlob()` = `BLOB_READ_WRITE_TOKEN` set | image bytes written under `.data/…` by the domain store | `putImage(key, bytes, type)` → Vercel Blob (public, `addRandomSuffix`) returns the full CDN URL. Callers store the returned **string** and hand it to `<img src>` — either a full https blob URL (prod) or a relative name the app's image routes serve (dev), *no branch in callers*. |
+| `rate-limit.ts` | `hasUpstash()` = `UPSTASH_REDIS_REST_URL` set | in-process `Map` sliding window (correct only for a single instance) | Upstash Redis shared sliding window (correct across replicas/lambdas). `checkRateLimit(key,{limit,windowMs})` + `clientKey(req,bucket)` are identical across backends. |
 
-### 3.3 Hunt store — `src/lib/hunt-store.ts`
+**DB schema (`db/schema.sql`, mirrored in `db.ts` `SCHEMA_STATEMENTS`):** four tables.
+- `overlay(store text, id text, doc jsonb, deleted boolean, PRIMARY KEY(store,id))` — backs **every** seed+overlay collection **and auth** (`store='auth-users' | 'auth-invites'`). `deleted` carries the `{_deleted:true}` tombstone.
+- `analytics_event(ts, event jsonb)`, `survey_response(ts, response jsonb)`, `ferry_observation(ts, obs jsonb)` — append-only logs.
 
-Server-only module (header warning: *"Do NOT import from client components (it touches the filesystem); `import type` is fine anywhere"*). Its own file layout under `.data/hunts/`:
+### 3.2 The backend-agnostic overlay store — `src/lib/stores/json-store.ts`
 
-```
-.data/hunts/custom-hunts.json            admin hunts — full StoredHunt objects (pretty-printed, 2-space)
-.data/hunts/refs/<huntId>-<stopId>.<ext> per-stop reference photos ("what the spot looks like")
-.data/hunts/photos/<huntId>/<stopId>/<epochMs>-<rand6>.<ext>   player submissions
-.data/hunts/submissions.jsonl            one JSON line per HuntSubmission
-```
+The ~75-line core all portal-editable data sits on:
 
-- **Merge rule** (`getAllHunts`): seed hunts (`data/hunts.ts`) merged with `custom-hunts.json`; *a custom hunt with the same id overrides the seed* (tagged `source: "custom"`); custom-only hunts are appended. No tombstones — hunts are never deleted through the app.
-- `saveHunt` re-validates ids (`isSafeId`, because ids become file-path segments), rejects slug collisions across the merged set, and **preserves a stop's existing `referencePhoto` when the incoming stop omits one**; incoming `referencePhoto` values are only kept if they pass `getPhotoAbsolutePath` *and* start with `refs/`.
-- `saveReferencePhoto` writes `refs/<huntId>-<stopId>.<ext>`, deletes a stale reference in another format, and **materializes a seed hunt into custom-hunts.json** if needed so the pointer has somewhere to live.
-- `saveSubmission` computes the check-off decision (§8): `verified = coords present && haversine ≤ radiusMeters`; stores the photo, then appends a `HuntSubmission` line (`ts, huntId, stopId, photoPath, lat?, lng?, distanceMeters?` (rounded), `verified`).
-- `listSubmissions` reads the JSONL, skipping corrupt lines, newest first.
-- `getPhotoAbsolutePath` / `readPhoto`: strict path sanitization for query-string-supplied paths (§11).
-- Constants: `MAX_PHOTO_BYTES = 8 MiB`; accepted images jpeg/png/webp/heic (both MIME→ext and ext→MIME maps; `jpeg` normalizes to `jpg`).
+- `readOverlay<T>(name)` — file mode: parse `.data/stores/<name>.json`, **any error returns `[]`** (fail-soft). DB mode: `SELECT id, doc, deleted FROM overlay WHERE store = name`, re-attaching `_deleted` onto the doc so downstream filters behave identically.
+- `writeOverlayRecord<T>(name, record)` — file mode: read-modify-write the whole array (`JSON.stringify(…, null, 1)`), replace-by-id or append (no locking; last write wins). DB mode: a single `INSERT … ON CONFLICT (store,id) DO UPDATE`, lifting `_deleted` into the `deleted` column.
+- `readMerged<T>(name, seed)` — **the merge**: `Map<id>` from `seed`, overlay each overlay record over it (overlay wins by id), drop `_deleted`, strip the flag. Deletion is a **tombstone** (`{id,_deleted:true}` hides a seed row forever and removes an overlay-only row); the tombstone itself persists.
 
-### 3.4 Append-only JSONL stores
+Consequence: an overlay record fully *replaces* the seed record (no field-level merge — which is why portal PUT handlers merge onto the *stored* record before saving, §9). Reversible "take it off the page" for restaurants uses the `hidden` flag instead of a tombstone, so the record stays in the admin list.
 
-- **Analytics** — `src/lib/analytics-store.ts`, file `.data/analytics/events.jsonl`. `saveEvent` appends one line; `summarize()` re-reads and re-aggregates the whole file on every call — the header comment declares this *"fine at Kingston scale (thousands of rows)"* and names the upgrade path: *"swap this module's internals for a database (Vercel Postgres / Supabase) keeping the same exports."* What is stored (and only this, per the module's privacy contract): `ts`, `type` (`pageview|outbound|geo-ping`), `path`, random per-browser-session `sessionId`, coarse header-derived `geo {country?,region?,city?,source}`, outbound `href/label`, and for geo-pings `lat/lng` rounded to 3 decimals plus a server-classified `area`. Corrupt lines are skipped, never fatal.
-- **Survey** — `src/lib/survey-store.ts`, file `.data/ltac-responses.jsonl`. This one is *explicitly* pluggable: a `SurveyStore` interface (`save`, `summarize` — *"aggregate counts … never raw rows with timestamps"*), a `FileSurveyStore` implementation, and a single exported instance `surveyStore`. The header says it plainly: in production, implement `SurveyStore` against a database and change the export at the bottom.
+### 3.3 Full store inventory (`src/lib/stores/` — 12 modules + json-store)
 
-### 3.5 Auth files
+| Store module | Overlay store name(s) | Seed | Notes |
+|---|---|---|---|
+| `business-store.ts` | `restaurants` | `data/restaurants.ts` | `getRestaurants/getRestaurant/saveRestaurant/deleteRestaurant` (tombstone). `hidden` flag is the reversible hide. |
+| `event-store.ts` | `events` | `data/events.ts` | `getEvents` (sorted by `start`), `saveEvent`, `deleteEvent`, **`eventsSharingDate(dateIso, excludeId?)`** — the deconfliction query (§12.3). |
+| `charity-store.ts` | `charities`, `volunteer-needs` | `data/charities.ts` | orgs + shifts. |
+| `parking-store.ts` | `parking-zones` | `data/parking.ts` (`parkingZones`) | `MapZone` CRUD; `/admin/map` polygon editor overlays the researched seed. |
+| `map-store.ts` | `map-views`, `map-features` | `data/map-{views,features}.ts` | Map CMS. Also feature-image storage: `saveFeatureImage` (sha1-named; Blob in prod, `.data/map/images/` in dev), `readFeatureImage`, `featureImagePath` (traversal-rejecting), `isBlobUrl`. |
+| `itinerary-store.ts` | `itineraries` | `data/itineraries.ts` | matches on slug across merged records. |
+| `listing-stores.ts` | `lodging`, `webcams` | `data/{lodging,webcams}.ts` | two small stores in one file. |
+| `site-store.ts` | `site-copy`, `site-pages` | none | CMS text overrides (`getCopyOverrides`, `copyText`, `saveCopyOverride`) + per-page visibility (`getPageSettings/getHiddenPaths/setPageHidden`). §8. |
+| `ferry-info-store.ts` | `ferry-info` | four seed records | Exactly four id'd structured records: `payment`, `boarding-pass`, `cash-tips`, `sources`. Each `doc` is the whole object/array from `data/ferry-info.ts`; overlay wins per record. §8. |
+| `ferry-prediction-store.ts` | `ferry-prediction` (id `settings`) | none (absence = OFF) | admin on/off flag for the whole prediction feature, **default OFF** (§6). `getFerryPredictionAccess()` → `{enabled, adminPreview}`: admins preview while off. |
+| `boarding-pass-store.ts` | `boarding-pass-override` (id `override`) | none | admin daily override of the SR-104 pass verdict; lapses at Pacific midnight (§12.6). `getEffectiveBoardingPass()` returns override-or-estimate. |
+| `ferry-observations.ts` | append log + `ferry-accuracy` overlay | none | Append snapshots of sailing fullness/delay → empirical busyness table + accuracy backtest (§6). |
 
-`.data/auth/users.json` (array of `User`, including scrypt `passwordHash`) and `.data/auth/invites.json` (array of `InviteCode`). Read via a fail-soft `readJson(file, fallback)`; written whole with `JSON.stringify(..., null, 1)` after `mkdir -p`. See §4.
+**Auth files** live in the SAME overlay table in DB mode (`store='auth-users'`, `store='auth-invites'`; invites keyed by their code in the `id` column) or in `.data/auth/{users,invites}.json` in file mode. `auth.ts` branches on `hasDb()` per call.
 
-### 3.6 The `.data/` directory tree (complete)
+**Append paths** (all dual-backend, all fail-soft, corrupt lines skipped):
+- **Analytics** — `analytics-store.ts` → `.data/analytics/events.jsonl` or `analytics_event`. `summarize()` re-reads and re-aggregates the whole log per call ("fine at Kingston scale").
+- **Survey** — `survey-store.ts` → `.data/ltac-responses.jsonl` or `survey_response`. Pluggable behind a `SurveyStore` interface (`save`, `summarize` — aggregate counts only, never raw rows) with a single exported `surveyStore` instance.
+- **Ferry observations** — `ferry-observations.ts` → `.data/ferry/observations.jsonl` or `ferry_observation`. Throttled to one write per 10 min per process; 90-day retention pruning; a 10-min aggregate cache.
+
+### 3.4 The `.data/` tree (file mode)
 
 ```
 .data/
-├── auth/
-│   ├── users.json               # User[] — created by /api/auth/setup
-│   └── invites.json             # InviteCode[] — created on first invite (lazy)
-├── stores/                      # seed+overlay files, all lazy-created
-│   ├── restaurants.json         # Overlay<Restaurant>
-│   ├── events.json              # Overlay<EventItem>
-│   ├── charities.json           # Overlay<Charity>
-│   ├── volunteer-needs.json     # Overlay<VolunteerNeed>
-│   └── parking.json             # Overlay<MapZone>            (landing in map v2)
+├── auth/{users,invites}.json          # User[] / InviteCode[]  (file mode only)
+├── stores/<name>.json                 # Overlay<T> per store name above
 ├── hunts/
-│   ├── custom-hunts.json        # StoredHunt[]
-│   ├── refs/                    # <huntId>-<stopId>.<ext>
-│   ├── photos/<huntId>/<stopId>/# player uploads
-│   └── submissions.jsonl        # HuntSubmission per line
-├── analytics/
-│   └── events.jsonl             # AnalyticsEvent per line
-└── ltac-responses.jsonl         # SurveyResponse per line
+│   ├── custom-hunts.json              # StoredHunt[]  (file mode)
+│   ├── refs/<huntId>-<stopId>.<ext>   # reference photos
+│   ├── photos/<huntId>/<stopId>/…     # player submissions
+│   └── submissions.jsonl              # HuntSubmission per line (file mode)
+├── map/images/<sha1>.<ext>            # feature images (file mode)
+├── analytics/events.jsonl
+├── ferry/observations.jsonl
+└── ltac-responses.jsonl
 ```
 
-Every writer `mkdir`s its parent recursively, so a fresh checkout needs no setup beyond `.env.local`.
+Every writer `mkdir`s its parent recursively; a fresh file-mode checkout needs nothing but `AUTH_SECRET`. `/api/health` probes that `dataDir()` is writable (§9).
 
-### 3.7 Migration path
+### 3.5 Hunt store — `src/lib/hunt-store.ts`
 
-The stated design intent, repeated in `json-store.ts`, `analytics-store.ts`, and `survey-store.ts` headers: module *interfaces* are the contract; the file I/O behind them is an implementation detail sized for one node and small volume. A Postgres implementation replaces the internals of each store module (or the `surveyStore` export) without changing any route or page. Reasons you would migrate: serverless/read-only filesystems, multi-instance deployment (the read-modify-write overlay writes are not concurrent-safe), or data volume.
+Server-only (touches the filesystem; `import type` is fine anywhere). Dual-backend like the rest:
+- **Custom hunts** → overlay store `custom-hunts` (DB) or `.data/hunts/custom-hunts.json` (file). `getAllHunts` merges seed with custom (custom wins by id, tagged `source:"custom"`; custom-only appended). No tombstones — hunts are never deleted through the app.
+- **Submissions** → overlay store `hunt-submissions` (DB) or `.data/hunts/submissions.jsonl` (file). `HuntSubmission` now carries an optional `id` (overlay key on DB rows; legacy file rows may lack it).
+- **Photos** → Blob in prod (`putImage`), `.data/hunts/{refs,photos}/…` in dev.
+- `saveHunt` re-validates ids (`isSafeId` — ids become path segments), rejects slug collisions across the merged set, preserves a stop's existing `referencePhoto` when omitted, and only keeps an incoming `referencePhoto` if it passes sanitization and starts with `refs/`. `saveReferencePhoto` materializes a seed hunt into the custom store so the pointer has somewhere to live. `saveSubmission` computes `verified` (§12.2) and appends. `getPhotoAbsolutePath`/`readPhoto` do strict path sanitization (§13). `MAX_PHOTO_BYTES = 8 MiB`; images jpeg/png/webp/heic.
+
+### 3.6 Migration path
+
+`scripts/migrate-to-db.mjs` (`npm run db:migrate`) copies a populated `.data/` into a Neon database; `db/schema.sql` (`npm run db:setup`) creates the tables. `/api/admin/backup` streams the whole `DATA_DIR` as a JSON bundle for off-site backup (restore via `scripts/restore-backup.mjs`).
 
 ---
 
-## 4. Authentication & authorization design (`src/lib/auth.ts`)
+## 4. Authentication & authorization (`src/lib/auth.ts`)
 
-Self-hosted, ~220 lines, server-only (node:crypto + fs + `next/headers` cookies). Design summary from the header: *"invite-based accounts (the Chamber controls who gets in), scrypt password hashes, and stateless HMAC-signed session cookies — no database, no third-party auth service."*
+Self-hosted, server-only (node:crypto + fs + `next/headers`). Invite-based accounts, scrypt hashes, stateless HMAC cookies. Dual-backend (`hasDb()` per call).
 
 ### 4.1 Passwords
+- `hashPassword`: 16-byte hex salt, `scryptSync(pw, salt, 64)`, stored `scrypt$<salt>$<hash>`.
+- `verifyPassword`: splits on `$`, requires scheme `scrypt`, recomputes, `timingSafeEqual` after a length check. Any malformed value → `false`.
 
-- `hashPassword`: 16 random bytes of salt (hex), `scryptSync(password, salt, 64)` (Node defaults: N=16384, r=8, p=1), stored as **`scrypt$<salt-hex>$<hash-hex>`**.
-- `verifyPassword`: splits on `$`, requires scheme `scrypt`, recomputes, compares with `timingSafeEqual` after a length check. Any malformed stored value → `false`.
-
-### 4.2 Session tokens — stateless HMAC cookie
-
-- **Format:** `base64url(JSON{ uid, exp }) + "." + base64url(HMAC-SHA256(payload, AUTH_SECRET))` — `makeSessionToken`. `exp` is epoch-ms, `Date.now() + 30 days` (`SESSION_DAYS = 30`).
-- **Verification** (`parseSessionToken`): split on `.`; recompute signature; `timingSafeEqual` (guarded by a length check so unequal lengths return null instead of throwing); then parse payload and enforce `exp >= now`. Returns `uid` or `null`. There is no server-side session list — tokens are self-contained; the only revocations are expiry and user deletion (below).
-- **Cookie** (`sessionCookie`): name **`vk-session`**, `httpOnly: true`, `sameSite: "lax"`, `path: "/"`, `maxAge: 30 days`. Note: **no `secure: true`** — acceptable for the current LAN/local posture, on the pre-deploy hardening list (§11).
-- `getSessionUser()`: read cookie → parse token → look the uid up in `users.json`. Because the user list is consulted per request, **deleting a user from users.json invalidates their outstanding tokens** despite statelessness.
-- `secret()`: reads `process.env.AUTH_SECRET` and **throws** if missing — auth cannot silently run unsigned.
+### 4.2 Session token — stateless HMAC cookie
+- **Format:** `base64url(JSON{uid,exp}) + "." + base64url(HMAC-SHA256(payload, AUTH_SECRET))`. `exp` = `Date.now() + 30 days`.
+- **Verify** (`parseSessionToken`): split on `.`; recompute; length-guarded `timingSafeEqual`; parse; enforce `exp >= now`. No server-side session list.
+- **Cookie** (`sessionCookie`): name **`vk-session`**, `httpOnly`, `sameSite:"lax"`, `path:"/"`, `maxAge` 30 days. **No `secure:true`** (LAN/http posture; on the hardening list, §13).
+- `getSessionUser()` reads the cookie, parses, and looks the uid up in the live user list — so **deleting a user invalidates their outstanding tokens** despite statelessness.
+- `secret()` **throws** if `AUTH_SECRET` is missing — auth cannot run unsigned.
 
 ### 4.3 Role model & `canEdit`
-
-`Role = "business" | "nonprofit" | "admin"`. A `User` carries `linkedIds: string[]` — *"restaurant ids (business) or charity ids (nonprofit) this account manages."* The single authorization primitive:
+`Role = "business" | "nonprofit" | "admin"`. `User.linkedIds` = the restaurant/charity ids the account manages. The single authz primitive:
 
 ```ts
 export function canEdit(user: User, id: string): boolean {
@@ -179,400 +191,342 @@ export function canEdit(user: User, id: string): boolean {
 }
 ```
 
-Admins can edit everything; others exactly their linked listings/orgs. There is no finer-grained permission anywhere.
+Admins edit everything; others exactly their linked ids. No finer grain anywhere.
 
 ### 4.4 Invite lifecycle
-
-1. **Mint** (admin-only, `POST /api/portal/invites`): `createInvite` generates a 12-hex-char code (`randomBytes(6)`), stores `{ code, role, linkedIds, note?, createdAt }`. The route validates `linkedIds` against the *real* stores (restaurants for business, charities for nonprofit) so *"a typo'd or malicious id can never grant edit rights to a listing that exists later"*; admin invites always get `linkedIds: []`. Note ≤ 200 chars.
-2. **Redeem** (`POST /api/auth/redeem` → `redeemInvite`): code must exist and have no `usedBy`. Creates the user with the invite's role/linkedIds (email uniqueness enforced case-insensitively in `createUser`), then marks `invite.usedBy = user.id`. **One-time use; used codes are kept as an audit record** (rendered struck-through in `/admin/accounts`). Invites do not expire.
-3. The `/admin/accounts` UI generates a paste-ready email blurb containing the join URL + code.
+1. **Mint** (`POST /api/portal/invites`, admin): 12-hex code, validated `linkedIds` against the *real* stores; admin invites forced `linkedIds:[]`; note ≤ 200 chars.
+2. **Redeem** (`POST /api/auth/redeem` → `redeemInvite`): unused code required; creates the user (email unique, case-insensitive) and marks `usedBy`. One-time; used codes kept as an audit record. Invites don't expire.
+3. `/admin/accounts` generates a paste-ready join blurb.
 
 ### 4.5 First-run bootstrap
+- `POST /api/auth/setup` creates the **first** account (hard-coded `role:"admin"`, `linkedIds:[]`); 403 once `hasAnyUsers()`.
+- `/portal/setup` UI redirects to `/portal` once users exist; `/portal` redirects to `/portal/setup` while none.
+- **`/admin` no-users grace** (`src/app/admin/layout.tsx`): one server layout gates everything under `/admin` — role `admin` → allowed; **zero users → allowed with a loud amber banner** (so a fresh install can bootstrap); anyone else → `redirect("/portal")`.
 
-- `POST /api/auth/setup` creates the **first** account, hard-coded `role: "admin"`, `linkedIds: []` — and refuses with 403 the moment `hasAnyUsers()` is true (*"Locked forever after"*).
-- `/portal/setup` is the UI; it `redirect("/portal")`s once users exist. `/portal` conversely redirects *to* `/portal/setup` while no users exist.
-- **The `/admin` layout no-users grace** (`src/app/admin/layout.tsx`): everything under `/admin` is gated by one server layout — role `admin` → allowed; **zero users → allowed with a loud amber banner** (*"pre-setup grace so a fresh local install can reach /admin before the first admin account is created … otherwise bootstrap could lock itself out"*); anyone else → `redirect("/portal")`.
+### 4.6 Self-service & admin password flows (added since v1)
+- **`PUT /api/auth/account`** — self-service profile (name/email; email uniqueness enforced), session-gated, rate-limited (`profile`, 10/window). Backs `/portal/account`.
+- **`POST /api/auth/password`** — self-service password change (`changeOwnPassword` verifies the current password; new ≥ 8 chars), session-gated, rate-limited (`pwchange`, 5/window per IP and per user).
+- **`POST /api/portal/users`** with `{action:"reset-password", userId}` — admin resets to a random temp password (`adminResetPassword`) returned **once** (`{ok, tempPassword}`); hashes are one-way, so a lost temp requires another reset.
 
-### 4.6 Defense in depth
+### 4.7 Rate limiting (§3.1 `rate-limit.ts`)
+Login, first-run setup, and redeem are rate-limited (8/60 s default; setup 5), keyed by IP (`clientKey`) **and** by account dimension (`login:<email>`, `redeem:<code>`) so IP spoofing can't fully escape. Profile/password changes limited too. Upstash-shared in cloud mode, per-instance Map otherwise.
 
-The layout gate is not trusted alone. Re-checks in code:
+### 4.8 Page-level visibility gating (`src/lib/page-visibility.tsx`)
+Public pages call `await assertPageVisible("/hunt")` at the top of their server component. Hidden page + visitor → `notFound()` (clean 404); hidden page + admin → renders with `<HiddenPageBanner/>` for preview. `HIDEABLE_PAGES` (11 paths — ferry, eat, events, itineraries, stay, parking, webcams, map, give, hunt, about) is the single source of truth shared by the admin UI and the nav filter. Home, portal, admin, and api are deliberately not hideable.
 
-- `/admin/accounts/page.tsx` re-checks (`user?.role !== "admin" && hasAnyUsers() → redirect`) and strips `passwordHash` before passing users to the client component (*"props to a client component are serialized into the page payload"*).
-- Every portal API route (`/api/portal/*`) independently calls `getSessionUser()` and returns 401/403; invite and user routes require role `admin` explicitly.
-- Every mutation resolves ownership from the **stored** record, never the client's word: event update/delete checks `canEdit(user, existing.ownerId)`; needs use `existing.charityId`; the listing PUT checks `canEdit(user, stored.id)` and re-pins `next.id = stored.id` (*"belt and braces"*).
-- Portal pages (`/portal/business/[id]`, `/portal/nonprofit/[id]`) redirect server-side on `!canEdit`.
-
-### 4.7 Known limitations (by design, current posture)
-
-Stated in code comments and to be fixed pre-deploy (§11): **no rate limiting** (login is brute-forceable), **no password reset** flow (admin edits `users.json` by hand), **no CSRF token** — mitigation is `sameSite: "lax"` plus JSON bodies on all mutating routes, **single-node file store** (no locking; users.json read per request), no `secure` cookie flag, sessions not individually revocable, invites never expire. Separately, the **hunt admin API has no auth at all** (§6, §11).
+### 4.9 Defense in depth
+The layout gate is not trusted alone: every `/api/portal/*` and `/api/admin/*` route independently calls `getSessionUser()` and re-checks role/ownership from the **stored** record; `/admin/accounts` re-checks role and strips `passwordHash` before serializing to the client. Portal `[id]` pages redirect server-side on `!canEdit`.
 
 ---
 
-## 5. External integrations (adapters in `src/lib/`)
+## 5. External adapters & graceful degradation
 
-Four adapters, all sharing one contract: **never throw, never block the page — return a fallback and mark it.** All server-side fetches use Next's `fetch(..., { next: { revalidate: N } })` data cache for self-throttling.
+Shared contract: **never throw, never block the page — return a fallback and mark it.** Server fetches use `fetch(..., { next: { revalidate: N } })` for self-throttling.
 
 ### 5.1 WSDOT Ferries — `wsf.ts`
-
-- **Constants (verified 2026-07-02, per header + `docs/DATA_SOURCES.md`):** Edmonds `TerminalID = 8`, Kingston `= 12`, Edmonds–Kingston `ED_KING_ROUTE_ID = 6`. Bases: `https://www.wsdot.wa.gov/ferries/api/schedule/rest` and `.../terminals/rest`.
-- **Auth:** free WSDOT access code in `WSDOT_API_KEY`, appended as `apiaccesscode=` **in the URL query string — so these calls must stay server-side** (header comment). No key → `wsfFetch` returns `null` immediately and everything falls back.
-- `wsfFetch<T>(url, revalidateSeconds)`: returns `null` on missing key, non-OK status, or thrown fetch/JSON error.
-- **WCF date quirk:** responses carry `/Date(1719936000000-0700)/` strings; `parseWsdotDate` extracts the epoch-ms with regex `/\/Date\((\d+)(?:[-+]\d{4})?\)\//`, ignores the embedded offset, and emits UTC ISO (`new Date(ms).toISOString()`) — correct because the ms value is absolute.
-- `getTodaysSailings()` → two parallel `GET /scheduletoday/{from}/{to}/false` calls (revalidate **900 s**; `/scheduletoday` means *"no date math, WSDOT handles the seasonal schedule"*). Both must succeed for `live: true`; response shape is `TerminalCombos[].Times[]` (`DepartingTime`, `ArrivingTime | null`, `VesselName`), flat-mapped into `Sailing`s. Otherwise `{ sailings: fallbackSailings(), live: false }`.
-- `getTerminalStatus(terminal)` → parallel `GET /terminalsailingspace/{id}` (revalidate **60 s**) + `GET /terminalwaittimes/{id}` (revalidate **300 s**). Quirks handled: drive-up space is nested `DepartingSpaces[0].SpaceForArrivalTerminals[0].DriveUpSpaceCount` and *"can be -1/null when unavailable"* — only `count >= 0` is surfaced; **the wait-times payload nests under `WaitTimes[]`** and is filtered to `RouteID === ED_KING_ROUTE_ID` with non-null `WaitTimeNotes` (the terminal serves multiple routes). Space failure → base `{ live: false }`; wait-notes failure alone still returns `live: true`. Ed-King has no vehicle reservations, so drive-up count is *the* number that matters (comment).
-- `getRouteAlerts()` → `GET /alerts` (revalidate **300 s**); filtered to `AllRoutesFlag || AffectedRouteIDs?.includes(6)`; returns `AlertFullTitle` strings, `[]` on failure.
-- **Fallback** — `data/ferry-fallback.ts`: a typical two-boat summer timetable (23 sailings each way, ~50-min headways, 30-min crossing), rebuilt for *today* on each call via `todayPacific()` + `pacificWallTimeToISO`, each sailing annotated `notes: "Approximate seasonal time — confirm with WSDOT"`. The UI renders `live:false` data with "Schedule only" badges and confirm-at-WSDOT links.
+- Constants (verified 2026-07-02): Edmonds `TerminalID=8`, Kingston `=12`, Ed-King `RouteID=6`. Bases: schedule/terminals/vessels REST.
+- Key rides in the URL query string (`apiaccesscode=`) — **server-side only**. `wsfFetch` returns `null` on missing key / non-OK / thrown error → everything falls back.
+- WCF `/Date(ms-0700)/` unwrapped by `parseWsdotDate` (regex extracts absolute epoch-ms, ignores the embedded offset, emits UTC ISO).
+- Functions: `getTodaysSailings()` (`/scheduletoday`, both directions, revalidate 900 s; both must succeed for `live:true` else fallback), `getSailingsForDate(dateStr)` + `getValidDateRange()` (for the planner, revalidate 3600 s), `getTerminalStatus(t)` (`terminalsailingspace` 60 s + `terminalwaittimes` 300 s; drive-up nested and filtered to `count>=0`; wait note filtered to `RouteID===6`), `getSailingSpace(from)` (per-departure drive-up space for the observation log + planner), `getRouteDelays()` (per-direction lateness from the vessels feed: `LeftDock − ScheduledDeparture`, or now−scheduled while still docked), `getVesselLocations()` (live positions for the vessel map), `getRouteAlerts()` (filtered to route 6). `getBoardingPassStatus(now)` and `pacificDayString(now)` support the SR-104 pass subsystem (§6/§12.6).
+- **Fallback** — `data/ferry-fallback.ts`: a typical summer timetable rebuilt for the requested day each call, every sailing annotated "confirm with WSDOT"; UI shows "Schedule only" badges.
 
 ### 5.2 Kitsap Transit fast ferry — `kitsap.ts`
+No live API. Times extracted from the official GTFS feed (valid to 2026-09-12). Hardcoded arrays: 6 weekday + 8 summer-Saturday sailings each way, **no Sunday service**; `CROSSING_MINUTES = 39`; always `{live:false}`. Exports `FAST_FERRY_FACTS` (verified fare/pier/URL prose).
 
-No live API. Times were **extracted from Kitsap Transit's official GTFS feed** (feed `S1000066`, valid 2026-06-14 → 2026-09-12; header documents the URL and the refresh obligation when the fall schedule drops). Hardcoded arrays: 6 weekday sailings each way; 8 Saturday sailings each way **summer-only** (`dow === 6 && month 5..9` in Pacific time via `Intl.formatToParts`); **no Sunday service ever**. `CROSSING_MINUTES = 39`. `getFastFerrySailings()` is synchronous and always `{ live: false }`. Also exports `FAST_FERRY_FACTS` — verified prose constants (the direction-based $2/$13 fare, Pier 50 vs Colman Dock, walk-on-only boarding, tracker/schedule URLs) rendered on the ferry page.
+### 5.3 NWS weather — `weather.ts`
+`gridpoints/SEW/121,78/forecast` (dock gridpoint), identifying User-Agent required, revalidate 1800 s; `[]` on failure → home renders "See forecast at weather.gov".
 
-### 5.3 National Weather Service — `weather.ts`
+### 5.4 NOAA tides — `tides.ts`
+Station **9445639** (Kingston, Appletree Cove — *not* 9445478). One GET, revalidate 21600 s; NOAA station-local time strings (home slices, doesn't parse); `[]` on failure.
 
-`GET https://api.weather.gov/gridpoints/SEW/121,78/forecast` — gridpoint verified for the ferry dock (47.796, −122.498). **NWS requires an identifying User-Agent**: `"visit-kingston-wa (community tourism site)"` sent on every request. Revalidate **1800 s**. Returns the first `count` (default 4) `properties.periods` entries (`name`, `temperature`, `temperatureUnit`, `shortForecast`, `isDaytime`); `[]` on any failure — the home page then renders "See forecast at weather.gov".
+### 5.5 Assembled snapshot — `ferry-status.ts`
+`getFerryStatusSnapshot()` runs `getTodaysSailings` + both `getTerminalStatus` + `getRouteAlerts` + `getRouteDelays` + both `getSailingSpace` + `getEffectiveBoardingPass` + `getFastFerrySailings` in parallel into `FerryStatusSnapshot` (car/fast ferry, terminals, alerts, delays, sailingSpace, boardingPass). It fires `recordSailingSpaceSnapshot(...)` **void, un-awaited** (best-effort logging that can't slow or break the response). Shared by `/api/ferry/status` and the server pages that seed the widget so SSR and polling agree.
 
-### 5.4 NOAA CO-OPS tides — `tides.ts`
+### 5.6 Pacific time — `time.ts`
+`todayPacific()`, `pacificWallTimeToISO(dateStr, hhmm)` (probes noon UTC for the offset in effect, PDT/PST per-date), `formatPacificTime/Date`. The lynchpin that keeps fallback schedules and portal dates correct regardless of server zone. `hours.ts` (§12.1) uses the same Intl-based Pacific wall clock.
 
-Station **9445639** (Kingston, Appletree Cove) — header explicitly warns *"NOT 9445478, which is Union/Hood Canal."* One GET to `api.tidesandcurrents.noaa.gov/api/prod/datagetter` with `product=predictions&datum=MLLW&interval=hilo&date=today&time_zone=lst_ldt&units=english&format=json`; revalidate **21600 s** (6 h). Maps `{t, v, type: "H"|"L"}` → `{time, type: "high"|"low", heightFeet}`. Quirk: `time` is NOAA's *station-local* `"YYYY-MM-DD HH:mm"` string, not ISO — the home page slices `t.time.slice(11)` for display rather than parsing it. `[]` on failure.
-
-### 5.5 Pacific-time construction — `time.ts`
-
-The lynchpin that makes fallback schedules and portal dates correct regardless of server timezone (*"Kingston runs on Pacific time; the server may not"*):
-
-- `todayPacific()` — `Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" })` → `YYYY-MM-DD`.
-- `pacificWallTimeToISO(dateStr, hhmm)` — probes noon UTC of that date with `timeZoneName: "longOffset"` to learn the offset in effect (PDT vs PST handled per-date), falls back to `-08:00`, and emits `YYYY-MM-DDTHH:mm:00±HH:MM`. Used by the ferry fallback, kitsap schedule, and portal event/need date anchoring.
-- `formatPacificTime/Date(iso)` — display formatting pinned to the zone.
+**Degradation catalogue (selected):** WSDOT down → fallback schedule + "Schedule only"; wait-notes fail (space ok) → still `live:true` without the note; NWS/NOAA fail → friendly copy pointing at the source; webcam image error → per-card offline placeholder + auto-retry; ferry poll fails → keep last good data; any store/JSONL read error → fallback value / skip corrupt line; localStorage/sessionStorage throws → fresh state / in-memory session id.
 
 ---
 
-## 6. API surface (`src/app/api/**` — 19 routes)
+## 6. Ferry busyness forecast subsystem
 
-### 6.1 Summary table
+The route publishes live space only for the next few sailings *today*; there is no "how busy is next Saturday" API. So this is an **estimate**, labelled as such on every surface.
+
+### 6.1 The model — `ferry-forecast.ts` (PURE, client-safe)
+No fetch/env/server imports, so the planner recomputes in the browser and SSR/hydration agree. Calibrated (July 2026) against WSF's per-sailing "Best Times to Travel" grid.
+- **Curves**: `CURVES[dayCategory][direction]` — 24-hour demand arrays (0–100, peak ≈ 80) encoding the route's directional asymmetry (eastbound AM commute + Sunday-evening return; westbound PM commute + Friday-afternoon getaway; the 2:30 Kingston→Edmonds boat fills daily).
+- **Multipliers**: `seasonFactor` (peak Jun 14–Sep 19 = 1.0, shoulder 0.82, off 0.58) × `holiday` (July 4th 1.5, Memorial/Labor/Thanksgiving 1.3, etc). `scoreAt(date, minutes, direction, empirical?)` clamps to 0–100; `scoreToLevel` maps to `light|moderate|busy|very-busy|extreme`.
+- **Empirical blend**: when an `EmpiricalTable` bucket (direction × season × weekday × hour, key from `empiricalBucketKey`) has ≥ `EMP_MIN_SAMPLES` (3) observations, the heuristic is blended toward the observed value, weighted by sample count up to `EMP_MAX_WEIGHT` (0.75, so the prior always keeps a voice). **Holidays skip the blend** (rare spikes would wash out). `forecastAt` returns level, `arriveEarlyMinutes` (drive vs walk buffers), `boatWait` prose, `boardingPassActive` (mirrors `getBoardingPassStatus`), `factors[]` explanation chips, and `empiricalApplied`/`empiricalSamples`. `dayCurve` samples every 30 min and returns quietest/busiest **windows** (first→last time at the min/max, so a plateau reads honestly).
+
+### 6.2 The observation log & accuracy — `stores/ferry-observations.ts`
+`recordSailingSpaceSnapshot(space, delays)` snapshots the next ~2 sailings/direction (throttled 10 min/process; claims the slot synchronously to avoid double-writes) into the append log. `getEmpiricalBusyness()` aggregates the log into the `EmpiricalTable` (mean observed fullness `1 − driveUp/max`, nudged by mean delay), cached 10 min. `computeAccuracy()` backtests the **heuristic-only** prediction (honest out-of-sample) vs observed fullness → `AccuracyMetrics` (mae/rmse/bias/levelMatchRate/within1Rate). `recordAccuracySnapshot()` appends to a rolling ~60-run history in the `ferry-accuracy` overlay store.
+
+### 6.3 Endpoints & UI
+- `GET /api/ferry/plan?date=YYYY-MM-DD` — real sailings for a Pacific date within `[today, today+365]` (`isPlannableDate` rejects overflow/out-of-range), plus live `sailingSpace` when the date is today. The forecast itself is computed client-side; this route only serves schedule + live corroboration.
+- `GET|POST /api/ferry/observe` — records one snapshot (point a ~15-min cron here for overnight coverage). Optional `FERRY_OBSERVE_TOKEN` gate.
+- `GET|POST /api/ferry/accuracy` — runs the backtest and records a snapshot (daily cron). Same optional token gate. Admin viewing goes through `/api/admin/ferry-accuracy`.
+- **Feature gating**: `ferry-prediction-store` **defaults OFF** — the whole prediction feature (the `/ferry/plan` planner, the "how busy today" panel on `/ferry`, the home planning callout) ships dark; `getFerryPredictionAccess()` still shows it to signed-in admins for validation. `/api/admin/ferry-prediction` toggles it.
+- **Planner UI**: `/ferry/plan` renders the page-local client component `ferry-planner.tsx` (§11).
+
+### 6.4 SR-104 vehicle boarding pass
+- **Estimate** — `wsf.ts getBoardingPassStatus(now)`: active during peak hours (8 a.m.–8 p.m. Pacific) on any weekend, in season (≈ May 10–Oct 13), or a holiday week. Returns `{active, reason, source:"estimate"}`.
+- **Admin daily override** — `boarding-pass-store.ts`: one record stamped with the Pacific day it was set; `getBoardingPassOverride` honors it only while that day is still today, so it **lapses at Pacific midnight** with no timer. `getEffectiveBoardingPass()` returns the override (`source:"override"`) or the estimate. `/api/admin/boarding-pass` sets/clears it.
+- **Nav routing** — `ferry-line.ts`: when a pass is required the "get in the ferry line" link routes drivers to the SR-104 **staging point** (not the dock) via a forced turnaround waypoint (Barber Cutoff for a normal line, Miller Bay Rd when the wait tops 2 hr per `parseWaitHours`/`lineBacksPastBarberCutoff`) so nobody U-turns mid-highway. `ferryLineNavUrl(longWait)` builds the keyless Google Maps deep link.
+
+### 6.5 Departure reminders — `ferry-reminder.ts`
+Pure module. `reminderIcsUrl(dir, departs)` points the widget at `GET /api/ferry/reminder`, which validates `dir` against `FERRY_DIRS` (fixed labels) and parses `departs` to an instant, then `buildFerryIcs` emits an RFC-5545 `VEVENT` with a `VALARM` firing `REMINDER_LEAD_MIN` (20) before departure. Injection-safe by construction (nothing from the query string is echoed; times re-emitted as UTC stamps; year 1–9999 guarded; TEXT escaped + 75-octet folded).
+
+---
+
+## 7. Side-of-water mode
+
+Reframes the app for Kingston-side (default, "leaving Kingston") vs Edmonds-side ("getting to Kingston") visitors.
+- **`side.ts`** (client-safe): `WaterSide`, `SIDE_COOKIE = "vk-side"`, `SIDE_ASKED_COOKIE = "vk-side-asked"`, `SIDE_DIVIDE_LNG = -122.44`, and the pure classifier `sideFromLngLat(lat,lng)` (returns null outside the crossing box).
+- **`side-server.ts`**: `getSide()` reads `vk-side` (needs `next/headers`); defaults `"kingston"`. Server components render for the current side.
+- **`side-switcher.tsx`** (client): a segmented Kingston/Edmonds toggle + "use my location" button; writes the cookie and calls `router.refresh()` (no full reload — polling and scroll survive). **Opt-out**: on a visitor's first arrival it asks for location once and sets the side automatically; a hand-picked side or a prior ask (either cookie) suppresses the prompt forever.
+
+---
+
+## 8. Content CMS + map CMS + structured ferry facts
+
+### 8.1 Content CMS (editable copy)
+- **Registry** — `site-copy-registry.ts` exports `COPY_BLOCKS: CopyBlock[]` = **91 editable copy blocks** (grep-verified; GROUND_TRUTH's "77" is stale — see inconsistencies). Each block names a headline (`key = "<page>.<block>"`), an admin group `page`, `label`, optional `multiline`/`rich`, and a `fallback` (the exact string hardcoded in the component). Pure data, importable anywhere.
+- **Overrides** — `site-store.ts` `site-copy` overlay holds only non-empty overrides; an untouched block always tracks the code fallback (`copyText(overrides,key,fallback)`).
+- **Server** components read `copyText(...)` directly. **Client** components can't (the store is server-only/async), so `RootLayout` loads `getCopyOverrides()` once and provides them through **`copy-context.tsx`** `CopyProvider`; client components use `useCopy(key,fallback)` or **`<EditableText copyKey fallback rich?/>`**. `rich` text runs through `RichText` (parses `**bold**` and `[links](url)`).
+- **Editor**: `/admin/content` (client `content/manager.tsx`) via `POST /api/admin/site`; page show/hide toggles too.
+
+### 8.2 Page show/hide
+`site-store` `site-pages` overlay (`{id:path, hidden}`); `getHiddenPaths()`; enforced by `assertPageVisible` (§4.8). Hidden pages drop from nav/footer/home grid and 404 for visitors; admins preview with a banner.
+
+### 8.3 Map CMS
+- **Types** in `src/lib/map/types.ts` (§2). **Seed** in `data/map-{views,features}.ts`; **overlay** in `map-store.ts`.
+- **`resolve.ts`** `resolveMapView(viewId)` → `ResolvedMapView`: the view config, its custom features (`getFeaturesForView`), and lightweight **built-in-source** payloads (`restaurants` filtered to `!hidden` with a server-chosen marker category; `parkingZones`; `streets` = a boolean flag, the client fetches `/geo/street-parking.json` itself).
+- **Public read** — `GET /api/map/[viewId]`: 404 unknown; **unpublished (draft) views are served only to admins** (dynamic-imports auth to check); `Cache-Control: s-maxage=60`. Feature images via `GET /api/map/image?p=` (redirects Blob URLs 302; streams sanitized fs names otherwise).
+- **Builders**: `/admin/maps` (general map CMS — named views + drawable markers/lines/trails/areas + built-in layers; client `maps/editor.tsx` via `/api/admin/map-views`, `/api/admin/map-features`, `/api/admin/map-features/image`) and `/admin/map` (the parking-zone polygon editor with leaflet-geoman; `map/editor.tsx` via `/api/admin/parking`).
+- **Public output**: `/map` renders the published views through `<FeatureMap/>` (§11).
+
+### 8.4 Structured ferry facts — `ferry-info-store.ts` + `data/ferry-info.ts`
+Four id'd records (`payment`, `boarding-pass`, `cash-tips`, `sources`), each field-editable at `/admin/ferry-info` via `/api/admin/ferry-info`. Rendered on `/ferry` (and cash guidance that formerly lived in an ATM section). `cash-tips` is where the removed cash/ATM content now lives ("no ATM at the dock…"). The editor page also hosts the boarding-pass override (`override-control.tsx`) and the prediction on/off toggle (`prediction-control.tsx`).
+
+---
+
+## 9. API surface — all 40 route files
+
+Every route is `fs`/DB-backed and therefore effectively dynamic; only the feeds and `/api/map/*` set explicit cache headers. Admin routes re-check role because API routes bypass the `/admin` layout.
 
 | # | Route | Methods | Auth | Purpose |
 |---|---|---|---|---|
-| 1 | `/api/auth/setup` | POST | none (self-locking) | Create first admin; 403 once any user exists |
-| 2 | `/api/auth/login` | POST | none | Verify credentials, set `vk-session` cookie |
-| 3 | `/api/auth/logout` | POST | none | Clear cookie (`maxAge: 0`) |
-| 4 | `/api/auth/redeem` | POST | invite code | Redeem invite → create user → set cookie |
-| 5 | `/api/portal/listing` | PUT | session + `canEdit` | Update a restaurant listing (whitelisted fields) |
-| 6 | `/api/portal/events` | GET/POST/DELETE | mixed (see detail) | Business-portal events + public date deconfliction |
-| 7 | `/api/portal/org` | PUT/POST | session + `canEdit` | Nonprofit profile; nonprofit events via `action` |
-| 8 | `/api/portal/needs` | GET/POST/DELETE | mixed | Volunteer shifts + public date deconfliction |
-| 9 | `/api/portal/invites` | GET/POST | admin only | List / mint invite codes |
-| 10 | `/api/portal/users` | GET | admin only | User list, `passwordHash` stripped |
-| 11 | `/api/feeds/events` | GET | none, CORS `*` | Public events feed — JSON or iCalendar |
-| 12 | `/api/feeds/business/[id]` | GET | none, CORS `*` | One listing + computed `openNow` |
-| 13 | `/api/hunts` | GET/POST | **none** (documented) | Hunt list/merge + submissions list; hunt CRUD |
-| 14 | `/api/hunts/photo` | GET | **none** | Stream a stored hunt image by sanitized path |
-| 15 | `/api/hunts/reference` | POST | **none** | Attach a stop reference photo (multipart) |
-| 16 | `/api/hunts/submit` | POST | none (public by design) | Player photo submission → verified/unverified |
-| 17 | `/api/survey` | POST/GET | none | Save survey response; GET aggregate summary |
-| 18 | `/api/track` | POST | none | Analytics beacon; always `{ ok: true }` |
-| 19 | `/api/ferry/status` | GET | none | Live ferry payload the ferry page polls |
+| 1 | `/api/auth/setup` | POST | none (self-locking) + rate-limit | Create first admin; 403 once any user exists |
+| 2 | `/api/auth/login` | POST | none + rate-limit (IP+email) | Verify creds, set `vk-session` |
+| 3 | `/api/auth/logout` | POST | none | Clear cookie |
+| 4 | `/api/auth/redeem` | POST | invite code + rate-limit (IP+code) | Redeem → create user → cookie |
+| 5 | `/api/auth/account` | PUT | session + rate-limit | Self-service name/email |
+| 6 | `/api/auth/password` | POST | session + rate-limit | Self-service password change |
+| 7 | `/api/portal/listing` | PUT | session + `canEdit` | Update restaurant listing (whitelisted fields) |
+| 8 | `/api/portal/events` | GET/POST/DELETE | mixed | Business-portal events + public date deconfliction |
+| 9 | `/api/portal/org` | PUT/POST | session + `canEdit` | Nonprofit profile; nonprofit events via `action` |
+| 10 | `/api/portal/needs` | GET/POST/DELETE | mixed | Volunteer shifts + slots stepper + deconfliction |
+| 11 | `/api/portal/invites` | GET/POST | admin | List / mint invites |
+| 12 | `/api/portal/users` | GET/POST | admin | User list (hash stripped) / admin password reset |
+| 13 | `/api/feeds/events` | GET | none, CORS `*` | Public events feed — JSON or iCalendar |
+| 14 | `/api/feeds/business/[id]` | GET | none, CORS `*` | One listing + computed `openNow` |
+| 15 | `/api/hunts` | GET/POST | **none** (stale comment) | Hunt list/merge + submissions; hunt CRUD |
+| 16 | `/api/hunts/photo` | GET | **none** | Stream a stored hunt image by sanitized path |
+| 17 | `/api/hunts/reference` | POST | **none** | Attach a stop reference photo (multipart) |
+| 18 | `/api/hunts/submit` | POST | none (public by design) | Player photo submission → verified/unverified |
+| 19 | `/api/survey` | POST / GET | POST none; **GET admin** | Save response / aggregate summary |
+| 20 | `/api/track` | POST | none | Analytics beacon; always `{ok:true}` |
+| 21 | `/api/ferry/status` | GET | none | Assembled snapshot the widget polls |
+| 22 | `/api/ferry/vessels` | GET | none | Live vessel positions for the map |
+| 23 | `/api/ferry/plan` | GET | none | Real sailings + live space for a chosen date |
+| 24 | `/api/ferry/observe` | GET/POST | optional token | Record an observation snapshot (cron) |
+| 25 | `/api/ferry/accuracy` | GET/POST | optional token | Run + record the accuracy backtest (cron) |
+| 26 | `/api/ferry/reminder` | GET | none | Build a sailing `.ics` reminder |
+| 27 | `/api/health` | GET | none | Liveness + data-dir writability (503 if not) |
+| 28 | `/api/admin/backup` | GET | admin | Whole-`DATA_DIR` JSON backup bundle |
+| 29 | `/api/admin/boarding-pass` | GET/POST | admin | Get/set/clear the SR-104 pass override |
+| 30 | `/api/admin/content-records` | GET/POST/DELETE | admin | Itineraries/lodging/webcams/restaurants CRUD |
+| 31 | `/api/admin/ferry-accuracy` | GET/POST | admin | View/record forecast accuracy |
+| 32 | `/api/admin/ferry-info` | GET/POST | admin | Edit the four structured ferry-fact records |
+| 33 | `/api/admin/ferry-prediction` | GET/POST | admin | Toggle the prediction feature on/off |
+| 34 | `/api/admin/map-features` | GET/POST/DELETE | admin | Map CMS feature CRUD |
+| 35 | `/api/admin/map-features/image` | POST | admin | Upload a feature image |
+| 36 | `/api/admin/map-views` | GET/POST/DELETE | admin | Map CMS view CRUD |
+| 37 | `/api/admin/parking` | GET/POST/DELETE | admin | Parking-zone (MapZone) CRUD |
+| 38 | `/api/admin/site` | GET/POST | admin | Copy overrides + page show/hide |
+| 39 | `/api/map/[viewId]` | GET | none (draft→admin) | Resolved public map view |
+| 40 | `/api/map/image` | GET | none | Serve a feature image (redirect Blob / stream fs) |
 
-All routes are `fs`-backed and therefore dynamic; only the two feeds set explicit cache headers.
-
-### 6.2 Auth group
-
-- **`POST /api/auth/login`** — body `{email, password}`; 400 on bad JSON/missing fields; 401 `"wrong email or password"` (single message for both cases); success `{ok:true, role}` + cookie.
-- **`POST /api/auth/logout`** — unconditional `{ok:true}`, cookie cleared with `maxAge: 0`.
-- **`POST /api/auth/redeem`** — `{code, email, name, password}`; password ≥ 8 chars; code trimmed; errors from `redeemInvite`/`createUser` (invalid/used code, duplicate email) surface as 400 with the message; success sets cookie, `{ok:true, role}`.
-- **`POST /api/auth/setup`** — 403 `"setup already completed"` if `hasAnyUsers()`; else validates like redeem and creates role-admin user + cookie.
-
-### 6.3 Portal group
-
-- **`PUT /api/portal/listing`** — 401 without session; loads the **stored** restaurant by `body.id` (404 if absent), 403 unless `canEdit(user, stored.id)`. Field policy (comment: *"only whitelisted fields merge onto the stored record"*): required text `description/cuisine/address` only overwritten by non-empty strings; optional text `phone/website/menuUrl/orderingUrl/hours` where empty string clears; `orderingPlatform` validated against the 5-value enum (empty/null clears, unknown → 400); `priceLevel` must be exactly 1|2|3; `tags` array of strings, trimmed, max 12; `weeklyHours` through `parseWeeklyHours` — a strict shape check requiring all 7 day keys, ≤ 2 spans/day, `HH:mm` matching `^([01]\d|2[0-3]):[0-5]\d$`, and `open !== close` (close < open allowed = past-midnight); `hoursVerified` must be `YYYY-MM-DD`. **Admin-only fields:** `name`, `lat`, `lng`, `walkMinutesFromFerry` (*"placement fields … stay Chamber-controlled"*). Returns `{ok, listing}`.
-- **`GET /api/portal/events`** — two modes: `?onDate=YYYY-MM-DD[&exclude=id]` is **public** (comment: *"no auth: this is the same data the events page shows"*) and returns `{events}` sharing that calendar date; `?ownerId=X` requires session + `canEdit(user, X)` and returns the events with that `ownerId`. Neither param → 400.
-- **`POST /api/portal/events`** — session required; `ownerId` required + `canEdit`; `title` required; `start` must match `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}` (datetime-local values pass through as-is); category ∈ enum; `organizer` defaults to `user.name`, `venue` to organizer. **Update path:** loads the stored event by `body.id`, 404 if missing, 403 unless `canEdit(user, existing.ownerId)` (*"never trust the client-sent id alone"*). **Create path:** id = `slugify(title).slice(0,48)` + `-` + 6 hex chars. Returns `{ok, event}`.
-- **`DELETE /api/portal/events?id=`** — session; stored-owner `canEdit`; tombstones via `deleteEvent`.
-- **`PUT /api/portal/org`** — session + `canEdit(user, id)`; whitelists exactly four fields (`name` non-empty-or-keep, `mission`, `website`/`contactEmail` where empty clears); id pinned.
-- **`POST /api/portal/org`** — action dispatch, exists so *"the two portals never collide on a file"* (nonprofit events go here, not through `/api/portal/events`): `action:"saveEvent"` takes `{orgId, event:{title, venue, date: YYYY-MM-DD, startTime: HH:mm, endTime?, address?, description?, category?, organizer?, url?, id?}}`, requires `canEdit(user, orgId)` and an existing org; on update re-checks `canEdit` against the stored event's `ownerId ?? charityId`; builds `start`/`end` with `pacificWallTimeToISO`; category defaults to `"charity"`; sets both `charityId` and `ownerId` to the org. `action:"deleteEvent"` mirrors the ownership check then tombstones. Unknown action → 400.
-- **`GET /api/portal/needs`** — `?onDate=` public deconfliction (same `eventsSharingDate` as the events route, `excludeId` param name differs) returning `{ok, events}`; `?charityId=` auth + `canEdit` returning `{ok, needs}`.
-- **`POST /api/portal/needs`** — session required. Branch 1, the **slots stepper**: `{action:"slots", id, delta:+1|-1}` → loads the need, `canEdit(user, need.charityId)`, clamps `slotsFilled` to `0..slotsTotal`. Branch 2, create/update a shift: `title`, `timeRange`, `date` required; a bare `YYYY-MM-DD` is anchored at Pacific midnight (`pacificWallTimeToISO(date, "00:00")` — comment: *"so it lands on the right calendar day"*), a full ISO instant passes through; `slotsTotal` clamped 1..999, `slotsFilled` 0..slotsTotal; update takes id/charityId/eventId from the **stored** record; create requires `charityId` + `canEdit` and mints `slug-6hex`.
-- **`DELETE /api/portal/needs?id=`** — session + stored-charity `canEdit` → tombstone.
-- **`GET|POST /api/portal/invites`** — both verbs behind `requireAdmin()` (401 no session, 403 non-admin). POST validates role ∈ enum, dedupes `linkedIds`, **cross-checks each id against the live store** for that role (unknown ids → 400 listing them), admin invites forced to `linkedIds: []`, note trimmed to 200. Returns `{ok, invite}` (the full code).
-- **`GET /api/portal/users`** — admin only; maps users through a destructure that drops `passwordHash` (*"Password hashes never leave the server"*).
-
-### 6.4 Feeds group (public, CORS `*` on purpose)
-
-- **`GET /api/feeds/events`** — headers `Access-Control-Allow-Origin: *` and `Cache-Control: public, s-maxage=300, stale-while-revalidate=600`. Filters to *"anything not yet finished (events in progress still count)"*: `new Date(e.end ?? e.start) >= now`. `?owner=` filters `ownerId === owner || charityId === owner`. Default JSON: `{source, generatedAt, count, events[]}` with a stable public projection (no ownerId/charityId leak — fields are explicitly enumerated). **`?format=ics`** returns RFC 5545 iCalendar (`text/calendar; charset=utf-8`; filename slug sanitized `[^a-zA-Z0-9_-]`): UTC `DTSTART/DTEND` via `toUtcStamp` (basic format `YYYYMMDDTHHMMSSZ` — emitting UTC avoids shipping a `VTIMEZONE`; *"calendar apps re-render in the viewer's zone"*), `escapeText` per §3.3.11 (backslash, semicolon, comma, newlines — `URL` is exempt as a URI value type), and **75-octet line folding that iterates code points so a multi-byte UTF-8 character is never split** (`fold`, continuation lines start with a space that counts toward their own 75). UID = `<escaped id>@explorekingston`. Calendar-level props: `X-WR-CALNAME: Kingston WA Events`, `X-WR-TIMEZONE: America/Los_Angeles`.
-- **`GET /api/feeds/business/[id]`** — same CORS; `Cache-Control: public, s-maxage=60, stale-while-revalidate=300` (*"short because open/closed flips on minute boundaries"*). 404 `{error}` (with CORS header) when the id is unknown. Payload: identity/contact/links (nulls, not undefined), `weeklyHours`, `hoursVerified`, and **server-computed `openNow`/`openLabel`** via the same `getOpenStatus` the site badge uses, plus `asOf`. This is the anti-drift mechanism: a restaurant's own website polls this so its hours never diverge from the portal's canonical copy. Consumed by `public/embed/kingston-events.js`'s sibling flow (the embed itself consumes the events feed; it is a dependency-free IIFE that inserts a `<div>` after its own script tag, renders via `textContent` only — nothing from the feed is parsed as HTML — and **removes itself entirely on any failure**).
-
-### 6.5 Hunts group
-
-Posture, stated verbatim in `/api/hunts/route.ts`: *"this app runs local-only for the Chamber (one laptop, no public deployment), so there is NO auth on these endpoints. Before deploying anywhere public, gate /api/hunts POST and ?submissions= behind admin auth."*
-
-- **`GET /api/hunts`** — `{hunts}` (seed+custom merged; each stop gains `referencePhotoUrl` via `photoUrl()` while the on-disk path also remains). **`GET /api/hunts?submissions=<huntId>`** — validates `isSafeId`, returns `{submissions}` newest-first, each with `photoUrl`.
-- **`POST /api/hunts`** — full-hunt create/update. `parseHuntPayload` validation: slug `^[a-z0-9][a-z0-9-]{0,63}$` (lowercased); id defaults to slug, `isSafeId`; title required ≤ 120; description ≤ 2000; difficulty coerced (`"moderate"` else `"easy"`); `durationMinutes` rounded and clamped 5..600 (default 45); 1..40 stops; per stop: safe unique id, title required, lat ∈ [−90,90], lng ∈ [−180,180], `radiusMeters` clamped 20..1000 (default 100), text fields length-capped, `referencePhoto` ≤ 400 chars (re-validated in `saveHunt`). Errors → 400 `{error}`; slug-collision errors from `saveHunt` also 400.
-- **`GET /api/hunts/photo?p=<relPath>`** — streams via `readPhoto`; 400 without `p`, 404 when sanitization or read fails; headers `Content-Type` (by extension), `Content-Length`, and **`Cache-Control: private, no-store`** — *"reference photos can be replaced under the same name — don't cache."*
-- **`POST /api/hunts/reference`** — multipart `photo` (File) + `huntId` + `stopId`; 400 non-multipart/missing/empty, **413** > 8 MB, **415** non-jpeg/png/webp/heic (`imageExtension` checks MIME first, then filename extension); "not found" errors map to 404, the rest 400. Returns `{ok, referencePhoto, referencePhotoUrl}`.
-- **`POST /api/hunts/submit`** — the player check-off endpoint; same multipart validation; optional `lat`/`lng` parsed by `parseCoord` (finite, |lat| ≤ 90, |lng| ≤ 180 — else treated as absent). Responds `{ok, verified, distanceMeters | null}`. Decision logic in §8. This endpoint is public *by design* (players are anonymous); the player-facing copy discloses that photos+coords go to organizers.
-
-### 6.6 Survey, track, ferry
-
-- **`POST /api/survey`** — validates `distanceBand` against the 5-value list (400 otherwise); everything else optional and clamped (`homeZip` ≤ 5 chars, `homeState` ≤ 20, `lodgingNights` 0..60, `lodgingType` ≤ 40, `partySize` 1..50, `primaryReason` ≤ 60); `submittedAt` set server-side. **A store failure is swallowed** with `console.warn` — *"don't fail the visitor's request over telemetry"* — and still returns `{ok:true}`. **`GET /api/survey`** — unauthenticated aggregate `SurveySummary` (total, byDistance, overnightCount, totalLodgingNights); aggregates only, never raw rows.
-- **`POST /api/track`** — reads **raw text** and parses JSON itself because `navigator.sendBeacon` posts with a `text/plain` content type (comment at top; fetch-fallback JSON also works). Validation → silent drop (always HTTP 200 `{ok:true}`, even on total garbage — *"telemetry must never break or slow down a visitor's session"*): type ∈ {pageview, outbound, geo-ping}; `path` ≤ 200, must start `/`, **`/admin` paths dropped** (defense in depth — the client tracker already skips them); `sessionId` ≤ 64, stripped to `[A-Za-z0-9_-]`; geo-pings default `path` to `/`. **Geo-ping privacy invariants enforced server-side regardless of client behavior:** coordinates must be finite and inside the Kitsap-ish box (lat 47.5..48.1, lng −123.0..−122.2) else dropped; then rounded to 3 decimals (~100 m) and classified into a named area — *"nothing finer ever reaches the store."* Geography: prefers Vercel's `x-vercel-ip-country/-region/-city` headers (city is URL-decoded), else peeks at `x-forwarded-for`/`x-real-ip` **only** to label loopback/RFC-1918/link-local traffic as `dev-local` — *"the IP is never stored or logged"*; otherwise `unknown`. Outbound events keep `href` ≤ 500 and `label` ≤ 120.
-- **`GET /api/ferry/status`** — aggregates `getTodaysSailings` + both `getTerminalStatus` + `getRouteAlerts` (parallel) + synchronous `getFastFerrySailings` into `{carFerry, fastFerry, terminals:{kingston, edmonds}, alerts}` — exactly the `FerryStatusPayload` shape `ferry-board.tsx` declares. No explicit cache headers; freshness is governed by the adapters' fetch revalidation.
+**Non-obvious details:**
+- **`/api/portal/listing`** — loads the **stored** restaurant, 403 unless `canEdit(user, stored.id)`, merges only whitelisted fields (`weeklyHours` through a strict `parseWeeklyHours`: 7 day keys, ≤ 2 spans/day, `HH:mm` regex, `open !== close`, close < open allowed = past-midnight); **admin-only** fields `name/lat/lng/walkMinutesFromFerry`; re-pins `next.id = stored.id`.
+- **`/api/portal/events`** — `?onDate=…[&exclude=id]` is **public** (same data the events page shows); `?ownerId=X` needs `canEdit`. POST/DELETE resolve ownership from `existing.ownerId`.
+- **`/api/portal/org`** POST is an action dispatcher (`saveEvent`/`deleteEvent`) so the two portals never collide on one file; nonprofit events set both `charityId` and `ownerId` to the org and re-check `canEdit(existing.ownerId ?? charityId)`.
+- **`/api/portal/needs`** — `{action:"slots", id, delta:±1}` clamps `slotsFilled` to `0..slotsTotal`; bare `YYYY-MM-DD` anchored at Pacific midnight.
+- **`/api/feeds/events`** — CORS `*`, `s-maxage=300`; filters to not-yet-finished; `?format=ics` emits RFC-5545 (UTC stamps, TEXT escaping, 75-octet code-point-safe folding). Public projection omits `ownerId`/`charityId`. **`/api/feeds/business/[id]`** returns server-computed `openNow`/`openLabel` (the anti-drift mechanism for a business's own site); consumed by `public/embed/kingston-events.js` (self-removing IIFE).
+- **`/api/track`** — reads raw text (sendBeacon posts `text/plain`), always returns `{ok:true}`; drops `/admin` paths; enforces the geo-ping privacy box (lat 47.5–48.1, lng −123.0–−122.2), rounds to 3 decimals, classifies into an area — *nothing finer ever reaches the store*; IP peeked only to label loopback/RFC-1918 as `dev-local`, never stored.
+- **Hunts group** carries a **stale** in-code warning ("local-only … NO auth on these endpoints") — the app is now deployed to Render, so these are effectively public write/read endpoints (§13, inconsistencies).
 
 ---
 
-## 7. Page & component design
+## 10. Pages — all 33 with rendering mode
 
-### 7.1 The 24 pages
+`export const revalidate = 60` → ISR-60; `dynamic = "force-dynamic"` → per-request; `generateStaticParams` where present. `/admin/map` declares both `revalidate=60` and `force-dynamic` (dynamic wins).
 
-Rendering modes are explicit in each file (`export const revalidate = 60` → ISR-60; `export const dynamic = "force-dynamic"` → per-request; neither + static data → build-time static).
-
-| Route | Mode | Data dependencies | Notes |
-|---|---|---|---|
-| `/` | ISR-60 | wsf, weather(2), tides, event-store, kitsap | Hero + live strip (next boats, weather), next-3 events, feature grid, photo strip, tides card, `<VisitorSurvey/>` |
-| `/ferry` | ISR-60 | wsf ×3, kitsap | Comment: revalidate so today's sailings never go stale *"even when the WSDOT key is missing and no fetches mark the page dynamic"*; alerts banner; hands `initial` + `serverNow` to `<FerryBoard/>`; verified fare prose |
-| `/eat` | ISR-60 | business-store | Curated groups by id (anything unlisted falls into "More around town"); per-card `<LocalBusinessJsonLd/>`, `<OpenBadge/>`, `<OrderTimingNote/>`; `<NearMe/>` gets a serialized subset |
-| `/events` | ISR-60 | event-store | "This weekend" = next 4 Pacific dates; month grouping; midnight-start = "All day" convention |
-| `/give` | ISR-60 | charity-store, event-store | Upcoming shifts (mailto/website/county-portal signup fallback chain) + the date-grouped deconfliction calendar (§8) |
-| `/about` | static | — | LTAC/JLARC explainer, tracking honesty table, second `<VisitorSurvey/>` |
-| `/itineraries` | static | `data/itineraries` | 4 cards |
-| `/itineraries/[slug]` | static + `generateStaticParams` | `data/itineraries` | Timeline; 404 via `notFound()` |
-| `/parking` | static | `data/parking`, `data/atms` | `<TownMap zones atms/>` + `<MapLegend/>`; rule-grouped `ZoneCard`s with confidence badges; overnight-honesty section; ATM cards with `atmMeta`. Will read via parking-store **(landing in map v2)** |
-| `/stay` | static | `data/lodging` | Compliance note: Airbnb/VRBO search deep-links only |
-| `/webcams` | static | `data/webcams` | Static shell; all liveness in `<WebcamGrid/>` |
-| `/hunt` | **force-dynamic** | hunt-store | *"Admin-created hunts must appear immediately"* — every request reads the merged store |
-| `/hunt/[slug]` | force-dynamic | hunt-store | Maps `StoredHunt` → `PlayerHunt` (paths become `/api/hunts/photo` URLs; *"the on-disk path stays server-side"*); `generateMetadata` from the hunt |
-| `/portal` | force-dynamic | auth | Redirects to `/portal/setup` when no users; login form when signed out; role-dependent dashboard cards |
-| `/portal/setup` | force-dynamic | auth | Redirects to `/portal` once users exist |
-| `/portal/join` | static | — | Invite-redemption form (all logic client + API side) |
-| `/portal/business` | force-dynamic | auth, business-store | Session + role gate; admins see all listings, businesses their `linkedIds` |
-| `/portal/business/[id]` | force-dynamic | auth, business-store, event-store | Server-side `canEdit` redirect; hands listing + owned events to `<BusinessEditor/>` |
-| `/portal/nonprofit` | force-dynamic | auth, charity-store | Mirror of business list |
-| `/portal/nonprofit/[id]` | force-dynamic | auth, charity/event stores, time | Hands org, needs, events, `today` (Pacific) to `<NonprofitEditor/>` |
-| `/portal/syndicate` | force-dynamic | auth, all three stores, `headers()` | Server component; builds absolute URLs from `x-forwarded-host`/`host` + proto; feeds, platform checklist (*"Honest status: no auto-sync yet"*), prewritten social posts; interactivity is one inline delegated-click copy script — no client component |
-| `/admin` | force-dynamic | analytics-store, survey-store | Visitor Insights: stat cards, geo/survey tables, top pages, outbound links, geo-ping area bars; *"numbers must be fresh on every load"* |
-| `/admin/accounts` | force-dynamic | auth, business/charity stores | Re-checks role; strips hashes; renders `<AccountsManager/>` |
-| `/admin/hunts` | force-dynamic | hunt-store | Hunt cards (source/ref-photo/submission badges), recent submissions grid, `<HuntEditor/>` (selected via `?hunt=` searchParam) |
-| `/admin/map` **(landing in map v2)** | force-dynamic | parking-store | Leaflet + `@geoman-io/leaflet-geoman-free` polygon editor: admins draw/edit zone polygons and edit zone metadata; writes overlay records through parking-store |
-
-Layout (`src/app/layout.tsx`): fonts (§9) + `<Tracker/>` + `<SiteNav/>` + `<main>` + `<SiteFooter/>`; metadata title template `%s · Explore Kingston`.
-
-### 7.2 Client-component islands — why each is client, props contract, state machine
-
-- **`tracker.tsx`** — needs `usePathname`, `sessionStorage`, `navigator.sendBeacon`. Exports: `Tracker` (renders null; one `pageview` per pathname change, skipping `/admin`), `trackOutbound(href, label)`, and `OutboundLink` — the client anchor behind `ui.tsx`'s `ExternalLink` (it lives here *"because ui.tsx must stay a shared server-safe module"*; no `preventDefault` — *"sendBeacon survives the navigation"*). Session id: `vk-sid` UUID in sessionStorage with an in-memory fallback for privacy modes where sessionStorage throws.
-- **`open-badge.tsx`** — needs the browser clock (*"computed in the visitor's browser so static pages never show stale state"*). `OpenBadge{weeklyHours?}` and `OrderTimingNote{weeklyHours?}` (renders a closed-kitchen warning only when closed). Both render **nothing until mounted** (hydration-mismatch avoidance) then re-run `getOpenStatus` every 60 s.
-- **`near-me.tsx`** — geolocation. Props: `places: NearMePlace[]` (a serializable Restaurant subset: id, name, lat, lng, weeklyHours?, walkMinutesFromFerry). State machine `Status: idle → locating → ready | denied | error`. One `getCurrentPosition` per tap (never `watchPosition`); sorts by client-side haversine, shows top 6 with ~80 m/min walk times and live open labels; **sends at most one geo-ping per page visit** (a `useRef` latch), coordinates rounded to 3 decimals *before leaving the device* (the server re-rounds regardless). Denied/error states degrade to friendly copy.
-- **`town-map.tsx`** — Leaflet touches `window` at module scope, so it is **dynamically imported inside `useEffect`**; the component renders an empty shell on the server. Props: `{ zones?: MapZone[], atms?: Atm[], showStreets = true, height = "460px", center = [47.7985,-122.4975], zoom = 15 }`. Design (map v2 restyle, landed): street overlay fetched at runtime from `/geo/street-parking.json` (*"so the JS bundle stays lean"*; fetch failure = base map still works); segments drawn quiet-first (`default` → `ferry-holding` → rule-bearing) so colored streets sit on top; the **`ferry-holding` street class** renders as a muted dashed slate line (*"it's the boat line, not a parking hazard to shout about"*); zones with `polygon` render **as filled polygons only ("no marker bubbles — owner feedback")** with permanent name tooltips on `port-*` zones gated to zoom ≥ 17 via a container-class toggle on `zoomend`; zones without polygons get compact white `divIcon` label chips (code extracted from `(POKPARK)`-style names). **Quick-view buttons** above the map: Downtown (15), Port parking (18), Whole area (fitBounds of the UGA boundary). Every popup gets a keyless Google Street View deep link; with `NEXT_PUBLIC_GMAPS_EMBED_KEY` set, clicking a feature also opens an embedded Street View iframe panel below the map (`selected` state). Colors are intentionally raw hex (*"they live on the map canvas, not in the page's token system"*); rule→color maps are string-keyed so new rules from the data layer render sensibly. Default Leaflet marker icons deliberately unused (bundler asset-path breakage). The effect runs once (`[]` with an eslint disable — *"re-running the effect would tear the map down mid-interaction"*) and guards against StrictMode double-mount. `MapLegend` is a server-safe sibling.
-- **`hunt-player.tsx`** — geolocation, camera capture, localStorage. Props: `PlayerHunt` (stops carry `referencePhotoUrl?`). Three state machines, exactly as typed: per-stop **`CheckState: idle | locating | too-far | confirmed | gps-unavailable`** (the GPS check-in — *"an assist, not a gate"*); per-stop **`UploadState: idle | uploading | failed`**; and the persisted per-stop **`StopStatus: verified | unverified | offline | honor`** with badge copy per status (`STATUS_BADGE`). Flow: stops unlock sequentially (`activeIndex` = first uncompleted); photo submit reuses the check-in fix or grabs one fresh (8 s timeout), POSTs multipart to `/api/hunts/submit`; server verdict → `verified`/`unverified`; upload failure → retry, or **"Mark complete anyway" → `offline`** (nobody gets stranded on the beach); a no-photo escape hatch → `honor`. Progress persists in localStorage keys `vk-hunt-<id>` (completed ids) and `vk-hunt-<id>-status` (status map; legacy entries default to `honor`); renders nothing until localStorage is loaded; completion screen at 100%.
-- **`visitor-survey.tsx`** — localStorage + form state. Step machine `distance → overnight → details → done`; "local" answers short-circuit straight to submit (`overnight: false`); dismiss and submit both set `vk-survey-done` so the visitor is never re-asked; POST failure silently ignored.
-- **`webcam-grid.tsx`** — timers + `<img>` error handling. Per-card state: `stamp` (epoch cache-buster, **null until mount** so SSR and first client render match), `now` (1 s tick for "Refreshed Xs ago"), `offline`. Refreshes on each cam's own `refreshSeconds` cadence by swapping `?t=<stamp>` — required because images.wsdot.wa.gov sends no Cache-Control; plain `<img>` hotlinks because the host sends no CORS headers (fetch/canvas would fail) and remote domains aren't configured for next/image. `onError` → offline placeholder; the next cycle resets `offline` and retries automatically.
-- **`ferry-board.tsx`** — polling + countdowns. Props: `{ initial: FerryStatusPayload, serverNow: string }` (server ISO timestamp *"so SSR and hydration agree"*). Polls `/api/ferry/status` every 60 s, **paused while `document.hidden`** (visibilitychange stops/starts the interval and refreshes on return); countdown labels re-render on a 20 s tick; `upcoming()` applies a 90 s grace for a boat leaving right now; alerts that appear *after* load render as a "New WSF alert" banner (diffed against `initial.alerts` — the page already showed the initial ones). Poll failures keep the last good data. Live vs "Schedule only" badges keyed off `live`.
-- **`site-nav.tsx`** — `usePathname` active states + two pieces of open/close state: desktop "More ▾" dropdown (closes on blur with a 150 ms grace) and the mobile bottom-sheet. Fixed 5-slot mobile bottom bar (Home/Ferry/Eat/Events/More); `globals.css` reserves `padding-bottom: 4.5rem` under 768 px for it.
-- **Portal editors:**
-  - `portal/forms.tsx` — Login/Setup/Join forms + LogoutButton; *"deliberately plain: fetch + reload on success"* (`window.location.href` redirect); shared `useSubmit` hook (busy/error state).
-  - `portal/business/[id]/editor.tsx` (`BusinessEditor{initial, initialEvents}`) — three independent sections each with its own `useSave` (busy/message): (a) **details** form posting the whitelisted fields; (b) **hours**: `HoursEditor` + live preview (a `nowMs` state, null until after mount, minute interval → `getOpenStatus`), `formatWeeklyHours` regenerating the human string by grouping consecutive identical days ("Mon–Thu 11 am–9:30 pm, … Sun closed", with noon/midnight words), an optional note suffix recovered on load by `initialNote` (prefix-matching the stored string), save blocked while `weeklyHoursIssues` is non-empty, and **saving stamps `hoursVerified` = today (Pacific, en-CA)**; (c) **events**: draft-based CRUD with the deconfliction effect — when the draft's date (first 10 chars of the datetime-local) changes, fetch `/api/portal/events?onDate=…&exclude=<id>`; results are remembered *with the date they answer for* so a date change instantly clears stale hits; conflicts render informationally (*"still fine, just know"*). `fmtEventDate` deliberately parses the ISO string textually ("no timezone math") so stored Pacific wall times display as entered.
-  - `portal/nonprofit/[id]/editor.tsx` (`NonprofitEditor{org, initialNeeds, initialEvents, today}`) — org-profile form (PUT `/api/portal/org`); volunteer shifts with the **±1 stepper** (POST `{action:"slots"}`), upcoming/past split on the server-provided `today`, full CRUD; events CRUD through `/api/portal/org` `action:saveEvent/deleteEvent`, with the same on-date deconfliction via `/api/portal/needs?onDate=`.
-  - `admin/accounts/manager.tsx` (`AccountsManager{users, invites, restaurants, charities}`) — accounts table, pending/used invite lists, create-invite form (role picker resets selections; client requires ≥ 1 linked id for non-admin; server re-validates). Fills `window.location.origin` after mount for join-URL copy; clipboard failures tolerated (*"plain-http LAN"*). All authorization server-side — *"this UI just talks to /api/portal/invites."*
-  - `admin/hunts/editor.tsx` (`HuntEditor{initialHunts, initialSelectedId}`) — the builder. Draft types hold **numeric fields as strings** (*"so typing '47.' or '-' never fights the input"*) and validate on save via `buildPayload`, a *"client-side mirror of the server's validation — friendlier errors, same rules"*; save POSTs the full hunt to `/api/hunts`; reference-photo upload POSTs to `/api/hunts/reference` **after auto-saving the draft** (so the server knows the stop); per-stop submissions load from `/api/hunts?submissions=` and render beside the reference photo; photo URLs carry a `&v=` version to bust the no-store-but-memory-cached image.
-  - `components/portal/hours-editor.tsx` (`HoursEditor{value, onChange}` + `emptyWeeklyHours` + `weeklyHoursIssues`) — fully controlled; **editing rules:** ≤ 2 spans/day; toggling a closed day open *borrows the nearest earlier open day's spans* (else defaults `11:00–20:00`; second span defaults `17:00–21:00`); "Copy Monday to all weekdays" one-click; inline flags — "set both times", "open and close can't match" (both blocking via `weeklyHoursIssues`), and a **non-blocking** "past midnight — closes the next morning" badge when `close < open` (the convention, not an error).
-  - Admin map editor **(landing in map v2)** — client for the same reason as town-map (Leaflet); geoman drawing tools produce polygon vertex arrays saved as `MapZone.polygon` overlay records via parking-store.
-- **`components/ui.tsx` is intentionally server-safe** (§9) — its only client dependency is delegated to `OutboundLink`.
-- **`components/json-ld.tsx`** — server component emitting one `<script type="application/ld+json">` per restaurant card: schema.org `Restaurant` with `OpeningHoursSpecification` per span (past-midnight spans emit raw closes — schema.org documents `opens > closes` as spanning midnight), a heuristic `PostalAddress` splitter (end-anchored state/zip regex so a 5-digit street number is never mistaken for the zip), and `<` escaped to `<` so listing text can never close the script tag.
-
----
-
-## 8. Algorithms
-
-### 8.1 Hours engine — `src/lib/hours.ts`
-
-Pure functions (*"so they run identically on server and client"*). `getOpenStatus(weekly, now = new Date()) → { open, label }`:
-
-1. **Pacific wall clock via Intl** (`nowInPacific`): `formatToParts` with `timeZone: "America/Los_Angeles"`, `hourCycle: "h23"` → weekday index (0=Sun) + minutes-since-midnight. No Date arithmetic in local server time, ever.
-2. **Today's spans:** for each span, if it `crossesMidnight` (`toMinutes(close) <= toMinutes(open)`) it matches when `minutes >= open` (open side only — the tail belongs to tomorrow's check); otherwise the half-open interval `open <= minutes < close`. Match → `"Open · closes 8 pm"` (via `fmt`, 12-hour, minutes only when non-zero).
-3. **Yesterday's past-midnight tail:** `spansForDay(weekly, dayIndex - 1)` (the `(dayIndex + 7) % 7` wrap handles −1); a crossing span matches when `minutes < close`. This is what keeps a bar showing "Open · closes 1 am" at 12:30 am.
-4. **Next-open scan:** ahead 0..6 days; each day's spans sorted by open time; on day 0 skip opens already past (`open <= minutes`). Label grammar: today → `"Closed · opens 5 pm"`, +1 → `"opens tomorrow …"`, else `"opens Fri …"`. A completely empty week → `"Closed"`.
-
-Consumers: `OpenBadge`/`OrderTimingNote` (browser, minute timer), the business feed (`openNow` server-side at response time), NearMe result rows, and the portal live preview.
-
-### 8.2 Haversine + GPS verification — `src/lib/hunt-store.ts`
-
-Standard haversine on a 6 371 000 m sphere (`haversineMeters`; duplicated deliberately in the client files `hunt-player.tsx` and `near-me.tsx`, which cannot import the fs-touching server module). Verification decision in `saveSubmission`:
-
-```
-hasCoords = lat & lng are finite numbers
-distance  = hasCoords ? haversine(player, stop) : undefined
-verified  = distance !== undefined && distance <= stop.radiusMeters
-```
-
-Thresholds: `radiusMeters` is clamped **20..1000 m (default 100)** at the API layer; seed stops use 80–150 m — deliberately generous, since *"GPS is an assist, not a gate."* Missing/denied GPS still saves the photo with `verified: false` (honor system); `distanceMeters` is stored rounded. The player's separate check-in button uses the same math client-side purely as feedback (`too-far` shows the distance and the required radius).
-
-### 8.3 Deconfliction — Pacific date-key grouping
-
-Two implementations of "what else happens that day":
-
-- **Store query** (`eventsSharingDate` in event-store, used by both portals' on-date lookups): compares `e.start.slice(0, 10) === dateIso.slice(0, 10)`. This is a *string* date key — correct because every write path stores Pacific-offset ISO strings (portal events store datetime-local text or `pacificWallTimeToISO` output), but it would misbucket a UTC-`Z` timestamp (see inconsistencies, end of doc).
-- **Give-back page** (`src/app/give/page.tsx`): the robust variant — `Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" })` over the parsed date (`pacificDateKey`), used to group every upcoming event into a `Map<dateKey, EventItem[]>` and count "busy days" (≥ 2 events). The same Intl-based day key is used in analytics (`pacificDay` in analytics-store) for the by-day table.
-
-The portal editors surface deconfliction *before commit*: picking a date immediately fetches other events that day and renders them as an informational callout, never a block.
-
-### 8.4 Area classification — `src/lib/analytics-store.ts`
-
-`classifyArea(lat, lng)`: linear scan over `AREAS`, six axis-aligned bounding boxes around downtown Kingston (ferry-terminal, marina-waterfront, village-green, downtown-104-strip, north-neighborhoods, west-kingston), **first match wins** — so the list is ordered *"specific waterfront spots before the broader neighborhoods that surround them"* (the boxes overlap). Miss → `"outside-uga"`. Inputs are already `roundCoord`ed (3 decimals ≈ 100 m); the comment is explicit that block-perfect edges would be *false precision*. `areaLabel` maps ids to display labels for the dashboard.
-
-### 8.5 Street-parking overlay generator — `scripts/gen-street-parking.py`
-
-Offline pipeline producing `public/geo/street-parking.json` (currently 208 segments / ~68 KB minified: 118 default, 41 prohibited, 33 ferry-holding, 12 free-2hr, 4 free-unrestricted, plus a 160-point boundary):
-
-1. **Inputs** (curl commands in the docstring): an Overpass export of highways in the Kingston UGA bbox `(47.770, -122.530, 47.812, -122.483)` matching `highway ~ ^(primary|secondary|tertiary|residential|unclassified)$` with `out geom`; and the Census TIGERweb GeoJSON for Kingston CDP **GEOID 5335870** (the UGA boundary).
-2. **CDP point-in-ring filter:** for each way, probe its first/middle/last points with a ray-casting `point_in_ring`; keep the way if *any* probe is inside — ways that merely touch the UGA stay.
-3. **Classification** (`classify`): exact name matches first (`NAME_RULES` — e.g. Central Ave & Washington Blvd `prohibited`, both SR 104 name variants `ferry-holding`, Georgia & Pennsylvania `free-unrestricted`); then **the midpoint rule** for streets whose rule changes block-by-block — the way's *midpoint* is compared against hand-picked thresholds ≈ block boundaries: NE 1st St `free-2hr` iff `lng > -122.4992`; Ohio Ave iff `47.7978 ≤ lat ≤ 47.8004` (NE 1st–NE 2nd); Iowa Ave iff `lat ≤ 47.8010`; Illinois Ave `lat ≤ 47.8003 → free-2hr` else `free-unrestricted`. Everything else → `default` (no known restriction; note cites RCW 46.55.085's 24-hour rule). Rules trace to the 2015/2016 county Complete Streets study; the shared note warns it hasn't been re-surveyed.
-4. **Output:** coordinates rounded to 5 dp, `{generated, boundary, segments:[{name, rule, coords, note?}]}`, minified. `town-map.tsx` consumes it verbatim (`StreetData`), normalizing unknown rules to `default`.
-
-Regeneration is manual (fetch fresh inputs, run from repo root); the JSON is committed.
-
----
-
-## 9. Frontend design system
-
-### 9.1 Token remapping — `src/app/globals.css`
-
-Tailwind 4, config-less: `@import "tailwindcss"` + an `@theme inline` block defines the design tokens as CSS variables, which Tailwind 4 exposes as utilities (`bg-tide`, `text-ink-soft`, `border-sand`, `font-display`…). The header comments document the remapping approach: the token *names* are stable seaside metaphors; the *values* were re-pointed at the Explore Kingston Chamber brand (primary cyan `#1E96C0` from the logo sailboat, deep navy `#324A6D`, warm peach accent family, near-white page with `#E4E4E0` warm-gray fills) — so a rebrand is a values-only edit.
-
-**The twelve color tokens and their Explore Kingston values:**
-
-| Token | Value | Role (from the file's comments) |
+| Route | Mode | Data deps / notes |
 |---|---|---|
-| `--color-shell` | `#fbfcfd` | page background — near-white, sits under the topo texture |
-| `--color-sand` | `#e4e4e0` | warm light gray — borders, subtle section fills |
-| `--color-seaglass` | `#b7e0f2` | pale brand-blue tint — light text on navy, tint fills |
-| `--color-tide` | `#1e96c0` | brand primary cyan-blue (logo sailboat) |
-| `--color-tide-deep` | `#16758f` | darker cyan — accessible link/text variant |
-| `--color-sound` | `#324a6d` | brand deep navy — secondary |
-| `--color-sound-deep` | `#22334d` | darker navy — footer, hero depths |
-| `--color-coral` | `#c97940` | warm CTA — deepened from brand peach `#FFBC7D` |
-| `--color-coral-deep` | `#a85c28` | hover + accessible text-on-white variant |
-| `--color-ink` | `#20262e` | near-black headings/body |
-| `--color-ink-soft` | `#6b7683` | muted body gray |
-| `--color-fern` | `#4a7c59` | PNW evergreen — success, open-now |
+| `/` | ISR-60 | ferry snapshot, weather, tides, event-store, side; hero + live strip (`<NextFerries/>`), side-switcher, planning callout (prediction-gated) |
+| `/ferry` | ISR-60 | ferry snapshot, kitsap, ferry-info, prediction access; `<NextFerries/>`, vessel + SR-104 maps, webcams box, boarding-pass line, "how busy today" (gated) |
+| `/ferry/plan` | ISR-60 | wsf schedule; renders `<FerryPlanner/>` (client) |
+| `/eat` | ISR-60 | business-store; curated groups, `<OpenBadge/>`, `<NearMe/>`, per-card JSON-LD; drops `hidden` |
+| `/events` | ISR-60 | event-store; weekend + month grouping; midnight = "All day" |
+| `/give` | ISR-60 | charity-store, event-store; shifts + deconfliction calendar |
+| `/map` | ISR-60 | map-store views; `<FeatureMap/>` view switcher |
+| `/parking` | ISR-60 | parking-store (MapZone), ferry-info; `<FeatureMap/>` / town map + confidence-badged zone cards. (No ATM section — removed.) |
+| `/about` | ISR-60 | — | LTAC/JLARC explainer, tracking-honesty table, `<VisitorSurvey/>` |
+| `/itineraries` | ISR-60 | itinerary-store | cards |
+| `/itineraries/[slug]` | force-dynamic | itinerary-store | timeline; `notFound()` |
+| `/stay` | ISR-60 | listing-stores (lodging) | Airbnb/VRBO search deep-links only |
+| `/webcams` | ISR-60 | listing-stores (webcams) | static shell; liveness in `<WebcamGrid/>` |
+| `/hunt` | force-dynamic | hunt-store | admin-created hunts appear immediately |
+| `/hunt/[slug]` | force-dynamic | hunt-store | maps `StoredHunt`→`PlayerHunt`; `generateMetadata` |
+| `/portal` | force-dynamic | auth | redirects to setup when no users; login/dashboard |
+| `/portal/setup` | force-dynamic | auth | redirects once users exist |
+| `/portal/account` | force-dynamic | auth | self-service profile/password |
+| `/portal/join` | static | — | invite redemption form |
+| `/portal/business` | force-dynamic | auth, business-store | admins see all; businesses their `linkedIds` |
+| `/portal/business/[id]` | force-dynamic | auth, business/event stores | `canEdit` redirect; `<BusinessEditor/>` |
+| `/portal/nonprofit` | force-dynamic | auth, charity-store | mirror of business list |
+| `/portal/nonprofit/[id]` | force-dynamic | auth, charity/event stores, time | `<NonprofitEditor/>` |
+| `/portal/syndicate` | force-dynamic | auth, stores, `headers()` | feeds + platform checklist + prewritten posts |
+| `/admin` | force-dynamic | analytics-store, survey-store | Visitor Insights dashboard |
+| `/admin/accounts` | force-dynamic | auth, business/charity stores | re-checks role; strips hashes; `<AccountsManager/>` |
+| `/admin/content` | force-dynamic | site-store, registry | CMS text + page show/hide |
+| `/admin/ferry-info` | force-dynamic | ferry-info/prediction/boarding-pass stores | structured facts + prediction toggle + pass override |
+| `/admin/hunts` | force-dynamic | hunt-store | hunt cards + submissions + `<HuntEditor/>` |
+| `/admin/itineraries` | force-dynamic | itinerary-store | `itineraries/editor.tsx` |
+| `/admin/listings` | force-dynamic | business/listing stores | restaurants (add/hide) + lodging + webcams |
+| `/admin/map` | force-dynamic | parking-store | leaflet-geoman polygon editor |
+| `/admin/maps` | force-dynamic | map-store | general map builder |
 
-**Contrast decisions:** the coral ramp is the documented one — the brand's peach `#FFBC7D` fails contrast as a button/text color, so `coral` is a deepened `#c97940` for white-text CTAs and `coral-deep` `#a85c28` is the on-white text variant (used for warnings/errors throughout); similarly `tide-deep` exists as the accessible link color where `tide` on white would be weak. The home hero layers a `sound-deep/95 → tide-deep/75` gradient over the photo, per its comment, to keep white text *"AAA-readable over the bright sky."*
-
-### 9.2 Fonts (next/font in `src/app/layout.tsx` → variables in `@theme`)
-
-| CSS token | Font (weights) | Use |
-|---|---|---|
-| `--font-sans` | Roboto (400/500/700/900) | body text (set on `body`) |
-| `--font-display` | Roboto Slab (400/600/700) | `h1–h3` and `.font-display` |
-| `--font-nav` | Poppins (500/600/700) | nav / uppercase UI labels |
-| `--font-script` | Satisfy (400) | big script accents ("Explore Kingston" style) — *"use sparingly"*; used for the word "Kingston" in the hero |
-
-Each is a `next/font/google` instance exposing a `--font-*` variable on `<html>`; `@theme` maps them with system fallback stacks.
-
-Other global CSS: Leaflet's stylesheet imported globally (the map component needs it and can't scope it); the body carries the brand's **topographic contour texture** (`/brand/bg-topographical-texture.jpg`, 1100 px repeat) over `shell`; `.bg-topo` re-uses it on white for standout sections; `padding-bottom: 4.5rem` under 768 px reserves room for the fixed mobile bottom nav.
-
-### 9.3 `ui.tsx` primitives (server-safe by design)
-
-`PageHeader{eyebrow?, title, intro?}` · `Section{title?, subtitle?, id?}` (max-w-5xl column) · `Card` (rounded-2xl, sand border, white, soft navy shadow) · `Badge{tone: navy|teal|coral|green|sand}` · `Callout{title, tone: teal|coral}` (left-border alert) · `ExternalLink` (tracked via `OutboundLink`, teal underline style) · helpers `mapSearchUrl(query)` / `mapDirectionsUrl(dest, walking|driving)` — keyless Google Maps deep links. Every page composes these; there is no other component library.
-
-### 9.4 Brand assets — `public/brand/`
-
-`logo-explore-kingston-primary.png` (horizontal; nav) and `-alt.png` (stacked; footer, on a white chip because it's black-on-transparent), favicons at 150/192, `bg-topographical-texture.jpg`, `bg-kingston-currents-blog.webp`, and the photo library (`photo-kingston-37.jpg` hero — fast ferry at the dock with Rainier behind, `photo-hansville-hero.jpg`, `photo-kingston-59.jpg`, `photo-kingston-harbor-35.jpg`, `photo-heritage-park.webp`, `photo-suquamish-17.jpg`), all served via `next/image`.
-
----
-
-## 10. Error handling & degradation catalogue
-
-The system-wide rule: visitor-facing surfaces never hard-fail on a dependency. The complete inventory:
-
-| Failure | Behavior | Where |
-|---|---|---|
-| WSDOT API unreachable / no key | Bundled seasonal schedule, `live: false`; UI shows "Schedule only" badges + confirm-at-WSDOT links; terminal cards simply omit live numbers | `wsf.ts`, `ferry-fallback.ts`, `ferry-board.tsx`, home live-strip footnote |
-| WSDOT wait-notes fetch fails (space ok) | Status stays `live: true` without the note | `wsf.ts getTerminalStatus` |
-| NWS forecast fails | `[]` → home card renders "See forecast at weather.gov" | `weather.ts`, `page.tsx` |
-| NOAA tides fail | `[]` → "Tide data unavailable right now — NOAA station 9445639 has the official predictions" | `tides.ts`, `page.tsx` |
-| Webcam image error | Per-card offline placeholder ("WSDOT feeds hiccup sometimes"); auto-retry on the next refresh cycle | `webcam-grid.tsx` |
-| Ferry-board poll fails | Keep showing last good data; footer timestamps only successful updates | `ferry-board.tsx` |
-| Tracking beacon/store failure | `send()` swallows; `/api/track` catches everything and returns `{ok:true}` regardless (bad JSON, read-only fs) | `tracker.tsx`, `track/route.ts` |
-| Survey store unavailable | POST logs `console.warn`, still `{ok:true}`; client fetch failure also swallowed | `survey/route.ts`, `visitor-survey.tsx` |
-| Hunt photo upload fails (offline/no signal) | `UploadState: failed` → retry button + "Mark complete anyway" → status `offline`; hunt continues; separate honor-system path when no photo is possible | `hunt-player.tsx` |
-| GPS denied/unavailable | Check-in: `gps-unavailable` message; submission still accepted `verified:false`; NearMe: `denied`/`error` copy pointing to walk-times | `hunt-player.tsx`, `hunt-store.ts`, `near-me.tsx` |
-| Map street-overlay fetch fails | Caught; base tiles + zones still render (*"progressive enhancement"*) | `town-map.tsx` |
-| Embed feed/network/old browser failure | The widget **removes its own mount node** and leaves the host page untouched | `public/embed/kingston-events.js` |
-| Overlay/JSONL file missing or corrupt | `readOverlay`/`readJson` → fallback value; JSONL readers skip corrupt lines individually | `json-store.ts`, `auth.ts`, `analytics-store.ts`, `hunt-store.ts` |
-| localStorage/sessionStorage throws (private mode) | Hunt progress starts fresh; session id falls back to in-memory | `hunt-player.tsx`, `tracker.tsx`, `near-me.tsx` |
-| Clipboard API unavailable | Accounts manager: silent (text is selectable); syndicate page: hidden-textarea `execCommand` fallback | `manager.tsx`, `syndicate/page.tsx` |
-| Deconfliction lookup fails | `.catch` — *"best-effort — never block the form on it"* | `business editor`, `nonprofit editor` |
-| Portal save fails | Inline error message, form state preserved | `useSave`/`useSubmit` hooks |
+Layout (`src/app/layout.tsx`): fonts + `<CopyProvider overrides>` wrapping `<Tracker/>` + nav + `<main>` + footer; overrides loaded via `getCopyOverrides()`.
 
 ---
 
-## 11. Security considerations
+## 11. Client-component islands
 
-**Path sanitization (`hunt-store.ts`)** — the one place query strings reach the filesystem. `getPhotoAbsolutePath` rejects, in order: non-string / empty / > 400 chars; null bytes and backslashes; absolute (`/`) and home (`~`) prefixes; any path segment that is empty, `.`, or `..`; extensions outside the image whitelist; and finally re-verifies the `path.resolve`d result is strictly inside `.data/hunts` (prefix check with separator). `isSafeId` (`^[a-z0-9][a-z0-9_-]{0,63}$/i`) gates every id that becomes a path segment, at both the API and store layers.
+All in `src/components/` unless noted; each is client only for a browser reason.
 
-**Upload constraints** — 8 MiB cap (413), MIME/extension whitelist jpeg/png/webp/heic (415), empty-file rejection; stored filenames are server-generated (`refs/<huntId>-<stopId>.<ext>`; `photos/.../<epochMs>-<rand>.<ext>`) — client filenames are only ever consulted for an extension hint. Note: there is **no total-disk quota** on submissions.
-
-**Secret handling** — `AUTH_SECRET` and `WSDOT_API_KEY` live in `.env.local` (gitignored); the WSDOT key rides in server-side URL query strings only (never shipped to the client); `AUTH_SECRET` absence throws rather than degrading. `NEXT_PUBLIC_GMAPS_EMBED_KEY` is intentionally public (Maps Embed API key, free tier, referrer-restrictable).
-
-**Injection surfaces** — Leaflet popup HTML is built from data through `esc()` (town-map); the embed widget writes only `textContent`; JSON-LD escapes `<`; ICS output escapes per RFC 5545. React handles the rest.
-
-**Intentionally unauthenticated** (documented in code, by design):
-- The public feeds (`/api/feeds/*`) with `Access-Control-Allow-Origin: *` — *"public directory data"*; business sites fetch them cross-origin.
-- Deconfliction date lookups (`?onDate=` on the events and needs routes) — same data as the public events page.
-- `/api/track` POST and `/api/survey` POST (anonymous telemetry), `/api/survey` GET (aggregate-only), `/api/ferry/status`, `/api/hunts/submit` (anonymous players).
-- The **entire hunt admin API** (`/api/hunts` POST, `?submissions=`, `/api/hunts/reference`, `/api/hunts/photo`) — the local-only posture; the code carries its own warning to gate these before public deployment. Note the `/admin` *pages* are now gated by the layout, but these API routes are not.
-
-**Pre-deploy hardening list** (aggregating every in-code warning + limitations from §4):
-1. Gate `/api/hunts` POST, `?submissions=`, `/api/hunts/reference` (and consider `/api/hunts/photo` for submission paths) behind admin auth.
-2. Rate-limit `/api/auth/login` (and `/api/track`, `/api/hunts/submit` against abuse); add a password-reset story.
-3. Set `secure: true` on the session cookie; serve over HTTPS.
-4. Add CSRF tokens for the portal mutations (current mitigation: `sameSite=lax` + JSON bodies).
-5. Decide whether `GET /api/survey` and the admin dashboard aggregates should require admin (the dashboard page is gated; the raw aggregate endpoint is not).
-6. Move `.data/` stores to a database before any multi-instance/serverless deployment (write races; read-only fs).
-7. Add a submissions disk quota / retention policy; document the photo-privacy retention promise.
-8. Consider invite expiry and admin-visible session revocation.
-
-**Privacy posture** (a feature, restated): no cookies for visitors, no IPs stored, geo-pings opt-in + bounded + rounded + area-bucketed server-side, survey PII-free, `/admin` traffic never tracked (client skip + server drop).
+- **`tracker.tsx`** — `usePathname`, `sessionStorage`, `sendBeacon`. `Tracker` (one pageview per path, skips `/admin`), `trackOutbound`, `OutboundLink` (backs `ui.tsx`'s `ExternalLink`). Session id `vk-sid` with in-memory fallback.
+- **`next-ferries.tsx`** — the home/ferry live widget (replaces the old "ferry-board"). Props: server-fetched `FerryStatusSnapshot` + `serverNow` + `side` + `tone` (light/dark). Per direction: delay, next sailings with live countdown and open car spots, alert banner, boarding-pass indicator, `.ics` reminder link. Polls `/api/ferry/status` every 60 s (paused while `document.hidden`), countdown ticks 20 s; keeps last good data on poll failure.
+- **`ferry-planner.tsx`** (page-local, `src/app/ferry/plan/`) — the planner. State: date, time, `Direction`, `TravelMode`. Recomputes the forecast **entirely client-side** via `ferry-forecast`; changing the date fetches `/api/ferry/plan` to snap to real sailings + show live space. Renders `<Trendline/>` + `<LevelLegend/>` (from `ferry-trendline.tsx`) and an "arrive by" recommendation.
+- **`ferry-busy-today.tsx`**, **`ferry-prediction-banner.tsx`**, **`ferry-trendline.tsx`** — the "how busy today" panel, the estimate/admin-preview banner, and the SVG trendline (colors are raw hex — SVG can't reliably use CSS vars).
+- **`ferry-vessel-map.tsx`**, **`sr104-traffic-map.tsx`**, **`ferry-webcams-box.tsx`** — Leaflet vessel map (polls `/api/ferry/vessels`), the WSDOT SR-104 traffic map, and the ferry-webcams box.
+- **`feature-map.tsx`** — the public map CMS renderer. Leaflet (dynamically imported), fetches `/api/map/[viewId]`, draws the view's features + built-in layers (restaurants/parking zones/streets); a published-view switcher; Street View deep links (+ embedded panel when `NEXT_PUBLIC_GMAPS_EMBED_KEY` is set).
+- **`near-me.tsx`** — geolocation. `NearMePlace[]` (serializable Restaurant subset). State `idle→locating→ready|denied|error`; one `getCurrentPosition` per tap; sorts by client haversine; sends at most one geo-ping (a `useRef` latch), coords rounded before leaving the device.
+- **`hunt-player.tsx`** — geolocation + camera + localStorage. `PlayerHunt`. Three state machines: `CheckState (idle|locating|too-far|confirmed|gps-unavailable)`, `UploadState (idle|uploading|failed)`, persisted `StopStatus (verified|unverified|offline|honor)`. Stops unlock sequentially; POSTs multipart to `/api/hunts/submit`; "Mark complete anyway" → `offline`; no-photo escape → `honor`. Progress in `vk-hunt-<id>` / `vk-hunt-<id>-status`.
+- **`open-badge.tsx`** (`OpenBadge`/`OrderTimingNote`) — browser clock; renders nothing until mounted, re-runs `getOpenStatus` every 60 s.
+- **`webcam-grid.tsx`** — timers + `<img>` error handling; cache-busts on each cam's `refreshSeconds`; offline placeholder + auto-retry.
+- **`visitor-survey.tsx`** — localStorage step machine `distance→overnight→details→done`; "local" short-circuits; `vk-survey-done` so the visitor is never re-asked.
+- **`site-nav.tsx`** — `usePathname` active states + "More ▾" desktop dropdown + mobile bottom sheet; filters hidden pages.
+- **`side-switcher.tsx`** — §7.
+- **`copy-context.tsx`** `EditableText`/`useCopy` — §8.1.
+- **Portal editors:** `portal/forms.tsx` (login/setup/join), `portal/business/[id]/editor.tsx` (`BusinessEditor` — details/hours/events, hours editor + live preview, save stamps `hoursVerified=today`, deconfliction effect), `portal/nonprofit/[id]/editor.tsx` (`NonprofitEditor` — profile, shifts with ±1 stepper, events), `components/portal/hours-editor.tsx` (`HoursEditor` — ≤ 2 spans/day, "Copy Monday to all weekdays", non-blocking "past midnight" badge via `weeklyHoursIssues`).
+- **Admin editors** (in `src/app/admin/*`): `accounts/manager.tsx` (accounts, invites, password reset shown-once), `content/manager.tsx` (copy + page toggles), `ferry-info/editor.tsx` + `override-control.tsx` + `prediction-control.tsx`, `hunts/editor.tsx` (numeric fields held as strings, client-mirror validation, reference-photo upload after auto-save), `itineraries/editor.tsx`, `listings/editor.tsx`, `map/editor.tsx` (geoman parking polygons), `maps/editor.tsx` (general map builder — draw markers/lines/trails/areas, assign to views, upload images).
+- **`components/ui.tsx` is server-safe** (its only client dependency is delegated to `OutboundLink`); **`json-ld.tsx`** is a server component emitting schema.org `Restaurant` with per-span `OpeningHoursSpecification` and `<` escaping.
 
 ---
 
-## 12. Testing status
+## 12. Algorithms
 
-**Honest statement: there is no automated test suite.** Zero `*.test.*`/`*.spec.*` files, no test runner in `package.json` (scripts are `dev/build/start/lint` only), no CI config in the repo.
+### 12.1 Hours engine — `hours.ts`
+Pure. `getOpenStatus(weekly, now)`: (1) Pacific wall clock via `Intl.formatToParts` (weekday index + minutes-since-midnight — no local Date math). (2) Today's spans: a `crossesMidnight` span (`close <= open`) matches when `minutes >= open`; else half-open `open <= minutes < close`. (3) Yesterday's past-midnight tail (`(dayIndex+7)%7`, crossing span matches `minutes < close`) — keeps "closes 1 am" showing at 12:30 am. (4) Next-open scan 0..6 days with today/tomorrow/weekday grammar; empty week → "Closed". Consumers: `OpenBadge`, the business feed `openNow`, NearMe rows, the portal preview.
 
-**How the system has actually been verified** (manual/e2e, as practiced during development):
-- **curl smoke flows** against a running dev server: the auth lifecycle (setup → login → invite → redeem → 403s), portal writes (listing PUT field policy, event create/update/delete with ownership checks), the feeds (JSON shape, ICS validity, CORS headers), hunt submission with/without coords, and `/api/track` validation edges.
-- **Preview/browser checks** of the client islands: ferry board polling and tab-visibility pause, webcam refresh/offline behavior, hunt player state machine on a phone (GPS grant/deny, airplane-mode upload failure), hours editor ↔ live badge agreement, the map overlay and Street View panel.
-- **`tsx` one-off scripts** for the pure engines — feeding synthetic `Date`s through `getOpenStatus` (weekday boundaries, split shifts, past-midnight spans, the yesterday-tail case, DST edges) and checking `pacificWallTimeToISO` offsets — plus `next build` + `eslint` as the standing static gate.
-- The data files carry their own verification discipline in comments (sources + dates checked, e.g. hours *"verified 2026-07-02 against two live sources per business"*).
+### 12.2 Haversine + GPS verification — `hunt-store.ts`
+6 371 000 m sphere (`haversineMeters`; duplicated in `hunt-player.tsx`/`near-me.tsx` which can't import the server module). `saveSubmission`: `verified = coords finite && haversine ≤ radiusMeters`; `radiusMeters` clamped 20..1000 (default 100); missing GPS still saves `verified:false` (honor system); `distanceMeters` stored rounded.
+
+### 12.3 Deconfliction — Pacific date keys
+`eventsSharingDate` (event-store) uses `pacificDateKey(iso)`: a naive datetime-local string (no offset) is sliced (`iso.slice(0,10)`), an offset/`Z` string is reformatted via `Intl` in Pacific — so both the portal's wall-time strings and any offset-carrying ISO bucket correctly. `/give` and analytics use the same Intl-based day key. Portals surface conflicts *before commit* as an informational callout.
+
+### 12.4 Area classification — `analytics-store.ts`
+`classifyArea(lat,lng)`: linear scan over six axis-aligned boxes around downtown Kingston, **first match wins** (list ordered specific-before-broad; boxes overlap). Miss → `outside-uga`. Inputs already `roundCoord`ed to 3 decimals.
+
+### 12.5 Ferry busyness scoring
+`scoreAt` blends the calibrated hourly curve × season × holiday with the empirical table (weighted by sample count, gated at 3 samples, capped at 0.75 weight, holidays excluded). Accuracy backtests heuristic-only vs observed fullness. See §6.
+
+### 12.6 Boarding-pass midnight lapse
+`pacificDayString(now)` produces `YYYY-MM-DD` from typed Intl parts (locale-independent). An override stamped with that day is honored only while it still equals today's Pacific day — so it lapses at the next Pacific midnight with **no timer and no DST math**. The same day-key idiom scopes the observation aggregate cache and empirical buckets.
+
+### 12.7 Street-parking overlay — `scripts/gen-street-parking.py`
+Offline pipeline → `public/geo/street-parking.json` (segments classified free-2hr/free-unrestricted/prohibited/ferry-holding/default, plus a UGA boundary). Overpass highways ∩ Census CDP point-in-ring; exact-name rules then per-street midpoint thresholds; rules trace to the 2015/2016 county study. `feature-map.tsx`/town map fetch it at runtime so the JS bundle stays lean (fetch failure → base map still works). Regeneration is manual; the JSON is committed.
+
+---
+
+## 13. Security posture & pre-public hardening remaining
+
+**Path sanitization** — `hunt-store.ts getPhotoAbsolutePath` (rejects non-string / > 400 chars / null bytes / backslashes / absolute / `~` / `.`/`..` segments / non-whitelisted ext; re-verifies the resolved path is inside `.data/hunts`) and `map-store.ts featureImagePath` (sha1-name pattern only). `isSafeId` (`^[a-z0-9][a-z0-9_-]{0,63}$/i`) gates every id-that-becomes-a-path-segment.
+
+**Uploads** — 8 MiB cap (413), MIME/ext whitelist (415), empty-file rejection; stored filenames server-generated. No total-disk quota on submissions.
+
+**Secrets** — `AUTH_SECRET`/`WSDOT_API_KEY` server-side (WSDOT key rides in server-only URLs); `NEXT_PUBLIC_GMAPS_EMBED_KEY` intentionally public (build-time, referrer-restrictable).
+
+**Injection** — Leaflet popups escape data; the embed writes only `textContent`; JSON-LD escapes `<`; ICS escapes per RFC 5545; the reminder route echoes nothing from the query string.
+
+**Intentionally unauthenticated** (by design): the public feeds (CORS `*`), the `?onDate=` deconfliction lookups, `/api/track` POST, `/api/survey` POST, `/api/ferry/{status,vessels,plan,reminder}`, `/api/hunts/submit`. `/api/ferry/{observe,accuracy}` have an *optional* `FERRY_OBSERVE_TOKEN`.
+
+**Pre-public hardening remaining:**
+1. **Gate the hunt admin API** (`/api/hunts` POST, `?submissions=`, `/api/hunts/reference`; consider `/api/hunts/photo`). The in-code "local-only, no auth" warning is now **false** — the app is deployed to Render, so anyone can create/overwrite hunts and read every player submission. **Highest priority.**
+2. Set `secure:true` on the session cookie and serve over HTTPS (Render already serves HTTPS; the flag is still off).
+3. CSRF tokens for portal mutations (current mitigation: `sameSite=lax` + JSON bodies).
+4. Consider invite expiry and admin-visible session revocation.
+5. In file mode on a single instance the overlay writes are read-modify-write with no locking (last-write-wins) and the rate limiter is per-instance — both correct for the single-instance Render deploy, both wrong the moment a second instance exists (move to the DB + Upstash backends first).
+
+**Privacy posture** (a feature): no visitor cookies beyond side/session, no IPs stored, geo-pings opt-in + bounded + rounded + area-bucketed server-side, survey PII-free, `/admin` traffic never tracked (client skip + server drop), the survey aggregate GET now admin-gated.
+
+---
+
+## 14. Testing status (honest)
+
+**There is no automated test suite.** No `*.test.*`/`*.spec.*` files, no test runner in `package.json` (scripts are `dev/build/start/lint`, `db:setup`, `db:migrate`), no CI test job. The GitHub workflows that exist are the ferry-observe/accuracy crons, not tests.
+
+**How it has actually been verified** (manual): curl smoke flows against a dev server (auth lifecycle, portal field policies + ownership 403s, feeds JSON/ICS/CORS, hunt submit with/without coords, `/api/track` edges, `/api/health`); preview/browser checks of the client islands (ferry widget polling + tab-pause, planner recompute, webcam refresh, hunt player on a phone, hours-editor↔badge agreement, the maps + Street View panel); `tsx` one-offs for the pure engines (`getOpenStatus` span shapes + DST, `pacificWallTimeToISO`, `scoreAt`/`dayCurve`); `next build` + `eslint` as the standing static gate. Data files carry their own verification discipline in dated comments.
 
 **What a proper suite should cover first** (highest value ÷ risk, all pure or near-pure):
-1. **Hours engine** (`hours.ts`): open/closed across every span shape — normal, split shift, past-midnight open side, *yesterday's tail*, next-open scan labels (today/tomorrow/weekday), empty week, DST transition days, and a fixed `now` in both PST and PDT.
-2. **Auth token** (`auth.ts`): sign/parse round-trip, expiry rejection, signature tamper (payload swap, sig truncation, wrong secret), length-mismatch safety, password hash/verify including malformed stored strings.
-3. **Store merge** (`json-store.ts`): overlay-wins-by-id, tombstone hides seed and overlay records, `_deleted` stripped from results, corrupt-file → seed-only, write replace-vs-append.
-4. **ICS output** (`feeds/events`): TEXT escaping (§3.3.11 characters, newlines), UTC stamp format, and the 75-octet folding property with multi-byte input (no split code points; continuation-space accounting).
-5. **`canEdit` matrix** across the routes: role × ownership for events (ownerId), needs (charityId), listings, org events (`ownerId ?? charityId`), plus the invite `linkedIds` validation and the admin-only listing fields.
-6. Next tier: `getPhotoAbsolutePath` adversarial paths, `/api/track` validation table (bounds box, rounding, `/admin` drop, sessionId stripping), `classifyArea` first-match ordering, `parseWeeklyHours` strictness, `parseWsdotDate`, and `formatWeeklyHours` grouping.
+1. **Hours engine** — every span shape (normal/split/past-midnight/yesterday-tail), next-open grammar, empty week, PST vs PDT.
+2. **Auth token** — sign/parse round-trip, expiry, tamper (payload swap, sig truncation, wrong secret), length-mismatch safety, password hash/verify malformed strings.
+3. **Store merge** (`json-store`) — overlay-wins-by-id, tombstone hides seed + overlay rows, `_deleted` stripped, corrupt-file → seed-only, DB `readOverlay` reconstructing `_deleted`.
+4. **Ferry forecast** (`ferry-forecast`) — curve/season/holiday scoring, `scoreToLevel` bands, the empirical blend gate (min-samples, weight cap, holiday exclusion), `dayCurve` plateau windows, `empiricalBucketKey` stability.
+5. **ICS output** (`feeds/events`, `ferry-reminder`) — TEXT escaping, UTC stamps, 75-octet folding, injection safety.
+6. **`canEdit` matrix** across routes (events `ownerId`, needs `charityId`, org events `ownerId ?? charityId`, listings, invite `linkedIds` validation, admin-only fields).
+7. Next tier: `getPhotoAbsolutePath` adversarial paths, `/api/track` validation table (bounds/rounding/`/admin` drop), `classifyArea` ordering, `parseWeeklyHours`, `parseWaitHours`, `pacificDayString`/override lapse, `isPlannableDate` overflow rejection.
 
 ---
 
 ## Appendix: file map (orientation)
 
 ```
-src/lib/types.ts                domain model (§2)
-src/lib/time.ts                 Pacific-time helpers (§5.5)
-src/lib/hours.ts                open/closed engine (§8.1)
-src/lib/wsf.ts | kitsap.ts | weather.ts | tides.ts    external adapters (§5)
-src/lib/auth.ts                 auth (§4)
-src/lib/stores/json-store.ts    seed+overlay core (§3.1)
-src/lib/stores/{business,event,charity}-store.ts      stores (§3.2)
-src/lib/stores/parking-store.ts (landing in map v2)
-src/lib/hunt-store.ts           hunt files + verification (§3.3, §8.2)
-src/lib/analytics-store.ts      JSONL analytics + areas (§3.4, §8.4)
-src/lib/survey-store.ts         pluggable survey store (§3.4)
-src/lib/data/*                  seed data (verified, dated comments)
-src/app/**                      24 pages + 19 API routes (§6, §7)
-src/components/**               client islands + ui primitives (§7, §9)
-scripts/gen-street-parking.py   street overlay generator (§8.5)
-public/geo/street-parking.json  generated overlay (208 segments)
-public/embed/kingston-events.js self-removing events widget (§6.4)
-public/brand/*                  logos, texture, photo library (§9.4)
-docs/                           ARCHITECTURE, DATA_SOURCES, REQUIREMENTS, SYNDICATION, GIT_SETUP, this SDD
-.data/                          all mutable state (§3.6, gitignored)
+src/lib/types.ts                    domain model (§2; Atm/ParkingArea LEGACY)
+src/lib/map/types.ts                map CMS domain (§2, §8.3)
+src/lib/{data-dir,db,blob-store,rate-limit}.ts   the persistence seam (§3.1)
+src/lib/stores/json-store.ts        seed+overlay core, dual-backend (§3.2)
+src/lib/stores/*                    12 store modules (§3.3)
+src/lib/auth.ts                     auth, dual-backend (§4)
+src/lib/page-visibility.tsx         page show/hide gate (§4.8)
+src/lib/wsf.ts | kitsap.ts | weather.ts | tides.ts   external adapters (§5)
+src/lib/ferry-status.ts             assembled snapshot (§5.5)
+src/lib/ferry-forecast.ts           pure busyness model (§6.1)
+src/lib/ferry-line.ts               SR-104 staging routing (§6.4)
+src/lib/ferry-reminder.ts           .ics reminders (§6.5)
+src/lib/{side,side-server}.ts       side-of-water mode (§7)
+src/lib/{time,hours}.ts             Pacific time + open/closed engine (§5.6, §12.1)
+src/lib/site-copy-registry.ts       91 editable copy blocks (§8.1)
+src/lib/copy-context.tsx            EditableText / useCopy for client comps (§8.1)
+src/lib/map/resolve.ts              ResolvedMapView builder (§8.3)
+src/lib/data/*                      seed data (parking.ts has MapZone + legacy ParkingArea)
+db/schema.sql                       overlay + 3 append tables (§3.1)
+src/app/**                          33 pages + 40 API route files (§9, §10)
+src/components/** + src/app/**/*editor.tsx   client islands (§11)
+scripts/gen-street-parking.py       street overlay generator (§12.7)
+public/embed/kingston-events.js     self-removing events widget (§9)
+.data/  (file mode)                 all mutable state (§3.4, gitignored)
 ```

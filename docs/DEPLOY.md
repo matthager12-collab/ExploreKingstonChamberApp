@@ -1,365 +1,342 @@
 # Deployment guide
 
-The authoritative deploy guide for Explore Kingston. Written 2026-07-02.
+The authoritative deploy guide for Explore Kingston. **July 2026.**
 
-Companion docs: [OPERATIONS.md](OPERATIONS.md) (runbook, backups, env vars,
-troubleshooting — §3 points here for step-by-step), [ARCHITECTURE.md](ARCHITECTURE.md)
-(§8 deployment topology), [SYNDICATION.md](SYNDICATION.md) (Resend email + the
-outbound-platform APIs), [DATA_SOURCES.md](DATA_SOURCES.md) (WSDOT key, DNS facts).
+**Status:** Phase 1 is **LIVE on Render** at <https://explore-kingston.onrender.com>
+(persistent-disk / filesystem mode). Phase 2 (Vercel serverless) is fully built
+and migration-tested but **not yet the running home** — it's the documented
+alternative / future move, not a pending chore.
 
-This app writes all of its mutable state to a directory on disk (accounts,
-portal edits, hunts + photos, analytics, survey). That single fact drives the
-whole plan below: **first host it where a real disk persists; move to a
-serverless host only after that state moves to a database + object storage.**
+Companion docs: [OPERATIONS.md](OPERATIONS.md) (day-2 runbook, backups, env-var
+reference, troubleshooting), [ARCHITECTURE.md](ARCHITECTURE.md) (deployment
+topology, the persistence seam), [DATA_SOURCES.md](DATA_SOURCES.md) (WSDOT key,
+DNS facts), [SYNDICATION.md](SYNDICATION.md) (outbound feeds / any future email).
 
 ---
 
-## a. Two-phase plan
+## 1. The persistence seam (why there are two phases)
 
-### Phase 1 — persistent-disk host, now
+The app writes all of its mutable state — accounts, portal edits, hunts +
+photos, analytics, survey responses, ferry observations, CMS copy/visibility,
+map views/features — outside the code tree. Where that state lands is chosen
+**per store, at runtime, by which env vars are present.** Nothing above the
+store modules (routes, components, domain types) ever branches. Three seam
+files:
 
-Ship exactly the code that exists today onto a host with a **persistent
-volume**: Render, Fly.io, Railway, or a plain VPS. Nothing in the store layer
-changes. The two pieces that make this work already exist in the repo:
-
-- **`src/lib/data-dir.ts`** — `dataDir()` / `dataPath(...)` resolve every
-  read/write through `process.env.DATA_DIR` (an absolute path), falling back
-  to `<repo>/.data` locally. On the host you mount a volume and set
-  `DATA_DIR` to its mount point. Every store module already routes through
-  this, so runtime state lands on the volume and survives redeploys and
-  container restarts.
-- **`src/app/api/health/route.ts`** — a `GET /api/health` probe that returns
-  `200 {ok:true,...}` only when `DATA_DIR` is writable, `503` otherwise. This
-  is the exact failure (an unmounted or read-only volume) the app most needs
-  to catch before real users hit it. Wire it as the host's health check.
-
-Phase 1 is genuinely production-capable for the Chamber's scale once the
-[pre-launch checklist](#f-pre-launch-checklist) is green. It is not "demo
-grade" — the file store is single-writer and fine for a one-admin Chamber
-(see ARCHITECTURE.md §9).
-
-### Phase 2 — Vercel (current)
-
-Vercel (and any serverless platform) has **no persistent filesystem**: writes
-land on an ephemeral instance and vanish on the next invocation. So every store
-behind `data-dir.ts` runs against a database + object storage instead. This is
-built: `data-dir.ts` is the migration seam, and each store now branches on
-`hasDb()` / `hasBlob()` — with the cloud env vars set it uses the SQL/Blob path,
-without them it uses the original `.data/` filesystem path (so `npm run dev`
-still works on disk). Nothing above the stores (routes, components, domain
-types) changed. **The concrete deploy steps are in [§g](#g-phase-2-deploy-to-vercel).**
-
-**Which store maps to which service (the built layout):**
-
-| Store / data | Backend | Where |
-|---|---|---|
-| auth (users, invites), portal overlays, custom hunts, hunt submissions, map views/features | **overlay table** | Neon Postgres |
-| analytics events, LTAC survey responses | **append tables** (`analytics_event`, `survey_response`) | Neon Postgres |
-| hunt reference + player photos, map-feature images | **object storage** | Vercel Blob |
-| auth login / invite-redeem rate limiting | **shared counter** | Upstash Redis |
-
-The per-module swap points (what each file's seam targets) — unchanged since the
-plan was written:
-
-| Module | Today (file) | Phase-2 target | Notes |
+| Seam file | Detector | Backend when set | Fallback when unset |
 |---|---|---|---|
-| `src/lib/auth.ts` | `.data/auth/users.json`, `invites.json` | **`users` + `invites` tables** | scrypt hashes and invite codes become rows. Sessions are already stateless HMAC cookies (no server store) — only the user/invite lookups (`listUsers`, `findUserByEmail`, `createUser`, `listInvites`, `createInvite`, `redeemInvite`) touch disk. `AUTH_SECRET` still signs cookies; unchanged. |
-| `src/lib/stores/json-store.ts` | `.data/stores/<name>.json` overlays | **a table per overlay, or a KV** | The seed+overlay merge (`readMerged`, `writeOverlayRecord`, `_deleted` tombstones) becomes rows keyed by `(store, id)` with a `deleted` flag. This one module backs restaurants, events, charities, volunteer-needs, and the map overlays below — reimplement it once and all of them move. |
-| `src/lib/hunt-store.ts` | `.data/hunts/custom-hunts.json`, `refs/`, `photos/`, `submissions.jsonl` | **hunts table + object storage for photos** | Custom hunts → a row/JSONB per hunt. Submissions (append-only JSONL) → an append table. **Reference photos and player photos → object storage** (Vercel Blob / Supabase Storage / S3), not a DB column; `readPhoto` / `saveReferencePhoto` / `saveSubmission` and the `/api/hunts/photo` streaming route move to signed object URLs. |
-| `src/lib/analytics-store.ts` | `.data/analytics/events.jsonl` (append-only) | **an append table** | `saveEvent` → `INSERT`; `summarize()` currently reads the whole file — in Phase 2 push the aggregation into SQL (`GROUP BY`) rather than scanning rows in Node. Same public exports. |
-| `src/lib/survey-store.ts` | `.data/ltac-responses.jsonl` (append-only) | **an append table** | Already the cleanest seam: `SurveyStore` is an interface with a single `FileSurveyStore` implementation, swapped at the bottom of the file. Write a `DbSurveyStore implements SurveyStore` and change the one `export const surveyStore = …` line. |
-| `src/lib/stores/map-store.ts` | overlays via `json-store` + `.data/map/images` | **table (via json-store swap) + object storage for images** | The view/feature overlays move for free when `json-store` moves. The uploaded **feature images** (`saveFeatureImage` / `readFeatureImage`, served by `/api/map/image`) need object storage, same as hunt photos. |
+| `src/lib/data-dir.ts` | `DATA_DIR` present | absolute path on a **persistent disk** | `<repo>/.data/` |
+| `src/lib/db.ts` | `hasDb()` = `DATABASE_URL` set | **Neon Postgres** (`overlay` + append tables) | filesystem JSON via `data-dir` |
+| `src/lib/blob-store.ts` | `hasBlob()` = `BLOB_READ_WRITE_TOKEN` set | **Vercel Blob** (public CDN) for images | image bytes under `DATA_DIR`, served by the app's image routes |
+| `src/lib/rate-limit.ts` | `UPSTASH_REDIS_REST_URL` set | **Upstash Redis** shared sliding window | in-process `Map` (single-instance only) |
 
-**Also required in Phase 2 — shared rate limiting.** `src/lib/rate-limit.ts`
-throttles auth login and invite redemption in **process memory**. That is
-correct for a single Phase-1 instance but breaks the moment there is more than
-one serverless instance (each keeps its own counter, so the effective limit
-multiplies by the instance count). Move it to a shared store — Upstash Redis
-or Vercel KV — as part of the same migration. Its interface is the seam, same
-as the data stores.
+Two consequences:
 
-Full backlog framing for the DB migration and auth hardening is in
-[ROADMAP-V2.md](ROADMAP-V2.md).
+- **Phase 1** sets `DATA_DIR` and *none* of the cloud vars → every store uses
+  the disk. This is the current live shape on Render.
+- **Phase 2** sets the cloud vars and *leaves `DATA_DIR` unset* → `hasDb()` /
+  `hasBlob()` / Upstash route each store to Neon / Blob / Redis. This is the
+  Vercel shape.
+
+`npm run dev` sets none of them, so local development runs entirely on `.data/`
+— the same code path Phase 1 uses in production, just at a different `DATA_DIR`.
+
+### What maps to which backend in Phase 2
+
+| Data | Phase 1 (disk) | Phase 2 backend |
+|---|---|---|
+| auth users + invites | `.data/auth/{users,invites}.json` | `overlay` rows, `store='auth-users'` / `'auth-invites'` |
+| portal overlays (restaurants, events, charities, needs, lodging, webcams, parking zones, itineraries, ferry-info, boarding-pass, ferry-prediction, site copy/pages, map views/features) | `.data/stores/<name>.json` | `overlay` rows keyed `(store, id)`, `deleted` column carries `_deleted` tombstones |
+| custom hunts + submissions | `.data/hunts/*` | `overlay` (`custom-hunts`, `hunt-submissions`) |
+| hunt reference/player photos, map-feature images | files under `.data/` | **Vercel Blob** (public URL stored on the record) |
+| analytics events | `.data/analytics/events.jsonl` | `analytics_event` append table |
+| LTAC survey responses | `.data/ltac-responses.jsonl` | `survey_response` append table |
+| ferry observations (busyness forecast learning log) | `.data/…` jsonl | `ferry_observation` append table |
+| auth login/setup/redeem rate limiting | in-process `Map` | **Upstash Redis** shared counter |
+
+The tables are defined in [`db/schema.sql`](../db/schema.sql). `ensureSchema()`
+in `db.ts` creates `overlay`, `analytics_event`, `survey_response`, and
+`ferry_observation` lazily on first use, so a fresh Neon database
+self-initializes.
 
 ---
 
-## b. Phase 1: deploy to Render
+## 2. Phase 1 — persistent-disk host (the CURRENT live shape)
 
-Render is the recommended Phase-1 host: a Docker web service plus an attached
-**Disk** gives a persistent filesystem with no code changes. A `render.yaml`
-blueprint (Docker service + a 1 GB Disk mounted at `/data` +
-`healthCheckPath: /api/health`) lives at the repo root — use it so the service,
-disk, and health check are declared in one reviewable file.
+Ship the code exactly as it is onto a host with a real disk. Two repo pieces
+make this turnkey:
 
-The app already ships the pieces the blueprint expects: `next.config.ts` sets
-`output: "standalone"` (a self-contained server bundle) and there is a
-`Dockerfile` at the repo root.
+- **`next.config.ts`** sets `output: "standalone"` — a self-contained server
+  bundle (`.next/standalone/server.js`) that runs without `node_modules`.
+- **`Dockerfile`** (multi-stage `node:22-alpine`: `deps → build → runner`)
+  produces the lean runtime image. The runner copies `.next/standalone`, then
+  `.next/static` and `public/` (standalone omits both), runs as non-root user
+  `nextjs`, defaults `DATA_DIR=/data`, declares `VOLUME ["/data"]`, and its
+  `HEALTHCHECK` hits `/api/health`.
+- **`GET /api/health`** (`src/app/api/health/route.ts`) write-tests `DATA_DIR`
+  (mkdir + write + unlink a probe file) and returns
+  `200 {ok:true, dataDir, dataWritable:true, time}` when writable, `503`
+  otherwise. This is the exact failure (unmounted / read-only volume) that must
+  be caught before real users hit the box. Wire it as the host's health check.
+
+The file store is single-writer and fine for a one-admin Chamber — Phase 1 is a
+real production deployment, not demo grade (see [ARCHITECTURE.md](ARCHITECTURE.md)).
+
+### 2a. Render (the live host) — Blueprint
+
+Render is the running home. The repo ships [`render.yaml`](../render.yaml), a
+Blueprint that declares the Docker web service, a **1 GB Disk mounted at
+`/data`**, and `healthCheckPath: /api/health` in one reviewable file.
+
+**Steps (as deployed):**
+
+1. **New → Blueprint**, point at the GitHub repo `mat-arda-cards/visit-kingston`.
+   Render reads `render.yaml`, builds the `Dockerfile`, and provisions the web
+   service + Disk. (The repo is **public** — a Render↔GitHub sync issue was
+   sidestepped by making it public; there are no secrets in git, so this is
+   safe.)
+2. **Env vars.** The blueprint pre-wires them:
+   - `AUTH_SECRET` — `generateValue: true`; Render mints a strong random value
+     once and keeps it stable across deploys. **Do not rotate casually** —
+     rotating logs everyone out.
+   - `WSDOT_API_KEY` — `sync: false`; entered in the dashboard. Set → ferry
+     board is **LIVE**. Absent → bundled fallback schedule, labeled not-live.
+   - `NEXT_PUBLIC_GMAPS_EMBED_KEY` — `sync: false`; entered in the dashboard.
+     **Build-time var** — see the gotcha in [§2c](#2c-the-next_public-build-time-gotcha).
+     Optional; without it the Street View panel falls back to free deep links.
+   - `DATA_DIR=/data` — hardcoded `value: /data` in the blueprint; equals the
+     Disk mount path. This is what puts all mutable state on the volume.
+   - **No `DATABASE_URL` / `BLOB_*` / `UPSTASH_*` are set** → every store uses
+     the `/data` disk. Render runs in pure **filesystem mode**.
+3. **First deploy** runs automatically on blueprint create. Render builds the
+   image and boots `server.js`.
+4. **Confirm the volume.** `GET https://explore-kingston.onrender.com/api/health`
+   returns `200 {"ok":true,"dataWritable":true,"dataDir":"/data",...}`. A `503`
+   means the Disk isn't mounted or `DATA_DIR` is wrong — fix before anything
+   writes state.
+5. **Bootstrap admin** — see [§4 First run](#4-first-run-in-production).
+
+**Running config today:** Starter web service + 1 GB Disk in the `oregon`
+region (~$7.25/mo total), auto-deploy on push **on**, admin account created and
+persisted, WSDOT key set (ferry live). Render also takes **daily disk snapshots**
+(7-day restore window) — one of two backup layers (see [§5](#5-backups)).
+
+### 2b. Fly.io (alternative)
+
+The repo ships [`fly.toml`](../fly.toml) for the same image. One-time setup:
+
+```bash
+fly apps create explore-kingston           # or: fly launch --no-deploy
+fly volumes create data --size 1 --region sea   # 1 GB volume "data", Seattle
+fly secrets set AUTH_SECRET="$(openssl rand -hex 32)" WSDOT_API_KEY="..."
+fly deploy --build-arg NEXT_PUBLIC_GMAPS_EMBED_KEY="..."
+```
+
+`fly.toml` already mounts `data` at `/data`, sets `DATA_DIR=/data` + `PORT=3000`
+in `[env]`, keeps `min_machines_running = 1` (so the disk-backed app stays
+warm), and health-checks `GET /api/health`. The critical difference from
+runtime secrets: `NEXT_PUBLIC_GMAPS_EMBED_KEY` must reach the **build**, hence
+`--build-arg` (or a build secret) rather than `fly secrets set` — a runtime-only
+secret never reaches the client bundle.
+
+**Any other persistent-disk host** (Railway, a plain VPS with PM2/systemd behind
+Caddy/nginx) works the same way: mount a volume, set `DATA_DIR` to its path,
+point the platform health check at `/api/health`. On a bare VPS keep `DATA_DIR`
+**outside the repo** (e.g. `/srv/vk-data`) so a `git pull` never touches live
+state, and copy `.next/static` + `public` next to `server.js` if not proxying
+them.
+
+### 2c. The `NEXT_PUBLIC_` build-time gotcha
+
+`NEXT_PUBLIC_GMAPS_EMBED_KEY` (used by `src/components/town-map.tsx`) is a
+`NEXT_PUBLIC_*` var: Next **inlines it into the client JavaScript bundle at
+`npm run build`**, not at runtime. Setting it only as a runtime env var leaves
+the client with an empty string.
+
+- **Render:** because the build runs *inside* the Docker build, a `sync:false`
+  dashboard env var is present during `npm run build`, so it bakes in. Change it
+  → you must **rebuild**, not just restart.
+- **Fly:** pass it as a **`--build-arg`** (as above). `fly secrets` are
+  runtime-only and won't reach the bundle.
+- **Vercel (Phase 2):** set it in Project → Environment Variables **before** the
+  build that ships it.
+
+The three runtime-only vars (`AUTH_SECRET`, `WSDOT_API_KEY`, `DATA_DIR`) don't
+have this constraint — they're read on the server at request time.
+
+---
+
+## 3. Phase 2 — Vercel serverless (built, not yet used)
+
+Vercel has no persistent filesystem: writes land on an ephemeral instance and
+vanish. So the stores run against Neon (Postgres), Vercel Blob (images), and
+Upstash Redis (shared rate limit) instead — all auto-detected from env presence
+(see [§1](#1-the-persistence-seam-why-there-are-two-phases)). The DB migration is
+complete and tested; this section is the one-time stand-up.
 
 ### Steps
 
-1. **Create the service from the repo.** In the Render dashboard →
-   **New → Blueprint**, point it at the Git repo. Render reads `render.yaml`
-   and provisions the Docker web service and its Disk. (Or **New → Web
-   Service → Docker** and add a Disk manually: size **1 GB**, mount path
-   **`/data`**.)
-2. **Set environment variables** on the service (Render dashboard →
-   Environment). The blueprint marks the secrets `sync: false` so Render
-   prompts for them on first deploy — never commit them:
-   - `AUTH_SECRET` — **generate a fresh production value**, e.g.
-     `openssl rand -hex 32`. **Never reuse the dev secret.** (Changing it
-     later logs everyone out — see OPERATIONS.md troubleshooting.)
-   - `WSDOT_API_KEY` — the WSDOT Ferries access code (see OPERATIONS.md §1 /
-     DATA_SOURCES.md §1). Without it the ferry board shows the bundled
-     schedule labeled not-live.
-   - `NEXT_PUBLIC_GMAPS_EMBED_KEY` — optional; the map falls back to free
-     Street View deep links without it. If set, restrict the key by HTTP
-     referrer and hard-cap quotas.
-   - `DATA_DIR=/data` — **required.** Must equal the Disk's mount path. This
-     is what puts all mutable state on the persistent volume.
-3. **First deploy.** Trigger the deploy (automatic on blueprint create).
-   Render builds the Docker image and boots the standalone server.
-4. **Confirm the volume is live.** Hit `https://<service>.onrender.com/api/health`.
-   You want `200 {"ok":true,"dataWritable":true,"dataDir":"/data",...}`. A
-   `503` means the Disk isn't mounted or `DATA_DIR` is wrong — fix before
-   going further; nothing that writes state will survive otherwise.
-5. Then bootstrap the admin and mint invites — see
-   [First run in production](#e-first-run-in-production).
+1. **Import the repo** at [vercel.com/new](https://vercel.com/new). Vercel
+   auto-detects Next.js; keep defaults (`next build`, no root-dir change).
+   Don't deploy yet — provision stores + env first, or the first build ships
+   with the filesystem fallback and no persistence.
+2. **Install the three Marketplace integrations** from the project's **Storage**
+   tab. Each **injects its env vars into the project automatically** — no
+   hand-copying secrets:
+   - **Neon** → injects **`DATABASE_URL`**. Use the **pooled** string (host
+     contains `-pooler`); the `@neondatabase/serverless` HTTP driver wants it.
+     Backs the `overlay` table + the three append tables.
+   - **Vercel Blob** → create a **public** Blob store; injects
+     **`BLOB_READ_WRITE_TOKEN`**. Public so image URLs serve straight from the
+     CDN with no Function in the path.
+   - **Upstash** (Redis) → injects **`UPSTASH_REDIS_REST_URL`** and
+     **`UPSTASH_REDIS_REST_TOKEN`**. Backs the shared rate limiter (required on
+     serverless — the in-memory limiter multiplies the effective limit by
+     instance count).
+3. **Set the remaining env vars** (Settings → Environment Variables, Production):
+   - `AUTH_SECRET` — a **fresh** `openssl rand -hex 32`; never the dev secret,
+     kept stable thereafter.
+   - `WSDOT_API_KEY` — WSDOT Ferries access code (live ferry data).
+   - `NEXT_PUBLIC_GMAPS_EMBED_KEY` — **before the build** ([§2c](#2c-the-next_public-build-time-gotcha)).
+   - **Do NOT set `DATA_DIR`.** Leaving it unset is what routes the stores to
+     Neon/Blob. Setting it on Vercel would point stores at an ephemeral disk.
+4. **Deploy** (redeploy if you imported before adding stores, so the build picks
+   up the injected env).
+5. **Schema.** Nothing to run — `ensureSchema()` creates the tables on the first
+   request that touches any store. To create them up front instead, run
+   **`npm run db:setup`** (`psql "$DATABASE_URL" -f db/schema.sql`) against the
+   Neon string, or paste [`db/schema.sql`](../db/schema.sql) into the Neon SQL
+   editor.
+6. **Migrate existing `.data/` (only if carrying over Render's state).** Pull the
+   production env and run the migration once:
+   ```bash
+   vercel env pull .env.production.local     # writes DATABASE_URL + BLOB token
+   node --env-file=.env.production.local scripts/migrate-to-db.mjs
+   ```
+   `scripts/migrate-to-db.mjs` upserts overlay rows (auth, portal overlays,
+   custom hunts, submissions, map views/features), appends analytics/survey
+   rows, and uploads images to Blob (rewriting each record's URL field to the
+   blob URL). It **refuses to run without `DATABASE_URL`**. Idempotency:
+   - overlay upserts use `ON CONFLICT DO UPDATE` — **safe to re-run**.
+   - the append tables (`analytics_event`, `survey_response`) are **run-once**:
+     the script skips each if it already has rows; pass `--force` to append
+     anyway (which would double them).
 
-### Alternative hosts
+   `npm run db:migrate` runs the same script but reads **`.env.local`** (not
+   `.env.production.local`) — use the explicit `node --env-file=…` form when
+   pointing at Vercel-pulled prod env. Without `BLOB_READ_WRITE_TOKEN` the
+   script leaves image fields as relative paths and warns. A fresh Chamber
+   deploy with no prior data skips this step entirely.
+7. **Verify `/api/health`** returns `200 {ok:true,...}`, then smoke-test a write:
+   create the admin at `/portal/setup` and confirm it survives a redeploy —
+   proof that Neon, not an ephemeral disk, holds state.
+8. **Add the domain** — [§6](#6-domain--dns).
 
-Any host that gives you a persistent disk works; only the volume-mounting and
-secret-setting mechanics differ. Set `DATA_DIR` to the mount path in every
-case, and point the platform's health check at `/api/health`.
+### Cost caveat
 
-- **Fly.io.** Add a `fly.toml`, then:
-  ```bash
-  fly volumes create data --size 1        # a 1 GB volume named "data"
-  fly secrets set AUTH_SECRET=$(openssl rand -hex 32) WSDOT_API_KEY=...
-  ```
-  In `fly.toml` mount that volume (e.g. at `/data`) and set `DATA_DIR=/data`
-  in the `[env]` block; set `[[http_service.checks]]` / `[checks]` to
-  `GET /api/health`. `fly deploy` builds from the same Dockerfile.
-- **Plain VPS (no Docker).** Node 22 (Next 16 needs ≥ 20.9), a reverse proxy
-  (Caddy/nginx) terminating TLS in front of the app:
-  ```bash
-  npm ci && npm run build
-  node .next/standalone/server.js        # the standalone output
-  ```
-  Because `output: "standalone"` only bundles server code, copy the static
-  assets next to the server once per build so they're served:
-  `cp -r .next/static .next/standalone/.next/static && cp -r public .next/standalone/public`
-  (or serve `public/` and `.next/static/` from the reverse proxy). Run it
-  under **PM2 or a systemd unit** so it restarts on crash/reboot, with
-  `PORT` and the same env vars (`AUTH_SECRET`, `WSDOT_API_KEY`, `DATA_DIR`).
-  **Put `DATA_DIR` OUTSIDE the repo** — e.g. `DATA_DIR=/srv/vk-data` — so a
-  `git pull` / redeploy never touches live state.
+Vercel **Hobby** is non-commercial only; a Chamber app promoting member
+businesses is commercial use, so this needs **Vercel Pro (~$20/mo)** to be in
+terms. Neon, Upstash, and Blob free tiers comfortably cover Kingston's scale —
+watch their usage dashboards.
 
 ---
 
-## c. Domain & DNS
+## 4. First run in production
 
-**Verified 2026-07-02.** Add **one** record and nothing else.
+Same bootstrap as local, now against the live volume/DB:
 
-In the **NameHero cPanel → Zone Editor**, add a **CNAME**:
+1. **Create the admin once** at `/portal/setup`. It works **only while there are
+   zero users** — creates the first admin, then disables itself. Do it right
+   after the first green `/api/health`, before anyone else can reach the box.
+2. **Mint invites** at `/admin/accounts`. Each code is tied to a role
+   (`business` / `nonprofit` / `admin`) and the listing/org ids it may edit
+   (`linkedIds`). Login/setup/redeem are rate-limited (`src/lib/rate-limit.ts`).
+3. **Hand codes to businesses.** They redeem at `/portal/join`, then edit
+   hours/listings/events/volunteer needs, which appear on public pages within
+   ~60 s (ISR). Codes are delivered by hand for the first cohort (no email
+   wired).
+
+---
+
+## 5. Backups
+
+**Two layers, both in place:**
+
+1. **Render daily disk snapshots** — automatic, 7-day restore window
+   (Dashboard → service → Disk → Snapshots). Zero config.
+2. **Off-site JSON bundle** — `GET /api/admin/backup` (admin-gated; the
+   "⤓ Download backup" button on `/admin`) walks the entire `DATA_DIR` and
+   returns one downloadable JSON: text files (`.json/.jsonl/.txt/.md/.csv`)
+   inlined UTF-8, everything else (photos) base64. **The bundle contains
+   password hashes — treat it as sensitive.** Restore it onto any host or local
+   `.data/` with:
+   ```bash
+   node scripts/restore-backup.mjs <bundle.json> <targetDataDir>
+   ```
+   (guards against path traversal; reports how many files were written).
+
+For a scheduled tarball instead of the on-demand bundle, `scripts/backup-data.sh`
+tars `DATA_DIR` to a timestamped `.tar.gz` and prunes past a retention window
+(default 14 days). Run it from cron / a Render Cron Job / a Fly scheduled
+machine, writing **off the primary disk** (S3/B2) — a backup on the same volume
+it backs up is not a backup:
+
+```cron
+15 3 * * * DATA_DIR=/data BACKUP_DIR=/data/backups /app/scripts/backup-data.sh >> /var/log/kingston-backup.log 2>&1
+```
+
+**`DATA_DIR` is the entire backup surface** in Phase 1 — everything else (code,
+seed content, brand assets, generated parking overlay) rebuilds from git +
+`npm install`. `.data/` is gitignored on purpose (password hashes, photos) — do
+not commit it. In **Phase 2** the backup surface moves to Neon (use its
+branch/PITR features) + Blob (versioned object store); the JSON-bundle route and
+`backup-data.sh` are Phase-1 filesystem tools.
+
+---
+
+## 6. Domain & DNS
+
+Add **one** record, nothing else. In **NameHero cPanel → Zone Editor**, a
+**CNAME**:
 
 ```
 app.explorekingstonwa.com   CNAME   <the host's target>
 ```
 
-- **Render** gives you an `onrender.com` hostname (and, for a custom domain,
-  the exact CNAME target to use) — point the CNAME at that.
-- **Fly.io** gives you an app hostname (`<app>.fly.dev`) or a dedicated IP;
-  use a CNAME to the hostname, or an `A`/`AAAA` to the IP as Fly instructs.
+- **Render** custom domain → the `onrender.com` CNAME target Render shows.
+- **Vercel** → `cname.vercel-dns.com` (the target Vercel shows in Settings →
+  Domains).
+- **Fly** → the `<app>.fly.dev` hostname, or an `A`/`AAAA` to a dedicated IP as
+  Fly instructs.
 
-**Do NOT move nameservers.** The NameHero VPS (`165.140.69.20`) serves three
-things off that one box: the **WordPress site**, the **domain's DNS**, and
-**Chamber email** (MX + SPF point at the same host). A single CNAME added to
-the existing zone leaves all three untouched — WordPress, the apex, and mail
-keep working. Moving nameservers to the app host would break DNS and email.
-
-Swap the **apex** (`explorekingstonwa.com` → an `A` record at the app host)
-**only at a full cutover later**, when the app actually replaces the WordPress
-site — not before.
-
----
-
-## d. Backups
-
-**`DATA_DIR` is the entire backup surface.** Everything the app writes at
-runtime lives under it; everything else (code, seed content, brand assets, the
-generated parking overlay) is reproducible from git + `npm install`. See
-OPERATIONS.md §2 for the file-by-file inventory.
-
-**Git does NOT cover it.** `.data/` is gitignored on purpose — it holds
-password hashes and player photos. Do not "fix" that by committing it. On the
-host, `DATA_DIR` points at the mounted volume, which git never sees at all.
-
-**Back up on a schedule.** Use `scripts/backup-data.sh` from cron. It tars up
-`DATA_DIR` to a timestamped archive and prunes old ones. Example (daily
-03:15, keep 14 days):
-
-```cron
-15 3 * * * /srv/visit-kingston/scripts/backup-data.sh
-```
-
-On Render/Fly, run the same script as a scheduled job (Render Cron Job / Fly
-scheduled machine) writing the archive to off-box storage (S3/B2), because a
-backup that lives only on the same volume it is backing up is not a backup.
-
-**Restore.** Stop the app (so nothing writes mid-restore), extract the archive
-into `DATA_DIR`, start the app:
-
-```bash
-# stop the service, then:
-tar xzf vk-data-YYYY-MM-DD.tar.gz -C "$DATA_DIR" --strip-components=1
-# start the service; hit /api/health to confirm the volume is writable
-```
-
-(`--strip-components` depends on how the archive was rooted — inspect it with
-`tar tzf` first.) There is nothing else to restore.
+**Do NOT move nameservers.** The NameHero box serves three things off one host:
+the **WordPress site**, the **domain's DNS**, and **Chamber email** (MX/SPF). A
+single CNAME added to the existing zone leaves all three untouched — mail rides
+those nameservers, so moving them would break DNS and email. Swap the **apex**
+(`explorekingstonwa.com` → an `A` record) **only at a full cutover** when the app
+actually replaces WordPress — not before. The custom domain is **deferred until
+launch**; the app currently lives at the raw `explore-kingston.onrender.com`.
 
 ---
 
-## e. First run in production
+## 7. Render vs Vercel — decision table
 
-Same bootstrap as local (OPERATIONS.md §1), now against the live volume:
+| | **Render (Phase 1, LIVE)** | **Vercel (Phase 2, ready)** |
+|---|---|---|
+| Persistence | 1 GB disk at `/data`, filesystem stores | Neon + Blob + Upstash |
+| Env shape | `DATA_DIR=/data`, no cloud vars | cloud vars set, `DATA_DIR` unset |
+| Schema/migration | none — files on disk | `ensureSchema()` / `db:setup`; migrate via `migrate-to-db.mjs` |
+| Rate limit | in-process `Map` (single instance, correct) | Upstash shared window (required) |
+| Cost | ~$7.25/mo (Starter + 1 GB disk) | ~$20/mo Pro + free-tier stores |
+| Backups | daily disk snapshots + off-site JSON bundle | Neon PITR + Blob versioning |
+| Scaling | single warm instance | serverless, multi-instance |
+| Ops burden | one box, one disk, snapshots | three managed services |
+| Status | **running the app today** | supported alternative / future move |
 
-1. **Create the admin once.** Visit `/portal/setup`. It works **only while
-   `DATA_DIR/auth/users.json` has zero users** — it creates the first admin
-   account, then disables itself. Do this immediately after the first green
-   `/api/health`, before anyone else can reach the box.
-2. **Mint invites.** As admin, go to `/admin/accounts`. Each invite code is
-   tied to a role (`business` / `nonprofit` / `admin`) and the listing/org ids
-   that account may edit (`linkedIds`).
-3. **Hand codes to businesses.** They redeem at `/portal/join` to create their
-   account, then edit hours/listings/events/volunteer needs, which appear on
-   public pages within ~60 s (ISR).
+**Pick Render** while the Chamber is one admin at Kingston's scale — cheaper,
+simpler, single-writer file store, and already live. **Move to Vercel** only if
+scale or a serverless mandate demands it; the seam makes it a config change, not
+a rewrite.
 
-Until Resend email is wired (checklist below), invite codes are delivered by
-hand — that's fine for the first cohort.
-
----
-
-## f. Pre-launch checklist
-
-Everything here must be true before real business/nonprofit accounts go on the
-public deployment:
-
-- [ ] **Persistent volume mounted and `/api/health` green.** `GET /api/health`
-      returns `200 {ok:true, dataWritable:true}` with `dataDir` equal to the
-      mount path. This is the whole reason for Phase 1 — verify it, don't
-      assume it.
-- [ ] **Fresh `AUTH_SECRET` set in production.** A new value, never the dev
-      secret, kept stable thereafter (rotating it logs everyone out).
-- [ ] **Rate limiting deployed.** `src/lib/rate-limit.ts` throttles
-      `/api/auth` login and invite redemption. On a single Phase-1 instance
-      its in-memory limiter is sufficient; confirm it is active before the
-      portal is on the public internet. (In Phase 2 it must move to a shared
-      store — see §a.)
-- [ ] **Automated backup scheduled.** `scripts/backup-data.sh` on cron,
-      writing off-box, with a restore actually test-run once.
-- [ ] **Resend email wired — only when businesses self-serve.** Needed for
-      invite email / any transactional mail: SPF + DKIM records for
-      `mail.explorekingstonwa.com` in the same NameHero Zone Editor session as
-      the app CNAME. Resend free tier: 3,000/month, 100/day, transactional
-      only. See [SYNDICATION.md](SYNDICATION.md) "Email". Until then, hand
-      invite codes over directly.
-
-When all of the above hold, Phase 1 is a real production deployment for the
-Chamber. The remaining work — the DB/blob migration and shared rate limiting —
-is Phase 2, gated on the move to Vercel, not on launch.
-
----
-
-## g. Phase 2: deploy to Vercel
-
-The store layer is now cloud-aware (see [§a Phase 2](#phase-2--vercel-current)):
-Neon Postgres for structured state, Vercel Blob for uploaded images, Upstash
-Redis for the shared rate limiter. Each store auto-detects its backend from the
-presence of an env var, so the whole switch is "provision the three stores, set
-their env vars, deploy." OPERATIONS.md is the day-2 runbook; this is the
-one-time stand-up.
-
-### Steps
-
-1. **Push to GitHub** — done. Vercel deploys from the repo.
-2. **Import the repo.** Go to **[vercel.com/new](https://vercel.com/new)**,
-   pick the repo. Vercel auto-detects Next.js; keep the defaults (build
-   `next build`, no root-directory change). Don't deploy yet — add the stores
-   and env first, or the first build ships with the filesystem fallback and no
-   persistence.
-3. **Provision the three stores** from the Vercel project's **Storage** tab
-   (a.k.a. Marketplace). Installing each integration **injects its env vars
-   into the project automatically** — you don't hand-copy secrets:
-   - **Neon** → creates a Postgres database and injects **`DATABASE_URL`**
-     (use the **pooled** connection string — the host contains `-pooler`; the
-     `@neondatabase/serverless` HTTP driver wants it). Backs the overlay table
-     + the two append tables.
-   - **Upstash** (Redis) → injects **`UPSTASH_REDIS_REST_URL`** and
-     **`UPSTASH_REDIS_REST_TOKEN`**. Backs the shared rate limiter.
-   - **Vercel Blob** → create a Blob store (**Storage → Create → Blob**);
-     injects **`BLOB_READ_WRITE_TOKEN`**. Backs hunt/reference/map images. Make
-     sure it's a **public** store so image URLs serve directly from the CDN.
-4. **Set the remaining env vars** (Project → Settings → Environment Variables),
-   for the **Production** environment:
-   - `AUTH_SECRET` — a **fresh** value, `openssl rand -hex 32`. Never reuse the
-     dev secret; changing it later logs everyone out (OPERATIONS.md
-     troubleshooting).
-   - `WSDOT_API_KEY` — WSDOT Ferries access code (OPERATIONS.md §1 /
-     DATA_SOURCES.md §1). Without it the ferry board shows the bundled
-     schedule, labeled not-live.
-   - `NEXT_PUBLIC_GMAPS_EMBED_KEY` — **build-time** (inlined into the client
-     bundle), so it must be set **before** the build that ships it, not just at
-     runtime. Restrict the key by HTTP referrer and cap its quota.
-   - **Do NOT set `DATA_DIR`.** It's the Phase-1 filesystem switch; on Vercel
-     there is no persistent disk, and leaving it unset is what routes the
-     stores to Neon/Blob.
-5. **Deploy.** Trigger the deploy (redeploy if you imported before adding the
-   stores, so the build picks up the env). Vercel builds and serves the app.
-6. **Create the schema, then migrate data (if any).**
-   - Schema: `ensureSchema()` in `src/lib/db.ts` **creates the tables lazily on
-     the first request**, so the first hit to any store self-initializes the
-     database — nothing to run. To create them up front instead, run
-     **`npm run db:setup`** (`psql "$DATABASE_URL" -f db/schema.sql`) against
-     the Neon connection string; if `psql` isn't installed, just let
-     `ensureSchema()` do it, or paste `db/schema.sql` into the Neon SQL editor.
-   - Existing local data: to carry over the current `.data/` tree (accounts,
-     overlays, hunts, analytics, survey, images), pull the production env and
-     run the migration once:
-     ```bash
-     vercel env pull .env.production.local   # writes DATABASE_URL + BLOB token
-     node --env-file=.env.production.local scripts/migrate-to-db.mjs
-     ```
-     (`npm run db:migrate` runs the same script but reads `.env.local`.) It
-     upserts overlay rows, appends analytics/survey rows, and uploads images to
-     Blob (rewriting each record's URL field to the blob URL). It refuses to
-     run without `DATABASE_URL`; the overlay upserts are idempotent, but the
-     append tables are **run-once** (it skips them if they already have rows —
-     `--force` to override). A fresh Chamber deploy with no local data can skip
-     this entirely.
-7. **Verify `/api/health`.** Hit `https://<project>.vercel.app/api/health`;
-   confirm it returns `200 {ok:true,...}`. Then smoke-test a write path: create
-   the admin at `/portal/setup` (see [§e](#e-first-run-in-production)) and
-   confirm it persists across a redeploy — that proves Neon, not an ephemeral
-   disk, is holding state.
-8. **Add the domain.** In Vercel **Project → Settings → Domains**, add
-   `app.explorekingstonwa.com`. Vercel shows a CNAME target; add it in the
-   **NameHero cPanel → Zone Editor** as a single **CNAME**, exactly as in
-   [§c](#c-domain--dns):
-   ```
-   app.explorekingstonwa.com   CNAME   <vercel's target, e.g. cname.vercel-dns.com>
-   ```
-   **Never move nameservers** — the NameHero box also serves the WordPress
-   site, the zone's DNS, and Chamber email (MX/SPF). One CNAME leaves all three
-   untouched. Swap the apex only at a full cutover later.
-
-### Cost caveat
-
-Vercel's **Hobby** plan is **non-commercial only**. A Chamber-of-Commerce app
-promoting member businesses is commercial use, so this likely needs **Vercel
-Pro (~$20/mo)** to be within terms — budget for it. Neon, Upstash, and Blob all
-have free tiers that comfortably cover Kingston's scale; watch their usage
-dashboards as traffic grows.
-
-Day-2 operations (backups of Neon/Blob, env-var reference, rotating secrets,
+Day-2 operations (env-var reference, rotating secrets, restoring from a snapshot,
 troubleshooting) live in [OPERATIONS.md](OPERATIONS.md).
