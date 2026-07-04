@@ -10,6 +10,7 @@
 
 import { useEffect, useRef } from "react";
 import type { Map as LeafletMap } from "leaflet";
+import { FERRY_LINE_STAGING } from "@/lib/ferry-line";
 
 const WSDOT_POST =
   "https://wsdotblog.blogspot.com/2026/04/smoother-sailing-in-kingston-new-sr-104.html";
@@ -122,6 +123,24 @@ export function Sr104TrafficMap({ height = "420px" }: { height?: string }) {
           );
       }
 
+      // Staging point — exactly where the "Get in the ferry line" button sends
+      // drivers when the pass is on (the end of the SR-104 line).
+      L.marker([FERRY_LINE_STAGING.lat, FERRY_LINE_STAGING.lng], {
+        icon: L.divIcon({
+          className: "",
+          html: `<div style="transform:translate(-50%,-100%);font-size:22px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));">📍</div>`,
+          iconSize: [0, 0],
+        }),
+      })
+        .addTo(map)
+        .bindPopup(
+          `<div style="font-size:0.8rem;line-height:1.35;max-width:220px;">
+            <p style="margin:0;font-weight:600;">Join the line here</p>
+            <p style="margin:4px 0 0;">When a boarding pass is required, the "Get in the ferry line" button routes you to this spot — approach from the west via Barber Cutoff Rd, and don't U-turn into the line early.</p>
+          </div>`,
+          { maxWidth: 240 },
+        );
+
       const bounds = L.latLngBounds(HOLDING_ROUTE);
       const fit = () => map.fitBounds(bounds, { padding: [40, 40] });
       fit();
@@ -174,10 +193,12 @@ export function Sr104TrafficMap({ height = "420px" }: { height?: string }) {
         ))}
       </ol>
       <p className="mt-2 text-xs text-ink-soft">
-        Kingston&apos;s SR 104 ferry traffic-management system — active daily 8 a.m.–8 p.m. in the
-        peak season, on weekends and holidays, through October 12. Walk-ons, cyclists, and
-        motorcycles skip it entirely; medical-preference vehicles go straight to the tollbooths.
-        Adapted from{" "}
+        When the pass is on, join the line from the <span className="font-medium text-ink">west,
+        coming down SR 104 via Barber Cutoff Rd</span> (or Miller Bay Rd from the south) — don&apos;t
+        U-turn into the line early; if you overshoot, turn around at Barber Cutoff or Miller Bay.
+        Active daily 8 a.m.–8 p.m. in the peak season, on weekends and holidays, through October 12.
+        Walk-ons, cyclists, and motorcycles skip it entirely; medical-preference vehicles go
+        straight to the tollbooths. Adapted from{" "}
         <a
           href={WSDOT_POST}
           target="_blank"
