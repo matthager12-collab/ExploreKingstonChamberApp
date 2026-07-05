@@ -20,8 +20,11 @@ import {
   featureColor,
   featureImages,
   parkingTypeInfo,
+  resolveLabel,
   type MapFeature,
   type ResolvedMapView,
+  type LabelShow,
+  type LabelDir,
 } from "@/lib/map/types";
 
 // ---- shared color conventions (kept in sync with town-map.tsx) ----
@@ -128,6 +131,41 @@ function googleSearchUrl(name: string): string {
   )}`;
 }
 
+// ---- on-map name labels (P1) ----
+
+interface LabelRec {
+  el: HTMLElement | null;
+  latlng: [number, number];
+  text: string;
+  show: LabelShow;
+  dir: LabelDir;
+  priority: number;
+  w: number;
+  h: number;
+}
+
+/** Top-left of the label box relative to the pin's container point, per direction.
+    Kept in lock-step with the `.fm-label--*` CSS transforms. */
+function labelBoxOffset(dir: LabelDir, w: number, h: number): [number, number] {
+  switch (dir === "auto" ? "top" : dir) {
+    case "bottom":
+      return [-w / 2, 6];
+    case "right":
+      return [18, -h / 2];
+    case "left":
+      return [-w - 18, -h / 2];
+    default: // "top"
+      return [-w / 2, -h - 34];
+  }
+}
+
+/** Priority (0..100) → min zoom at which an `auto` label may appear (the clutter dial). */
+function labelZoomThreshold(priority: number): number {
+  if (priority >= 80) return 13; // stars/viewpoints survive town-wide
+  if (priority >= 45) return 15; // restaurants/mid appear near the downtown fit zoom
+  return 16; // restroom/parking only when fully zoomed in
+}
+
 /** Rounded teardrop divIcon: an emoji chip on a white pin with a colored ring. */
 function markerIconHtml(emoji: string, ring: string): string {
   return `<div style="position:relative;transform:translate(-50%,-100%);">
@@ -218,9 +256,13 @@ function featurePopupHtml(f: MapFeature): string {
   )}</div>`;
 }
 
-function restaurantPopupHtml(r: { name: string; walkMinutesFromFerry: number }): string {
+function restaurantPopupHtml(r: {
+  name: string;
+  walkMinutesFromFerry: number;
+  category?: string;
+}): string {
   return `<div style="font-size:0.8rem;line-height:1.35;max-width:230px;">
-    <p style="margin:0;font-weight:600;font-size:0.95rem;">🍽️ ${esc(r.name)}</p>
+    <p style="margin:0;font-weight:600;font-size:0.95rem;">${markerCategory(r.category).emoji} ${esc(r.name)}</p>
     <p style="margin:4px 0 0;">${r.walkMinutesFromFerry} min walk from the ferry</p>
     <p style="margin:6px 0 0;"><a href="${esc(
       googleSearchUrl(r.name),
@@ -258,6 +300,9 @@ export function FeatureMap({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
+  const labelsRef = useRef<LabelRec[]>([]);
+  const rafRef = useRef<number | null>(null);
+  const moveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [data, setData] = useState<ResolvedMapView | null>(resolved ?? null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">(
     resolved ? "ready" : "loading",
@@ -323,6 +368,118 @@ export function FeatureMap({
       });
       mapRef.current = map;
 
+      // ---- on-map labels: dedicated pane + hand-rolled declutter (P1) ----
+      labelsRef.current = [];
+      const labelPane = map.createPane("feature-labels");
+      labelPane.style.zIndex = "620"; // markerPane 600 < 620 < popupPane 700
+      labelPane.style.pointerEvents = "none"; // labels never steal taps
+
+      const addLabel = (
+        latlng: [number, number],
+        lab: ReturnType<typeof resolveLabel>,
+      ) => {
+        if (lab.show === "off") return;
+        const icon = L.divIcon({
+          className: "fm-label-wrap",
+          html: `<span class="fm-label fm-label--${
+            lab.dir === "auto" ? "top" : lab.dir
+          }" dir="auto" aria-hidden="true">${esc(lab.text)}</span>`,
+          iconSize: [0, 0],
+        });
+        const marker = L.marker(latlng, {
+          icon,
+          interactive: false,
+          keyboard: false,
+          pane: "feature-labels",
+          zIndexOffset: Math.round(lab.priority),
+        }).addTo(map);
+        const el =
+          marker.getElement()?.querySelector<HTMLElement>(".fm-label") ?? null;
+        labelsRef.current.push({ el, latlng, ...lab, w: 0, h: 18 });
+      };
+
+      // Measure every chip's box ONCE, batched (reads only) — emoji/CJK/RTL make
+      // an arithmetic estimate wrong, so read the real offsetWidth (system-ui, no
+      // web-font reflow). Falls back to an estimate only if layout reports 0.
+      const measureLabels = () => {
+        for (const r of labelsRef.current) {
+          if (!r.el) continue;
+          r.w = r.el.offsetWidth || Math.round(8 + r.text.length * 6.4);
+          r.h = r.el.offsetHeight || 18;
+        }
+      };
+
+      // Greedy priority declutter: viewport-cull → zoom-gate → sort by priority →
+      // place highest first, hide any chip whose box overlaps an already-placed one.
+      // Reads first, then writes (no layout thrash). No-ops on a torn-down map.
+      const declutter = () => {
+        const m = mapRef.current;
+        if (!m) return;
+        const z = m.getZoom();
+        const bounds = m.getBounds().pad(0.15);
+        const cands: (LabelRec & {
+          x0: number;
+          y0: number;
+          x1: number;
+          y1: number;
+        })[] = [];
+        const hide: LabelRec[] = [];
+        for (const r of labelsRef.current) {
+          if (!r.el) continue;
+          if (r.show === "off" || !bounds.contains(r.latlng)) {
+            hide.push(r);
+            continue;
+          }
+          if (r.show !== "on" && z < labelZoomThreshold(r.priority)) {
+            hide.push(r);
+            continue;
+          }
+          const p = m.latLngToContainerPoint(r.latlng);
+          const [dx, dy] = labelBoxOffset(r.dir, r.w, r.h);
+          cands.push({
+            ...r,
+            x0: p.x + dx,
+            y0: p.y + dy,
+            x1: p.x + dx + r.w,
+            y1: p.y + dy + r.h,
+          });
+        }
+        // priority desc, tie-break by lat for deterministic frames (no flicker).
+        cands.sort((a, b) => b.priority - a.priority || a.latlng[0] - b.latlng[0]);
+        const placed: { x0: number; y0: number; x1: number; y1: number }[] = [];
+        const show: LabelRec[] = [];
+        for (const c of cands) {
+          const clash = placed.some(
+            (p) =>
+              !(
+                c.x1 + 2 < p.x0 ||
+                c.x0 - 2 > p.x1 ||
+                c.y1 + 2 < p.y0 ||
+                c.y0 - 2 > p.y1
+              ),
+          );
+          if (c.show === "on" || !clash) {
+            placed.push({ x0: c.x0, y0: c.y0, x1: c.x1, y1: c.y1 });
+            show.push(c);
+          } else {
+            hide.push(c);
+          }
+        }
+        for (const r of hide) if (r.el) r.el.style.display = "none";
+        for (const r of show) if (r.el) r.el.style.display = "";
+      };
+
+      const scheduleDeclutter = () => {
+        if (moveTimerRef.current) clearTimeout(moveTimerRef.current);
+        moveTimerRef.current = setTimeout(() => {
+          if (rafRef.current != null) return;
+          rafRef.current = requestAnimationFrame(() => {
+            rafRef.current = null;
+            declutter();
+          });
+        }, 120);
+      };
+
       // On touch devices a full-width map otherwise eats the page's vertical
       // swipes ("scroll trap"): disable panning until the visitor taps to
       // activate. Desktop is untouched (fine-pointer → stays interactive).
@@ -374,6 +531,15 @@ export function FeatureMap({
             .addTo(map)
             .bindPopup(featurePopupHtml(f), { maxWidth: 240 });
           pts.push(f.point);
+          addLabel(
+            f.point,
+            resolveLabel({
+              title: f.title,
+              category: f.category,
+              kind: f.kind,
+              label: f.label,
+            }),
+          );
           const pl = parkingLegend(f, ring, "pin");
           addLegend(
             pl ?? {
@@ -429,6 +595,10 @@ export function FeatureMap({
           .addTo(map)
           .bindPopup(restaurantPopupHtml(r), { maxWidth: 240 });
         pts.push([r.lat, r.lng]);
+        addLabel(
+          [r.lat, r.lng],
+          resolveLabel({ title: r.label?.text ?? r.name, category: r.category }),
+        );
         addLegend({
           key: `builtin-restaurant-${cat.key}`,
           label: cat.label,
@@ -487,6 +657,13 @@ export function FeatureMap({
           map.fitBounds(bounds, { padding: [32, 32], maxZoom: 16 });
         }
       }
+
+      // Labels: measure boxes once (batched), place at the current/fitted zoom,
+      // then re-declutter on zoom/pan. Runs synchronously before the first paint,
+      // so no flash of overlapping labels.
+      measureLabels();
+      declutter();
+      map.on("zoomend moveend", scheduleDeclutter);
 
       // ---- built-ins: streets (fetched here) ----
       if (data.builtins.streets) {
@@ -559,7 +736,14 @@ export function FeatureMap({
 
     return () => {
       cancelled = true;
-      mapRef.current?.remove();
+      // Cancel pending declutter work BEFORE dropping the map, or a queued rAF
+      // would call latLngToContainerPoint on a torn-down map (StrictMode remount).
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+      if (moveTimerRef.current) clearTimeout(moveTimerRef.current);
+      moveTimerRef.current = null;
+      labelsRef.current = [];
+      mapRef.current?.remove(); // also drops the zoomend/moveend handlers
       mapRef.current = null;
       setLegend([]);
     };
@@ -606,6 +790,25 @@ export function FeatureMap({
 
 const PIN_CSS = `
 .feature-pin { background: transparent; border: none; }
+.fm-label-wrap { background: transparent; border: none; }
+.fm-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: inline-block;
+  font: 600 11px/1.15 system-ui, -apple-system, sans-serif;
+  color: #fff;
+  background: #16405e;            /* opaque — legible over dark water/forest tiles */
+  border-radius: 2px;
+  padding: 1px 6px;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0,0,0,.55);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.5);
+}
+.fm-label--top    { transform: translate(-50%, calc(-100% - 34px)); }
+.fm-label--bottom { transform: translate(-50%, 6px); }
+.fm-label--right  { transform: translate(18px, -50%); }
+.fm-label--left   { transform: translate(calc(-100% - 18px), -50%); }
 `;
 
 function LegendSwatch({ entry }: { entry: LegendEntry }) {

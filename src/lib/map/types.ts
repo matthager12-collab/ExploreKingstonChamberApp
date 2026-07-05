@@ -26,6 +26,21 @@ export interface MapView {
   published: boolean;
 }
 
+export type LabelShow = "auto" | "on" | "off";
+export type LabelDir = "auto" | "top" | "right" | "bottom" | "left";
+
+/** On-map name-label config for a feature. All fields optional → smart defaults. */
+export interface MapLabel {
+  /** Short on-map label; when unset, derived from title via shortenTitle(). */
+  text?: string;
+  /** auto = declutter decides by zoom+priority; on = always; off = never. */
+  show?: LabelShow;
+  /** Placement relative to the pin. auto currently resolves to "top". */
+  dir?: LabelDir;
+  /** −50..+50 admin nudge, merged with the category rank. Default 0. */
+  priority?: number;
+}
+
 export interface MapFeature {
   id: string;
   kind: FeatureKind;
@@ -42,6 +57,8 @@ export interface MapFeature {
   /** When set, feature is a parking area; color is automatic. */
   parking?: ParkingMeta;
   link?: string;
+  /** On-map name label + overrides. Absent = all smart defaults. */
+  label?: MapLabel;
   /** MapView ids this feature appears on. */
   views: string[];
   // Geometry — exactly one is set, matching `kind`:
@@ -115,6 +132,74 @@ export function markerCategory(key: string | undefined) {
   return MARKER_CATEGORIES.find((c) => c.key === key) ?? MARKER_CATEGORIES[MARKER_CATEGORIES.length - 2]; // default "info"
 }
 
+/* ------------------------------------------------------------------ */
+/* Label helpers — shared by feature-map.tsx, resolve.ts, the editor   */
+/* ------------------------------------------------------------------ */
+
+/** Category → base label rank (0..100). Higher = shows earlier + wins collisions. */
+export const CATEGORY_LABEL_RANK: Record<string, number> = {
+  star: 85, viewpoint: 82, beach: 80, trailhead: 78, park: 76,
+  shipwreck: 72, // the "Landmark" 📍 pin's category key is `shipwreck`, not `landmark`
+  lodging: 60, event: 58, art: 55, info: 50,
+  food: 50, coffee: 50, drink: 50, shop: 48,
+  parking: 30, restroom: 25,
+};
+const DEFAULT_LABEL_RANK = 45;
+
+function clampNum(n: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, n));
+}
+
+/** Effective label priority on one absolute 0..100 scale (category rank + admin nudge). */
+export function labelPriority(catKey: string | undefined, nudge = 0): number {
+  const rank = CATEGORY_LABEL_RANK[catKey ?? ""] ?? DEFAULT_LABEL_RANK;
+  return clampNum(rank + nudge, 0, 100);
+}
+
+/** Shorten a long title into a compact map-chip label. Full title stays in the popup. */
+export function shortenTitle(title: string): string {
+  let t = title.trim();
+  t = t.replace(/\s*\([^)]*\)\s*$/, ""); // drop a trailing parenthetical
+  t = t.replace(/^the\s+/i, ""); // drop a leading "The "
+  const clause = t.split(/\s*[—–]\s+|,\s+|:\s+/)[0]?.trim(); // first clause boundary
+  if (clause && clause.length >= 3) t = clause;
+  const CAP = 18;
+  if (t.length > CAP) {
+    const cut = t.slice(0, CAP);
+    const sp = cut.lastIndexOf(" ");
+    // Break on the last word boundary unless that leaves too little (< 8 chars),
+    // in which case hard-cut. `>= 8` so a boundary exactly at 8 still wins
+    // (avoids ugly mid-word cuts like "Downtown Waterfron…").
+    t = (sp >= 8 ? cut.slice(0, sp) : cut).replace(/\s+$/, "") + "…";
+  }
+  return t;
+}
+
+/**
+ * Single source of truth for a feature's label — consumed by the public map,
+ * the restaurants builtin, and (later) the admin preview, so they never drift.
+ */
+export function resolveLabel(input: {
+  title: string;
+  category?: string;
+  kind?: FeatureKind;
+  label?: MapLabel;
+}): { text: string; show: LabelShow; dir: LabelDir; priority: number } {
+  const l = input.label ?? {};
+  const isShape =
+    input.kind === "line" || input.kind === "trail" || input.kind === "area";
+  return {
+    text: l.text?.trim() || shortenTitle(input.title),
+    show: l.show ?? (isShape ? "off" : "auto"),
+    dir: l.dir ?? "auto",
+    priority: clampNum(
+      labelPriority(input.category, l.priority ?? 0) - (isShape ? 15 : 0),
+      0,
+      100,
+    ),
+  };
+}
+
 /**
  * A view's data resolved for rendering: its config, the custom features on it,
  * and lightweight built-in-source payloads the client map draws directly.
@@ -131,6 +216,8 @@ export interface ResolvedMapView {
       walkMinutesFromFerry: number;
       /** MARKER_CATEGORIES key chosen server-side from cuisine/tags. */
       category: string;
+      /** Optional name-as-label for the map chip (see resolveLabel). */
+      label?: { text?: string; priority?: number };
     }[];
     parkingZones?: {
       id: string;

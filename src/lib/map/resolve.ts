@@ -36,6 +36,7 @@ export async function resolveMapView(viewId: string): Promise<ResolvedMapView | 
       lng: r.lng,
       walkMinutesFromFerry: r.walkMinutesFromFerry,
       category: restaurantCategory(r),
+      label: { text: r.name }, // name-as-label survives field stripping (disambiguates look-alike pins)
     }));
   }
 
