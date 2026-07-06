@@ -54,7 +54,17 @@ class FileSurveyStore implements SurveyStore {
       } catch {
         // no responses yet
       }
-      rows = lines.map((l) => JSON.parse(l) as SurveyResponse);
+      rows = [];
+      let skipped = 0;
+      for (const line of lines) {
+        try {
+          rows.push(JSON.parse(line) as SurveyResponse);
+        } catch {
+          // skip a corrupt line rather than losing the whole summary
+          skipped++;
+        }
+      }
+      if (skipped > 0) console.warn(`survey-store: skipped ${skipped} corrupt line(s)`);
     }
     const byDistance: Record<string, number> = {};
     for (const r of rows) {
