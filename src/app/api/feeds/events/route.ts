@@ -15,6 +15,7 @@
 
 import type { NextRequest } from "next/server";
 import { getEvents } from "@/lib/stores/event-store";
+import { normalizeEventTimestamp } from "@/lib/time";
 import type { EventItem } from "@/lib/types";
 
 const SHARED_HEADERS = {
@@ -27,10 +28,19 @@ export async function GET(request: NextRequest) {
   const owner = search.get("owner");
   const now = Date.now();
 
+  // Defensive read-time normalization: pre-existing rows written before the
+  // write-path fix may still hold a naive string, and the upcoming-events
+  // comparison just below is itself TZ-sensitive for those — so normalize
+  // BEFORE filtering, not after, or a naive event could sort as already-past
+  // (or not) depending on the server's TZ.
+  const normalized = (await getEvents()).map((e) => ({
+    ...e,
+    start: normalizeEventTimestamp(e.start),
+    end: e.end ? normalizeEventTimestamp(e.end) : e.end,
+  }));
+
   // Upcoming = anything not yet finished (events in progress still count).
-  let events = (await getEvents()).filter(
-    (e) => new Date(e.end ?? e.start).getTime() >= now,
-  );
+  let events = normalized.filter((e) => new Date(e.end ?? e.start).getTime() >= now);
   if (owner) {
     events = events.filter((e) => e.ownerId === owner || e.charityId === owner);
   }

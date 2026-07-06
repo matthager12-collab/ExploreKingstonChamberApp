@@ -49,4 +49,10 @@ describe("POST /api/portal/events validation", () => {
     const json = await res.json();
     expect((json.event.description as string).length).toBe(2000);
   });
+
+  it("normalizes a naive start into a Pacific-offset instant", async () => {
+    const res = await post(BASE);
+    const json = await res.json();
+    expect(json.event.start).toBe("2026-08-01T15:00:00-07:00");
+  });
 });

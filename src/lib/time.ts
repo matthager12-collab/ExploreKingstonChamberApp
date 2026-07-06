@@ -39,3 +39,22 @@ export function formatPacificDate(iso: string): string {
     day: "numeric",
   }).format(new Date(iso));
 }
+
+const NAIVE_DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/;
+
+/**
+ * Attach a real Pacific UTC offset to a naive "YYYY-MM-DDTHH:mm[:ss]" string
+ * (what a `datetime-local` input submits), leaving anything that already
+ * carries a Z/offset — or anything else unrecognized — unchanged.
+ *
+ * Load-bearing property: the naive wall-time PREFIX is preserved verbatim
+ * ("2026-08-01T15:00" -> "2026-08-01T15:00:00-07:00"), not converted to a UTC
+ * clock time. Callers rely on being able to `.slice(0, 16)` the result back
+ * into a datetime-local input (the portal editor's round-trip) and on
+ * pacificDateKey()-style date-prefix slicing continuing to work on it.
+ */
+export function normalizeEventTimestamp(value: string): string {
+  if (/Z$|[+-]\d{2}:\d{2}$/.test(value)) return value;
+  if (!NAIVE_DATETIME_RE.test(value)) return value;
+  return pacificWallTimeToISO(value.slice(0, 10), value.slice(11, 16));
+}

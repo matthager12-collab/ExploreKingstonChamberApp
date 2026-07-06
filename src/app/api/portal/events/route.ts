@@ -18,6 +18,7 @@ import {
   getEvents,
   saveEvent,
 } from "@/lib/stores/event-store";
+import { normalizeEventTimestamp } from "@/lib/time";
 import type { EventCategory, EventItem } from "@/lib/types";
 
 const CATEGORIES: EventCategory[] = [
@@ -96,10 +97,16 @@ export async function POST(request: NextRequest) {
   if (!CATEGORIES.includes(category)) {
     return NextResponse.json({ error: "unknown category" }, { status: 400 });
   }
+  // Normalize AFTER validation: DATETIME_RE only requires the naive prefix
+  // the business editor submits; this attaches a real Pacific UTC offset so
+  // downstream consumers (the ICS/JSON feed) don't parse it in server-local
+  // time. The naive wall-time prefix is preserved, so the editor's
+  // start.slice(0, 16) round-trip into its datetime-local input still works.
+  const normalizedStart = normalizeEventTimestamp(start);
 
   const end =
     typeof body.end === "string" && DATETIME_RE.test(body.end.trim())
-      ? body.end.trim()
+      ? normalizeEventTimestamp(body.end.trim())
       : undefined;
   const organizer = (
     typeof body.organizer === "string" && body.organizer.trim() ? body.organizer.trim() : user.name
@@ -129,12 +136,23 @@ export async function POST(request: NextRequest) {
     if (!canEdit(user, existing.ownerId ?? "")) {
       return NextResponse.json({ error: "You don't manage that event" }, { status: 403 });
     }
-    event = { ...existing, title, start, end, venue, description, category, organizer, url, ownerId };
+    event = {
+      ...existing,
+      title,
+      start: normalizedStart,
+      end,
+      venue,
+      description,
+      category,
+      organizer,
+      url,
+      ownerId,
+    };
   } else {
     event = {
       id: `${slugify(title)}-${randomBytes(3).toString("hex")}`,
       title,
-      start,
+      start: normalizedStart,
       end,
       venue,
       description,
