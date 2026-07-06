@@ -15,7 +15,7 @@
 // No coords (denied / unavailable) → accepted but verified: false, and the
 // player UI labels it honor-system.
 
-import { appendFile, mkdir, readFile, unlink, writeFile } from "fs/promises";
+import { appendFile, mkdir, readdir, readFile, stat, unlink, writeFile } from "fs/promises";
 import path from "path";
 import { dataPath } from "./data-dir";
 import { hunts as seedHunts } from "@/lib/data/hunts";
@@ -66,6 +66,50 @@ const CUSTOM_STORE = "custom-hunts";
 const SUBMISSIONS_STORE = "hunt-submissions";
 
 export const MAX_PHOTO_BYTES = 8 * 1024 * 1024; // ~8 MB
+
+/** Cap on total bytes under .data/hunts/photos in filesystem mode (fs disk is
+ *  shared by all app state — see /api/hunts/submit). */
+export const MAX_PHOTO_STORAGE_BYTES = 400 * 1024 * 1024; // ~400 MB
+
+const PHOTOS_ROOT = path.join(DATA_ROOT, "photos");
+const PHOTO_STORAGE_CACHE_MS = 60_000;
+let photoStorageCache: { bytes: number; at: number } | undefined;
+
+async function dirSizeRecursive(dir: string): Promise<number> {
+  let entries;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return 0; // missing dir → 0
+  }
+  let total = 0;
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      total += await dirSizeRecursive(full);
+    } else if (entry.isFile()) {
+      total += (await stat(full).catch(() => undefined))?.size ?? 0;
+    }
+  }
+  return total;
+}
+
+/** Total bytes under .data/hunts/photos, cached for 60 s. A per-IP rate limit
+ *  on the submit route bounds how stale this can get in practice. */
+export async function photoStorageBytes(): Promise<number> {
+  const now = Date.now();
+  if (photoStorageCache && now - photoStorageCache.at < PHOTO_STORAGE_CACHE_MS) {
+    return photoStorageCache.bytes;
+  }
+  const bytes = await dirSizeRecursive(PHOTOS_ROOT);
+  photoStorageCache = { bytes, at: now };
+  return bytes;
+}
+
+/** Test-only: force the next photoStorageBytes() call to recompute. */
+export function invalidatePhotoStorageCache(): void {
+  photoStorageCache = undefined;
+}
 
 const EXT_CONTENT_TYPES: Record<string, string> = {
   jpg: "image/jpeg",

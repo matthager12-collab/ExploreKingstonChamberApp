@@ -10,9 +10,40 @@
 // discloses this. Local-only app — no auth; see /api/hunts/route.ts.
 
 import { NextRequest } from "next/server";
-import { MAX_PHOTO_BYTES, imageExtension, saveSubmission } from "@/lib/hunt-store";
+import { hasBlob } from "@/lib/blob-store";
+import {
+  MAX_PHOTO_BYTES,
+  MAX_PHOTO_STORAGE_BYTES,
+  imageExtension,
+  photoStorageBytes,
+  saveSubmission,
+} from "@/lib/hunt-store";
+import { checkRateLimit, clientKey } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
+  const limit = await checkRateLimit(clientKey(request, "hunt-submit"), {
+    limit: 5,
+    windowMs: 10 * 60_000,
+  });
+  if (!limit.ok) {
+    return Response.json(
+      { ok: false, error: "too many uploads, please try again later" },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } },
+    );
+  }
+
+  // Filesystem mode shares one disk across all app state (see docs/OPERATIONS.md
+  // "Abuse response"); Blob-backed storage has no such quota to enforce here.
+  if (!hasBlob() && (await photoStorageBytes()) > MAX_PHOTO_STORAGE_BYTES) {
+    return Response.json(
+      {
+        ok: false,
+        error: "photo storage is full — submissions are paused until the Chamber clears space",
+      },
+      { status: 507 },
+    );
+  }
+
   let form: FormData;
   try {
     form = await request.formData();
