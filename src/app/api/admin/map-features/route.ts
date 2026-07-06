@@ -23,6 +23,7 @@ import type {
   ParkingType,
 } from "@/lib/map/types";
 import { PARKING_TYPES } from "@/lib/map/types";
+import { isAllowedPaymentLink } from "@/lib/map/payment-link";
 import { deleteMapFeature, getMapFeatures, saveMapFeature } from "@/lib/stores/map-store";
 import { getMapViews } from "@/lib/stores/map-store";
 
@@ -192,10 +193,9 @@ export async function POST(request: NextRequest) {
       const paymentMethod = str(p.paymentMethod, 200);
       const paymentNotes = str(p.paymentNotes, 200);
       const timeLimit = str(p.timeLimit, 200);
-      const paymentLink =
-        typeof p.paymentLink === "string" && /^(https?:\/\/|[a-z]+:\/\/)/i.test(p.paymentLink.trim())
-          ? p.paymentLink.trim().slice(0, 500)
-          : undefined;
+      const paymentLink = isAllowedPaymentLink(p.paymentLink)
+        ? (p.paymentLink as string).trim().slice(0, 500)
+        : undefined;
       parking = {
         type,
         ...(owner ? { owner } : {}),
