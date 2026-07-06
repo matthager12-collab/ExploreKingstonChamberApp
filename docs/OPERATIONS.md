@@ -59,6 +59,7 @@ working copy's `.env.local` — reference that, don't reprint secrets.
 | `WSDOT_API_KEY` | No — app falls back to the bundled schedule, labeled not-live | Free access code from <https://wsdot.wa.gov/traffic/api/> (enter an email, code issued instantly). Current code registered under matt.hager12@gmail.com; already in `.env.local`. Rotating = registering again. |
 | `NEXT_PUBLIC_GMAPS_EMBED_KEY` | No — Street View panel falls back to free deep links | Google Maps **Embed API** key (free/unlimited, but any Google key needs a billing account; hard-cap quotas + restrict by HTTP referrer). **Build-time var** — inlined into the client bundle at `npm run build`, NOT read at runtime. Used only by `src/components/town-map.tsx`. |
 | `DATA_DIR` | No locally (defaults to `<repo>/.data`); **set in production** | Absolute path to the mutable-state root, resolved via `src/lib/data-dir.ts`. Leave unset locally. In production it **must** be an absolute path on a mounted persistent volume (`/data` on Render/Fly) or redeploys wipe accounts, portal edits, and photos. |
+| `SETUP_TOKEN` | Only to bootstrap the first admin (locally or in production) — `POST /api/auth/setup` 403s fail-closed without it | Any string you choose, e.g. `openssl rand -hex 16`. Only consulted while zero users exist (`hasAnyUsers()` is checked first) — once an admin exists, it's never read again. Set it in `.env.local` before running `/portal/setup` on a fresh `.data/`; on Render it's `generateValue: true`. |
 
 **Phase-2 (Vercel) vars** — `DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`,
 `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` — are **not** set locally or
@@ -67,7 +68,9 @@ on Render; they belong only to a Vercel deployment (§7, `.env.production.exampl
 ### First run — bootstrap the admin and mint invites
 
 1. `npm run dev`, open <http://localhost:3000>.
-2. **Bootstrap the first admin:** visit `/portal/setup`. It works **only while
+2. **Bootstrap the first admin:** set `SETUP_TOKEN` in `.env.local` (any string;
+   the endpoint 403s fail-closed without it), then visit `/portal/setup` and
+   enter that same value in the "Setup token" field. It works **only while
    `DATA_DIR/auth/users.json` has zero users** — it creates the first admin
    account (role `admin`, empty `linkedIds`), signs you in, then locks itself
    forever (`/api/auth/setup` returns 403 once any user exists; the endpoint is

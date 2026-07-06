@@ -112,6 +112,12 @@ export function SetupForm() {
           className={inputClass}
         />
       </Field>
+      <Field label="Setup token">
+        <input name="setupToken" required className={inputClass} />
+      </Field>
+      <p className="text-xs text-ink-soft">
+        From the SETUP_TOKEN environment variable — see docs/DEPLOY.md.
+      </p>
       {error && <p className="text-sm font-medium text-coral-deep">{error}</p>}
       <button type="submit" disabled={busy} className={buttonClass}>
         {busy ? "Creating…" : "Create admin account"}

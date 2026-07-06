@@ -106,6 +106,11 @@ Blueprint that declares the Docker web service, a **1 GB Disk mounted at
      Optional; without it the Street View panel falls back to free deep links.
    - `DATA_DIR=/data` — hardcoded `value: /data` in the blueprint; equals the
      Disk mount path. This is what puts all mutable state on the volume.
+   - `SETUP_TOKEN` — `generateValue: true`; Render mints a random value on a
+     **fresh** blueprint deploy. Gates `POST /api/auth/setup` fail-closed —
+     read the value from the dashboard to complete first-run bootstrap once
+     (see [§4 First run](#4-first-run-in-production)); already-bootstrapped
+     deploys never consult it (`hasAnyUsers()` is checked first).
    - **No `DATABASE_URL` / `BLOB_*` / `UPSTASH_*` are set** → every store uses
      the `/data` disk. Render runs in pure **filesystem mode**.
 3. **First deploy** runs automatically on blueprint create. Render builds the
@@ -128,7 +133,8 @@ The repo ships [`fly.toml`](../fly.toml) for the same image. One-time setup:
 ```bash
 fly apps create explore-kingston           # or: fly launch --no-deploy
 fly volumes create data --size 1 --region sea   # 1 GB volume "data", Seattle
-fly secrets set AUTH_SECRET="$(openssl rand -hex 32)" WSDOT_API_KEY="..."
+fly secrets set AUTH_SECRET="$(openssl rand -hex 32)" WSDOT_API_KEY="..." \
+    SETUP_TOKEN="$(openssl rand -hex 16)"
 fly deploy --build-arg NEXT_PUBLIC_GMAPS_EMBED_KEY="..."
 ```
 
@@ -248,6 +254,10 @@ Same bootstrap as local, now against the live volume/DB:
 1. **Create the admin once** at `/portal/setup`. It works **only while there are
    zero users** — creates the first admin, then disables itself. Do it right
    after the first green `/api/health`, before anyone else can reach the box.
+   The form also requires the **setup token** — read the `SETUP_TOKEN` value
+   from the Render dashboard (or the Fly secret you set) and paste it in; the
+   endpoint 403s without it, so a stranger who finds the URL first can't take
+   the site.
 2. **Mint invites** at `/admin/accounts`. Each code is tied to a role
    (`business` / `nonprofit` / `admin`) and the listing/org ids it may edit
    (`linkedIds`). Login/setup/redeem are rate-limited (`src/lib/rate-limit.ts`).

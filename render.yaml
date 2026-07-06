@@ -46,3 +46,10 @@ services:
       # Point all mutable state at the mounted disk above.
       - key: DATA_DIR
         value: /data
+
+      # Gates POST /api/auth/setup (first-run admin bootstrap) fail-closed.
+      # Render generates a random value on first deploy; the operator reads it
+      # from the dashboard to complete setup once. Deploys that already have an
+      # admin never consult this var (hasAnyUsers() is checked first).
+      - key: SETUP_TOKEN
+        generateValue: true
