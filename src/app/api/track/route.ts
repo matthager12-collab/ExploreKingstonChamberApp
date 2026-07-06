@@ -30,12 +30,14 @@ import {
   type AnalyticsEvent,
   type AnalyticsGeo,
 } from "@/lib/analytics-store";
+import { checkRateLimit, clientKey } from "@/lib/rate-limit";
 
 const MAX_PATH = 200;
 const MAX_SESSION_ID = 64;
 const MAX_HREF = 500;
 const MAX_LABEL = 120;
 const MAX_GEO_FIELD = 80;
+const MAX_BODY_BYTES = 8_192;
 
 // Kitsap-ish bounding box for geo-pings. Anything outside is dropped
 // silently — the feature is about movement around Kingston, and out-of-range
@@ -96,6 +98,18 @@ export async function POST(request: NextRequest) {
     // sendBeacon delivers JSON as text/plain; fetch fallback sends it as
     // application/json — reading raw text handles both.
     const raw = await request.text();
+    // Abuse controls below are silent drops, never an error status: telemetry
+    // must never break or signal to a visitor (see file header).
+    if (raw.length > MAX_BODY_BYTES) {
+      return Response.json({ ok: true });
+    }
+    const limit = await checkRateLimit(clientKey(request, "track"), {
+      limit: 120,
+      windowMs: 5 * 60_000,
+    });
+    if (!limit.ok) {
+      return Response.json({ ok: true });
+    }
     const body = JSON.parse(raw) as Record<string, unknown>;
 
     const type =
