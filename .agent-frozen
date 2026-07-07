@@ -1,0 +1,30 @@
+# .agent-frozen — files agents must NOT modify without explicit human approval.
+#
+# Enforced two ways (E02, decisions §6b):
+#   1. CI + local: scripts/check-frozen.mjs fails if any changed file matches an
+#      entry below (unless the PR carries the 'frozen-change-approved' label).
+#   2. At agent tool-use time: the PreToolUse hook in .claude/settings.json blocks
+#      Edit/Write on these paths.
+#
+# Policy: entries are removed/changed ONLY by an epic explicitly chartered to
+# modify that file, in the same PR, ask-first. The 'frozen-change-approved' label
+# is the human escape hatch. Lines starting with # are comments; blank lines ignored.
+# Globs: * matches within a path segment, ** matches across segments.
+
+# --- Pure, audit-named domain modules (characterization-tested, must stay stable) ---
+src/lib/stores/json-store.ts
+src/lib/hours.ts
+src/lib/ferry-forecast.ts
+src/lib/wsf.ts
+src/lib/ferry-reminder.ts
+src/lib/ferry-line.ts
+src/lib/time.ts
+
+# --- Production data pipelines (NOT CI; scheduled crons) ---
+.github/workflows/ferry-observe.yml
+.github/workflows/ferry-accuracy.yml
+
+# --- Audit-flagged monoliths (high blast radius; touch only with a chartered epic) ---
+src/components/feature-map.tsx
+src/app/admin/map/editor.tsx
+src/app/admin/maps/editor.tsx

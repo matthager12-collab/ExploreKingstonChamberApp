@@ -1,0 +1,40 @@
+name: CI
+
+# The quality gate for every change. Render auto-deploys `main` on push and does
+# NOT wait for GitHub checks, so branch protection requiring this `ci` check is
+# what actually keeps a red build off the live site — once it's on, code can only
+# reach `main` through a branch whose CI is green. One job so the required-check
+# name stays stable ("ci"). The suite runs keyless by design — no secrets needed.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 } # full history: the frozen-manifest check diffs against the PR base
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run lint:boundaries
+      - run: node scripts/check-frozen.mjs
+      - run: npm run test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:server

@@ -27,13 +27,13 @@ export const COPY_BLOCKS: CopyBlock[] = [
     key: "home.hero.eyebrow",
     page: "Home",
     label: "Hero eyebrow",
-    fallback: "Gateway to the Kitsap & Olympic Peninsulas",
+    fallback: "Gateway to the Peninsula",
   },
   {
     key: "home.hero.title1",
     page: "Home",
     label: "Hero headline, line 1",
-    fallback: "You made the boat.",
+    fallback: "Discover",
   },
   {
     key: "home.hero.title2",
@@ -47,7 +47,7 @@ export const COPY_BLOCKS: CopyBlock[] = [
     label: "Hero intro paragraph",
     multiline: true,
     fallback:
-      "Ferry times, food worth walking to, and everything happening in our little town on Appletree Cove — from the folks who live here.",
+      "Ferry times, food worth walking to, and everything happening in our little town.",
   },
   {
     key: "home.hero.ctaPrimary",
@@ -103,7 +103,7 @@ export const COPY_BLOCKS: CopyBlock[] = [
     label: "Header intro",
     multiline: true,
     fallback:
-      "Everything here is a walk from the ferry dock — two minutes to a crêpe, ten to the Village Green. Heads up: plenty of Kingston kitchens take orders by phone, not app. That's normal here.",
+      "Everything here is a walk from the ferry dock — two minutes to a crêpe, ten up the hill to the shops by Grocery Outlet. Heads up: plenty of Kingston kitchens take orders by phone, not app. That's normal here.",
   },
   {
     key: "eat.callout.title",
@@ -422,7 +422,7 @@ export const COPY_BLOCKS: CopyBlock[] = [
     label: "Hero intro",
     multiline: true,
     fallback:
-      "Catch the Edmonds–Kingston boat and you're minutes from our little town on Appletree Cove — food worth walking to, waterfront trails, and everything happening this week, from the folks who live here.",
+      "Catch the Edmonds–Kingston boat and you're minutes from our little town on Appletree Cove.",
   },
   {
     key: "home.hero.edmonds.ctaPrimary",
@@ -619,7 +619,7 @@ export const COPY_BLOCKS: CopyBlock[] = [
     key: "home.strip.fastFerry",
     page: "Home (live strip)",
     label: "Label: fast ferry to Seattle",
-    fallback: "Fast ferry to Seattle",
+    fallback: "Fast Ferry:",
   },
   {
     key: "home.strip.weather",

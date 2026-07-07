@@ -267,7 +267,7 @@ export function makeSessionToken(userId: string): string {
   return `${payload}.${sign(payload)}`;
 }
 
-function parseSessionToken(token: string): string | null {
+export function parseSessionToken(token: string): string | null {
   const [payload, sig] = token.split(".");
   if (!payload || !sig) return null;
   const expected = sign(payload);

@@ -7,7 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "TZ=UTC vitest run",
+    "lint:boundaries": "depcruise --config .dependency-cruiser.cjs src",
+    "typecheck": "tsc --noEmit",
+    "test": "TZ=UTC vitest run --config vitest.config.ts",
+    "test:server": "TZ=UTC vitest run --config vitest.server.config.ts",
+    "test:all": "npm run test && npm run test:server",
     "test:watch": "TZ=UTC vitest",
     "db:setup": "psql \"$DATABASE_URL\" -f db/schema.sql",
     "db:migrate": "node --env-file=.env.local scripts/migrate-to-db.mjs"
@@ -25,12 +29,16 @@
     "react-dom": "19.2.4"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dependency-cruiser": "^16.10.4",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
+    "fast-glob": "^3.3.3",
+    "playwright": "^1.61.1",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^3.2.7"
