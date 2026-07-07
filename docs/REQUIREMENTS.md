@@ -259,9 +259,8 @@ ferry fact (FR-7.4). Parking is one view of the general map CMS (FR-17).
   that a pre-loaded ORCA card skips the 3% card surcharge, that walking on from
   Kingston is free (fares are collected at Edmonds), and that Good To Go! passes
   do not pay ferry fares.
-- FR-7.5 Zone shapes offer Street View (free deep link always; embedded
-  panorama when `NEXT_PUBLIC_GMAPS_EMBED_KEY` is configured at build time) so
-  users can see the curb.
+- FR-7.5 Zone shapes offer Street View via a free deep link so users can see
+  the curb.
 - FR-7.6 An honest overnight-parking answer per zone (`overnight: yes / no /
   confirm-first`), including "call the Port office first: 360-297-3545" where
   that is the truth.
@@ -555,8 +554,8 @@ it learns from.
 |---|---|---|
 | `AUTH_SECRET` | **yes** | Signs HMAC session cookies |
 | `WSDOT_API_KEY` | no | Live ferry data; absent → labeled fallback schedule |
-| `NEXT_PUBLIC_GMAPS_EMBED_KEY` | no | Inline Street View panel; **build-time** (inlined into the client bundle at build) |
-| `NEXT_PUBLIC_SITE_URL` | no | Absolute base URL for feeds/canonical links |
+| `NEXT_PUBLIC_SITE_URL` | **yes** in production | Absolute base URL for feeds/canonical links; **build-time** (inlined into the client bundle at build) |
+| `SETUP_TOKEN` | no | Gates first-run admin bootstrap fail-closed; unused once an admin exists |
 | `DATA_DIR` | Phase 1 | Persistent volume path (e.g. `/data`) |
 | `FERRY_OBSERVE_TOKEN` | no | Locks `/api/ferry/observe` when an off-site scheduler calls it |
 | `DATABASE_URL` | Phase 2 | Neon Postgres (pooled URL); enables DB mode |

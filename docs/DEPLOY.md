@@ -101,9 +101,10 @@ Blueprint that declares the Docker web service, a **1 GB Disk mounted at
      rotating logs everyone out.
    - `WSDOT_API_KEY` — `sync: false`; entered in the dashboard. Set → ferry
      board is **LIVE**. Absent → bundled fallback schedule, labeled not-live.
-   - `NEXT_PUBLIC_GMAPS_EMBED_KEY` — `sync: false`; entered in the dashboard.
+   - `NEXT_PUBLIC_SITE_URL` — `sync: false`; entered in the dashboard.
      **Build-time var** — see the gotcha in [§2c](#2c-the-next_public-build-time-gotcha).
-     Optional; without it the Street View panel falls back to free deep links.
+     The absolute production origin for share-card/canonical URLs, e.g.
+     `https://explore-kingston.onrender.com`.
    - `DATA_DIR=/data` — hardcoded `value: /data` in the blueprint; equals the
      Disk mount path. This is what puts all mutable state on the volume.
    - `SETUP_TOKEN` — `generateValue: true`; Render mints a random value on a
@@ -135,13 +136,13 @@ fly apps create explore-kingston           # or: fly launch --no-deploy
 fly volumes create data --size 1 --region sea   # 1 GB volume "data", Seattle
 fly secrets set AUTH_SECRET="$(openssl rand -hex 32)" WSDOT_API_KEY="..." \
     SETUP_TOKEN="$(openssl rand -hex 16)"
-fly deploy --build-arg NEXT_PUBLIC_GMAPS_EMBED_KEY="..."
+fly deploy --build-arg NEXT_PUBLIC_SITE_URL="https://explore-kingston.fly.dev"
 ```
 
 `fly.toml` already mounts `data` at `/data`, sets `DATA_DIR=/data` + `PORT=3000`
 in `[env]`, keeps `min_machines_running = 1` (so the disk-backed app stays
 warm), and health-checks `GET /api/health`. The critical difference from
-runtime secrets: `NEXT_PUBLIC_GMAPS_EMBED_KEY` must reach the **build**, hence
+runtime secrets: `NEXT_PUBLIC_SITE_URL` must reach the **build**, hence
 `--build-arg` (or a build secret) rather than `fly secrets set` — a runtime-only
 secret never reaches the client bundle.
 
@@ -154,10 +155,11 @@ them.
 
 ### 2c. The `NEXT_PUBLIC_` build-time gotcha
 
-`NEXT_PUBLIC_GMAPS_EMBED_KEY` (used by `src/components/town-map.tsx`) is a
-`NEXT_PUBLIC_*` var: Next **inlines it into the client JavaScript bundle at
-`npm run build`**, not at runtime. Setting it only as a runtime env var leaves
-the client with an empty string.
+`NEXT_PUBLIC_SITE_URL` (used by `src/app/layout.tsx` for `metadataBase` —
+share-card/canonical URLs) is a `NEXT_PUBLIC_*` var: Next **inlines it into the
+client JavaScript bundle at `npm run build`**, not at runtime. Setting it only
+as a runtime env var (or forgetting it entirely) leaves production resolving
+share cards against `http://localhost:3000`.
 
 - **Render:** because the build runs *inside* the Docker build, a `sync:false`
   dashboard env var is present during `npm run build`, so it bakes in. Change it
@@ -167,8 +169,9 @@ the client with an empty string.
 - **Vercel (Phase 2):** set it in Project → Environment Variables **before** the
   build that ships it.
 
-The three runtime-only vars (`AUTH_SECRET`, `WSDOT_API_KEY`, `DATA_DIR`) don't
-have this constraint — they're read on the server at request time.
+The other runtime-only vars (`AUTH_SECRET`, `WSDOT_API_KEY`, `SETUP_TOKEN`,
+`DATA_DIR`) don't have this constraint — they're read on the server at request
+time.
 
 ---
 
@@ -203,7 +206,9 @@ complete and tested; this section is the one-time stand-up.
    - `AUTH_SECRET` — a **fresh** `openssl rand -hex 32`; never the dev secret,
      kept stable thereafter.
    - `WSDOT_API_KEY` — WSDOT Ferries access code (live ferry data).
-   - `NEXT_PUBLIC_GMAPS_EMBED_KEY` — **before the build** ([§2c](#2c-the-next_public-build-time-gotcha)).
+   - `NEXT_PUBLIC_SITE_URL` — the Vercel production origin, **before the build**
+     ([§2c](#2c-the-next_public-build-time-gotcha)).
+   - `SETUP_TOKEN` — any string; gates first-run bootstrap fail-closed.
    - **Do NOT set `DATA_DIR`.** Leaving it unset is what routes the stores to
      Neon/Blob. Setting it on Vercel would point stores at an ephemeral disk.
 4. **Deploy** (redeploy if you imported before adding stores, so the build picks

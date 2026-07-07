@@ -387,7 +387,7 @@ the entire difference between them.
 | Rate limit | in-process Map (one instance — correct) | Upstash Redis (shared) |
 | Images | under `/data`, served by app routes | Vercel Blob CDN URLs |
 | Health | `/api/health` → `{ok, dataDir:/data, dataWritable:true}`; **503 until the volume is writable** so Render won't route traffic to a broken disk | `/api/health` (DB/env-driven readiness) |
-| Secrets | `AUTH_SECRET` (Render-generated, stable), `WSDOT_API_KEY`, `NEXT_PUBLIC_GMAPS_EMBED_KEY` (**build-time**, baked into the client bundle) set in dashboard | + `DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`, `UPSTASH_REDIS_REST_URL/TOKEN` |
+| Secrets | `AUTH_SECRET` (Render-generated, stable), `SETUP_TOKEN` (Render-generated, first-run bootstrap only), `WSDOT_API_KEY`, `NEXT_PUBLIC_SITE_URL` (**build-time**, baked into the client bundle) set in dashboard | + `DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`, `UPSTASH_REDIS_REST_URL/TOKEN` |
 
 Environment variables (authoritative — `.env.production.example`, `render.yaml`,
 `fly.toml`):
@@ -396,7 +396,8 @@ Environment variables (authoritative — `.env.production.example`, `render.yaml
 |-----|-----------|--------|
 | `AUTH_SECRET` | **yes** | signs HMAC session cookies (`auth.ts`) |
 | `WSDOT_API_KEY` | optional | live ferry data; absent → bundled fallback schedule |
-| `NEXT_PUBLIC_GMAPS_EMBED_KEY` | optional, **build-time** | inline Street View panel; inlined at `npm run build`, not read at runtime |
+| `NEXT_PUBLIC_SITE_URL` | **required in production**, **build-time** | absolute origin for share-card/canonical URLs (`layout.tsx` `metadataBase`); inlined at `npm run build`, not read at runtime |
+| `SETUP_TOKEN` | optional (first-run bootstrap only) | gates `POST /api/auth/setup` fail-closed; never consulted once an admin exists |
 | `DATA_DIR` | Phase 1 | persistent volume path (e.g. `/data`); **unset on Vercel** |
 | `DATABASE_URL` | Phase 2 | Neon Postgres (POOLED url, host has `-pooler`) |
 | `BLOB_READ_WRITE_TOKEN` | Phase 2 | Vercel Blob for uploaded images |

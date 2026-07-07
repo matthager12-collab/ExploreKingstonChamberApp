@@ -33,7 +33,8 @@ A tourism web app for Kingston, WA (unincorporated Kitsap County; the Edmonds–
 |---|---|---|
 | `AUTH_SECRET` | signs HMAC session cookies | **required** |
 | `WSDOT_API_KEY` | live ferry data | absent → bundled fallback schedule, `live:false` |
-| `NEXT_PUBLIC_GMAPS_EMBED_KEY` | inline Street View panel on maps | **build-time** var (inlined into client bundle) |
+| `NEXT_PUBLIC_SITE_URL` | share-card/canonical URL origin | **build-time** var (inlined into client bundle); **required in production** |
+| `SETUP_TOKEN` | gates first-run admin bootstrap | fail-closed; unused once an admin exists |
 | `DATA_DIR` | persistent-volume path (Phase 1) | e.g. `/data`; not set on Vercel |
 | `DATABASE_URL` | Neon Postgres (Phase 2) | pooled URL (host has `-pooler`) |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob image store (Phase 2) | — |
@@ -422,7 +423,7 @@ All in `src/components/` unless noted; each is client only for a browser reason.
 - **`ferry-planner.tsx`** (page-local, `src/app/ferry/plan/`) — the planner. State: date, time, `Direction`, `TravelMode`. Recomputes the forecast **entirely client-side** via `ferry-forecast`; changing the date fetches `/api/ferry/plan` to snap to real sailings + show live space. Renders `<Trendline/>` + `<LevelLegend/>` (from `ferry-trendline.tsx`) and an "arrive by" recommendation.
 - **`ferry-busy-today.tsx`**, **`ferry-prediction-banner.tsx`**, **`ferry-trendline.tsx`** — the "how busy today" panel, the estimate/admin-preview banner, and the SVG trendline (colors are raw hex — SVG can't reliably use CSS vars).
 - **`ferry-vessel-map.tsx`**, **`sr104-traffic-map.tsx`**, **`ferry-webcams-box.tsx`** — Leaflet vessel map (polls `/api/ferry/vessels`), the WSDOT SR-104 traffic map, and the ferry-webcams box.
-- **`feature-map.tsx`** — the public map CMS renderer. Leaflet (dynamically imported), fetches `/api/map/[viewId]`, draws the view's features + built-in layers (restaurants/parking zones/streets); a published-view switcher; Street View deep links (+ embedded panel when `NEXT_PUBLIC_GMAPS_EMBED_KEY` is set).
+- **`feature-map.tsx`** — the public map CMS renderer. Leaflet (dynamically imported), fetches `/api/map/[viewId]`, draws the view's features + built-in layers (restaurants/parking zones/streets); a published-view switcher; Street View deep links.
 - **`near-me.tsx`** — geolocation. `NearMePlace[]` (serializable Restaurant subset). State `idle→locating→ready|denied|error`; one `getCurrentPosition` per tap; sorts by client haversine; sends at most one geo-ping (a `useRef` latch), coords rounded before leaving the device.
 - **`hunt-player.tsx`** — geolocation + camera + localStorage. `PlayerHunt`. Three state machines: `CheckState (idle|locating|too-far|confirmed|gps-unavailable)`, `UploadState (idle|uploading|failed)`, persisted `StopStatus (verified|unverified|offline|honor)`. Stops unlock sequentially; POSTs multipart to `/api/hunts/submit`; "Mark complete anyway" → `offline`; no-photo escape → `honor`. Progress in `vk-hunt-<id>` / `vk-hunt-<id>-status`.
 - **`open-badge.tsx`** (`OpenBadge`/`OrderTimingNote`) — browser clock; renders nothing until mounted, re-runs `getOpenStatus` every 60 s.
@@ -468,7 +469,7 @@ Offline pipeline → `public/geo/street-parking.json` (segments classified free-
 
 **Uploads** — 8 MiB cap (413), MIME/ext whitelist (415), empty-file rejection; stored filenames server-generated. No total-disk quota on submissions.
 
-**Secrets** — `AUTH_SECRET`/`WSDOT_API_KEY` server-side (WSDOT key rides in server-only URLs); `NEXT_PUBLIC_GMAPS_EMBED_KEY` intentionally public (build-time, referrer-restrictable).
+**Secrets** — `AUTH_SECRET`/`WSDOT_API_KEY`/`SETUP_TOKEN` server-side (WSDOT key rides in server-only URLs); `NEXT_PUBLIC_SITE_URL` intentionally public (build-time).
 
 **Injection** — Leaflet popups escape data; the embed writes only `textContent`; JSON-LD escapes `<`; ICS escapes per RFC 5545; the reminder route echoes nothing from the query string.
 

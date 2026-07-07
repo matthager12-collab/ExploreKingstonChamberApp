@@ -7,15 +7,15 @@
 #        ^ creates the persistent volume named "data" mounted below at /data.
 #          Pick a region near Kingston, WA (sea = Seattle).
 #   3. fly secrets set AUTH_SECRET="$(openssl rand -hex 32)" \
-#          WSDOT_API_KEY="..." NEXT_PUBLIC_GMAPS_EMBED_KEY="..." \
-#          SETUP_TOKEN="$(openssl rand -hex 16)"
+#          WSDOT_API_KEY="..." SETUP_TOKEN="$(openssl rand -hex 16)"
 #        ^ AUTH_SECRET, WSDOT_API_KEY, and SETUP_TOKEN are runtime secrets.
 #          SETUP_TOKEN gates POST /api/auth/setup (first-run admin bootstrap)
 #          fail-closed — read it back to complete setup once, then it's never
 #          consulted again (hasAnyUsers() is checked first).
-#          NOTE: NEXT_PUBLIC_GMAPS_EMBED_KEY is inlined at BUILD time, so also
-#          pass it to the build, e.g.:
-#            fly deploy --build-arg NEXT_PUBLIC_GMAPS_EMBED_KEY="..."
+#          NOTE: NEXT_PUBLIC_SITE_URL (absolute production origin, for
+#          share-card/canonical URLs) is inlined at BUILD time, so pass it to
+#          the build instead, e.g.:
+#            fly deploy --build-arg NEXT_PUBLIC_SITE_URL="https://explore-kingston.fly.dev"
 #          (or bake it via a build secret) — a runtime-only secret will NOT
 #          reach the client bundle.
 #   4. fly deploy

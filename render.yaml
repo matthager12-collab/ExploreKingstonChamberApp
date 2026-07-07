@@ -35,12 +35,10 @@ services:
       - key: WSDOT_API_KEY
         sync: false
 
-      # Google Maps Embed key (components/town-map.tsx). NOTE: this is a
-      # NEXT_PUBLIC_* var, so it is inlined at BUILD time, not read at runtime.
-      # For Render to bake it into the client bundle it must be present as a
-      # build-time env var — setting it here (sync:false, entered in dashboard)
-      # makes it available during `npm run build` inside the Docker build.
-      - key: NEXT_PUBLIC_GMAPS_EMBED_KEY
+      # Absolute production origin for share-card/canonical URLs
+      # (src/app/layout.tsx metadataBase). NEXT_PUBLIC_* = BUILD-time inlined —
+      # changing the value requires a rebuild, not just a restart.
+      - key: NEXT_PUBLIC_SITE_URL
         sync: false
 
       # Point all mutable state at the mounted disk above.

@@ -57,7 +57,7 @@ working copy's `.env.local` — reference that, don't reprint secrets.
 |-----|-----------|----------------------------|
 | `AUTH_SECRET` | **Yes** for the portals — `src/lib/auth.ts` `secret()` throws `AUTH_SECRET missing` without it | Any long random string, e.g. `openssl rand -hex 32`. Signs the stateless `vk-session` HMAC cookie. **Changing it logs everyone out** (see §8). |
 | `WSDOT_API_KEY` | No — app falls back to the bundled schedule, labeled not-live | Free access code from <https://wsdot.wa.gov/traffic/api/> (enter an email, code issued instantly). Current code registered under matt.hager12@gmail.com; already in `.env.local`. Rotating = registering again. |
-| `NEXT_PUBLIC_GMAPS_EMBED_KEY` | No — Street View panel falls back to free deep links | Google Maps **Embed API** key (free/unlimited, but any Google key needs a billing account; hard-cap quotas + restrict by HTTP referrer). **Build-time var** — inlined into the client bundle at `npm run build`, NOT read at runtime. Used only by `src/components/town-map.tsx`. |
+| `NEXT_PUBLIC_SITE_URL` | No locally (defaults to `http://localhost:3000`); **set in production** | Absolute production origin for share-card/canonical URLs (`src/app/layout.tsx` `metadataBase` — the app spreads by visitors texting links). **Build-time var** — inlined into the client bundle at `npm run build`; a dashboard-only change needs a rebuild. |
 | `DATA_DIR` | No locally (defaults to `<repo>/.data`); **set in production** | Absolute path to the mutable-state root, resolved via `src/lib/data-dir.ts`. Leave unset locally. In production it **must** be an absolute path on a mounted persistent volume (`/data` on Render/Fly) or redeploys wipe accounts, portal edits, and photos. |
 | `SETUP_TOKEN` | Only to bootstrap the first admin (locally or in production) — `POST /api/auth/setup` 403s fail-closed without it | Any string you choose, e.g. `openssl rand -hex 16`. Only consulted while zero users exist (`hasAnyUsers()` is checked first) — once an admin exists, it's never read again. Set it in `.env.local` before running `/portal/setup` on a fresh `.data/`; on Render it's `generateValue: true`. |
 
@@ -158,7 +158,7 @@ picture.
 | Image | Multi-stage `Dockerfile`: `node:22-alpine`, `npm ci`, `npm run build`, ships only the standalone runner (`.next/standalone` + copied `.next/static` + `public/`), runs as non-root `nextjs`, `CMD ["node","server.js"]` on port 3000 |
 | Persistence | 1 GB disk named `data` mounted at **`/data`**; `DATA_DIR=/data` (set in `render.yaml`) → **filesystem mode**, because no DB/Blob/Upstash env vars are set on Render. The disk survives deploys and restarts |
 | Health gate | `healthCheckPath: /api/health` — Render routes traffic only after 200. `/api/health` returns `{ ok, dataDir, dataWritable, time }`, **200 when `/data` is writable, 503 otherwise** (it write-probes `/data/.health-probe`). This catches an unmounted/read-only volume before users do |
-| Secrets | `AUTH_SECRET` = `generateValue: true` (Render mints it once, keeps it stable — do **not** rotate casually); `WSDOT_API_KEY` and `NEXT_PUBLIC_GMAPS_EMBED_KEY` are `sync: false`, entered in the dashboard. `NEXT_PUBLIC_*` is inlined at **build** time — Render bakes it during the Docker build |
+| Secrets | `AUTH_SECRET` and `SETUP_TOKEN` = `generateValue: true` (Render mints them once; **do not rotate `AUTH_SECRET` casually**); `WSDOT_API_KEY` and `NEXT_PUBLIC_SITE_URL` are `sync: false`, entered in the dashboard. `NEXT_PUBLIC_*` is inlined at **build** time — Render bakes it during the Docker build |
 | Deploys | **Auto-deploy on push** to the tracked branch. The repo was made **public** to bypass a Render↔GitHub sync issue (no secrets live in git — `.env*`, `.data/` are gitignored; `.env.production.example` is documentation only) |
 | Cost | **≈ $7.25 / mo** (Starter web instance + 1 GB disk) |
 | State today | Admin account created and persisted; `WSDOT_API_KEY` set → ferry board is **LIVE**; disk snapshots on |
@@ -486,6 +486,31 @@ unmounted or read-only — Render will then withhold traffic (the health gate do
 its job). Check the disk is attached and `DATA_DIR=/data`. Locally, check the
 `.data` directory is writable. The 503 body still reports the resolved `dataDir`,
 which is the first thing to confirm.
+
+### Abuse response: anonymous-write flood / disk full
+
+**Symptoms:** `/api/health` starts returning 503 (see above), or the Render
+dashboard shows the `/data` disk approaching its 1 GB size. Both point at the
+same root cause: an anonymous write endpoint filled the disk.
+
+**Where the limits live:** `src/lib/rate-limit.ts` is the shared seam
+(`checkRateLimit`/`clientKey`). The three anonymous-write routes it protects:
+
+- `POST /api/hunts/submit` — 5 uploads / 10 min / IP, plus a 400 MB storage
+  quota on `<DATA_DIR>/hunts/photos` (`MAX_PHOTO_STORAGE_BYTES` in
+  `src/lib/hunt-store.ts`); returns 507 once the quota is exceeded.
+- `POST /api/track` — 120 events / 5 min / IP plus an 8 KB body cap; abuse is a
+  **silent drop** (always `{ok:true}`) — telemetry never 429s a real visitor.
+- `POST /api/survey` — 5 submissions / 10 min / IP, 429 + `Retry-After`.
+
+**To clear hostile hunt uploads:** inspect and prune
+`<DATA_DIR>/hunts/photos/<huntId>/<stopId>/` (e.g. `/data/hunts/photos/...` on
+Render) for files that aren't legitimate player submissions, then redeploy or
+wait ~60 s for the cached storage-size check to pick up the change.
+
+**To tune the quota:** raise or lower `MAX_PHOTO_STORAGE_BYTES` in
+`src/lib/hunt-store.ts` (currently 400 MB, leaving headroom on the 1 GB disk
+for accounts, portal overlays, analytics, and the LTAC survey).
 
 ### Edits not showing up on public pages (stale ISR)
 

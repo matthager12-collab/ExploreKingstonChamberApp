@@ -26,7 +26,6 @@ disagreed, the verified correction is what appears here.
 | Webcams | `src/lib/data/webcams.ts`; feature pages hotlink WSDOT images | camera list hardcoded, images live | **seeded** (list static, images live) |
 | Maps / directions (deep links) | `mapSearchUrl()` / `mapDirectionsUrl()` in `src/components/ui.tsx` | — | **wired** (free Google Maps deep links, no key) |
 | Leaflet basemap tiles | `src/components/{ferry-vessel-map,sr104-traffic-map,feature-map}.tsx`, Leaflet + OSM | — | **wired** (OSM raster tiles) |
-| Street View / Google Embed | *(env var declared, no consumer)* | — | **declared, not wired** — `NEXT_PUBLIC_GMAPS_EMBED_KEY` is in the env template but referenced nowhere in `src/` |
 | Parking (lots + street overlay) | `src/lib/data/parking.ts` (`MapZone`), `public/geo/street-parking.json` | Port/WSDOT/Diamond facts + OSM/Census-generated overlay | **seeded** (generator = OSM + Census CDP) |
 | Events, restaurants, lodging, charity, hunts, itineraries | feature stores in `src/lib/stores/*` over `src/lib/data/*` | hand-curated content per feature | **seeded** (admin-editable via CMS) |
 | LTAC visitor survey | `src/lib/stores/survey-store.ts`, `/api/survey` | — | **wired** (file- **or** DB-backed; see persistence seam) |
@@ -296,23 +295,17 @@ Camera-list pages the seed points back to:
 | Source | URL | Access | Cost | Status in app |
 |---|---|---|---|---|
 | Google Maps URLs (deep links) | https://developers.google.com/maps/documentation/urls/get-started | No key, no signup; `api=1` param is **mandatory** | Free, unlimited | **wired** (`mapSearchUrl`/`mapDirectionsUrl` in `src/components/ui.tsx`) |
-| Google Maps **Embed** API (Street View panel) | https://developers.google.com/maps/documentation/embed | API key (build-time `NEXT_PUBLIC_GMAPS_EMBED_KEY`), billing account required even though Embed is free | **Embed unlimited free** | **declared, not wired** — the env var is in the template but no component reads it (see gotcha) |
 | OSM raster tiles (Leaflet basemap) | https://tile.openstreetmap.org (currently) · policy: https://operations.osmfoundation.org/policies/tiles/ | Best-effort tile server, no key | Free (best-effort, no SLA) | **wired** — but see the debt note below |
 | Leaflet + Geoman | https://leafletjs.com · https://github.com/geoman-io/leaflet-geoman | `npm` deps, client components | Free (open source) | **wired** (admin polygon/feature editing at `/admin/map`, `/admin/maps`) |
 | OpenFreeMap / MapLibre / Protomaps (vector-tile swap targets) | https://openfreemap.org · https://maplibre.org · https://docs.protomaps.com | No-key vector tiles / static PMTiles | Free–low | planned (only if OSM raster proves inadequate) |
 
 The map CMS (`/map`, `/admin/maps`) and parking editor (`/admin/map`) render on Leaflet + OSM
-tiles; see [MAPS.md](MAPS.md). Google is used only for outbound deep links and the embedded
-Street View panel — the app's own curated place data avoids ever plotting Google Places on a
+tiles; see [MAPS.md](MAPS.md). Google is used only for outbound deep links (free Street View
+deep links, no key) — the app's own curated place data avoids ever plotting Google Places on a
 non-Google map (a ToS trap).
 
 ### Gotchas (load-bearing)
 
-- **`NEXT_PUBLIC_GMAPS_EMBED_KEY` is declared but unused.** The env template + `render.yaml`
-  document it and it would be a **build-time** var (inlined at `npm run build`), but **no
-  component in `src/` reads it today** and there is no `town-map.tsx` — the Street View / Embed
-  panel it was intended for isn't in the code. Treat it as reserved-for-future, not live.
-  (See Inconsistencies — the env comment still points at a non-existent file.)
 - **The $200/month Google credit is gone** (since March 1, 2025). Free usage is per-SKU; the
   Embed API is the one that's still **unlimited free**. Any Google key needs a billing account
   with a card even for Embed — hard-cap quotas and restrict the key by HTTP referrer.
@@ -572,8 +565,7 @@ Authoritative source: `.env.production.example`, `render.yaml`, `fly.toml`. See
 | Var | Required? | Purpose | Notes |
 |---|---|---|---|
 | `WSDOT_API_KEY` | optional | Live Edmonds–Kingston ferry data (`wsf.ts`) | Absent → bundled fallback schedule, no live space/delays/vessels |
-| `NEXT_PUBLIC_GMAPS_EMBED_KEY` | optional / reserved | Intended for an embedded Street View panel | **Declared in the env template + `render.yaml` but read by no component in `src/`.** Would be build-time if wired |
-| `NEXT_PUBLIC_SITE_URL` | optional | Absolute origin for shared-link cards / feeds (`layout.tsx`) | Defaults to `http://localhost:3000` |
+| `NEXT_PUBLIC_SITE_URL` | **required in production** | Absolute origin for shared-link cards / feeds (`layout.tsx` `metadataBase`) | Wired in `render.yaml`/`fly.toml`/`.env.production.example`. **Build-time** — a dashboard-only change needs a rebuild. Defaults to `http://localhost:3000` if unset |
 | `FERRY_OBSERVE_TOKEN` | optional | Gates `/api/ferry/{observe,accuracy}` | If set, requires `?token=` or `Authorization: Bearer`; else open |
 | `AUTH_SECRET` | **required** | Signs session cookies (`auth.ts`) | Not a data source, but required to boot |
 | `DATABASE_URL` | prod-only (Vercel) | Neon Postgres — overlay + `analytics_event`/`survey_response`/`ferry_observation` tables | POOLED url (host has `-pooler`); `hasDb()` auto-detects. **NOT set on Render** (filesystem mode) |
