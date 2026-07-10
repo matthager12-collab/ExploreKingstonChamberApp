@@ -183,10 +183,10 @@ a different vendor or stay on the artifact fallback for now)
 
 Record here once done:
 
-- [ ] Staging cost approved (Render Blueprint sync click, step 7.3)
-- [ ] Sentry free tier confirmed
-- [ ] UptimeRobot free tier confirmed
-- [ ] R2 free tier confirmed (or explicitly deferred to the artifact fallback)
+- [x] Staging cost approved — service is live (~$7.25/mo + ~$0.25/mo disk); the Blueprint sync auto-created it on merge with no separate approval prompt, but Mat directed the merge that triggered it and confirmed the live service
+- [x] Sentry free tier confirmed — 14-day trial, no credit card required, reverts to free-plan limits automatically
+- [x] UptimeRobot free tier confirmed — no credit card required
+- [x] R2 confirmed — free tier limits (10GB storage, 1M Class A + 10M Class B ops/month), but note R2 subscription **does** require a payment method on file (unlike Sentry/UptimeRobot); current usage is $0.00
 
 ---
 
@@ -263,8 +263,12 @@ Fill in as Part B executes:
 
 | Item | Value |
 |---|---|
-| Migration date | _(YYYY-MM-DD)_ |
-| New 1Password item — GitHub PAT | _(item name)_ |
+| Migration date | N/A — transfer on hold (see Status above) |
+| Part A PR | [#2](https://github.com/mat-arda-cards/visit-kingston/pull/2) merged 2026-07-10; follow-up [#3](https://github.com/mat-arda-cards/visit-kingston/pull/3) (this file's step-8 clarification) merged same day |
+| Production | Live on the merged E03 code — `/api/health` 200, `/robots.txt` disallows only `/admin` `/portal` `/api`, `/api/ferry/observe` correctly 401s without a token |
+| Staging | Live at `https://explore-kingston-staging.onrender.com` — auto-created by the Blueprint sync (no separate spend-approval prompt appeared), `staging` branch pushed to match `main`, `/robots.txt` correctly returns a bare `Disallow: /` (`NOINDEX=1`) |
+| GitHub Actions secrets/variables (current repo) | `BACKUP_TOKEN` + `FERRY_OBSERVE_TOKEN` secrets and `FERRY_OBSERVE_URL` + `BACKUP_AGE_RECIPIENT` variables all set on `mat-arda-cards/visit-kingston`; `ferry-observe`/`ferry-accuracy` cron runs confirmed succeeding |
+| New 1Password item — GitHub PAT | Not applicable — transfer on hold, current PAT unchanged |
 | New 1Password item — age backup key | _(item name)_ — saved by Mat; local keypair file generated in agent scratchpad and deleted after confirmation |
 | age public key (`BACKUP_AGE_RECIPIENT`) | `age18u4k3yx4qt3pdtqmx8x6as47uzu4vevdecnx5dkkeljy7fd9ha9s5zr5uh` (not secret — becomes the repo variable in human step 8) |
 | UptimeRobot monitors created | Yes — "Explore Kingston — /api/health" + "Explore Kingston — /api/ferry/status", 5-min interval, email alerts on |
@@ -273,6 +277,6 @@ Fill in as Part B executes:
 | Sentry DSN + tokens on Render production | `SENTRY_DSN`, `SENTRY_ENVIRONMENT=production`, `BACKUP_TOKEN`, and `FERRY_OBSERVE_TOKEN` are all set on the `explore-kingston` Render service (confirmed via a redeploy + `/api/health` still 200). Values not recorded in any file, per the project's 1Password-is-source-of-truth pattern |
 | Sentry verification token (`project:read` only) | 1Password: `op://Private/fswei6tqnabxtkcyutykupwt3q/credential` — used for AC 19's `curl .../api/0/projects/` check |
 | Sentry test-event id | _(id, or "none yet — wiring verified by config")_ |
-| R2 bucket created | _(yes/no/deferred)_ |
+| R2 bucket created | Yes — `explore-kingston-backups`, Standard storage class, public access disabled, 90-day object-expiry lifecycle rule. Account-scoped API token (Object Read & Write, restricted to this bucket). GitHub secrets `R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY` + variables `R2_ENDPOINT`/`R2_BUCKET` set on `mat-arda-cards/visit-kingston`. Manually triggered `backup-offsite.yml` run succeeded end-to-end — `explore-kingston-backup-2026-07-10.json.age` (352 KB, `application/vnd.age`) confirmed in the bucket, no plaintext artifact |
 | `scripts/verify-migration.sh` result | _(all PASS, date run)_ |
 | First production deploy from new repo — commit SHA | _(sha)_ |
