@@ -14,8 +14,15 @@ would have blocked a clean GitHub transfer, and decided it wasn't worth
 resolving right now. The **ops-floor work below is independent of the
 transfer and is still real progress** — Sentry, UptimeRobot, the age backup
 keypair, and the production env vars are all done regardless of which account
-hosts the repo (see the completion log). Only the GitHub-account-transfer
-steps (human checklist 5–9, agent checklist) are not happening.
+hosts the repo (see the completion log).
+
+Only human-checklist steps **5–7** (GitHub account confirmation + transfer,
+new PAT, Render re-link) are on hold — those are the actually
+transfer-specific ones. Steps **8** (GitHub Actions secrets/variables) and
+**9** (Cloudflare R2) are **not** transfer-specific — `backup-offsite.yml`
+and the ferry crons need those set on the **current** repo
+(`mat-arda-cards/visit-kingston`) regardless of which account hosts it, so
+those still need doing.
 
 If the transfer is revisited later: resolve the placeholder-repo conflict
 first (rename or delete `matthager12-collab/ExploreKingstonChamberApp` before
@@ -144,19 +151,20 @@ monitored while it happens.
    `NEXT_PUBLIC_SITE_URL` (the staging service's own `onrender.com` URL, once
    Render assigns it), `SENTRY_DSN`, `BACKUP_TOKEN`, `FERRY_OBSERVE_TOKEN`.
 
-### 8. GitHub repo settings on the new repo
+### 8. GitHub Actions secrets/variables — NOT on hold, do this on the current repo
 
-1. Re-create (or verify, if the transfer carried them over) Actions
-   **secrets**:
+The transfer is on hold, but `backup-offsite.yml` and the ferry crons still
+need these set on `mat-arda-cards/visit-kingston` to actually run:
+
+1. Create Actions **secrets** (Settings → Secrets and variables → Actions →
+   Secrets):
    - `FERRY_OBSERVE_TOKEN` — value from step 3
    - `BACKUP_TOKEN` — value from step 3
-2. Re-create (or verify) Actions **variables**:
+2. Create Actions **variables** (same page, Variables tab):
    - `FERRY_OBSERVE_URL` = `https://explore-kingston.onrender.com`
    - `BACKUP_AGE_RECIPIENT` = the `age1...` public key from step 4
-3. Re-enable any scheduled workflows GitHub disabled during the transfer
-   (Actions tab → each workflow → re-enable if greyed out).
-4. Verify branch protection on `main` survived the transfer — the agent's
-   `scripts/verify-migration.sh` (and its re-apply step) checks/fixes this.
+3. Confirm branch protection on `main` is still active (it already is — E02
+   set it up on this repo and nothing has touched it).
 
 ### 9. Cloudflare R2 (recommended — ask-first item; skip if you'd rather use
 a different vendor or stay on the artifact fallback for now)
