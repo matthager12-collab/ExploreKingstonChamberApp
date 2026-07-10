@@ -1,19 +1,12 @@
 # Git & GitHub setup for this repo
 
 *July 2026. This repo is live and public. See also
-[DEPLOY.md](DEPLOY.md) (Render auto-deploys from GitHub on push),
-[MIGRATION.md](MIGRATION.md) (the E03 repo migration this doc reflects), and
+[DEPLOY.md](DEPLOY.md) (Render auto-deploys from GitHub on push) and
 [README.md](README.md) (doc index).*
 
 ## Current reality (as configured)
 
-> **Status:** this section describes the **post-E03-migration** configuration
-> — the permanent home at `matthager12-collab`. If you're reading this
-> between the E03 code landing and Mat completing the migration checklist,
-> `docs/MIGRATION.md` has the actual current state and the pending steps.
-
-- **Remote:** `origin` →
-  `https://github.com/matthager12-collab/ExploreKingstonChamberApp.git`
+- **Remote:** `origin` → `https://github.com/mat-arda-cards/visit-kingston.git`
 - **Visibility:** **PUBLIC** on GitHub. (Made public to bypass a
   Render↔GitHub sync issue during Phase-1 launch. No secrets are in git —
   every `.env*` is gitignored; the one committed sample is
@@ -30,9 +23,12 @@
   Note the name is `Mat`, not `Matt Hager`; the personal **email** is what
   keeps commits off the arda identity. Reset it if you want the full name:
   `git config user.name "Matt Hager"`.
-- **GitHub account:** `matthager12-collab` (personal — a distinct account
-  from the pre-E03 home; see [MIGRATION.md](MIGRATION.md) for which account
-  that was and why this repo moved).
+- **GitHub account:** `mat-arda-cards` (personal, despite the arda-ish name —
+  confirmed intentional). A migration to a different account
+  (`matthager12-collab`) was drafted under E03 but is **on hold** — the
+  target account already had a same-named placeholder repo blocking a clean
+  transfer, and Mat decided to stay put rather than resolve that conflict.
+  This repo is not moving for now.
 - **Deploy:** Render **auto-deploys on push to `main`** from this GitHub repo
   (Blueprint / `render.yaml`, Docker build). A push is a production deploy —
   see [DEPLOY.md](DEPLOY.md). Push to `staging` deploys the staging service
@@ -69,26 +65,25 @@ that reads a Personal Access Token from a gitignored env file:
   `.env.git` line in `.gitignore`) and is `chmod 600`. It is never committed.
 - Result: `git push` is instant and silent — no interactive prompt.
 
-**Source of truth for the token is 1Password**, in a **new item created
-during the E03 migration** (the old item was scoped to the pre-migration PAT
-on the pre-E03 account and is superseded — see [MIGRATION.md](MIGRATION.md)
-for the exact old/new item names Mat used). The
-`.env.git` file is seeded from that new item the same way the old one was: a
-one-time `op read` into the gitignored file, then the credential helper reads
-the cached file on every push. If you prefer reading straight from 1Password
-instead of the cached file, swap the helper's `grep` for an `op read` of the
-new item's path (slower, prompts on op session expiry).
+**Source of truth for the token remains 1Password:**
+`op://Private/Github MattHager/credential`. The `.env.git` file was **seeded
+from that item** on 2026-07-03 after repeated `op read` auth-timeouts made
+pushing painful. If you prefer reading straight from 1Password instead of the
+cached file, swap the helper's `grep` for
+`op read "op://Private/Github MattHager/credential"` (slower, prompts on op
+session expiry).
 
 **The PAT needs both `repo` AND `workflow` scopes** (not just `repo`) — the
-repo now has GitHub Actions workflow files (`ci.yml`, the two ferry crons,
+repo has GitHub Actions workflow files (`ci.yml`, the two ferry crons,
 `backup-offsite.yml`), and pushing a new/changed workflow file is rejected by
 a `repo`-only token with a clear "refusing to allow a Personal Access Token
-to create or update workflow" error.
+to create or update workflow" error. The current token already has both
+scopes (confirmed: the E03 PR pushed `backup-offsite.yml` successfully).
 
 **Never print the token.** If it rotates, refresh `.env.git` from 1Password:
 
 ```bash
-op read "op://Private/<new 1Password item name>/credential" | \
+op read "op://Private/Github MattHager/credential" | \
   sed 's/^/GITHUB_TOKEN=/' > "/Users/matatarda/chamber app/visit-kingston/.env.git"
 chmod 600 "/Users/matatarda/chamber app/visit-kingston/.env.git"
 ```
@@ -112,7 +107,7 @@ and watch the Render deploy + `/api/health` after pushing (see
 
 ## If you ever need to reset / re-clone
 
-1. Clone: `git clone https://github.com/matthager12-collab/ExploreKingstonChamberApp.git`.
+1. Clone: `git clone https://github.com/mat-arda-cards/visit-kingston.git`.
 2. Set repo-local identity:
    ```bash
    git config user.email "matt.hager12@gmail.com"

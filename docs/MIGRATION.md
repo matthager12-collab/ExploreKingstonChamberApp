@@ -1,36 +1,45 @@
-# Repo migration runbook (E03)
+# Repo migration runbook (E03) — ON HOLD
 
 Ordered steps to stand up the ops floor (Sentry, UptimeRobot, encrypted
-off-site backups, staging) and move this repo to its permanent home. Part A
-(code) lands via a normal PR against the **current** repo and is safe to
-merge on its own — every new env var/route/script is a no-op until Part B
-below actually sets it. Part B is Mat's account-level checklist, interleaved
-with agent-run verification.
+off-site backups, staging) and — originally — move this repo to a new GitHub
+account. Part A (code) lands via a normal PR against the **current** repo and
+is safe to merge on its own — every new env var/route/script is a no-op until
+it's actually wired up.
 
-**Status: Part A merged; Part B not yet started.** Update this line (and fill
-in the completion log at the bottom) as Part B proceeds.
+**Status (2026-07-07): the repo-transfer portion of this epic is ON HOLD —
+this repo is staying at `mat-arda-cards/visit-kingston`.** Mat found that the
+transfer target, `matthager12-collab/ExploreKingstonChamberApp`, already
+existed as a same-named placeholder repo (one commit, a bare README) which
+would have blocked a clean GitHub transfer, and decided it wasn't worth
+resolving right now. The **ops-floor work below is independent of the
+transfer and is still real progress** — Sentry, UptimeRobot, the age backup
+keypair, and the production env vars are all done regardless of which account
+hosts the repo (see the completion log). Only the GitHub-account-transfer
+steps (human checklist 5–9, agent checklist) are not happening.
+
+If the transfer is revisited later: resolve the placeholder-repo conflict
+first (rename or delete `matthager12-collab/ExploreKingstonChamberApp` before
+attempting a GitHub transfer into that slot), then this runbook's steps and
+`scripts/verify-migration.sh` are otherwise ready to use as-is.
 
 ## Recorded slugs
 
-- **Old repo (pre-migration):** `mat-arda-cards/visit-kingston`
+- **Current repo:** `mat-arda-cards/visit-kingston`
   (`https://github.com/mat-arda-cards/visit-kingston.git`) — a personal
-  GitHub account, despite the arda-ish name. This is the one deliberate place
-  this slug is allowed to appear in the tracked tree; every other doc/script
-  refers back here instead of repeating it (`scripts/verify-migration.sh`
-  greps for it everywhere else and requires zero matches).
-- **New repo (post-migration):** `matthager12-collab/ExploreKingstonChamberApp`
+  GitHub account, despite the arda-ish name. Staying here for now.
+- **Originally planned new repo (on hold):** `matthager12-collab/ExploreKingstonChamberApp`
   (`https://github.com/matthager12-collab/ExploreKingstonChamberApp.git`) —
-  a different personal GitHub account. The Render service itself does not
-  move; its URL `https://explore-kingston.onrender.com` is unchanged.
+  a different personal GitHub account, currently occupied by an unrelated
+  placeholder repo (see Status above).
 
-## Why a cross-account transfer, not a rename
+## Why a cross-account transfer, not a rename (background, not happening now)
 
-The original repo lived on `mat-arda-cards`, which — despite the name — is
-one of Mat's personal accounts, not the arda work account. This epic moves it
-to `matthager12-collab`, a distinct personal account, and renames it to
-`ExploreKingstonChamberApp` at the same time. GitHub's transfer preserves
-stars/issues and leaves a redirect at the old URL — **do not delete or
-archive the old repo**, that breaks the redirect.
+The plan was to move the repo from `mat-arda-cards` — despite the name, one
+of Mat's personal accounts, not the arda work account — to `matthager12-collab`,
+a distinct personal account, renaming it to `ExploreKingstonChamberApp` at the
+same time. GitHub's transfer preserves stars/issues and leaves a redirect at
+the old URL. This is documented for reference only; it is **not currently
+happening** (see Status above).
 
 ---
 
@@ -248,9 +257,13 @@ Fill in as Part B executes:
 |---|---|
 | Migration date | _(YYYY-MM-DD)_ |
 | New 1Password item — GitHub PAT | _(item name)_ |
-| New 1Password item — age backup key | _(item name)_ |
-| UptimeRobot monitors created | _(yes/no, date)_ |
-| Sentry project created | _(yes/no, project slug)_ |
+| New 1Password item — age backup key | _(item name)_ — saved by Mat; local keypair file generated in agent scratchpad and deleted after confirmation |
+| age public key (`BACKUP_AGE_RECIPIENT`) | `age18u4k3yx4qt3pdtqmx8x6as47uzu4vevdecnx5dkkeljy7fd9ha9s5zr5uh` (not secret — becomes the repo variable in human step 8) |
+| UptimeRobot monitors created | Yes — "Explore Kingston — /api/health" + "Explore Kingston — /api/ferry/status", 5-min interval, email alerts on |
+| UptimeRobot read-only API key | Saved in 1Password by Mat (path not recorded here — see his 1Password vault) |
+| Sentry org / project | Org `greater-kingston-chamber-of-co`, project platform `javascript-nextjs`. Note: signup started a 14-day trial (no credit card required — reverts to free-plan limits automatically, not an auto-bill risk) |
+| Sentry DSN + tokens on Render production | `SENTRY_DSN`, `SENTRY_ENVIRONMENT=production`, `BACKUP_TOKEN`, and `FERRY_OBSERVE_TOKEN` are all set on the `explore-kingston` Render service (confirmed via a redeploy + `/api/health` still 200). Values not recorded in any file, per the project's 1Password-is-source-of-truth pattern |
+| Sentry verification token (`project:read` only) | 1Password: `op://Private/fswei6tqnabxtkcyutykupwt3q/credential` — used for AC 19's `curl .../api/0/projects/` check |
 | Sentry test-event id | _(id, or "none yet — wiring verified by config")_ |
 | R2 bucket created | _(yes/no/deferred)_ |
 | `scripts/verify-migration.sh` result | _(all PASS, date run)_ |

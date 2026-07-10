@@ -90,13 +90,11 @@ Blueprint that declares the Docker web service, a **1 GB Disk mounted at
 
 **Steps (as deployed):**
 
-1. **New → Blueprint**, point at the GitHub repo
-   `matthager12-collab/ExploreKingstonChamberApp` (see
-   [docs/MIGRATION.md](MIGRATION.md) if this looks unfamiliar — the repo
-   migrated there under E03). Render reads `render.yaml`, builds the
-   `Dockerfile`, and provisions the web service + Disk. (The repo is
-   **public** — a Render↔GitHub sync issue was sidestepped by making it
-   public; there are no secrets in git, so this is safe.)
+1. **New → Blueprint**, point at the GitHub repo `mat-arda-cards/visit-kingston`.
+   Render reads `render.yaml`, builds the `Dockerfile`, and provisions the web
+   service + Disk. (The repo is **public** — a Render↔GitHub sync issue was
+   sidestepped by making it public; there are no secrets in git, so this is
+   safe.)
 2. **Env vars.** The blueprint pre-wires them:
    - `AUTH_SECRET` — `generateValue: true`; Render mints a strong random value
      once and keeps it stable across deploys. **Do not rotate casually** —
