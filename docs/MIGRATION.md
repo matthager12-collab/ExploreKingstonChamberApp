@@ -263,8 +263,12 @@ Fill in as Part B executes:
 
 | Item | Value |
 |---|---|
-| Migration date | _(YYYY-MM-DD)_ |
-| New 1Password item — GitHub PAT | _(item name)_ |
+| Migration date | N/A — transfer on hold (see Status above) |
+| Part A PR | [#2](https://github.com/mat-arda-cards/visit-kingston/pull/2) merged 2026-07-10; follow-up [#3](https://github.com/mat-arda-cards/visit-kingston/pull/3) (this file's step-8 clarification) merged same day |
+| Production | Live on the merged E03 code — `/api/health` 200, `/robots.txt` disallows only `/admin` `/portal` `/api`, `/api/ferry/observe` correctly 401s without a token |
+| Staging | Live at `https://explore-kingston-staging.onrender.com` — auto-created by the Blueprint sync (no separate spend-approval prompt appeared), `staging` branch pushed to match `main`, `/robots.txt` correctly returns a bare `Disallow: /` (`NOINDEX=1`) |
+| GitHub Actions secrets/variables (current repo) | `BACKUP_TOKEN` + `FERRY_OBSERVE_TOKEN` secrets and `FERRY_OBSERVE_URL` + `BACKUP_AGE_RECIPIENT` variables all set on `mat-arda-cards/visit-kingston`; `ferry-observe`/`ferry-accuracy` cron runs confirmed succeeding |
+| New 1Password item — GitHub PAT | Not applicable — transfer on hold, current PAT unchanged |
 | New 1Password item — age backup key | _(item name)_ — saved by Mat; local keypair file generated in agent scratchpad and deleted after confirmation |
 | age public key (`BACKUP_AGE_RECIPIENT`) | `age18u4k3yx4qt3pdtqmx8x6as47uzu4vevdecnx5dkkeljy7fd9ha9s5zr5uh` (not secret — becomes the repo variable in human step 8) |
 | UptimeRobot monitors created | Yes — "Explore Kingston — /api/health" + "Explore Kingston — /api/ferry/status", 5-min interval, email alerts on |
