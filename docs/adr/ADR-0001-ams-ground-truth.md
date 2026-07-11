@@ -2,9 +2,9 @@
 
 ## Status
 
-BLOCKED-ON-HUMAN — awaiting written GrowthZone support answers via the Chamber (draft email: docs/chamber/ams-support-email.md). Accepted only when the Questions section below is filled from a written vendor reply and Mat signs the walk-away decision.
+CLOSED — WALK-AWAY (2026-07-10). The gate resolved without vendor answers: the Chamber decided to **roll off GrowthZone entirely** (docs/ROLLOFF-GROWTHZONE.md, accepted; ADR-0003 QuickBooks boundary; ADR-0004 membership-SoR scope amendment), so the GrowthZone API will **never be purchased** and the eight questions below are moot. The support email (docs/chamber/ams-support-email.md) is superseded — do not send it. **This closure authorizes no API code**: it is a walk-away, not an approval; any future revival of a GrowthZone API purchase would need a new decision. The verified-facts sections below remain accurate history, and `npm run ams:checks` remains the tenant-drift alarm until cancellation (~April 2027).
 
-> **Posture update (2026-07-10, ADR-0002):** the near-term plan no longer depends on this gate closing. Per docs/adr/ADR-0002-app-first-events-and-manual-exports.md, events shift to the app as system of record, moderation happens in-app, and member data arrives via manual CSV exports (integration-ladder rung 0). This gate now guards only a **future** API-module purchase (e.g. LTAC-funded in 2027); the support email is informational — pricing intel and the hot-deals/calendar-feed questions — not blocking.
+> *Superseded history — the gate as originally framed:* BLOCKED-ON-HUMAN awaiting written GrowthZone answers; then demoted 2026-07-10 by ADR-0002 (app-first events, manual exports) to guarding only a future API purchase; then closed the same day by the roll-off decision.
 
 ## Correction (2026-07-10)
 

@@ -1,4 +1,8 @@
-# AMS API support email — ready to send
+# AMS API support email — SUPERSEDED, DO NOT SEND
+
+> **2026-07-10:** the Chamber decided to roll off GrowthZone entirely (docs/ROLLOFF-GROWTHZONE.md; docs/adr/ADR-0001 closed as walk-away). The API will never be purchased, so this inquiry is moot. Kept for the record only. The two still-useful asks moved elsewhere: the whole-calendar iCal feed is staff-generated (docs/OPERATIONS.md §9 item 6b), and cancellation/data-export mechanics are covered by the roll-off plan's R0/R4 phases.
+
+---
 
 **For the Chamber office — please read this preamble, then send the draft below.**
 
