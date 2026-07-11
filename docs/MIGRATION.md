@@ -1,33 +1,41 @@
-# Repo migration runbook (E03) — ON HOLD
+# Repo migration runbook (E03) — TRANSFER IN FLIGHT
 
 Ordered steps to stand up the ops floor (Sentry, UptimeRobot, encrypted
-off-site backups, staging) and — originally — move this repo to a new GitHub
-account. Part A (code) lands via a normal PR against the **current** repo and
-is safe to merge on its own — every new env var/route/script is a no-op until
-it's actually wired up.
+off-site backups, staging) and move this repo to a new GitHub account. The
+ops floor is **done** (see the completion log).
 
-**Status (2026-07-07): the repo-transfer portion of this epic is ON HOLD —
-this repo is staying at `mat-arda-cards/visit-kingston`.** Mat found that the
-transfer target, `matthager12-collab/ExploreKingstonChamberApp`, already
-existed as a same-named placeholder repo (one commit, a bare README) which
-would have blocked a clean GitHub transfer, and decided it wasn't worth
-resolving right now. The **ops-floor work below is independent of the
-transfer and is still real progress** — Sentry, UptimeRobot, the age backup
-keypair, and the production env vars are all done regardless of which account
-hosts the repo (see the completion log).
+**Status (2026-07-10, evening): the transfer is INITIATED and pending
+acceptance.** Mat took the hold off (the blocking placeholder repo at the
+target name is gone), and the transfer of `mat-arda-cards/visit-kingston` →
+`matthager12-collab/ExploreKingstonChamberApp` was initiated via the GitHub
+API. It completes when Mat accepts the email invitation on the
+`matthager12-collab` account (invitations expire after ~1 day — if it lapses,
+re-initiate with:
+`gh api repos/mat-arda-cards/visit-kingston/transfer -f new_owner=matthager12-collab -f new_name=ExploreKingstonChamberApp`).
 
-Only human-checklist steps **5–7** (GitHub account confirmation + transfer,
-new PAT, Render re-link) are on hold — those are the actually
-transfer-specific ones. Steps **8** (GitHub Actions secrets/variables) and
-**9** (Cloudflare R2) are **not** transfer-specific — `backup-offsite.yml`
-and the ferry crons need those set on the **current** repo
-(`mat-arda-cards/visit-kingston`) regardless of which account hosts it, so
-those still need doing.
+**Remaining sequence (morning checklist, IN ORDER):**
 
-If the transfer is revisited later: resolve the placeholder-repo conflict
-first (rename or delete `matthager12-collab/ExploreKingstonChamberApp` before
-attempting a GitHub transfer into that slot), then this runbook's steps and
-`scripts/verify-migration.sh` are otherwise ready to use as-is.
+1. **Don't accept while an agent session is mid-push.** The moment the
+   transfer is accepted, pushes authenticated as `mat-arda-cards` stop
+   working (the repo becomes `matthager12-collab`'s; public reads and the
+   old-URL redirect keep working). Finish or pause any running epic first.
+2. **Accept the transfer** (email link on the `matthager12-collab` account).
+   The repo lands already named `ExploreKingstonChamberApp`. Keep it public.
+3. **Mint the new PAT** (step 6 below: `repo` + `workflow` scopes on
+   `matthager12-collab`) and write it to `.env.git` per step 6.3 — this is
+   what restores push access for local/agent work. Optionally also
+   `gh auth login` with the new account.
+4. **Render re-link** (step 7 below): install the Render GitHub App on
+   `matthager12-collab`, point the service + Blueprint at the new repo.
+   Until this is done, pushes to `main` do NOT auto-deploy — fine for hours,
+   not for days.
+5. Tell Claude — it runs `scripts/verify-migration.sh`, updates the local
+   remote, and sweeps docs/memory for the old slug.
+
+Historical note (2026-07-07): the transfer was briefly ON HOLD because the
+target name was occupied by a same-named placeholder repo; that conflict no
+longer exists. Steps **8** (GitHub Actions secrets/variables) and **9**
+(Cloudflare R2) were completed on the current repo and transfer with it.
 
 ## Recorded slugs
 
