@@ -340,14 +340,17 @@ interface BehavioralState { lastArc; arcTrend; slowSampleCount; firstSlowTs }
 - Gate record → `overlay(store="ferry-queue-sensing", id="settings")`, doc `{ enabled, setAt, setBy }` — identical shape to the existing `ferry-prediction` record.
 
 **Aggregate (durable) — the ONE new table, section-level only, k-anonymous.**
-Add to **both** `db/schema.sql` and the `SCHEMA_STATEMENTS` array in `src/lib/db.ts` — they must stay in sync (the neon() HTTP driver runs one statement per call, `ensureSchema` iterates `SCHEMA_STATEMENTS`):
+Since E05, there is a single schema source of truth: add the table to
+`src/lib/db/schema.ts` and generate a checked-in migration (`npm run
+db:generate`) — the old hand-synced `db/schema.sql` / `SCHEMA_STATEMENTS` pair
+(and its drift trap) is gone:
 ```sql
 CREATE TABLE IF NOT EXISTS queue_observation (
   ts  timestamptz NOT NULL DEFAULT now(),
   obs jsonb NOT NULL
 );
 ```
-**Schema-sync safety (minor fix):** because the write is fire-and-forget (`.catch(()=>{})` like `ferry-status.ts` line 47), a drift where the table exists in one file but not the other fails **silently** — no table, no error, feature looks built. So: add a **CI/startup assertion that every `CREATE TABLE` in `db/schema.sql` has a matching `SCHEMA_STATEMENTS` entry**, and for the first weeks **log queue-write failures to the existing error channel** instead of swallowing them, so a missing table is visible.
+**Write-failure visibility (minor fix):** because the write is fire-and-forget (`.catch(()=>{})` like `ferry-status.ts` line 47), a missing table fails **silently** — no table, no error, feature looks built. Migrations retire the schema-drift half of this risk, but for the first weeks **log queue-write failures to the existing error channel** instead of swallowing them, so any write problem is visible.
 
 Local dev mirrors `.data/ferry-queue/observations.jsonl` (one JSON per line), like `.data/ferry/observations.jsonl`. New store `src/lib/stores/queue-observations.ts` mirrors `ferry-observations.ts`: `recordQueueObservation()`, `readObservations()`, `prune()`.
 
@@ -493,7 +496,7 @@ Overlay `store="ferry-queue-sensing", id="settings"`, record `{ enabled, setAt, 
 |---|---|
 | `src/lib/ferry-forecast.ts` | Add `QUEUE_MIN_PROBES` / `QUEUE_FULL_CONFIDENCE_N` / `QUEUE_MAX_WEIGHT` beside `EMP_*`; add a **dual-source `scoreAt()` overload** taking a separate `QueueTable {carCount, probeCount}` with independent weight `w_q` — **no merge into the ferry `EmpiricalBucket`** |
 | `src/lib/stores/ferry-observations.ts` | (Optional) expose `pacificParts`/`empiricalBucketKey` usage the queue store mirrors; **do NOT** aggregate queue rows into the ferry table |
-| `src/lib/db.ts` + `db/schema.sql` | Add `CREATE TABLE IF NOT EXISTS queue_observation (ts timestamptz, obs jsonb)` to `SCHEMA_STATEMENTS` **and** the schema file (kept in sync); add the CI/startup sync assertion |
+| `src/lib/db/schema.ts` | Add a `queue_observation (ts timestamptz, obs jsonb)` table and generate a checked-in migration (`npm run db:generate`) — the E05 substrate's single DDL path (no hand-kept sync, no assertion needed) |
 | `src/lib/ferry-status.ts` | Fire-and-forget roll-up flush alongside the snapshot at line 47 (or per-trip); **log queue-write failures to the error channel** for the first weeks |
 | `src/lib/data/map-features.ts` | Seed queue-path `kind:"line"` (+`lanes`/`corridorM` per segment) + alternate-staging `kind:"line"` + exclusion `kind:"area"` (Port-lot snapshot + residents) + starter QR `kind:"marker"` on `queue-sensing` |
 | `src/lib/data/map-views.ts` | Seed `{ id:"queue-sensing", published:false }` |

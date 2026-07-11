@@ -41,7 +41,7 @@ A tourism web app for Kingston, WA (unincorporated Kitsap County; the Edmonds–
 | `UPSTASH_REDIS_REST_URL` / `_TOKEN` | shared rate-limit (Phase 2) | else in-process Map |
 | `FERRY_OBSERVE_TOKEN` | optional bearer gate on `/api/ferry/{observe,accuracy}` | absent → open (writes throttled, public data only) |
 
-Scale: **33 pages, 40 API route files.** Scripts: `dev/build/start/lint`, `db:setup` (psql schema), `db:migrate` (`scripts/migrate-to-db.mjs`).
+Scale: **33 pages, 40 API route files.** Scripts: `dev/build/start/lint`, plus (post-E02/E05) `typecheck`, `lint:boundaries`, `test`/`test:server`, `db:generate`/`db:migrate` (drizzle-kit).
 
 ---
 
@@ -97,7 +97,7 @@ The app was file-only; it now runs on a **dual-backend seam** auto-selected by e
 | `blob-store.ts` | `hasBlob()` = `BLOB_READ_WRITE_TOKEN` set | image bytes written under `.data/…` by the domain store | `putImage(key, bytes, type)` → Vercel Blob (public, `addRandomSuffix`) returns the full CDN URL. Callers store the returned **string** and hand it to `<img src>` — either a full https blob URL (prod) or a relative name the app's image routes serve (dev), *no branch in callers*. |
 | `rate-limit.ts` | `hasUpstash()` = `UPSTASH_REDIS_REST_URL` set | in-process `Map` sliding window (correct only for a single instance) | Upstash Redis shared sliding window (correct across replicas/lambdas). `checkRateLimit(key,{limit,windowMs})` + `clientKey(req,bucket)` are identical across backends. |
 
-**DB schema (`db/schema.sql`, mirrored in `db.ts` `SCHEMA_STATEMENTS`):** four tables.
+**Legacy DB schema (`db.ts` `SCHEMA_STATEMENTS`, lazily self-created; superseded since E05 by `src/lib/db/schema.ts` + generated `db/migrations/`):** four tables.
 - `overlay(store text, id text, doc jsonb, deleted boolean, PRIMARY KEY(store,id))` — backs **every** seed+overlay collection **and auth** (`store='auth-users' | 'auth-invites'`). `deleted` carries the `{_deleted:true}` tombstone.
 - `analytics_event(ts, event jsonb)`, `survey_response(ts, response jsonb)`, `ferry_observation(ts, obs jsonb)` — append-only logs.
 
@@ -164,7 +164,7 @@ Server-only (touches the filesystem; `import type` is fine anywhere). Dual-backe
 
 ### 3.6 Migration path
 
-`scripts/migrate-to-db.mjs` (`npm run db:migrate`) copies a populated `.data/` into a Neon database; `db/schema.sql` (`npm run db:setup`) creates the tables. `/api/admin/backup` streams the whole `DATA_DIR` as a JSON bundle for off-site backup (restore via `scripts/restore-backup.mjs`).
+`scripts/migrate-to-db.mjs` (run directly: `node --env-file=… scripts/migrate-to-db.mjs`) copies a populated `.data/` into a Neon database; since E05 the tables come from checked-in Drizzle migrations (`db/migrations/`, generated from `src/lib/db/schema.ts`, applied at boot or via `npm run db:migrate`). `/api/admin/backup` streams the whole `DATA_DIR` as a JSON bundle for off-site backup (restore via `scripts/restore-backup.mjs`).
 
 ---
 
@@ -527,7 +527,7 @@ src/lib/site-copy-registry.ts       91 editable copy blocks (§8.1)
 src/lib/copy-context.tsx            EditableText / useCopy for client comps (§8.1)
 src/lib/map/resolve.ts              ResolvedMapView builder (§8.3)
 src/lib/data/*                      seed data (parking.ts has MapZone + legacy ParkingArea)
-db/schema.sql                       overlay + 3 append tables (§3.1)
+src/lib/db/schema.ts + db/migrations/   E05 Drizzle schema (legacy overlay + append tables: §3.1)
 src/app/**                          33 pages + 40 API route files (§9, §10)
 src/components/** + src/app/**/*editor.tsx   client islands (§11)
 scripts/gen-street-parking.py       street overlay generator (§12.7)

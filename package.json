@@ -14,8 +14,8 @@
     "test:all": "npm run test && npm run test:server",
     "test:watch": "TZ=UTC vitest",
     "ams:checks": "node scripts/ams-ground-truth-checks.mjs",
-    "db:setup": "psql \"$DATABASE_URL\" -f db/schema.sql",
-    "db:migrate": "node --env-file=.env.local scripts/migrate-to-db.mjs"
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
     "@geoman-io/leaflet-geoman-free": "^2.20.0",
@@ -25,23 +25,31 @@
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.38.0",
     "@vercel/blob": "^2.5.0",
+    "drizzle-orm": "^0.45.2",
     "leaflet": "^1.9.4",
     "next": "16.2.10",
+    "pg": "^8.22.0",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "server-only": "^0.0.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
+    "@electric-sql/pglite": "^0.5.4",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "dependency-cruiser": "^16.10.4",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
     "fast-glob": "^3.3.3",
     "playwright": "^1.61.1",
     "tailwindcss": "^4",
+    "tsx": "^4.23.0",
     "typescript": "^5",
     "vitest": "^3.2.7"
   }

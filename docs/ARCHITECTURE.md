@@ -197,8 +197,10 @@ the **contracts are identical across backends** so nothing above changes:
 | `blob-store.ts` | `hasBlob()` = `BLOB_READ_WRITE_TOKEN` set | image bytes under DATA_DIR, served by app image routes | Vercel Blob public CDN URL |
 | `rate-limit.ts` | `hasUpstash()` = `UPSTASH_REDIS_REST_URL` set | in-process `Map` sliding window (correct for one instance) | Upstash Redis shared sliding window (correct across lambdas) |
 
-The Neon schema (`db/schema.sql`, also self-created lazily by `ensureSchema()`
-so a fresh DB self-initializes) is deliberately tiny — **four tables**:
+The legacy Neon schema (self-created lazily by `ensureSchema()` so a fresh DB
+self-initializes; E05 supersedes it with Drizzle migrations generated from
+`src/lib/db/schema.ts` into `db/migrations/`) is deliberately tiny — **four
+tables**:
 
 - `overlay(store, id, doc jsonb, deleted)` — the generic table that backs
   **every** seed+overlay collection *and* auth (`store = 'auth-users' |
@@ -419,9 +421,12 @@ admin-gated `/api/admin/backup` — a JSON bundle of the whole `DATA_DIR`
 `scripts/backup-data.sh` (tar) is the local equivalent. Full runbook:
 [OPERATIONS.md](OPERATIONS.md).
 
-Migration path: `db/schema.sql` (`npm run db:setup`) + `scripts/migrate-to-db.mjs`
-(`npm run db:migrate`) move a filesystem `DATA_DIR` into Neon; `ensureSchema()`
-also self-creates the tables on first use.
+Migration path (mid-rebuild by E05): schema DDL is generated from
+`src/lib/db/schema.ts` into `db/migrations/` (`npm run db:generate`) and
+applied at boot (`src/instrumentation.ts`) or via `npm run db:migrate`;
+`scripts/migrate-to-db.mjs` (run directly with `node --env-file=…`) moves a
+filesystem `DATA_DIR` into the legacy overlay tables until E05's importer
+replaces it. `ensureSchema()` still self-creates the legacy tables on first use.
 
 ---
 

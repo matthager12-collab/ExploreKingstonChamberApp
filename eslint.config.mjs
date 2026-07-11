@@ -42,6 +42,41 @@ const eslintConfig = defineConfig([
       "react/no-unescaped-entities": "warn",
     },
   },
+  // E05: the Postgres client is data-layer-only. Everything else goes through
+  // the data layer (src/lib/db/records.ts, PR 2) or a store module above it.
+  // `patterns` catches relative/deep specifiers a paths-only rule would miss;
+  // the dependency-cruiser rule `db-client-only-via-db-layer` is the
+  // resolver-aware backstop for anything importy that eslint can't see.
+  {
+    files: ["src/**/*.{ts,tsx}", "scripts/**/*.{ts,mjs}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@/lib/db/client",
+              message:
+                "Only src/lib/db/** may import the DB client — go through the data layer.",
+            },
+          ],
+          patterns: [
+            {
+              group: ["**/lib/db/client", "**/lib/db/client/**"],
+              message:
+                "Only src/lib/db/** may import the DB client — go through the data layer.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["src/lib/db/**/*.ts"],
+    rules: {
+      "no-restricted-imports": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

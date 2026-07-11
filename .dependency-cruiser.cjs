@@ -56,6 +56,17 @@ module.exports = {
         pathNot: "^src/app/webcams/webcam-grid",
       },
     },
+    {
+      name: "db-client-only-via-db-layer",
+      severity: "error",
+      comment:
+        "E05: the Postgres client (src/lib/db/client.ts) is data-layer-only — " +
+        "every other module goes through src/lib/db/records.ts or a store module. " +
+        "Resolver-aware twin of the eslint no-restricted-imports rule (this one " +
+        "also catches aliased/relative specifiers).",
+      from: { pathNot: "^src/lib/db/" },
+      to: { path: "^src/lib/db/client" },
+    },
   ],
   options: {
     doNotFollow: { path: "node_modules" },

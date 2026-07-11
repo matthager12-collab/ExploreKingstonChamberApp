@@ -45,8 +45,10 @@ npm install
 npm run dev        # http://localhost:3000
 ```
 
-Scripts (`package.json`): `dev`, `build`, `start`, `lint`, plus two Phase-2-only
-DB scripts, `db:setup` and `db:migrate` (§7). There is no test script.
+Scripts (`package.json`): `dev`, `build`, `start`, `lint`, `lint:boundaries`,
+`typecheck`, `test`/`test:server`/`test:all` (E02), `ams:checks`, plus the E05
+schema scripts `db:generate` (drizzle-kit generate) and `db:migrate`
+(drizzle-kit migrate — needs `DATABASE_URL`).
 
 ### `.env.local`
 
@@ -425,10 +427,12 @@ store seam already branches on env. When/if the app moves to Vercel:
    **pooled** URL, host contains `-pooler`), `BLOB_READ_WRITE_TOKEN` (Vercel
    Blob), `UPSTASH_REDIS_REST_URL` + `_TOKEN` (shared rate limiter). Do **not**
    set `DATA_DIR` on Vercel.
-2. **Create the schema:** `npm run db:setup` runs `psql "$DATABASE_URL" -f
-   db/schema.sql` (tables `overlay`, `analytics_event`, `survey_response`).
-   `ensureSchema()` also self-creates lazily, so this is belt-and-suspenders.
-3. **Move the data once:** `npm run db:migrate` →
+2. **Create the schema:** the checked-in Drizzle migrations (`db/migrations/`,
+   generated from `src/lib/db/schema.ts`) apply automatically at server boot
+   (`src/instrumentation.ts`), or up front via `npm run db:migrate`. The legacy
+   `overlay` + append tables are still self-created lazily by `ensureSchema()`
+   until E05 completes.
+3. **Move the data once:**
    `node --env-file=.env.local scripts/migrate-to-db.mjs`. It reads the on-disk
    `DATA_DIR` tree and loads it into the cloud backends:
    - `stores/*.json`, `auth/users.json` (`auth-users`), `auth/invites.json`

@@ -77,6 +77,10 @@ COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
 # public/ (brand assets, embed, geo) is also not part of standalone.
 COPY --from=build --chown=nextjs:nodejs /app/public ./public
+# Checked-in Drizzle migrations, read at runtime by the boot migrator
+# (src/instrumentation.ts). Standalone's file tracer only follows static
+# imports, so runtime-read .sql files must be copied in explicitly.
+COPY --from=build --chown=nextjs:nodejs /app/db/migrations ./db/migrations
 
 # Create the mount point for the persistent volume and hand it to the app user
 # so the health probe's write test and all data writes succeed. On Render/Fly

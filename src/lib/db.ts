@@ -9,9 +9,10 @@
 // that is stateless per query (no TCP pool to leak across serverless
 // invocations). Use the POOLED DATABASE_URL (host contains "-pooler").
 //
-// Schema lives in db/schema.sql; run it once against the Neon database (Neon
-// SQL editor or `npm run db:setup`). ensureSchema() also creates the tables
-// lazily on first use so a fresh database self-initializes.
+// LEGACY (E05): this module and its lazy ensureSchema() are being retired —
+// the schema's source of truth is now src/lib/db/schema.ts + generated
+// db/migrations/ applied at boot. Kept until the store layer cutover lands;
+// do not add new callers.
 
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 
@@ -34,8 +35,9 @@ export function db(): NeonQueryFunction<false, false> {
 
 // The three tables that back every store. One generic overlay table serves all
 // portal-editable collections (custom-wins-by-id over the git seed arrays) plus
-// auth; two append tables hold the analytics and survey logs. Mirror of
-// db/schema.sql — keep them in sync. The neon() HTTP driver runs ONE statement
+// auth; two append tables hold the analytics and survey logs. (The old
+// db/schema.sql twin of this list is deleted — E05 migrations own DDL now.)
+// The neon() HTTP driver runs ONE statement
 // per call, so each CREATE runs separately (all idempotent via IF NOT EXISTS).
 const SCHEMA_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS overlay (

@@ -27,7 +27,7 @@ the current baseline, recorded here so nobody re-lists them.
 
 | Was | Now | Where |
 |---|---|---|
-| P0 — migrate file stores off the local disk | **Done.** Dual-backend seam: every store branches on env. Neon Postgres (`overlay`/`analytics_event`/`survey_response`/`ferry_observation` tables), Vercel Blob for images, Upstash Redis for shared rate-limit. Stores unchanged above the seam. | `src/lib/db.ts`, `src/lib/blob-store.ts`, `src/lib/rate-limit.ts`, `db/schema.sql`, `scripts/migrate-to-db.mjs` |
+| P0 — migrate file stores off the local disk | **Done.** Dual-backend seam: every store branches on env. Neon Postgres (`overlay`/`analytics_event`/`survey_response`/`ferry_observation` tables), Vercel Blob for images, Upstash Redis for shared rate-limit. Stores unchanged above the seam. | `src/lib/db.ts`, `src/lib/blob-store.ts`, `src/lib/rate-limit.ts`, `scripts/migrate-to-db.mjs` (schema since E05: `src/lib/db/schema.ts` + `db/migrations/`) |
 | P0 — production deploy | **Done (Phase 1 live on Render).** Docker/standalone, Starter web + 1 GB disk at `/data`, filesystem mode, `/api/health` 503-gates on `dataWritable`. Auto-deploy on push. | `Dockerfile`, `render.yaml`, `fly.toml`, `src/app/api/health/route.ts`, [DEPLOY.md](DEPLOY.md) |
 | P0 — persistent-disk portability | **Done.** `DATA_DIR` resolves all mutable state; health gate refuses to serve until the volume is writable. | `src/lib/data-dir.ts` |
 | P0 — auth rate limiting | **Done.** login / setup / redeem are rate-limited; shared sliding window on Upstash when configured, in-process Map otherwise. | `src/lib/rate-limit.ts`, `src/app/api/auth/{login,setup,redeem}/route.ts` |

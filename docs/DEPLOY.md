@@ -54,10 +54,12 @@ Two consequences:
 | ferry observations (busyness forecast learning log) | `.data/…` jsonl | `ferry_observation` append table |
 | auth login/setup/redeem rate limiting | in-process `Map` | **Upstash Redis** shared counter |
 
-The tables are defined in [`db/schema.sql`](../db/schema.sql). `ensureSchema()`
-in `db.ts` creates `overlay`, `analytics_event`, `survey_response`, and
-`ferry_observation` lazily on first use, so a fresh Neon database
-self-initializes.
+The schema's source of truth is `src/lib/db/schema.ts` (Drizzle, E05): DDL is
+generated into checked-in migrations under `db/migrations/` (`npm run
+db:generate`) and applied at server boot by `src/instrumentation.ts` (or
+manually via `npm run db:migrate`). The legacy `ensureSchema()` in `db.ts`
+still creates the old `overlay` + append tables lazily on first use; it is
+retired when E05's store-layer cutover completes.
 
 ---
 
@@ -248,11 +250,12 @@ complete and tested; this section is the one-time stand-up.
      Neon/Blob. Setting it on Vercel would point stores at an ephemeral disk.
 4. **Deploy** (redeploy if you imported before adding stores, so the build picks
    up the injected env).
-5. **Schema.** Nothing to run — `ensureSchema()` creates the tables on the first
-   request that touches any store. To create them up front instead, run
-   **`npm run db:setup`** (`psql "$DATABASE_URL" -f db/schema.sql`) against the
-   Neon string, or paste [`db/schema.sql`](../db/schema.sql) into the Neon SQL
-   editor.
+5. **Schema.** The E05 substrate tables come from the checked-in Drizzle
+   migrations: they apply automatically at server boot
+   (`src/instrumentation.ts`), or up front with **`npm run db:migrate`**
+   (drizzle-kit; reads `DATABASE_URL` from the environment). The legacy
+   `overlay` + append tables are still self-created lazily by `ensureSchema()`
+   until E05 completes.
 6. **Migrate existing `.data/` (only if carrying over Render's state).** Pull the
    production env and run the migration once:
    ```bash
@@ -268,9 +271,9 @@ complete and tested; this section is the one-time stand-up.
      the script skips each if it already has rows; pass `--force` to append
      anyway (which would double them).
 
-   `npm run db:migrate` runs the same script but reads **`.env.local`** (not
-   `.env.production.local`) — use the explicit `node --env-file=…` form when
-   pointing at Vercel-pulled prod env. Without `BLOB_READ_WRITE_TOKEN` the
+   (Since E05, `npm run db:migrate` is drizzle-kit's schema migrator, NOT this
+   data-move script — always run `scripts/migrate-to-db.mjs` via the explicit
+   `node --env-file=…` form.) Without `BLOB_READ_WRITE_TOKEN` the
    script leaves image fields as relative paths and warns. A fresh Chamber
    deploy with no prior data skips this step entirely.
 7. **Verify `/api/health`** returns `200 {ok:true,...}`, then smoke-test a write:
@@ -375,7 +378,7 @@ launch**; the app currently lives at the raw `explore-kingston.onrender.com`.
 |---|---|---|
 | Persistence | 1 GB disk at `/data`, filesystem stores | Neon + Blob + Upstash |
 | Env shape | `DATA_DIR=/data`, no cloud vars | cloud vars set, `DATA_DIR` unset |
-| Schema/migration | none — files on disk | `ensureSchema()` / `db:setup`; migrate via `migrate-to-db.mjs` |
+| Schema/migration | none — files on disk | Drizzle migrations (`db/migrations/`, applied at boot — E05); data move via `scripts/migrate-to-db.mjs` |
 | Rate limit | in-process `Map` (single instance, correct) | Upstash shared window (required) |
 | Cost | ~$7.25/mo (Starter + 1 GB disk) | ~$20/mo Pro + free-tier stores |
 | Backups | daily disk snapshots + off-site JSON bundle | Neon PITR + Blob versioning |
