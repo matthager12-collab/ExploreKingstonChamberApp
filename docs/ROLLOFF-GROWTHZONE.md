@@ -1,6 +1,16 @@
 # GrowthZone roll-off plan
 
-**Status: PROPOSED** — for Mat + Chamber evaluation (2026-07-10). Nothing in the build plan changes until this is accepted; the "Requirements & build-plan deltas" section below is the worklist for that follow-up. Research provenance: vendor pages, Intuit docs, and WA DOR read 2026-07-10; tenant module states probed live the same day.
+**Status: ACCEPTED with modifications** — Mat evaluated and approved 2026-07-10 ("plan looks good with my modifications"); his modifications are recorded in §0 below and folded through the document. The §8 "Requirements & build-plan deltas" worklist is now active. Research provenance: vendor pages, Intuit docs, and WA DOR read 2026-07-10; tenant module states probed live the same day; member roster from the Chamber's 2026-07-10 GrowthZone export.
+
+## 0. Decision readout (2026-07-10 — read this first at handover)
+
+Mat's decisions on evaluation, in plain terms:
+
+1. **Jobs board is IN.** Even though staff didn't list the GrowthZone jobs module among used features, Mat wants a jobs board in the app. It ships via E28 in its child-safety shape (Chamber-vetted employers only, moderated, no applicant intake in the app) and stays in the R4 gate checklist. E28 is a Phase-4 epic — with the relaxed timeline below, that sequencing works.
+2. **Every other module staff didn't name is DROPPED, no replacement:** lists/committees, MemberPlus, member forum, hot deals, store, forms, surveys, engagement scoring, sales funnel. If a need re-emerges later, it's a new feature request, not a migration obligation.
+3. **Ticketing is NOT currently used** (corrects the earlier read of the staff feature list — "events including ticketing" meant the calendar's capability, not active use). Paid ticketing is a **future feature request**: nothing to migrate, nothing gate-blocking. When wanted, the FR-A15 floor applies (deep-link out to an external provider — QB payment links / Eventbrite / Ticket Tailor / Zeffy-if-eligible); decide then.
+4. **Timeline: no huge rush.** The Chamber **just renewed** GrowthZone, so there's roughly a year of runway. The exact term-end date should still be pinned (one line in the contract or invoice) so the T−30 non-renewal deadline goes on a calendar now — a year passes fast and missing it costs ~$4k.
+5. **Member roster received** — 2026-07-10 GrowthZone export analyzed in §2b below. Published dues tiers: [kingstonchamber.com/membership](https://kingstonchamber.com/membership/) (new structure effective June 1, 2026).
 
 ## 1. Goal
 
@@ -16,17 +26,27 @@ Machine-verified module states (probed 2026-07-10) plus product inventory. "Repl
 | Dues invoicing, renewals, payments | Yes → **already moving to QuickBooks** | **QuickBooks Online** | See §3. Audit: is GZ Pay in use anywhere (event door payments)? |
 | Public member directory | **Yes** (`/directory` live) | App directory (E17 import/claiming + self-service) | Already planned P0 scope |
 | Events calendar | **Yes** (`/events` live; staff-confirmed) | **App — already decided** (docs/adr/ADR-0002-app-first-events-and-manual-exports.md) | Transitional GrowthZone iCal ingest gets an end date |
-| Event registration/ticketing | **Yes — including paid ticketing** (staff-confirmed 2026-07-10) | Free events: in-app RSVP (M-05-08). Paid events: **deep-link out to a ticketing provider** (FR-A15 floor — app never merchant-of-record) | Provider decision needed (§9): QB payment links (simplest, no attendee mgmt), Eventbrite (fees pass to buyers), Zeffy (free, but 501(c)(6) eligibility unverified — corpus's Zeffy-first pattern is for nonprofits), or Ticket Tailor. Audit which processor GZ ticketing uses today (GZ Pay?) |
-| Job postings | Module on (`/jobs` live) but **NOT in staff's used-features list — confirm** | If used: app jobs board (E28, Tension-4 child-safety shape: vetted employers, no applicant intake — note E28 is Phase-4, so confirmed usage would add a timing dependency). If unused: drop, no replacement | |
+| Event registration/ticketing | **Not currently used** (Mat, 2026-07-10) — requested as a **future feature** | Free events: in-app RSVP (M-05-08). Paid events (future): deep-link out to a provider per the FR-A15 floor | Nothing to migrate; not gate-blocking. Provider options when wanted: QB payment links (simplest, no attendee mgmt), Eventbrite (fees pass to buyers), Ticket Tailor (flat low fee), Zeffy (free — verify 501(c)(6) eligibility) |
+| Job postings | Module on (`/jobs` live); not in staff's used list, but **Mat wants a jobs board in the app** (2026-07-10, §0) | **App jobs board — E28**, Tension-4 child-safety shape: Chamber-vetted employers only, moderated, no applicant intake in the app | E28 is Phase-4; fits the relaxed timeline. Stays in the R4 gate |
 | Member application (join form) | **Yes** (`/member-application` live) | **App — NEW capability** (coverage gap; no M-xx owns it today) | Form → moderation queue → creates org + QB customer handoff |
 | **Constant Contact integration** (GZ syncs member lists to CC; CC is the Chamber's mail tool) | **Yes** (staff-confirmed 2026-07-10) | **Keep Constant Contact** — the app exports roster/segment lists to CC (manual CSV import first, CC v3 API later; agent-operable runbook, same posture as ADR-0002) | Simplifies the plan: no member-newsletter build needed. Renewal reminders move to QB; Resend stays tourist-side only. Member mailings = ops funding (§6) |
 | Member portal (MIC/Info Hub) — **a stated member benefit** | **Yes** (staff-confirmed; `/MIC/login` live) | App business-owner portal (invite/claims, profile self-service) + QB emailed invoice links for payment | QBO's own portal is thin — the app is the member-facing surface. The "member benefit" framing carries over: portal access is a membership entitlement |
 | **Automated member rolls on the website** (WP pages show auto-updating member lists from GZ) | **Yes** (staff-confirmed 2026-07-10) | **App-provided directory feed/embeddable widget** consumed by kingstonchamber.com | Small NEW capability: the app already plans public event feeds/widget (M-05-05/FR-EVT-09); a members/new-members equivalent is needed so the WP site never goes stale (§8) |
 | Hot deals, store, forms, surveys, news modules | **No (all off/404)** | Nothing to replace | Confirmed by probe — meaningfully shrinks the job |
-| Lists/Committees (rosters, mailing lists) | Not in staff's used-features list — **confirm unused** | App groups or a simple spreadsheet until demand proven | Cheap to confirm during the export sweep |
+| Lists/Committees (rosters, mailing lists) | **Dropped** (Mat, 2026-07-10, §0) | None — spreadsheet if a need re-emerges | Export any committee rosters during the R0 sweep anyway (they're one click and irreplaceable after cancellation) |
 | Reports/dashboards | Yes (implicitly) | App admin reports + QB reports | GZ reports are also the **export vehicle** for migration |
-| MemberPlus app / member forum / engagement scoring / sales funnel / chapters / certifications | Not in staff's used-features list — treat as unused | Consciously dropped | |
+| MemberPlus app / member forum / engagement scoring / sales funnel / chapters / certifications | **Dropped** (Mat, 2026-07-10, §0) | None | |
 | Website module hosting | **Yes** — `business.kingstonchamber.com` is GrowthZone-hosted pages wrapped in the WordPress theme | Retire the subdomain: repoint WP nav/widgets to the app, 301 the subdomain | On cancellation those pages go dead; inventory every WP link first |
+
+## 2b. Member roster snapshot (from the Chamber's 2026-07-10 GrowthZone export)
+
+Source: "Membership Report.xlsx", generated 2026-07-10 from the GrowthZone back office (83 columns — the export is rich enough to seed the migration importer as-is). **The file itself contains member PII (emails, phones, addresses) and must NOT be committed to this repo** — store it in the Chamber's drive and the R0 encrypted-backup archive; only the aggregates below live here. Headline numbers:
+
+- **174 Active memberships** (+4 Courtesy, 3 Pending Approval; 37 Dropped records in the report). 166 of 174 active have an email on file.
+- **Active dues total ≈ $38.8k/yr** — the GrowthZone subscription (~$4k) consumes roughly **10% of dues revenue**, which is the board-pitch number for this plan.
+- **Renewals are anniversary-based and spread across all 12 months** (Jan 26, Mar 23, Nov 21, Feb 15, …). Consequence: QB gets **one recurring annual invoice per member on their anniversary**, not a batch renewal date — and the R4 gate's "renewal invoices generating" check can only be verified for anniversaries that have passed.
+- **The type/level data is messy and mid-transition.** 15 distinct legacy membership-type names (e.g. "Business Membership Annual", "Annual Business Membership (based on full time employees)", "5-10 employees & patron"…), 85 of 174 active records have **no Level value**, and legacy prices ($90/$100/$125/$155/$195…) don't match the published tiers. The Chamber simplified to a new structure **effective June 1, 2026** ([kingstonchamber.com/membership](https://kingstonchamber.com/membership/)): **Nonprofit/Community $115 · Small Business (≤5 FTE + food service) $160 · Medium Business (6–20 FTE) $375 · Large Business (>20 FTE) $550 · Patron add-on $350 · Visionary Sponsor $10,000+ · one-time lunch sponsorship $150.** Members presumably migrate to new rates at renewal. Consequences: (a) the migration importer needs an explicit **old-type → new-tier mapping table** (human-reviewed, not guessed); (b) QB items should be the **new** tiers, with the legacy price honored per member until their first post-migration renewal; (c) the one **$10,000+ Visionary** membership exceeds QB Autopay's $5k cap — it gets a manually-sent invoice.
+- The membership page's "To Join" link points at business.kingstonchamber.com (the GrowthZone application) — add it to the R4 website-link inventory; it repoints to the app's join form in R2.
 
 ## 3. Target architecture
 
@@ -52,7 +72,7 @@ Machine-verified module states (probed 2026-07-10) plus product inventory. "Repl
 - **R3 — Membership SoR flip.** Freeze GZ edits → final export sweep → migration import (dry-run first, agent-operable) → native member store live, entitlements read native fields → QB renewal loop live (recurring invoices set up per level) → eNews/communications replacement confirmed. From here GrowthZone is read-only legacy.
 - **R4 — Retire and cancel.** Repoint/301 `business.kingstonchamber.com`; verify nothing links to GZ pages; **migration-completeness gate** (the checklist below must be green — this replaces the old E04 gate as the human go/no-go); send written non-renewal notice **no later than 30 days before term end** (i.e., BEFORE the final 30 days begin — notice sent inside the last 30 days is too late and auto-renews another non-refundable year); confirm cancellation in writing.
   - **Timeline anchor:** call the notice deadline **T−30** (term end = T). The gate's "live ≥30 days" requirement means R2/R3 must be complete by roughly **T−60**. Work backwards from the renewal date the moment audit item 1 lands.
-  - Gate checklist: final exports archived + restorable; **roster reconciliation** — every member in the final GZ export is accounted for in the app, with post-freeze in-app joins itemized separately (strict count-equality is wrong once the R2 join form is live); QB customers reconciled to roster; renewal templates configured and invoices confirmed generating for members whose anniversaries have passed; website carries zero GZ links; events/directory/join-form live in app for ≥30 days (jobs only if the audit confirms the GZ jobs module is actually used — staff did not name it); staff sign-off that no daily task still needs GZ.
+  - Gate checklist: final exports archived + restorable; **roster reconciliation** — every member in the final GZ export is accounted for in the app, with post-freeze in-app joins itemized separately (strict count-equality is wrong once the R2 join form is live); QB customers reconciled to roster; renewal templates configured and invoices confirmed generating for members whose anniversaries have passed; website carries zero GZ links; events/directory/join-form/jobs-board live in app for ≥30 days (jobs board per Mat's §0 decision, shipped via E28); staff sign-off that no daily task still needs GZ.
 
 ## 5. What this saves and costs
 
@@ -70,19 +90,21 @@ The hidden cost is **operational, not monetary**: support and stewardship (passw
 
 A membership CRM is **member service, not tourism promotion**. This plan's rule — every dollar of SoR build and operation is **Chamber ops money, never LTAC** — is consistent with the corpus's never-mix partition floor (00-DECISIONS §5, NFR-14's tourism-only LTAC scope, E18's one-funding-source-per-ledger-entry rule, E17's precedent that business claiming/onboarding is member service) and deliberately **stricter than the corpus's one contrary precedent**: the old "AMS API enablement fee → LTAC paid-integration ask" route (E18 seed list, ADR-0001), which §8 revokes as moot under roll-off. Membership administration stays behind `/admin` and `/portal` so an LTAC reviewer auditing the deliverable sees a tourism app; the ~$3.9k/yr GrowthZone savings is ops money (not LTAC match); and the E18 cost-attribution ledger records the split. The tourist-facing calendar/directory surfaces remain LTAC-clean.
 
-## 7. Staff audit — answered 2026-07-10 + remaining items
+## 7. Staff audit — status
 
-**Staff-confirmed used features (2026-07-10):** (1) membership signup and renewal; (2) calendar and events **including ticketing**; (3) Constant Contact integration; (4) InfoHub access as a member benefit; (5) automated member rolls on the website. Not mentioned — treat as unused pending the export sweep: lists/committees, MemberPlus, forums, store, forms, surveys, hot deals, sales funnel.
+**Answered (2026-07-10, Mat + staff):**
+- Used features: membership signup/renewal; events calendar; Constant Contact integration; InfoHub as member benefit; automated member rolls on the website. Ticketing: **not used** (future request). Jobs board: wanted in the app regardless of GZ usage (§0).
+- Contract timing: **just renewed — no rush**; roughly a year of runway.
+- Member roster: received and analyzed (§2b).
+- Everything unnamed: dropped (§0).
 
-**Still needed:**
+**Still needed (small list now):**
 
-1. **Contract:** renewal date, current annual price, any multi-year term. *(This sets the whole timeline — the single most important unknown.)*
-2. **Ticketing money path:** which processor GZ event ticketing uses (GZ Pay?) and roughly how many paid events/year + ticket volume (sizes the replacement).
-3. **Member count + levels list** (exact level names — they become QB items and app levels).
-4. **QuickBooks:** which QBO tier the Chamber is on, and whether QuickBooks Payments is enabled.
-5. **Constant Contact:** which lists/segments GZ currently syncs to CC (they must be reproduced from the app's exports).
-6. **Automated communications inventory:** renewal reminders / onboarding / invoice emails firing from GZ today (they stop silently at cancellation; QB reminders + CC replace them).
-7. **Email templates/content worth keeping** (export before cancellation).
+1. **Exact GrowthZone term-end date** (one line on the renewal invoice/contract) — even with no rush, the **T−30 written-notice deadline goes on the calendar today**; missing it costs ~$4k.
+2. **QuickBooks:** which QBO tier the Chamber is on, and whether QuickBooks Payments is enabled.
+3. **Constant Contact lists** — concretely: in Constant Contact, open **Contacts → Lists** and note (a) which lists exist, and (b) which ones GrowthZone fills automatically (typically something like "Active Members" — the integration syncs GZ groups/segments into CC lists). Those auto-filled lists are what the app's export runbook must keep populated after GrowthZone is gone; if nobody knows, a screenshot of the Lists page is enough for Mat to work it out.
+4. **Dues payment path today:** do members pay GZ invoices online (GZ Pay / card) or by check? (Determines how much payment-behavior change the QB cutover asks of members.)
+5. **Email templates/automated communications worth keeping** — export during the R0 sweep.
 
 ## 8. Requirements & build-plan deltas (the follow-up worklist — NOT yet applied)
 
@@ -98,9 +120,10 @@ A membership CRM is **member service, not tourism promotion**. This plan's rule 
 
 ## 9. Open decisions
 
-1. **Proceed with the roll-off?** (Mat + Chamber board — this document is the evaluation input.)
-2. **Timeline anchor:** GrowthZone renewal date (audit item 1) → work backwards; if renewal is close, decide whether to eat one more year or sprint R0–R4.
-3. **Paid-event ticketing provider** (replaces GZ ticketing; app deep-links out per FR-A15): QB payment links (simplest, no attendee management), Eventbrite (per-ticket fees, passable to buyers), Zeffy (free — verify 501(c)(6) eligibility first), Ticket Tailor (flat low fee). Decide once audit item 2 sizes the volume.
+1. ~~Proceed with the roll-off?~~ **Decided: yes, with modifications** (Mat, 2026-07-10 — §0). Chamber board briefing still worthwhile before R3 (the SoR flip) using §2b's 10%-of-dues number.
+2. **Timeline anchor:** just renewed → ~a year of runway; pin the exact term-end date and calendar the T−30 notice deadline now (audit item 1).
+3. ~~Paid-event ticketing provider~~ **Deferred: ticketing is a future feature** (not used today — §0). Provider options recorded in §2 for when it's wanted.
 4. **Lapse grace period** (recommend 60 days) and who confirms lapses.
-5. **Member email/PII posture** as SoR (consent + retention wording — E11 amendment).
-6. **Cutover date for the `business.kingstonchamber.com` subdomain** (already flagged in ADR-0002, now scoped to the whole subdomain).
+5. **Member email/PII posture** as SoR (consent + retention wording — E11 amendment). Note §2b: 166/174 active members have emails in the export, so this decision is now concrete.
+6. **Cutover date for the `business.kingstonchamber.com` subdomain** (already flagged in ADR-0002, now scoped to the whole subdomain — including the kingstonchamber.com membership page's "To Join" link).
+7. **Old-type → new-tier mapping** (§2b): a human-reviewed table mapping the 15 legacy membership-type names onto the four published tiers + add-ons, before the migration import.

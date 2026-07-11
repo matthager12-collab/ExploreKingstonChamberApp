@@ -27,6 +27,20 @@ GTFS, NWS weather, NOAA tides); local content lives in typed seed files the
 Chamber can edit. Every source is documented in
 [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md).
 
+## Strategic direction (read before any AMS/membership work)
+
+**The app is replacing the Chamber's GrowthZone AMS.** The accepted plan is
+[docs/ROLLOFF-GROWTHZONE.md](docs/ROLLOFF-GROWTHZONE.md) — the app becomes
+the membership system of record, QuickBooks the money system, Constant
+Contact stays for mail; start with its §0 decision readout. Supporting
+decisions: [docs/adr/ADR-0001](docs/adr/ADR-0001-ams-ground-truth.md)
+(tenant ground truth) and
+[docs/adr/ADR-0002](docs/adr/ADR-0002-app-first-events-and-manual-exports.md)
+(app-first events, manual exports). One hard deadline exists: GrowthZone
+auto-renews annually, written non-renewal notice is due **30 days before
+term end**, and there is no data export after termination — all exports
+happen while still subscribed.
+
 ## Run it
 
 ```bash
