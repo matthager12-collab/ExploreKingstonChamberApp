@@ -134,7 +134,7 @@ let customDomainTenantId = null;
   }
   slugs = [...found];
   // GrowthZone public-modules pages embed `<!-- TenantId: N; ... -->`.
-  customDomainTenantId = res.body.match(/TenantId:\s*(\d+)/)?.[1] ?? null;
+  customDomainTenantId = res.body.match(/\bTenantId:\s*(\d+)/)?.[1] ?? null;
   const ok = res.status === 200 && slugs.length >= 1;
   eventsIndex = {
     url: eventsIndexUrl,
@@ -165,18 +165,28 @@ let tenantParity;
 {
   const staffUrl = `https://${STAFF_TENANT_HOST}/events`;
   const res = await get(staffUrl);
-  const staffTenantId = res.body.match(/TenantId:\s*(\d+)/)?.[1] ?? null;
+  const staffTenantId = res.body.match(/\bTenantId:\s*(\d+)/)?.[1] ?? null;
   const match =
     customDomainTenantId !== null &&
     staffTenantId !== null &&
     customDomainTenantId === staffTenantId;
   const asExpected = match && customDomainTenantId === EXPECTED_TENANT_ID;
   if (!asExpected) {
-    console.error(
-      "TENANT CHANGED — the two hostnames no longer serve GrowthZone tenant " +
-        `${EXPECTED_TENANT_ID} (custom domain: ${customDomainTenantId ?? "none"}, ` +
-        `staff host: ${staffTenantId ?? "none"}); ADR-0001 and the E16 design assumptions are stale`,
-    );
+    // Only claim drift when both pages were actually fetched and parsed; a
+    // transient fetch failure is not evidence the tenant changed.
+    if (customDomainTenantId !== null && staffTenantId !== null) {
+      console.error(
+        "TENANT CHANGED — the two hostnames no longer serve GrowthZone tenant " +
+          `${EXPECTED_TENANT_ID} (custom domain: ${customDomainTenantId}, ` +
+          `staff host: ${staffTenantId}); ADR-0001 and the E16 design assumptions are stale`,
+      );
+    } else {
+      console.error(
+        "PARITY UNVERIFIABLE — could not extract a TenantId from " +
+          `${customDomainTenantId === null ? HOST : STAFF_TENANT_HOST} ` +
+          "(fetch failed or page markup changed); rerun before concluding drift",
+      );
+    }
   }
   tenantParity = {
     customDomainHost: HOST,

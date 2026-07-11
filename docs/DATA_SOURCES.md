@@ -462,9 +462,10 @@ editable in the portal + admin). The app already emits its own events feed at
   business.kingstonchamber.com (GrowthZone, the real data). And now a **third, better** source:
   the Chamber's own explorekingstonwa.com runs The Events Calendar with a live Tribe REST API
   — the discovery below is the strongest automation candidate.
-- **The GrowthZone calendar-wide iCal feed is unverified.** It's a documented admin feature but
-  nobody has confirmed the Chamber's plan exposes it or produced a working URL. Verify before
-  building any pipeline (Action items). Prefer the explorekingstonwa.com Tribe REST if it holds.
+- **The GrowthZone calendar-wide feed is absent (verified 2026-07).** All five candidate URLs
+  checked — `/events/ical` is a soft-404 (see docs/adr/ADR-0001-ams-ground-truth.md; rerun
+  `npm run ams:checks` to re-verify). Whether the Chamber's plan can enable one is question 7 in
+  docs/chamber/ams-support-email.md. Prefer the explorekingstonwa.com Tribe REST if it holds.
 - **Dedupe or show triplicates.** July 4th and Kingston Public Market appear on multiple
   calendars — dedupe on normalized title + start date, prefer the Chamber record.
 - **Timezones/recurrence.** All feeds are America/Los_Angeles; expand RRULEs / VTIMEZONE or
@@ -524,8 +525,8 @@ authority. The survey is anonymous (zip-code micro-survey, method = Informal Sur
    bundled fallback and no live space/delays/vessels.
 2. **Verify the events feed to automate against** — first confirm the discovered
    explorekingstonwa.com Tribe REST (`/wp-json/tribe/events/v1/events`) is stable and complete;
-   failing that, verify the GrowthZone calendar-wide iCal feed exists on the Chamber's plan
-   before any ingest pipeline is designed.
+   failing that, the calendar-wide feed is absent (docs/adr/ADR-0001-ams-ground-truth.md) —
+   whether the plan can enable one is question 7 of docs/chamber/ams-support-email.md.
 3. **Send the Kitsap Transit permission email** (lindsayc@kitsaptransit.com — the GTFS
    `feed_info` contact) for written OK to use the GTFS/GTFS-RT feeds in a Chamber tourism app;
    same email can resolve the **PugetPass contradiction**.

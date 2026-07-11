@@ -20,14 +20,14 @@ GrowthZone (the vendor) markets two product lines with two documented API famili
 
 ## Verified facts
 
-Rows 1–8 are transcribed from the harness snapshot generated **2026-07-11T03:05:53Z** (`docs/adr/ams-ground-truth-checks.json`); each fact was first verified 2026-07-05 or 2026-07-10 and re-verified on the probe date shown. Every feed probe uses the truth triple — HTTP status + `Content-Type` + body prefix — because of the soft-404 row below.
+Rows 1–8 are transcribed from the harness snapshot generated **2026-07-11T03:15:36Z** (`docs/adr/ams-ground-truth-checks.json`); each fact was first verified 2026-07-05 or 2026-07-10 and re-verified on the probe date shown. Every feed probe uses the truth triple — HTTP status + `Content-Type` + body prefix — because of the soft-404 row below.
 
 | # | Fact | Evidence | Probed |
 |---|---|---|---|
-| 1 | **Tenant parity: one GrowthZone tenant (3508), two hostnames** — the custom-domain public site and the staff tenant serve the same data | `business.kingstonchamber.com/events` and `greaterkingstoncommunitychamberofcommerce.growthzoneapp.com/events` both embed `TenantId: 3508`; identical event slugs and IDs on both | 2026-07-10 |
+| 1 | **Tenant parity: one GrowthZone tenant (3508), two hostnames** — the custom-domain public site and the staff tenant serve the same data | `business.kingstonchamber.com/events` and `greaterkingstoncommunitychamberofcommerce.growthzoneapp.com/events` both embed `TenantId: 3508` (harness-checked); identical event slugs and IDs on both hosts observed 2026-07-10 (human check, not harness-probed) | 2026-07-10 |
 | 2 | The custom domain rides GrowthZone's shared public-modules hosting under legacy MemberZone naming — **not platform proof** (see Correction) | `dig CNAME business.kingstonchamber.com` → `public.west.us.memberzone.org` | 2026-07-10 |
 | 3 | Public events index is live and yields per-event Details links | `GET /events` → HTTP 200; ≥ 3 `/events/Details/{slug}-{id}` links found | 2026-07-10 |
-| 4 | **Per-event iCal is live and free** | `GET /events/ICal/{slug}-{id}.ics` → HTTP 200, `text/calendar; charset=utf-8`, body starts `BEGIN:VCALENDAR`; `PRODID:-//ChamberMaster//Event Calendar 2.0//EN` (legacy string — served by the growthzoneapp.com host too); `TZID:America/Los_Angeles` present; `X-PUBLISHED-TTL:P1H` (3/3 probed events valid) | 2026-07-10 |
+| 4 | **Per-event iCal is live and free** | `GET /events/ICal/{slug}-{id}.ics` → HTTP 200, `text/calendar; charset=utf-8`, body starts `BEGIN:VCALENDAR`; `PRODID:-//ChamberMaster//Event Calendar 2.0//EN` (legacy string; also observed on the growthzoneapp.com host 2026-07-10 — human check, not harness-probed); `TZID:America/Los_Angeles` present; `X-PUBLISHED-TTL:P1H` (3/3 probed events valid) | 2026-07-10 |
 | 5 | **Soft-404 trap:** `/events/ical` (no slug) returns HTTP **200** with `text/html` and body "Event is not found." — status codes alone prove nothing on this host | `GET /events/ical` → 200, `text/html; charset=utf-8`, soft-404 body confirmed | 2026-07-10 |
 | 6 | **No calendar-wide feed exists** | `/events/rss`, `/events/icalfeed`, `/events/calendar.ics`, `/rss` all 404; `/events/ical` is the soft-404 above; nothing served `text/calendar` or XML | 2026-07-10 |
 | 7 | Module state: jobs on, hot deals off | `GET /jobs` → 200; `GET /hotdeals` → 404 | 2026-07-10 |
