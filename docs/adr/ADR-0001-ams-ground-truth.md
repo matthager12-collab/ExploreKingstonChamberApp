@@ -4,6 +4,8 @@
 
 BLOCKED-ON-HUMAN — awaiting written GrowthZone support answers via the Chamber (draft email: docs/chamber/ams-support-email.md). Accepted only when the Questions section below is filled from a written vendor reply and Mat signs the walk-away decision.
 
+> **Posture update (2026-07-10, ADR-0002):** the near-term plan no longer depends on this gate closing. Per docs/adr/ADR-0002-app-first-events-and-manual-exports.md, events shift to the app as system of record, moderation happens in-app, and member data arrives via manual CSV exports (integration-ladder rung 0). This gate now guards only a **future** API-module purchase (e.g. LTAC-funded in 2027); the support email is informational — pricing intel and the hot-deals/calendar-feed questions — not blocking.
+
 ## Correction (2026-07-10)
 
 The original E04 run of this ADR concluded the Chamber's tenant was **ChamberMaster/MemberZone, not GrowthZone AMS**, inferring the platform from two signals: the `business.kingstonchamber.com` CNAME pointing at `public.west.us.memberzone.org`, and the event iCal `PRODID:-//ChamberMaster//Event Calendar 2.0//EN`. **That conclusion was wrong.** Same-day evidence:
