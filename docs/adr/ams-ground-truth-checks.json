@@ -1,6 +1,15 @@
 {
-  "generatedAt": "2026-07-10T21:52:07.539Z",
+  "generatedAt": "2026-07-11T03:05:53.032Z",
   "dnsCname": "public.west.us.memberzone.org",
+  "tenantParity": {
+    "customDomainHost": "business.kingstonchamber.com",
+    "staffTenantHost": "greaterkingstoncommunitychamberofcommerce.growthzoneapp.com",
+    "customDomainTenantId": "3508",
+    "staffTenantId": "3508",
+    "expectedTenantId": "3508",
+    "match": true,
+    "asExpected": true
+  },
   "eventsIndex": {
     "url": "https://business.kingstonchamber.com/events",
     "status": 200,

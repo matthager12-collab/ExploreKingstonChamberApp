@@ -2,7 +2,7 @@
 
 **For the Chamber office — please read this preamble, then send the draft below.**
 
-- **Send it FROM a Chamber account** (e.g. info@kingstonchamber.com). GrowthZone issues API keys per developer and only with the **account holder's** express permission — the Chamber is the account holder, so this inquiry carries weight only coming from you. Mat cannot send it.
+- **Send it FROM a Chamber account** (e.g. info@kingstonchamber.com). GrowthZone issues API access per developer and only with the **account holder's** express permission — the Chamber is the account holder, so this inquiry carries weight only coming from you. Mat cannot send it.
 - **To:** websupport@growthzone.com
 - **Cc:** engagement@growthzone.com
 - **Phone fallback** if no reply in ~a week: 800-825-9171 (ask for WebSupport, then the Engagement team for API-access quotes).
@@ -10,30 +10,30 @@
 
 ---
 
-**Subject:** API access inquiry — Greater Kingston Chamber of Commerce (ChamberMaster/MemberZone tenant, business.kingstonchamber.com)
+**Subject:** API access inquiry — Greater Kingston Community Chamber of Commerce (GrowthZone tenant, business.kingstonchamber.com)
 
 Hello,
 
-The Greater Kingston Chamber of Commerce (Kingston, WA) is building a chamber-owned community tourism app and would like machine access to our own tenant's data — member directory, events, and related modules — via your API. Our public modules are live at business.kingstonchamber.com, and we'd appreciate written answers to the following questions so we can plan the integration and budget correctly:
+The Greater Kingston Community Chamber of Commerce (Kingston, WA) is building a chamber-owned community tourism app and would like machine access to our own tenant's data — member directory, events, and related modules — via your API. Our staff use the GrowthZone staff application at greaterkingstoncommunitychamberofcommerce.growthzoneapp.com and our public modules are served at business.kingstonchamber.com; we'd appreciate written answers to the following questions so we can plan the integration and budget correctly:
 
-1. Which product/edition/package is our account on (ChamberMaster vs MemberZone branding, module version — our public modules live at business.kingstonchamber.com), and does that edition include API access?
+1. Which GrowthZone product/edition/package is our account on, and does that edition include API access? (Context: our staff log in via the GrowthZone staff app, but our public modules still carry ChamberMaster/MemberZone naming — the business.kingstonchamber.com DNS points at memberzone.org hosting and our event iCal feeds say "ChamberMaster Event Calendar 2.0" — so we want written confirmation of which product we are actually on.)
 
-2. If API access is not included: what does enablement cost for an account of our size, and which editions include it?
+2. If API access is not included in our edition: what does enablement cost for an account of our size, and which editions include it?
 
-3. Is an issued API key read-only or read-write? Can write scopes (members `PUT`, events `POST`/`PUT`, Marketplace `POST`) be granted to a chamber-built app, and is there an approval workflow for API-written content?
+3. Which API should a chamber-built app use against our tenant: the GrowthZone REST API (OAuth/OIDC), the publicly documented v1 API at api.micronetonline.com (X-ApiKey), or both? Please point us at the documentation for whichever applies to our account.
 
-4. What are the rate limits / throttling / burst rules for `api.micronetonline.com`?
+4. Is granted API access read-only or read-write? Can write scopes (updating member records, creating/updating events, posting hot-deals/Marketplace content) be granted to a chamber-built app, and is there an approval workflow for API-written content?
 
-5. What do the `events/feeds` and `RecentActivity` endpoints do (both appear in the v1 documentation without descriptions)? Can `RecentActivity` be used as a change feed, given no webhooks exist?
+5. What are the rate limits / throttling / burst rules for the API(s) that apply to our tenant?
 
-6. Is there any webhook or change-notification option for ChamberMaster/MemberZone customers, and does an all-events iCal or RSS feed exist for v4 public modules (per-event iCal works today; we found no calendar-wide feed)?
+6. What webhook or change-notification options exist for our tenant — which webhook action types are available, and how are they configured (do we request them through support)? If webhooks are not available to us, what is the recommended way to detect changed records for a periodic sync?
 
-7. Do the "Marketplace" API objects correspond to Hot Deals / Member-to-Member Deals, and what does enabling the hot-deals module on our tenant involve?
+7. Does an all-events iCal or RSS feed exist for our public event calendar (per-event iCal works today; we could not find a calendar-wide feed)? Relatedly, our hot-deals module appears to be disabled (/hotdeals returns 404) — what does enabling it involve, and are hot deals ("Marketplace" objects) accessible via the API?
 
-8. If we later migrate to GrowthZone AMS: which API modules are contractually supported for external use (vs. Curated-API-only), what webhook action types are available, and does OAuth client issuance cost extra?
+8. Are API keys / OAuth clients issued per developer, does client issuance cost extra, and what authorization do you need from us (the account holder) to issue credentials to our developer?
 
 Written answers are preferred so we can share them accurately with our developer. Thank you!
 
-Greater Kingston Chamber of Commerce
+Greater Kingston Community Chamber of Commerce
 Kingston, WA
 business.kingstonchamber.com

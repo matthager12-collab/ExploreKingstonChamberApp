@@ -1,12 +1,17 @@
 #!/usr/bin/env node
 // ams-ground-truth-checks.mjs — re-verifies the machine-checkable facts behind
-// docs/adr/ADR-0001-ams-ground-truth.md (E04). Zero dependencies: node:dns/promises
-// + global fetch (Node >= 20). GET-only by construction — the single `get` helper
-// below hardcodes the method; there is no other request path in this file.
+// docs/adr/ADR-0001-ams-ground-truth.md (E04 + 2026-07-10 correction). Zero
+// dependencies: node:dns/promises + global fetch (Node >= 20). GET-only by
+// construction — the single `get` helper below hardcodes the method; there is
+// no other request path in this file.
 //
-// Doubles as the platform-drift alarm: if the Chamber's tenant ever migrates from
-// ChamberMaster/MemberZone to GrowthZone AMS, the DNS check fails loudly and the
-// ADR (plus the E16 sync design) is stale.
+// Doubles as the tenant-drift alarm. The load-bearing invariant (ADR-0001
+// Correction) is TENANT PARITY: business.kingstonchamber.com and the staff
+// tenant at greaterkingstoncommunitychamberofcommerce.growthzoneapp.com embed
+// the same GrowthZone TenantId (3508) — one tenant, two hostnames. The DNS
+// CNAME (public.west.us.memberzone.org) and the ChamberMaster PRODID are
+// legacy naming on GrowthZone's shared public-modules infra and do NOT
+// discriminate the platform; they are recorded as INFO only.
 //
 // Usage: npm run ams:checks   (add --json to also dump the JSON snapshot to stdout)
 // Writes: docs/adr/ams-ground-truth-checks.json
@@ -20,6 +25,9 @@ import process from "node:process";
 
 const HOST = "business.kingstonchamber.com";
 const BASE = `https://${HOST}`;
+const STAFF_TENANT_HOST =
+  "greaterkingstoncommunitychamberofcommerce.growthzoneapp.com";
+const EXPECTED_TENANT_ID = "3508";
 const USER_AGENT =
   "visit-kingston-ground-truth-check/1.0 (Greater Kingston Chamber tourism app)";
 const REQUEST_DELAY_MS = 500;
@@ -75,7 +83,10 @@ function record(level, name, ok, detail) {
 }
 
 // ---------------------------------------------------------------------------
-// REQUIRED — DNS: which platform is the tenant actually on?
+// INFO — DNS CNAME. Record-only: memberzone.org is GrowthZone's shared
+// public-modules hosting and does NOT identify the product (ADR-0001
+// Correction, 2026-07-10 — the original E04 run treated this as platform
+// proof and was wrong). A changed CNAME is worth noting, not failing.
 // ---------------------------------------------------------------------------
 let dnsCname = "";
 {
@@ -86,28 +97,20 @@ let dnsCname = "";
   } catch (err) {
     dnsError = String(err?.message ?? err);
   }
-  // resolveCname returns names without the trailing dot dig shows. Record the
-  // name that actually satisfied the check, not just whichever came first.
+  // resolveCname returns names without the trailing dot dig shows.
   const normalized = names.map((n) => n.replace(/\.$/, ""));
-  dnsCname =
-    normalized.find((n) => n.endsWith(".memberzone.org")) ?? normalized[0] ?? "";
-  const isMemberZone = normalized.some((n) => n.endsWith(".memberzone.org"));
-  const isGrowthZoneAms = normalized.some((n) => n.endsWith(".growthzoneapp.com"));
-  if (isGrowthZoneAms) {
-    console.error(
-      "PLATFORM CHANGED — tenant migrated to GrowthZone AMS; the ADR and E16 design assumptions are stale",
-    );
-  }
+  dnsCname = normalized[0] ?? "";
+  const isKnownInfra = dnsCname === "public.west.us.memberzone.org";
   record(
-    "REQUIRED",
+    "INFO",
     `DNS CNAME ${HOST}`,
-    isMemberZone,
+    true,
     dnsError
       ? `lookup failed: ${dnsError}`
-      : `${normalized.join(", ") || "(no CNAME)"} — ${
-          isMemberZone
-            ? "ChamberMaster/MemberZone confirmed"
-            : "does NOT end with .memberzone.org"
+      : `${normalized.join(", ") || "(no CNAME)"}${
+          isKnownInfra
+            ? " (GrowthZone shared public-modules infra; legacy naming, not platform proof)"
+            : " — CHANGED from public.west.us.memberzone.org; hosting infra moved, note it in ADR-0001"
         }`,
   );
 }
@@ -121,6 +124,7 @@ let dnsCname = "";
 const eventsIndexUrl = `${BASE}/events`;
 let slugs = [];
 let eventsIndex;
+let customDomainTenantId = null;
 {
   const res = await get(eventsIndexUrl);
   const found = new Set();
@@ -129,6 +133,8 @@ let eventsIndex;
     if (found.size >= 3) break;
   }
   slugs = [...found];
+  // GrowthZone public-modules pages embed `<!-- TenantId: N; ... -->`.
+  customDomainTenantId = res.body.match(/TenantId:\s*(\d+)/)?.[1] ?? null;
   const ok = res.status === 200 && slugs.length >= 1;
   eventsIndex = {
     url: eventsIndexUrl,
@@ -145,6 +151,50 @@ let eventsIndex;
     res.error
       ? `request failed: ${res.error}`
       : `HTTP ${res.status}; ${slugs.length} Details slug(s): ${slugs.join(", ") || "none"}`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// REQUIRED — tenant parity: the load-bearing invariant. The custom-domain
+// public site and the staff tenant on growthzoneapp.com must embed the same
+// GrowthZone TenantId (one tenant, two hostnames). If this breaks — either
+// hostname stops serving TenantId 3508 — the Chamber's setup changed and
+// ADR-0001 plus the E16 sync design are stale.
+// ---------------------------------------------------------------------------
+let tenantParity;
+{
+  const staffUrl = `https://${STAFF_TENANT_HOST}/events`;
+  const res = await get(staffUrl);
+  const staffTenantId = res.body.match(/TenantId:\s*(\d+)/)?.[1] ?? null;
+  const match =
+    customDomainTenantId !== null &&
+    staffTenantId !== null &&
+    customDomainTenantId === staffTenantId;
+  const asExpected = match && customDomainTenantId === EXPECTED_TENANT_ID;
+  if (!asExpected) {
+    console.error(
+      "TENANT CHANGED — the two hostnames no longer serve GrowthZone tenant " +
+        `${EXPECTED_TENANT_ID} (custom domain: ${customDomainTenantId ?? "none"}, ` +
+        `staff host: ${staffTenantId ?? "none"}); ADR-0001 and the E16 design assumptions are stale`,
+    );
+  }
+  tenantParity = {
+    customDomainHost: HOST,
+    staffTenantHost: STAFF_TENANT_HOST,
+    customDomainTenantId,
+    staffTenantId,
+    expectedTenantId: EXPECTED_TENANT_ID,
+    match,
+    asExpected,
+    ...(res.error ? { error: res.error } : {}),
+  };
+  record(
+    "REQUIRED",
+    "tenant parity (one tenant, two hostnames)",
+    asExpected,
+    res.error
+      ? `staff-host request failed: ${res.error}`
+      : `custom domain TenantId=${customDomainTenantId ?? "none"}, staff host TenantId=${staffTenantId ?? "none"} (expected ${EXPECTED_TENANT_ID})`,
   );
 }
 
@@ -316,6 +366,7 @@ const requiredChecksPass = results
 const snapshot = {
   generatedAt: new Date().toISOString(),
   dnsCname,
+  tenantParity,
   eventsIndex,
   perEventIcs,
   calendarWideCandidates,
