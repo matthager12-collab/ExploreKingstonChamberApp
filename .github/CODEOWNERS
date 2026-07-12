@@ -1,0 +1,5 @@
+# E05: checked-in Drizzle migrations are never hand-edited after merge —
+# every change under db/migrations/ needs a human (code-owner) review.
+# Enforced only when branch protection has "Require review from Code Owners"
+# enabled on main (see docs/RUNBOOK-CUTOVER.md Preflight / AC-16).
+db/migrations/** @matthager12-collab
