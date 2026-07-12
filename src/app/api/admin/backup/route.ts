@@ -1,11 +1,14 @@
-// Admin-only off-site backup: streams the entire mutable data directory
-// (accounts, portal overlays, analytics, survey, hunts + photos, maps) as a
-// single downloadable JSON bundle. This is the platform-independent backup —
-// Render already snapshots the disk daily, but this lets the Chamber pull a
-// copy off Render entirely (important for LTAC/survey records).
+// Admin-only off-site backup (v2): streams the entire mutable data directory
+// (photos, maps, any remaining disk files) PLUS the full Postgres substrate
+// (record/audit/quarantine + the append-only logs, via the data layer's
+// serializeDb()) as a single downloadable JSON bundle. This is the
+// platform-independent backup — Render already snapshots the disk daily, but
+// this lets the Chamber pull a copy off Render entirely (important for
+// LTAC/survey records).
 //
 // Text files (.json/.jsonl/.txt/.md) are inlined as UTF-8; everything else
-// (photos) is base64. Restore with scripts/restore-backup.mjs.
+// (photos) is base64. Restore: disk files with scripts/restore-backup.mjs,
+// the db section with `npm run restore:db` (scripts/restore-db.ts).
 //
 // Auth: an admin session, OR — when the BACKUP_TOKEN env var is set — a
 // matching `Authorization: Bearer <token>` header. BACKUP_TOKEN is a
@@ -13,13 +16,15 @@
 // workflow (.github/workflows/backup-offsite.yml); it grants nothing else
 // anywhere. When BACKUP_TOKEN is unset, behavior is admin-session-only, same
 // as before. The bundle contains password hashes — treat the downloaded file
-// as sensitive.
+// as sensitive. (Audit rows redact password material at write time, but the
+// record rows for auth-users still contain the hashes.)
 
 import { timingSafeEqual } from "crypto";
 import { readdir, readFile } from "fs/promises";
 import path from "path";
 import { getSessionUser } from "@/lib/auth";
 import { dataDir } from "@/lib/data-dir";
+import { serializeDb } from "@/lib/db/export";
 
 export const dynamic = "force-dynamic";
 
@@ -78,15 +83,18 @@ export async function GET(request: Request) {
   const files = await walk(root, root);
   const bundle = {
     app: "explore-kingston",
-    version: 1,
+    version: 2,
     createdAt: new Date().toISOString(),
     dataDir: root,
     fileCount: files.length,
     files,
+    db: await serializeDb(),
   };
 
   const date = new Date().toISOString().slice(0, 10);
-  return new Response(JSON.stringify(bundle), {
+  // Pretty-printed (indent 1) per M-20-07: backup bundles must stay
+  // human-readable — the Chamber has to be able to open one in a text editor.
+  return new Response(JSON.stringify(bundle, null, 1), {
     headers: {
       "Content-Type": "application/json",
       "Content-Disposition": `attachment; filename="explore-kingston-backup-${date}.json"`,

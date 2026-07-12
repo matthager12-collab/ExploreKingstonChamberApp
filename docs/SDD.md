@@ -164,7 +164,7 @@ Server-only (touches the filesystem; `import type` is fine anywhere). Dual-backe
 
 ### 3.6 Migration path
 
-`scripts/migrate-to-db.mjs` (run directly: `node --env-file=… scripts/migrate-to-db.mjs`) copies a populated `.data/` into a Neon database; since E05 the tables come from checked-in Drizzle migrations (`db/migrations/`, generated from `src/lib/db/schema.ts`, applied at boot or via `npm run db:migrate`). `/api/admin/backup` streams the whole `DATA_DIR` as a JSON bundle for off-site backup (restore via `scripts/restore-backup.mjs`).
+`npm run import:data-dir -- --data-dir <dir>` (`scripts/import-data-dir.ts`, semantics in `scripts/import-core.ts`) loads a populated `DATA_DIR`-shaped tree — a `.data/` copy or a backup bundle restored via `scripts/restore-backup.mjs` — into Postgres: dry-run diff by default, `--apply` (+ typed host confirmation, or `--yes`) to write through the app's choke point with `import` audit rows; schema-invalid records are parked in the `quarantine` table, never `record`; append logs are run-once (`--force-append` to override); images are not moved (no Blob uploads this epic). The tables themselves come from checked-in Drizzle migrations (`db/migrations/`, generated from `src/lib/db/schema.ts`, applied at boot or via `npm run db:migrate`). `/api/admin/backup` streams the whole `DATA_DIR` as a JSON bundle for off-site backup (restore via `scripts/restore-backup.mjs`).
 
 ---
 

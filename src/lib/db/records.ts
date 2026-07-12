@@ -15,6 +15,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "./client";
 import {
   audit,
+  quarantine,
   record,
   type RecordSource,
   type RecordStatus,
@@ -36,6 +37,10 @@ export type WriteMeta = {
   status?: RecordStatus;
   ownerOrgId?: string;
   externalId?: string;
+  /** Audit-action override — importer only (its rows audit as 'import'
+   *  regardless of create/update). App writes leave this unset and get the
+   *  derived create/update/delete. */
+  action?: "create" | "update" | "delete" | "import";
 };
 
 /** Keys whose values never reach an audit row (auth-users password hashes;
@@ -161,7 +166,7 @@ export async function writeRecord<T extends WithId>(
 
     await tx.insert(audit).values({
       actor,
-      action: _deleted ? "delete" : before ? "update" : "create",
+      action: meta?.action ?? (_deleted ? "delete" : before ? "update" : "create"),
       store,
       recordId: rec.id,
       before: before ? (redactSecrets(before.doc) as Record<string, unknown>) : null,
@@ -169,6 +174,33 @@ export async function writeRecord<T extends WithId>(
       source,
     });
   });
+}
+
+/** Full rows (docs + governance metadata) — the read the backup/export
+ *  serializer and the importer's diff pass need. One store, or every store
+ *  when omitted. */
+export async function readRecordRows(store?: string) {
+  const db = getDb();
+  if (store) return db.select().from(record).where(eq(record.store, store));
+  return db.select().from(record);
+}
+
+/** Importer-only: park a record that failed validation. Never written to
+ *  `record`; the runbook's quarantine workflow resolves it. */
+export async function insertQuarantineRow(row: {
+  store: string;
+  id: string;
+  doc: Record<string, unknown> | null;
+  errors: unknown;
+}): Promise<void> {
+  const db = getDb();
+  await db
+    .insert(quarantine)
+    .values(row)
+    .onConflictDoUpdate({
+      target: [quarantine.store, quarantine.id],
+      set: { doc: row.doc, errors: row.errors, resolvedAt: null },
+    });
 }
 
 // Health probe (SELECT 1), memoized ~60s so Render + UptimeRobot polling
