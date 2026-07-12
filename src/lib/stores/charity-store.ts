@@ -3,7 +3,7 @@
 
 import type { Charity, VolunteerNeed } from "../types";
 import { charities as charitySeed, volunteerNeeds as needSeed } from "../data/charities";
-import { readMerged, writeOverlayRecord } from "./json-store";
+import { readMerged, writeOverlayRecord, type WriteMeta } from "./json-store";
 
 const ORG_STORE = "charities";
 const NEED_STORE = "volunteer-needs";
@@ -16,8 +16,8 @@ export async function getCharity(id: string): Promise<Charity | undefined> {
   return (await getCharities()).find((c) => c.id === id);
 }
 
-export async function saveCharity(record: Charity): Promise<void> {
-  await writeOverlayRecord(ORG_STORE, record);
+export async function saveCharity(record: Charity, meta?: WriteMeta): Promise<void> {
+  await writeOverlayRecord(ORG_STORE, record, meta);
 }
 
 export async function getVolunteerNeeds(): Promise<VolunteerNeed[]> {
@@ -25,12 +25,14 @@ export async function getVolunteerNeeds(): Promise<VolunteerNeed[]> {
   return all.sort((a, b) => a.date.localeCompare(b.date));
 }
 
-export async function saveVolunteerNeed(record: VolunteerNeed): Promise<void> {
-  await writeOverlayRecord(NEED_STORE, record);
+export async function saveVolunteerNeed(record: VolunteerNeed, meta?: WriteMeta): Promise<void> {
+  await writeOverlayRecord(NEED_STORE, record, meta);
 }
 
-export async function deleteVolunteerNeed(id: string): Promise<void> {
-  await writeOverlayRecord(NEED_STORE, { id, _deleted: true } as VolunteerNeed & {
-    _deleted: true;
-  });
+export async function deleteVolunteerNeed(id: string, meta?: WriteMeta): Promise<void> {
+  await writeOverlayRecord(
+    NEED_STORE,
+    { id, _deleted: true } as VolunteerNeed & { _deleted: true },
+    meta,
+  );
 }

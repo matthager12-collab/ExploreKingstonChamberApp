@@ -15,6 +15,10 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),
+      // The real `server-only` throws outside a React Server bundle; the E05
+      // data-layer suites import modules that carry it for build-time
+      // poisoning. Swap in an empty stub under vitest.
+      "server-only": path.resolve(__dirname, "tests/setup/server-only-stub.ts"),
     },
   },
 });

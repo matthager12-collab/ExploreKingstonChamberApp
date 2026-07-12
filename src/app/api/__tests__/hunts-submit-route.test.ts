@@ -1,7 +1,9 @@
 import { mkdir, truncate, unlink, writeFile } from "fs/promises";
 import path from "path";
 import { NextRequest } from "next/server";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+// E05: hunt submissions are Postgres-only — run over PGlite.
+import { createTestDb, type TestDb } from "../../../../tests/setup/pglite-db";
 import { dataPath } from "@/lib/data-dir";
 import { MAX_PHOTO_STORAGE_BYTES, invalidatePhotoStorageCache } from "@/lib/hunt-store";
 import { POST } from "@/app/api/hunts/submit/route";
@@ -33,6 +35,14 @@ function submitPost(ip: string) {
     }),
   );
 }
+
+let tdb: TestDb;
+beforeAll(async () => {
+  tdb = await createTestDb();
+});
+afterAll(async () => {
+  await tdb.close();
+});
 
 describe("POST /api/hunts/submit abuse controls", () => {
   it("rate-limits before body parsing: 5 400s then a 429 from one IP", async () => {

@@ -8,7 +8,7 @@
 // route handlers bypass layouts.
 
 import { NextRequest } from "next/server";
-import { requireAdmin } from "@/lib/auth";
+import { getSessionUser, requireAdmin } from "@/lib/auth";
 import {
   getAllHunts,
   isSafeId,
@@ -55,6 +55,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const denied = await requireAdmin();
   if (denied) return denied;
+  const user = await getSessionUser();
 
   let body: unknown;
   try {
@@ -69,7 +70,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const saved = await saveHunt(parsed.hunt);
+    const saved = await saveHunt(parsed.hunt, { actor: user?.email, source: "admin" });
     return Response.json({ ok: true, hunt: saved });
   } catch (err) {
     return Response.json(

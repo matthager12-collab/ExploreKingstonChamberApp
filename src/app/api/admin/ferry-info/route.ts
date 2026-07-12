@@ -20,6 +20,7 @@ import {
   type FerryPayment,
   type Source,
 } from "@/lib/stores/ferry-info-store";
+import { RecordValidationError } from "@/lib/db/store-schemas";
 
 export const dynamic = "force-dynamic";
 
@@ -52,14 +53,16 @@ function httpUrl(v: unknown): string | undefined {
   return /^https?:\/\//.test(s) ? s : undefined;
 }
 
-/** Admin gate: null when allowed, otherwise the 401/403 response to return. */
-async function requireAdmin(): Promise<NextResponse | null> {
+/** Admin gate: returns the user when allowed, else the 401/403 response. */
+async function requireAdmin(): Promise<
+  { ok: true; user: { name: string; email: string } } | { ok: false; res: NextResponse }
+> {
   const user = await getSessionUser();
-  if (!user) return NextResponse.json({ error: "Sign in first" }, { status: 401 });
+  if (!user) return { ok: false, res: NextResponse.json({ error: "Sign in first" }, { status: 401 }) };
   if (user.role !== "admin") {
-    return NextResponse.json({ error: "Chamber admins only" }, { status: 403 });
+    return { ok: false, res: NextResponse.json({ error: "Chamber admins only" }, { status: 403 }) };
   }
-  return null;
+  return { ok: true, user };
 }
 
 function bad(error: string): NextResponse {
@@ -124,15 +127,15 @@ function buildSources(doc: unknown): Source[] | string {
 /* --------------------------------- handlers -------------------------------- */
 
 export async function GET() {
-  const denied = await requireAdmin();
-  if (denied) return denied;
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate.res;
   const records = await getFerryInfoRecords();
   return NextResponse.json({ records });
 }
 
 export async function POST(request: NextRequest) {
-  const denied = await requireAdmin();
-  if (denied) return denied;
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate.res;
 
   let body: Record<string, unknown>;
   try {
@@ -160,6 +163,14 @@ export async function POST(request: NextRequest) {
 
   if (typeof clean === "string") return bad(clean);
 
-  await saveFerryInfoRecord(id as FerryInfoId, clean);
+  try {
+    await saveFerryInfoRecord(id as FerryInfoId, clean, {
+      actor: gate.user.email,
+      source: "admin",
+    });
+  } catch (err) {
+    if (err instanceof RecordValidationError) return bad(err.message);
+    throw err;
+  }
   return NextResponse.json({ ok: true, id, doc: clean });
 }

@@ -11,7 +11,7 @@
 //    see them (with a banner) so they can prep content before launch.
 //    Enforcement helper: src/lib/page-visibility.ts.
 
-import { readMerged, writeOverlayRecord } from "./json-store";
+import { readMerged, writeOverlayRecord, type WriteMeta } from "./json-store";
 
 const COPY_STORE = "site-copy";
 const PAGES_STORE = "site-pages";
@@ -42,8 +42,8 @@ export function copyText(
   return t && t.trim().length > 0 ? t : fallback;
 }
 
-export async function saveCopyOverride(key: string, text: string): Promise<void> {
-  await writeOverlayRecord<CopyOverride>(COPY_STORE, { id: key, text });
+export async function saveCopyOverride(key: string, text: string, meta?: WriteMeta): Promise<void> {
+  await writeOverlayRecord<CopyOverride>(COPY_STORE, { id: key, text }, meta);
 }
 
 export async function getPageSettings(): Promise<PageSetting[]> {
@@ -54,6 +54,6 @@ export async function getHiddenPaths(): Promise<string[]> {
   return (await getPageSettings()).filter((p) => p.hidden).map((p) => p.id);
 }
 
-export async function setPageHidden(path: string, hidden: boolean): Promise<void> {
-  await writeOverlayRecord<PageSetting>(PAGES_STORE, { id: path, hidden });
+export async function setPageHidden(path: string, hidden: boolean, meta?: WriteMeta): Promise<void> {
+  await writeOverlayRecord<PageSetting>(PAGES_STORE, { id: path, hidden }, meta);
 }

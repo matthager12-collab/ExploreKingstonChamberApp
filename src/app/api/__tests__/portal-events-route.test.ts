@@ -1,5 +1,8 @@
 import { NextRequest } from "next/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+// E05: the store layer is Postgres-only — these route tests run against an
+// in-memory PGlite migrated with the checked-in db/migrations.
+import { createTestDb, type TestDb } from "../../../../tests/setup/pglite-db";
 import { POST } from "@/app/api/portal/events/route";
 
 vi.mock("@/lib/auth", () => ({
@@ -29,6 +32,14 @@ const BASE = {
   start: "2026-08-01T15:00",
   category: "market" as const,
 };
+
+let tdb: TestDb;
+beforeAll(async () => {
+  tdb = await createTestDb();
+});
+afterAll(async () => {
+  await tdb.close();
+});
 
 describe("POST /api/portal/events validation", () => {
   it("drops a javascript: url instead of storing it", async () => {

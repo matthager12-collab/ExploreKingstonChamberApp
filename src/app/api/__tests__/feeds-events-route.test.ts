@@ -1,5 +1,8 @@
 import { NextRequest } from "next/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+// E05: the store layer is Postgres-only — these route tests run against an
+// in-memory PGlite migrated with the checked-in db/migrations.
+import { createTestDb, type TestDb } from "../../../../tests/setup/pglite-db";
 import { POST as portalEventsPost } from "@/app/api/portal/events/route";
 import { GET as feedsGet } from "@/app/api/feeds/events/route";
 
@@ -13,6 +16,14 @@ vi.mock("@/lib/auth", () => ({
   })),
   canEdit: vi.fn(() => true),
 }));
+
+let tdb: TestDb;
+beforeAll(async () => {
+  tdb = await createTestDb();
+});
+afterAll(async () => {
+  await tdb.close();
+});
 
 describe("GET /api/feeds/events timezone correctness", () => {
   it("serializes a naive-start event's DTSTART as the correct UTC instant", async () => {

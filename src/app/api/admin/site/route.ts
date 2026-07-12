@@ -19,24 +19,27 @@ import {
 } from "@/lib/stores/site-store";
 import { COPY_BLOCKS } from "@/lib/site-copy-registry";
 import { HIDEABLE_PAGES } from "@/lib/page-visibility";
+import { RecordValidationError } from "@/lib/db/store-schemas";
 
 const COPY_KEYS = new Set(COPY_BLOCKS.map((b) => b.key));
 const HIDEABLE = new Set(HIDEABLE_PAGES.map((p) => p.path));
 const MAX_TEXT_LENGTH = 2000;
 
-/** Admin gate: null when allowed, otherwise the 401/403 response to return. */
-async function requireAdmin(): Promise<NextResponse | null> {
+/** Admin gate: returns the user when allowed, else the 401/403 response. */
+async function requireAdmin(): Promise<
+  { ok: true; user: { name: string; email: string } } | { ok: false; res: NextResponse }
+> {
   const user = await getSessionUser();
-  if (!user) return NextResponse.json({ error: "Sign in first" }, { status: 401 });
+  if (!user) return { ok: false, res: NextResponse.json({ error: "Sign in first" }, { status: 401 }) };
   if (user.role !== "admin") {
-    return NextResponse.json({ error: "Chamber admins only" }, { status: 403 });
+    return { ok: false, res: NextResponse.json({ error: "Chamber admins only" }, { status: 403 }) };
   }
-  return null;
+  return { ok: true, user };
 }
 
 export async function GET() {
-  const denied = await requireAdmin();
-  if (denied) return denied;
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate.res;
   const [copyOverrides, pageSettings] = await Promise.all([
     getCopyOverrides(),
     getPageSettings(),
@@ -45,8 +48,8 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const denied = await requireAdmin();
-  if (denied) return denied;
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate.res;
 
   let body: Record<string, unknown>;
   try {
@@ -64,7 +67,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "text must be a string" }, { status: 400 });
     }
     const text = body.text.slice(0, MAX_TEXT_LENGTH);
-    await saveCopyOverride(key, text);
+    try {
+      await saveCopyOverride(key, text, { actor: gate.user.email, source: "admin" });
+    } catch (err) {
+      if (err instanceof RecordValidationError) {
+        return NextResponse.json({ error: err.message }, { status: 400 });
+      }
+      throw err;
+    }
     return NextResponse.json({ ok: true, key, text });
   }
 
@@ -76,7 +86,14 @@ export async function POST(request: NextRequest) {
     if (typeof body.hidden !== "boolean") {
       return NextResponse.json({ error: "hidden must be a boolean" }, { status: 400 });
     }
-    await setPageHidden(path, body.hidden);
+    try {
+      await setPageHidden(path, body.hidden, { actor: gate.user.email, source: "admin" });
+    } catch (err) {
+      if (err instanceof RecordValidationError) {
+        return NextResponse.json({ error: err.message }, { status: 400 });
+      }
+      throw err;
+    }
     return NextResponse.json({ ok: true, path, hidden: body.hidden });
   }
 

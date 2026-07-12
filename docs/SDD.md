@@ -21,7 +21,7 @@ A tourism web app for Kingston, WA (unincorporated Kitsap County; the Edmonds–
 
 **Core architectural decisions:**
 
-- **Dual-backend persistence seam (§3) — the central architectural fact.** Every store branches on env presence; nothing above the store modules changes. Local / persistent-disk hosts write JSON/JSONL under `DATA_DIR` (default `.data/`); on Vercel-style serverless the same stores use Neon Postgres, Vercel Blob, and Upstash Redis, all auto-detected. **Phase 1 (filesystem) is the live production home** (Render, `/data` disk).
+- **Dual-backend persistence seam (§3) — the central architectural fact.** Every store branches on env presence; nothing above the store modules changes. Local / persistent-disk hosts write JSON/JSONL under `DATA_DIR` (default `.data/`); on Vercel-style serverless the same stores use Neon Postgres, Vercel Blob, and Upstash Redis, all auto-detected. **Phase 1 (filesystem) is the live production home** (Render, `/data` disk). *(Superseded by E05: structured data is Postgres-only — `record` + append tables, every write through the audited zod choke point `src/lib/db/records.ts`, `DATABASE_URL` required (health 503s without it); the `DATA_DIR` disk keeps only images/hunt photos until E15.)*
 - **Self-hosted auth (§4).** Invite-based accounts, scrypt password hashes, stateless HMAC-signed session cookies, rate-limited login/setup/redeem, self-service and admin password flows. No third-party auth.
 - **Fail soft everywhere (§5).** Every external dependency (WSDOT, NOAA, NWS, webcams, the stores themselves) degrades to a bundled fallback or a silent no-op, never an error page. Non-live data is always labelled (`live: boolean`, "estimate", "Schedule only").
 - **Privacy-first analytics.** Cookie-less pageview/outbound tracking with server-side coarse geo; opt-in geo-pings rounded to ~100 m and bucketed into named areas; an anonymous survey. No PII, no IP storage.
@@ -35,8 +35,8 @@ A tourism web app for Kingston, WA (unincorporated Kitsap County; the Edmonds–
 | `WSDOT_API_KEY` | live ferry data | absent → bundled fallback schedule, `live:false` |
 | `NEXT_PUBLIC_SITE_URL` | share-card/canonical URL origin | **build-time** var (inlined into client bundle); **required in production** |
 | `SETUP_TOKEN` | gates first-run admin bootstrap | fail-closed; unused once an admin exists |
-| `DATA_DIR` | persistent-volume path (Phase 1) | e.g. `/data`; not set on Vercel |
-| `DATABASE_URL` | Neon Postgres (Phase 2) | pooled URL (host has `-pooler`) |
+| `DATA_DIR` | persistent-volume path (Phase 1) | e.g. `/data`; not set on Vercel *(E05: images/hunt photos only)* |
+| `DATABASE_URL` | Neon Postgres (Phase 2) | pooled URL (host has `-pooler`) *(superseded by E05: **required** everywhere — health 503s without it)* |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob image store (Phase 2) | — |
 | `UPSTASH_REDIS_REST_URL` / `_TOKEN` | shared rate-limit (Phase 2) | else in-process Map |
 | `FERRY_OBSERVE_TOKEN` | optional bearer gate on `/api/ferry/{observe,accuracy}` | absent → open (writes throttled, public data only) |
@@ -86,14 +86,14 @@ Header contract: *"Every feature reads these types; data adapters in src/lib/dat
 
 ## 3. Persistence design — the central update
 
-The app was file-only; it now runs on a **dual-backend seam** auto-selected by env presence. The store *interfaces* are the contract; the I/O behind them is an implementation detail sized for one node or for cloud stores. Nothing above the store modules branches.
+The app was file-only; it now runs on a **dual-backend seam** auto-selected by env presence. The store *interfaces* are the contract; the I/O behind them is an implementation detail sized for one node or for cloud stores. Nothing above the store modules branches. *(Superseded by E05: the dual-backend seam is gone from this layer — structured data lives only in Neon Postgres, `json-store.ts` is a thin delegate over `src/lib/db/records.ts` (zod-validated, audited writes), and `src/lib/db.ts`/`hasDb()` are deleted. The store interfaces and everything above them are unchanged, as promised.)*
 
 ### 3.1 The seam files
 
 | File | `hasX()` gate | File-mode backend | Cloud backend |
 |---|---|---|---|
 | `data-dir.ts` | — | `dataDir()` = `$DATA_DIR` (resolved) or `<cwd>/.data`; `dataPath(...segs)` joins | (paths unused when a cloud store handles the domain) |
-| `db.ts` | `hasDb()` = `DATABASE_URL` set | — | Neon Postgres via `neon()` (stateless HTTP tagged-template). `db()` throws if unset (callers gate on `hasDb()`). `ensureSchema()` lazily + idempotently creates tables (memoized per warm process; a failed setup clears the memo so the next call retries). |
+| `db.ts` | `hasDb()` = `DATABASE_URL` set | — | Neon Postgres via `neon()` (stateless HTTP tagged-template). `db()` throws if unset (callers gate on `hasDb()`). `ensureSchema()` lazily + idempotently creates tables (memoized per warm process; a failed setup clears the memo so the next call retries). *(Superseded by E05: `db.ts` deleted — `src/lib/db/client.ts` + Drizzle migrations applied at boot replace it; no lazy schema, no `hasDb()` gate.)* |
 | `blob-store.ts` | `hasBlob()` = `BLOB_READ_WRITE_TOKEN` set | image bytes written under `.data/…` by the domain store | `putImage(key, bytes, type)` → Vercel Blob (public, `addRandomSuffix`) returns the full CDN URL. Callers store the returned **string** and hand it to `<img src>` — either a full https blob URL (prod) or a relative name the app's image routes serve (dev), *no branch in callers*. |
 | `rate-limit.ts` | `hasUpstash()` = `UPSTASH_REDIS_REST_URL` set | in-process `Map` sliding window (correct only for a single instance) | Upstash Redis shared sliding window (correct across replicas/lambdas). `checkRateLimit(key,{limit,windowMs})` + `clientKey(req,bucket)` are identical across backends. |
 
@@ -103,7 +103,7 @@ The app was file-only; it now runs on a **dual-backend seam** auto-selected by e
 
 ### 3.2 The backend-agnostic overlay store — `src/lib/stores/json-store.ts`
 
-The ~75-line core all portal-editable data sits on:
+The ~75-line core all portal-editable data sits on. *(Superseded by E05: the file branch is gone — all three functions are thin delegates over `src/lib/db/records.ts` against the `record` table; writes are zod-validated per store, audited, and only `live` rows participate in the merge. The contracts below are otherwise unchanged.)*
 
 - `readOverlay<T>(name)` — file mode: parse `.data/stores/<name>.json`, **any error returns `[]`** (fail-soft). DB mode: `SELECT id, doc, deleted FROM overlay WHERE store = name`, re-attaching `_deleted` onto the doc so downstream filters behave identically.
 - `writeOverlayRecord<T>(name, record)` — file mode: read-modify-write the whole array (`JSON.stringify(…, null, 1)`), replace-by-id or append (no locking; last write wins). DB mode: a single `INSERT … ON CONFLICT (store,id) DO UPDATE`, lifting `_deleted` into the `deleted` column.
@@ -128,14 +128,14 @@ Consequence: an overlay record fully *replaces* the seed record (no field-level 
 | `boarding-pass-store.ts` | `boarding-pass-override` (id `override`) | none | admin daily override of the SR-104 pass verdict; lapses at Pacific midnight (§12.6). `getEffectiveBoardingPass()` returns override-or-estimate. |
 | `ferry-observations.ts` | append log + `ferry-accuracy` overlay | none | Append snapshots of sailing fullness/delay → empirical busyness table + accuracy backtest (§6). |
 
-**Auth files** live in the SAME overlay table in DB mode (`store='auth-users'`, `store='auth-invites'`; invites keyed by their code in the `id` column) or in `.data/auth/{users,invites}.json` in file mode. `auth.ts` branches on `hasDb()` per call.
+**Auth files** live in the SAME overlay table in DB mode (`store='auth-users'`, `store='auth-invites'`; invites keyed by their code in the `id` column) or in `.data/auth/{users,invites}.json` in file mode. `auth.ts` branches on `hasDb()` per call. *(Superseded by E05: Postgres-only — `record` rows, same store names; the file branch and `hasDb()` are gone.)*
 
-**Append paths** (all dual-backend, all fail-soft, corrupt lines skipped):
+**Append paths** (all dual-backend, all fail-soft, corrupt lines skipped) *(superseded by E05: DB-only — the jsonl branches are gone; tables unchanged)*:
 - **Analytics** — `analytics-store.ts` → `.data/analytics/events.jsonl` or `analytics_event`. `summarize()` re-reads and re-aggregates the whole log per call ("fine at Kingston scale").
 - **Survey** — `survey-store.ts` → `.data/ltac-responses.jsonl` or `survey_response`. Pluggable behind a `SurveyStore` interface (`save`, `summarize` — aggregate counts only, never raw rows) with a single exported `surveyStore` instance.
 - **Ferry observations** — `ferry-observations.ts` → `.data/ferry/observations.jsonl` or `ferry_observation`. Throttled to one write per 10 min per process; 90-day retention pruning; a 10-min aggregate cache.
 
-### 3.4 The `.data/` tree (file mode)
+### 3.4 The `.data/` tree (file mode) *(superseded by E05: only `map/images/`, `hunts/refs/`, `hunts/photos/` are still live on disk — the JSON/JSONL entries below moved to Postgres)*
 
 ```
 .data/
@@ -152,11 +152,11 @@ Consequence: an overlay record fully *replaces* the seed record (no field-level 
 └── ltac-responses.jsonl
 ```
 
-Every writer `mkdir`s its parent recursively; a fresh file-mode checkout needs nothing but `AUTH_SECRET`. `/api/health` probes that `dataDir()` is writable (§9).
+Every writer `mkdir`s its parent recursively; a fresh file-mode checkout needs nothing but `AUTH_SECRET`. `/api/health` probes that `dataDir()` is writable (§9). *(Superseded by E05: a fresh checkout also needs `DATABASE_URL`, and the health route additionally pings Postgres — `dbOk` — 503ing without it.)*
 
 ### 3.5 Hunt store — `src/lib/hunt-store.ts`
 
-Server-only (touches the filesystem; `import type` is fine anywhere). Dual-backend like the rest:
+Server-only (touches the filesystem; `import type` is fine anywhere). Dual-backend like the rest *(superseded by E05: hunts + submissions are Postgres-only records; photos stay on disk/Blob)*:
 - **Custom hunts** → overlay store `custom-hunts` (DB) or `.data/hunts/custom-hunts.json` (file). `getAllHunts` merges seed with custom (custom wins by id, tagged `source:"custom"`; custom-only appended). No tombstones — hunts are never deleted through the app.
 - **Submissions** → overlay store `hunt-submissions` (DB) or `.data/hunts/submissions.jsonl` (file). `HuntSubmission` now carries an optional `id` (overlay key on DB rows; legacy file rows may lack it).
 - **Photos** → Blob in prod (`putImage`), `.data/hunts/{refs,photos}/…` in dev.
@@ -170,7 +170,7 @@ Server-only (touches the filesystem; `import type` is fine anywhere). Dual-backe
 
 ## 4. Authentication & authorization (`src/lib/auth.ts`)
 
-Self-hosted, server-only (node:crypto + fs + `next/headers`). Invite-based accounts, scrypt hashes, stateless HMAC cookies. Dual-backend (`hasDb()` per call).
+Self-hosted, server-only (node:crypto + fs + `next/headers`). Invite-based accounts, scrypt hashes, stateless HMAC cookies. Dual-backend (`hasDb()` per call). *(Superseded by E05: Postgres-only — users/invites are `record` rows; no `hasDb()` branch.)*
 
 ### 4.1 Passwords
 - `hashPassword`: 16-byte hex salt, `scryptSync(pw, salt, 64)`, stored `scrypt$<salt>$<hash>`.
@@ -483,7 +483,7 @@ Offline pipeline → `public/geo/street-parking.json` (segments classified free-
 1. CSRF tokens for portal mutations (current mitigation: `sameSite=lax` + JSON bodies).
 2. Consider invite expiry and admin-visible session revocation.
 3. Private-blob follow-up: in the Vercel/Blob config, submission images live in a *public* blob store, so their URLs are unguessable-but-public — move submissions to a private store or signed URLs if that deployment shape is used. (Not an issue on the current Render/filesystem deployment, where `/api/hunts/photo` gates them.)
-5. In file mode on a single instance the overlay writes are read-modify-write with no locking (last-write-wins) and the rate limiter is per-instance — both correct for the single-instance Render deploy, both wrong the moment a second instance exists (move to the DB + Upstash backends first).
+5. In file mode on a single instance the overlay writes are read-modify-write with no locking (last-write-wins) and the rate limiter is per-instance — both correct for the single-instance Render deploy, both wrong the moment a second instance exists (move to the DB + Upstash backends first). *(E05 resolves the write half: overlay writes are now Postgres upserts. The per-instance rate limiter concern stands until Upstash is configured.)*
 
 **Privacy posture** (a feature): no visitor cookies beyond side/session, no IPs stored, geo-pings opt-in + bounded + rounded + area-bucketed server-side, survey PII-free, `/admin` traffic never tracked (client skip + server drop), the survey aggregate GET now admin-gated.
 
@@ -511,10 +511,11 @@ Offline pipeline → `public/geo/street-parking.json` (segments classified free-
 ```
 src/lib/types.ts                    domain model (§2; Atm/ParkingArea LEGACY)
 src/lib/map/types.ts                map CMS domain (§2, §8.3)
-src/lib/{data-dir,db,blob-store,rate-limit}.ts   the persistence seam (§3.1)
-src/lib/stores/json-store.ts        seed+overlay core, dual-backend (§3.2)
+src/lib/{data-dir,blob-store,rate-limit}.ts   image/rate seams (§3.1; db.ts deleted by E05)
+src/lib/db/records.ts               E05 audited zod write choke point (all structured writes)
+src/lib/stores/json-store.ts        seed+overlay core (§3.2; E05: thin delegate over db/records.ts)
 src/lib/stores/*                    12 store modules (§3.3)
-src/lib/auth.ts                     auth, dual-backend (§4)
+src/lib/auth.ts                     auth (§4; E05: Postgres-only)
 src/lib/page-visibility.tsx         page show/hide gate (§4.8)
 src/lib/wsf.ts | kitsap.ts | weather.ts | tides.ts   external adapters (§5)
 src/lib/ferry-status.ts             assembled snapshot (§5.5)
@@ -527,10 +528,10 @@ src/lib/site-copy-registry.ts       91 editable copy blocks (§8.1)
 src/lib/copy-context.tsx            EditableText / useCopy for client comps (§8.1)
 src/lib/map/resolve.ts              ResolvedMapView builder (§8.3)
 src/lib/data/*                      seed data (parking.ts has MapZone + legacy ParkingArea)
-src/lib/db/schema.ts + db/migrations/   E05 Drizzle schema (legacy overlay + append tables: §3.1)
+src/lib/db/schema.ts + db/migrations/   E05 Drizzle schema (record/audit/quarantine + append tables)
 src/app/**                          33 pages + 40 API route files (§9, §10)
 src/components/** + src/app/**/*editor.tsx   client islands (§11)
 scripts/gen-street-parking.py       street overlay generator (§12.7)
 public/embed/kingston-events.js     self-removing events widget (§9)
-.data/  (file mode)                 all mutable state (§3.4, gitignored)
+.data/                              images/hunt photos since E05 (§3.4, gitignored)
 ```

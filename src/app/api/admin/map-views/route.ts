@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 import type { BuiltInSource, MapView } from "@/lib/map/types";
 import { deleteMapView, getMapView, getMapViews, saveMapView } from "@/lib/stores/map-store";
+import { RecordValidationError } from "@/lib/db/store-schemas";
 
 const SOURCES: BuiltInSource[] = ["restaurants", "parking-zones", "streets"];
 
@@ -58,25 +59,27 @@ function uniqueId(base: string, existing: Set<string>): string {
   return `${root}-${Math.random().toString(36).slice(2, 6)}`;
 }
 
-/** Admin gate: null when allowed, otherwise the 401/403 response to return. */
-async function requireAdmin(): Promise<NextResponse | null> {
+/** Admin gate: returns the user when allowed, else the 401/403 response. */
+async function requireAdmin(): Promise<
+  { ok: true; user: { name: string; email: string } } | { ok: false; res: NextResponse }
+> {
   const user = await getSessionUser();
-  if (!user) return NextResponse.json({ error: "Sign in first" }, { status: 401 });
+  if (!user) return { ok: false, res: NextResponse.json({ error: "Sign in first" }, { status: 401 }) };
   if (user.role !== "admin") {
-    return NextResponse.json({ error: "Chamber admins only" }, { status: 403 });
+    return { ok: false, res: NextResponse.json({ error: "Chamber admins only" }, { status: 403 }) };
   }
-  return null;
+  return { ok: true, user };
 }
 
 export async function GET() {
-  const denied = await requireAdmin();
-  if (denied) return denied;
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate.res;
   return NextResponse.json({ views: await getMapViews() });
 }
 
 export async function POST(request: NextRequest) {
-  const denied = await requireAdmin();
-  if (denied) return denied;
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate.res;
 
   let body: Record<string, unknown>;
   try {
@@ -148,13 +151,20 @@ export async function POST(request: NextRequest) {
     published,
   };
 
-  await saveMapView(view);
+  try {
+    await saveMapView(view, { actor: gate.user.email, source: "admin" });
+  } catch (err) {
+    if (err instanceof RecordValidationError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
+  }
   return NextResponse.json({ ok: true, view });
 }
 
 export async function DELETE(request: NextRequest) {
-  const denied = await requireAdmin();
-  if (denied) return denied;
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate.res;
 
   const id = request.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
@@ -163,6 +173,13 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "View not found" }, { status: 404 });
   }
 
-  await deleteMapView(id);
+  try {
+    await deleteMapView(id, { actor: gate.user.email, source: "admin" });
+  } catch (err) {
+    if (err instanceof RecordValidationError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
+  }
   return NextResponse.json({ ok: true });
 }

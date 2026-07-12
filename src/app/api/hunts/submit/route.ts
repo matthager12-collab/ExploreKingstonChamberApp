@@ -79,14 +79,17 @@ export async function POST(request: NextRequest) {
   const lng = parseCoord(form.get("lng"), 180);
 
   try {
-    const submission = await saveSubmission({
-      huntId,
-      stopId,
-      photo: new Uint8Array(await photo.arrayBuffer()),
-      ext,
-      lat,
-      lng,
-    });
+    const submission = await saveSubmission(
+      {
+        huntId,
+        stopId,
+        photo: new Uint8Array(await photo.arrayBuffer()),
+        ext,
+        lat,
+        lng,
+      },
+      { actor: "public", source: "public" },
+    );
     return Response.json({
       ok: true,
       verified: submission.verified,

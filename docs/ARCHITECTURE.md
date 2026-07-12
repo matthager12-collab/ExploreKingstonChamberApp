@@ -10,11 +10,12 @@ Explore Kingston is the companion app to explorekingstonwa.com — a single
 Next.js 16 deployable that surfaces ferry, dining, lodging, events, parking,
 give-back, and scavenger-hunt content for visitors to Kingston, WA, plus
 invite-only portals for businesses / nonprofits and an admin CMS for the
-Chamber. The headline architectural fact in this version is the **dual-backend
-persistence seam**: every store runs on either the local/persistent-disk
-filesystem OR cloud stores (Neon Postgres + Vercel Blob + Upstash Redis),
-auto-detected per store by env presence, with nothing above the store layer
-aware of which.
+Chamber. The headline architectural fact in this version is the **Postgres
+substrate (E05)**: all structured data lives in Neon Postgres (`record` +
+append tables), every write goes through one audited, zod-validated choke
+point (`src/lib/db/records.ts`), and `DATABASE_URL` is required at runtime —
+`/api/health` 503s without it. The `DATA_DIR` disk remains only for images and
+hunt photos (until E15); nothing above the store layer knows any of this.
 
 ---
 
@@ -32,11 +33,12 @@ aware of which.
  Search engines    ◀─└───────────┬──────────────────┬───────────────┘
                                  │                  │
               ┌──────────────────┘                  └────────────────────┐
-              ▼ FILESYSTEM MODE (Phase 1, LIVE)      CLOUD MODE (Phase 2) ▼
-     DATA_DIR volume (/data on Render disk)     Neon Postgres  (overlay + append tables)
-       .data/auth · stores · hunts · photos     Vercel Blob    (uploaded images)
-       analytics.jsonl · survey · ferry obs      Upstash Redis  (shared rate limit)
-       (in-process rate-limit Map)              (DATA_DIR NOT set)
+              ▼ NEON POSTGRES (required, E05)        DATA_DIR disk (/data on Render) ▼
+     record + audit + quarantine tables          images only: hunt photos + map
+       analytics_event · survey_response ·        images (until E15), plus the
+       ferry_observation (append logs)            health disk-probe + backup walk
+       (schema.ts → db/migrations, applied      (Vercel Blob / Upstash Redis are
+        at boot; writes via records.ts)          the serverless-only image/rate seams)
 
   Host: Render Blueprint (Docker, Starter web + 1GB disk) — https://explore-kingston.onrender.com
   Future outbound (SYNDICATION.md): Google Business Profile, Meta, Apple Business — adapters behind the same seam.
@@ -45,10 +47,13 @@ aware of which.
 The app is **one deployable unit**: pages, portals, admin CMS, API routes, and
 feeds in a single `output: "standalone"` Next.js image. What the system *owns*
 lives in the repo (typed seed data) plus exactly one mutable substrate — and
-that substrate is now **pluggable**: a mounted disk (filesystem mode, the
-running Phase-1 home on Render) *or* managed cloud stores (Neon / Blob / Upstash,
-Phase-2 Vercel). No always-on database server, queue, or auth SaaS is *required*
-— the DB is an optional backend the same seam selects, not a hard dependency.
+since E05 that substrate is **Neon Postgres**: the `record` table + append logs
+hold every piece of structured data, with schema DDL generated from
+`src/lib/db/schema.ts` into `db/migrations/` and applied at boot. The seeds in
+git remain the merge baseline. The old "no `DATABASE_URL` = filesystem mode"
+dual-backend seam is gone: the DB is a hard runtime dependency, and the mounted
+`DATA_DIR` disk keeps only images/hunt photos (until E15). No queue or auth
+SaaS is required.
 
 ---
 
@@ -65,9 +70,9 @@ Phase-2 Vercel). No always-on database server, queue, or auth SaaS is *required*
 2. **Seed + overlay.** Checked-in typed seed files in `src/lib/data/*.ts` define
    baseline content; runtime edits are stored as overlays that win by id, with
    `{_deleted:true}` tombstones hiding seed rows. `readMerged(name, seed)` in
-   `src/lib/stores/json-store.ts` does the merge and is **backend-agnostic** —
-   the overlay comes from a `.data/stores/<name>.json` file OR the Neon `overlay`
-   table, and nothing above the store notices. Result: git-reviewable defaults,
+   `src/lib/stores/json-store.ts` does the merge — since E05 as a thin delegate
+   over `src/lib/db/records.ts`, with overlay rows living in the Neon `record`
+   table — and nothing above the store notices. Result: git-reviewable defaults,
    portal/admin editability without deploys, trivially resettable state.
 
 3. **Tokens are the only theming channel.** Twelve semantic color tokens + four
@@ -90,14 +95,14 @@ Phase-2 Vercel). No always-on database server, queue, or auth SaaS is *required*
    the live board; it ships **dark by default** (admin on/off flag) precisely so
    an unvalidated model never masquerades as measurement.
 
-6. **No third party until forced — but the seam now HAS a DB backend.** Auth,
-   analytics, feeds, ICS, embeds are self-implemented. The one deliberate
-   evolution since v2: the store seam was *always designed* to accept a
-   database, and that backend now exists (Neon/Blob/Upstash), selected by env
-   presence. It is a **fallback path for the serverless deployment**, not a
-   dependency of the running host — Phase 1 on Render runs pure filesystem mode
-   with none of those env vars set. External SaaS still enters only with a
-   verified free tier and a documented reason (see the decision log).
+6. **No third party until forced — and the DB is now the required substrate
+   (E05).** Auth, analytics, feeds, ICS, embeds are self-implemented. The store
+   seam was *always designed* to accept a database; since E05 Neon Postgres is
+   no longer an optional backend but **the** home for structured data —
+   `DATABASE_URL` must be set on every deploy, and there is no filesystem
+   fallback. Blob/Upstash remain env-selected serverless seams. External SaaS
+   still enters only with a verified free tier and a documented reason (see
+   the decision log).
 
 ---
 
@@ -125,9 +130,10 @@ domain layer (src/lib/)
                    side/side-server, page-visibility, copy-context, map/resolve
    auth.ts         users, invites, sessions, canEdit
    ▼
-persistence seam   data-dir.ts | db.ts | blob-store.ts | rate-limit.ts
-   ├─ FILESYSTEM   seed: src/lib/data/*.ts (git) · mutable: DATA_DIR/** (backup unit)
-   └─ CLOUD        Neon overlay+append tables · Vercel Blob images · Upstash Redis
+persistence substrate   db/records.ts (audited zod write choke) | data-dir.ts | blob-store.ts | rate-limit.ts
+   ├─ POSTGRES (required)  Neon: record + audit + quarantine + append tables
+   │                       (schema.ts → db/migrations, applied at boot) · seeds in git = merge baseline
+   └─ DISK (DATA_DIR)      images/hunt photos only, until E15 (Blob on Vercel) · Upstash = serverless rate limit
    generated       public/geo/street-parking.json (scripts/gen-street-parking.py)
 ```
 
@@ -181,43 +187,50 @@ All are seed+overlay via `json-store.ts` unless marked append.
 | `ferry-info-store` | 4 structured records: `payment` / `boarding-pass` / `cash-tips` / `sources` | field-by-field edits |
 | `ferry-prediction-store` | one `settings` record | admin on/off flag, **default OFF** (absence = off) |
 | `boarding-pass-store` | one `override` record | admin daily SR-104 verdict, lapses at Pacific midnight |
-| `ferry-observations` | **append** (`ferry/observations.jsonl` / `ferry_observation` table) | sailing-space snapshots for the forecast |
-| `analytics-store` | **append** (`analytics/events.jsonl` / `analytics_event` table) | 3 event types |
+| `ferry-observations` | **append** (`ferry_observation` table) | sailing-space snapshots for the forecast |
+| `analytics-store` | **append** (`analytics_event` table) | 3 event types |
 | `survey-store` | **append** (`survey_response` table) | LTAC/JLARC responses |
-| `auth` (`auth.ts`) | users + invites | overlay stores `auth-users` / `auth-invites` in DB mode |
+| `auth` (`auth.ts`) | users + invites | `record` rows, stores `auth-users` / `auth-invites` |
 
-### 4.3 The dual-backend persistence seam (the headline fact)
-Four files form the seam; each store branches on env presence at call time, and
-the **contracts are identical across backends** so nothing above changes:
+### 4.3 The Postgres substrate (the headline fact — E05)
+Structured data no longer branches on env: it lives in Neon Postgres,
+**every write goes through the audited zod choke point**
+`src/lib/db/records.ts` (`readRecords` / `readMergedRecords` / `writeRecord`),
+and `DATABASE_URL` is required — `/api/health` reports `dbOk:false` and 503s
+without it, so deploys fail closed. The env-detected seams that remain cover
+only images and rate limiting:
 
-| Seam file | Detector | Filesystem mode (Phase 1) | Cloud mode (Phase 2) |
-|-----------|----------|---------------------------|----------------------|
-| `data-dir.ts` | `DATA_DIR` set → that path, else `.data/` | `dataPath()` under the volume | (DATA_DIR unset on Vercel) |
-| `db.ts` | `hasDb()` = `DATABASE_URL` set | unused | Neon Postgres via `neon()` HTTP client (POOLED url) |
+| Seam file | Detector | Disk host (Render) | Serverless (Vercel) |
+|-----------|----------|--------------------|---------------------|
+| `data-dir.ts` | `DATA_DIR` set → that path, else `.data/` | images/hunt photos under the volume (until E15), plus the health disk-probe + backup walk | (DATA_DIR unset on Vercel) |
 | `blob-store.ts` | `hasBlob()` = `BLOB_READ_WRITE_TOKEN` set | image bytes under DATA_DIR, served by app image routes | Vercel Blob public CDN URL |
 | `rate-limit.ts` | `hasUpstash()` = `UPSTASH_REDIS_REST_URL` set | in-process `Map` sliding window (correct for one instance) | Upstash Redis shared sliding window (correct across lambdas) |
 
-The legacy Neon schema (self-created lazily by `ensureSchema()` so a fresh DB
-self-initializes; E05 supersedes it with Drizzle migrations generated from
-`src/lib/db/schema.ts` into `db/migrations/`) is deliberately tiny — **four
-tables**:
+The schema's source of truth is `src/lib/db/schema.ts` (Drizzle); DDL is
+generated into checked-in `db/migrations/` and applied at boot
+(`src/instrumentation.ts`) or via `npm run db:migrate`. The tables:
 
-- `overlay(store, id, doc jsonb, deleted)` — the generic table that backs
-  **every** seed+overlay collection *and* auth (`store = 'auth-users' |
-  'auth-invites'`). `readOverlay()` reconstructs the file-shaped record (re-attaches
+- `record(store, id, doc jsonb, deleted, status, source, external_id,
+  owner_org_id, created/updated…)` — the generic table backing **every**
+  seed+overlay collection *and* auth (`store = 'auth-users' | 'auth-invites'`).
+  `readRecords()` reconstructs the old file-shaped contract (re-attaches
   `_deleted` from the `deleted` column) so `readMerged()` behaves identically.
-- `analytics_event(ts, event jsonb)` — append.
-- `survey_response(ts, response jsonb)` — append.
-- `ferry_observation(ts, obs jsonb)` — append.
+- `audit` — append-only trail of every record write (a DB trigger rejects
+  UPDATE/DELETE); `quarantine` — importer rejects, kept whole with zod issues.
+- `analytics_event(ts, event jsonb)`, `survey_response(ts, response jsonb)`,
+  `ferry_observation(ts, obs jsonb)` — append logs (no audit rows).
+
+The legacy `src/lib/db.ts` (`hasDb()` / lazily self-created `overlay` table) is
+deleted; the seeds in `src/lib/data/*.ts` remain the merge baseline.
 
 `putImage()` returns a *string* that is either a full https blob URL (prod) or a
 relative path the app's image routes serve (dev); it's stored on the record and
 handed to `<img src>` either way, so callers never branch.
 
-**Why this shape:** one overlay table + three append logs is the minimum surface
-that lets the *same* store code run on a disk or a serverless host. It is the
-"clean DB seam" the v1/v2 file design promised, now realized without touching a
-single page or component.
+**Why this shape:** one record table + one audit trail + three append logs is
+the minimum surface that gives every structured write validation and
+provenance. It is the "clean DB seam" the v1/v2 file design promised, hardened
+into the only path — without touching a single page or component.
 
 ### 4.4 Generated artifacts
 `public/geo/street-parking.json` is produced by `scripts/gen-street-parking.py`
@@ -229,7 +242,8 @@ dependency.
 ### 4.5 Identity
 Every record's id is a human-readable slug; overlays and cross-references
 (events↔owners, needs↔charities, accounts↔`linkedIds`, features↔views) join on
-it. The overlay table's `(store, id)` primary key mirrors the file model exactly.
+it. The `record` table's `(store, id)` primary key mirrors the old file model
+exactly.
 
 ---
 
@@ -243,9 +257,9 @@ accounts**. scrypt password hashes; stateless HMAC-signed session cookies
 every write handler re-validates the session + `canEdit(user, recordId)` —
 defense in depth, never trusting the UI.
 
-Storage rides the same seam: filesystem mode keeps `users.json` / `invites.json`
-under `DATA_DIR/auth/`; DB mode stores them in the `overlay` table under
-`auth-users` / `auth-invites` (invites keyed by their code). The former v1
+Storage lives in Postgres with everything else (E05): users and invites are
+`record` rows under the stores `auth-users` / `auth-invites` (invites keyed by
+their code); the old `DATA_DIR/auth/*.json` files are gone. The former v1
 limits are **now addressed**: login / setup / redeem are rate-limited
 (`rate-limit.ts`, per-IP + per-account buckets), `/portal/account` gives
 self-service name/email/password changes (`/api/auth/account`, `/api/auth/password`),
@@ -378,18 +392,19 @@ general-purpose map system on `map-store` + `src/lib/map/`:
 
 ## 10. Deployment topology
 
-**Two phases; DEPLOY.md is the step-by-step.** The persistence seam (§4.3) is
-the entire difference between them.
+**Two phases; DEPLOY.md is the step-by-step.** Neon Postgres is common to both
+(E05); the remaining image/rate-limit seams (§4.3) are the entire difference
+between them.
 
 | | Phase 1 — **LIVE** | Phase 2 — supported alternative |
 |--|--------------------|---------------------------------|
 | Host | **Render** Blueprint (`render.yaml`), Docker `output:"standalone"`, Starter web + 1GB disk at `/data` (~$7.25/mo) | Vercel serverless (no persistent disk) |
 | URL | https://explore-kingston.onrender.com | (not the running home) |
-| Mode | **Filesystem** — `DATA_DIR=/data`, no cloud env vars set | **Cloud** — Neon + Blob + Upstash; `DATA_DIR` unset |
+| Mode | **Postgres + disk (E05)** — `DATABASE_URL` (Neon) for structured data, `DATA_DIR=/data` for images/photos | **Cloud** — Neon + Blob + Upstash; `DATA_DIR` unset |
 | Rate limit | in-process Map (one instance — correct) | Upstash Redis (shared) |
 | Images | under `/data`, served by app routes | Vercel Blob CDN URLs |
-| Health | `/api/health` → `{ok, dataDir:/data, dataWritable:true}`; **503 until the volume is writable** so Render won't route traffic to a broken disk | `/api/health` (DB/env-driven readiness) |
-| Secrets | `AUTH_SECRET` (Render-generated, stable), `SETUP_TOKEN` (Render-generated, first-run bootstrap only), `WSDOT_API_KEY`, `NEXT_PUBLIC_SITE_URL` (**build-time**, baked into the client bundle) set in dashboard | + `DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`, `UPSTASH_REDIS_REST_URL/TOKEN` |
+| Health | `/api/health` → `{ok, dataDir, dataWritable, dbOk}`; **503 until the volume is writable AND Postgres answers** (E05) — a release booted without `DATABASE_URL` never goes live | `/api/health` (same dual probe) |
+| Secrets | `AUTH_SECRET` (Render-generated, stable), `SETUP_TOKEN` (Render-generated, first-run bootstrap only), `WSDOT_API_KEY`, `NEXT_PUBLIC_SITE_URL` (**build-time**, baked into the client bundle), `DATABASE_URL` (Neon pooled url — E05) set in dashboard | + `BLOB_READ_WRITE_TOKEN`, `UPSTASH_REDIS_REST_URL/TOKEN` |
 
 Environment variables (authoritative — `.env.production.example`, `render.yaml`,
 `fly.toml`):
@@ -400,8 +415,8 @@ Environment variables (authoritative — `.env.production.example`, `render.yaml
 | `WSDOT_API_KEY` | optional | live ferry data; absent → bundled fallback schedule |
 | `NEXT_PUBLIC_SITE_URL` | **required in production**, **build-time** | absolute origin for share-card/canonical URLs (`layout.tsx` `metadataBase`); inlined at `npm run build`, not read at runtime |
 | `SETUP_TOKEN` | optional (first-run bootstrap only) | gates `POST /api/auth/setup` fail-closed; never consulted once an admin exists |
-| `DATA_DIR` | Phase 1 | persistent volume path (e.g. `/data`); **unset on Vercel** |
-| `DATABASE_URL` | Phase 2 | Neon Postgres (POOLED url, host has `-pooler`) |
+| `DATA_DIR` | disk hosts | persistent volume path (e.g. `/data`) — images/hunt photos only since E05; **unset on Vercel** |
+| `DATABASE_URL` | **yes (E05)** | Neon Postgres (POOLED url, host has `-pooler`) — the structured-data home; `/api/health` 503s without it |
 | `BLOB_READ_WRITE_TOKEN` | Phase 2 | Vercel Blob for uploaded images |
 | `UPSTASH_REDIS_REST_URL` / `_TOKEN` | Phase 2 | shared rate limiter |
 
@@ -424,9 +439,9 @@ admin-gated `/api/admin/backup` — a JSON bundle of the whole `DATA_DIR`
 Migration path (mid-rebuild by E05): schema DDL is generated from
 `src/lib/db/schema.ts` into `db/migrations/` (`npm run db:generate`) and
 applied at boot (`src/instrumentation.ts`) or via `npm run db:migrate`;
-`scripts/migrate-to-db.mjs` (run directly with `node --env-file=…`) moves a
-filesystem `DATA_DIR` into the legacy overlay tables until E05's importer
-replaces it. `ensureSchema()` still self-creates the legacy tables on first use.
+`scripts/migrate-to-db.mjs` (run directly with `node --env-file=…`) still
+targets the legacy `overlay` tables — which the stores no longer read — and is
+superseded by E05's importer; `db.ts` / `ensureSchema()` are gone.
 
 ---
 
@@ -436,10 +451,10 @@ replaces it. `ensureSchema()` still self-creates the legacy tables on first use.
 - **Orphaned legacy types.** `Atm` and `ParkingArea` remain in `types.ts` with no
   users after the ATM/cash map was removed and `atms.ts` deleted — dead code to
   prune; a doc reader must not mistake them for live features.
-- **Filesystem mode is single-writer.** Concurrent admin edits can last-write-win
-  at the record level (fine for a one-admin Chamber). DB mode's `overlay`
-  upsert (`ON CONFLICT DO UPDATE`) is also last-write-wins, so this is a property
-  of the design, not just the file backend.
+- **Record writes are last-write-wins.** Concurrent admin edits can last-write-win
+  at the record level (fine for a one-admin Chamber) — the `record` upsert
+  (`ON CONFLICT DO UPDATE`) does no field-level merge; a property of the design
+  carried over from the file era.
 - **In-process rate limiting is per-instance.** Correct on the single-instance
   Render host; it would NOT limit across replicas or lambdas — which is exactly
   why the Upstash backend exists for the serverless path.
@@ -447,9 +462,9 @@ replaces it. `ensureSchema()` still self-creates the legacy tables on first use.
   Summer-2026 WSF grid and still light on empirical samples; it can't see a
   substitute small vessel. It ships dark behind the admin flag for this reason;
   don't trust it in front of visitors until the accuracy backtest earns it.
-- **Neon `ensureSchema()` is lazy + memoized per warm instance;** a cold start
-  pays a one-time create-table round trip, and a failed setup is retried (the
-  rejection is deliberately not cached).
+- **Migrations run at boot** (`src/instrumentation.ts`) — a release with a bad
+  or missing migration fails its health check instead of serving. (The legacy
+  lazy `ensureSchema()` path was removed by E05.)
 - **Seasonal data rots on a schedule** (GTFS, WSF fares ~Oct, hours quarterly) —
   mitigated by the OPERATIONS.md calendar, not by code.
 - **Parking polygon geometry** is schematic-georeferenced (±10 m) pending the

@@ -20,25 +20,30 @@ Phase-2 Vercel path, DNS, pre-launch checklist),
 
 ## 0. Two facts that drive everything below
 
-1. **`DATA_DIR` is the whole mutable world.** Every account, portal edit,
-   ferry override, hunt photo, analytics and survey row is written under one
-   directory resolved by `src/lib/data-dir.ts`. Code, seed content, brand
-   assets, and the generated parking overlay are all reproducible from git +
-   `npm install`. Back up `DATA_DIR`; nothing else matters.
-2. **Each store auto-detects its backend from env presence** (the persistence
-   seam — see [ARCHITECTURE.md](ARCHITECTURE.md)). On Render **no** DB/Blob/
-   Upstash vars are set, so every store uses the **`/data` filesystem**. Set
-   `DATABASE_URL` (+ Blob + Upstash) and the same code runs serverless on
-   Vercel with `DATA_DIR` unset. The migration between them is a one-time data
-   move (§7), not a rewrite.
+1. **Postgres is the structured-data home; `DATA_DIR` keeps the images**
+   (since E05). Every account, portal edit, ferry override, analytics and
+   survey row lives in Neon Postgres (`record` + append tables; writes go
+   through the audited choke point `src/lib/db/records.ts`). The `DATA_DIR`
+   directory (resolved by `src/lib/data-dir.ts`) holds hunt photos and map
+   images (until E15). Code, seed content, brand assets, and the generated
+   parking overlay are all reproducible from git + `npm install`. Back up
+   **both** Neon (PITR/branching) and `DATA_DIR`.
+2. **`DATABASE_URL` is required on every deploy** — `/api/health` reports
+   `dbOk:false` and 503s without it, so a mis-configured release fails closed.
+   The remaining env-detected seams cover only images (Vercel Blob when
+   `BLOB_READ_WRITE_TOKEN` is set, else the disk) and rate limiting (Upstash
+   when set, else in-process). On Render only `DATABASE_URL` + `DATA_DIR` are
+   set; the Vercel move is now a Blob/Upstash config change plus the image
+   move (§8), not a rewrite.
 
 ---
 
 ## 1. Local development
 
 **Prereqs:** **Node 22+** (the production image is `node:22-alpine`; Next 16
-needs ≥ 20.9) and npm. No database, no Docker, no paid service required for
-local dev — the app runs entirely on the filesystem fallback.
+needs ≥ 20.9), npm, and — since E05 — a **Postgres** to point `DATABASE_URL`
+at (a throwaway Docker container or a personal Neon dev branch; see the table
+below). No paid service required.
 
 ```bash
 npm install
@@ -62,8 +67,9 @@ working copy's `.env.local` — reference that, don't reprint secrets.
 | `NEXT_PUBLIC_SITE_URL` | No locally (defaults to `http://localhost:3000`); **set in production** | Absolute production origin for share-card/canonical URLs (`src/app/layout.tsx` `metadataBase` — the app spreads by visitors texting links). **Build-time var** — inlined into the client bundle at `npm run build`; a dashboard-only change needs a rebuild. |
 | `DATA_DIR` | No locally (defaults to `<repo>/.data`); **set in production** | Absolute path to the mutable-state root, resolved via `src/lib/data-dir.ts`. Leave unset locally. In production it **must** be an absolute path on a mounted persistent volume (`/data` on Render/Fly) or redeploys wipe accounts, portal edits, and photos. |
 | `SETUP_TOKEN` | Only to bootstrap the first admin (locally or in production) — `POST /api/auth/setup` 403s fail-closed without it | Any string you choose, e.g. `openssl rand -hex 16`. Only consulted while zero users exist (`hasAnyUsers()` is checked first) — once an admin exists, it's never read again. Set it in `.env.local` before running `/portal/setup` on a fresh `.data/`; on Render it's `generateValue: true`. |
+| `DATABASE_URL` | **Yes since E05** — structured data (listings, events, auth, …) lives in Postgres; `next dev` pages fail without it. Images/photos stay on disk under `DATA_DIR`. | A throwaway local Postgres (`docker run -e POSTGRES_PASSWORD=ci -p 5432:5432 postgres:16` → `postgres://postgres:ci@127.0.0.1:5432/postgres`) or a personal Neon dev branch. Migrations under `db/migrations/` apply automatically at server start. **Never point local dev at the production database.** |
 
-**Phase-2 (Vercel) vars** — `DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`,
+**Remaining Phase-2 (Vercel) vars** — `BLOB_READ_WRITE_TOKEN`,
 `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` — are **not** set locally or
 on Render; they belong only to a Vercel deployment (§7, `.env.production.example`).
 
@@ -73,7 +79,7 @@ on Render; they belong only to a Vercel deployment (§7, `.env.production.exampl
 2. **Bootstrap the first admin:** set `SETUP_TOKEN` in `.env.local` (any string;
    the endpoint 403s fail-closed without it), then visit `/portal/setup` and
    enter that same value in the "Setup token" field. It works **only while
-   `DATA_DIR/auth/users.json` has zero users** — it creates the first admin
+   zero users exist** (the `auth-users` records) — it creates the first admin
    account (role `admin`, empty `linkedIds`), signs you in, then locks itself
    forever (`/api/auth/setup` returns 403 once any user exists; the endpoint is
    also rate-limited to 5 attempts). Until the first admin exists, `/admin` is
@@ -83,12 +89,20 @@ on Render; they belong only to a Vercel deployment (§7, `.env.production.exampl
    to a role (`business` / `nonprofit` / `admin`) and the listing/org ids that
    account may edit (`linkedIds`). Hand the code to the business; they redeem it
    at `/portal/join`. (`/api/auth/login`, `/setup`, `/redeem` are rate-limited.)
-4. Portal edits (hours, listings, events, volunteer needs) land in
-   `DATA_DIR/stores/*.json` and appear on public pages within ~60 s (ISR).
+4. Portal edits (hours, listings, events, volunteer needs) land in the
+   `record` table and appear on public pages within ~60 s (ISR).
 
 ---
 
-## 2. State layout — everything under `DATA_DIR`
+## 2. State layout — Postgres, plus images under `DATA_DIR`
+
+**Since E05 the JSON/JSONL files below are NOT the live data** — every
+structured store shown as a `.json`/`.jsonl` entry lives in Postgres
+(`record` rows keyed `(store, id)`; `analytics_event` / `survey_response` /
+`ferry_observation` append tables). What's still live on disk: `map/images/`,
+`hunts/refs/`, `hunts/photos/` (until E15). The tree is kept as the map of the
+on-disk layout — pre-E05 disks still carry the legacy files, and the store
+names below are the `record.store` keys.
 
 Local dev: `<repo>/.data/`. Render: `/data`. Same tree either way. Files and
 subdirectories appear **lazily** — a missing file just means that subsystem
@@ -130,8 +144,12 @@ DATA_DIR/
 
 ### Reset a subsystem (local dev)
 
-Deleting a store file resets **only** that subsystem to its git seed. Stop the
-dev server first so a write doesn't race the delete.
+Since E05 the structured rows live in Postgres: reset one domain against your
+**local dev database** with `DELETE FROM record WHERE store = '<name>'` (and
+`TRUNCATE` the matching append table for analytics/survey/observations) — the
+domain reverts to its git seed on the next read. The file deletions below now
+apply only to the image directories and to pre-E05 disks. Stop the dev server
+first so a write doesn't race the delete.
 
 | To reset… | Delete… | Effect |
 |---|---|---|
@@ -158,8 +176,8 @@ picture.
 |---|---|
 | Blueprint | `render.yaml` — a Docker web service (`runtime: docker`, `dockerfilePath: ./Dockerfile`), region `oregon`, plan **starter** (persistent disks require a paid plan) |
 | Image | Multi-stage `Dockerfile`: `node:22-alpine`, `npm ci`, `npm run build`, ships only the standalone runner (`.next/standalone` + copied `.next/static` + `public/`), runs as non-root `nextjs`, `CMD ["node","server.js"]` on port 3000 |
-| Persistence | 1 GB disk named `data` mounted at **`/data`**; `DATA_DIR=/data` (set in `render.yaml`) → **filesystem mode**, because no DB/Blob/Upstash env vars are set on Render. The disk survives deploys and restarts |
-| Health gate | `healthCheckPath: /api/health` — Render routes traffic only after 200. `/api/health` returns `{ ok, dataDir, dataWritable, time }`, **200 when `/data` is writable, 503 otherwise** (it write-probes `/data/.health-probe`). This catches an unmounted/read-only volume before users do |
+| Persistence | **Neon Postgres** for all structured data (E05 — `DATABASE_URL` is `sync: false` in `render.yaml`, set in the dashboard) + a 1 GB disk named `data` mounted at **`/data`** (`DATA_DIR=/data`) for hunt photos / map images. The disk survives deploys and restarts |
+| Health gate | `healthCheckPath: /api/health` — Render routes traffic only after 200. `/api/health` returns `{ ok, dataDir, dataWritable, dbOk, time }`, **200 only when `/data` is writable AND Postgres answers, 503 otherwise** (write-probes `/data/.health-probe`, pings the DB). This catches an unmounted/read-only volume — or a release booted without `DATABASE_URL` — before users do |
 | Secrets | `AUTH_SECRET` and `SETUP_TOKEN` = `generateValue: true` (Render mints them once; **do not rotate `AUTH_SECRET` casually**); `WSDOT_API_KEY` and `NEXT_PUBLIC_SITE_URL` are `sync: false`, entered in the dashboard. `NEXT_PUBLIC_*` is inlined at **build** time — Render bakes it during the Docker build |
 | Deploys | **Auto-deploy on push** to the tracked branch. The repo was made **public** to bypass a Render↔GitHub sync issue (no secrets live in git — `.env*`, `.data/` are gitignored; `.env.production.example` is documentation only) |
 | Cost | **≈ $7.25 / mo** (Starter web instance + 1 GB disk) |
@@ -189,8 +207,10 @@ that would break Chamber email) is **deferred until launch**. See
 
 ## 4. State & backups — three independent layers
 
-`DATA_DIR` (`/data` on Render) is the entire backup surface. There are **three
-backup layers**, deliberately independent:
+Since E05 the backup surface is split: **Neon holds structured data** (its
+PITR/branching is the recovery path for records) and **`DATA_DIR`** (`/data`
+on Render) holds images/hunt photos. The bundle layers below still walk the
+whole `DATA_DIR`. There are **three backup layers**, deliberately independent:
 
 ### Layer 1 — Render daily disk snapshots (on-host, automatic)
 
@@ -207,8 +227,9 @@ base64-encodes everything else (photos), and streams one file
 `explore-kingston-backup-YYYY-MM-DD.json`. **Admin session only** — the bundle
 contains password hashes, so **treat the download as sensitive**.
 
-This is the *off-Render* copy. Pull one before risky changes and on a regular
-cadence (important for LTAC/survey records, which live only in `DATA_DIR`).
+This is the *off-Render* copy of the disk. Pull one before risky changes and
+on a regular cadence. (Since E05 LTAC/survey records live in Postgres, not
+`DATA_DIR` — cover them with Neon PITR/branching or a SQL dump.)
 
 **Restore an off-site bundle** with `scripts/restore-backup.mjs`:
 
@@ -293,8 +314,9 @@ use layer 2 (bundle) for the off-site copy. See [DEPLOY.md §d](DEPLOY.md).
 ## 5. Admin operations
 
 Everything under `/admin` is gated by `src/app/admin/layout.tsx` (role `admin`,
-or open-with-banner pre-bootstrap). Editors write overlays into `DATA_DIR` and
-public pages pick them up on the next ISR revalidate (~60 s).
+or open-with-banner pre-bootstrap). Editors write overlay records into
+Postgres (audited, E05) and public pages pick them up on the next ISR
+revalidate (~60 s).
 
 | Admin page | What it does |
 |---|---|
@@ -309,7 +331,7 @@ public pages pick them up on the next ISR revalidate (~60 s).
 | `/admin/maps` | General map builder — named public views + drawable markers/lines/trails/areas + built-in data layers (output at `/map`) |
 
 **Ferry prediction toggle** (`/admin/ferry-info` → `POST /api/admin/ferry-prediction {enabled:boolean}`): the busyness forecast (`/ferry/plan`, the "how busy today" panel on `/ferry`, the home callout) ships **dark**. The flag
-(`stores/ferry-prediction.json`) defaults to **OFF**: the public sees nothing,
+(the `ferry-prediction` record) defaults to **OFF**: the public sees nothing,
 but **signed-in admins get a preview** so they can validate before flipping it
 on. Flip it on only once you trust the estimate against reality.
 
@@ -535,11 +557,14 @@ revocation.)
 
 ### `/api/health` returns 503
 
-The probe couldn't write to `DATA_DIR`. On Render that means the `/data` disk is
-unmounted or read-only — Render will then withhold traffic (the health gate doing
-its job). Check the disk is attached and `DATA_DIR=/data`. Locally, check the
-`.data` directory is writable. The 503 body still reports the resolved `dataDir`,
-which is the first thing to confirm.
+Two probes can fail (the body says which): `dataWritable:false` means the
+probe couldn't write to `DATA_DIR` — on Render the `/data` disk is unmounted
+or read-only; check the disk is attached and `DATA_DIR=/data` (locally, that
+`.data` is writable). `dbOk:false` (E05) means Postgres didn't answer —
+`DATABASE_URL` missing/wrong or Neon unreachable. Either way Render withholds
+traffic (the health gate doing its job, keeping the previous release serving).
+The 503 body still reports the resolved `dataDir`, which is the first thing to
+confirm.
 
 ### Abuse response: anonymous-write flood / disk full
 
@@ -564,7 +589,8 @@ wait ~60 s for the cached storage-size check to pick up the change.
 
 **To tune the quota:** raise or lower `MAX_PHOTO_STORAGE_BYTES` in
 `src/lib/hunt-store.ts` (currently 400 MB, leaving headroom on the 1 GB disk
-for accounts, portal overlays, analytics, and the LTAC survey).
+for map images and hunt reference photos — the disk's remaining tenants
+since E05).
 
 ### Edits not showing up on public pages (stale ISR)
 

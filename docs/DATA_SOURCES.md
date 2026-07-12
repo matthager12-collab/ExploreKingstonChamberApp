@@ -571,10 +571,10 @@ Authoritative source: `.env.production.example`, `render.yaml`, `fly.toml`. See
 | `NEXT_PUBLIC_SITE_URL` | **required in production** | Absolute origin for shared-link cards / feeds (`layout.tsx` `metadataBase`) | Wired in `render.yaml`/`fly.toml`/`.env.production.example`. **Build-time** — a dashboard-only change needs a rebuild. Defaults to `http://localhost:3000` if unset |
 | `FERRY_OBSERVE_TOKEN` | optional | Gates `/api/ferry/{observe,accuracy}` | If set, requires `?token=` or `Authorization: Bearer`; else open |
 | `AUTH_SECRET` | **required** | Signs session cookies (`auth.ts`) | Not a data source, but required to boot |
-| `DATABASE_URL` | prod-only (Vercel) | Neon Postgres — overlay + `analytics_event`/`survey_response`/`ferry_observation` tables | POOLED url (host has `-pooler`); `hasDb()` auto-detects. **NOT set on Render** (filesystem mode) |
+| `DATABASE_URL` | **required (all deploys, E05)** | Neon Postgres — `record` + append tables (`analytics_event`/`survey_response`/`ferry_observation`); the only home for structured data | POOLED url (host has `-pooler`). `/api/health` 503s without it, so a deploy missing it fails closed |
 | `BLOB_READ_WRITE_TOKEN` | prod-only (Vercel) | Vercel Blob for uploaded images | `hasBlob()` auto-detects |
 | `UPSTASH_REDIS_REST_URL` / `_TOKEN` | prod-only (Vercel) | Shared rate limiter (`rate-limit.ts`) | Needed on serverless; else in-process Map |
-| `DATA_DIR` | Phase-1 only | Persistent-disk state root (`/data` on Render) | **NOT set on Vercel** — cloud stores take over |
+| `DATA_DIR` | disk hosts | Persistent-disk root (`/data` on Render) — since E05 holds only images/hunt photos (until E15) | **NOT set on Vercel** — Blob takes over images |
 
 The self-collected ferry-observation schedulers use repo-level GitHub config, not app env:
 `FERRY_OBSERVE_URL` (Actions variable, defaults to the Render host) points the observe/accuracy

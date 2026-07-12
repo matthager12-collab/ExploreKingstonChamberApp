@@ -18,7 +18,7 @@
 // in store "boarding-pass-override". No seed (the natural state is "no override").
 
 import { getBoardingPassStatus, pacificDayString, type BoardingPassStatus } from "../wsf";
-import { readMerged, writeOverlayRecord } from "./json-store";
+import { readMerged, writeOverlayRecord, type WriteMeta } from "./json-store";
 
 const STORE = "boarding-pass-override";
 const RECORD_ID = "override";
@@ -52,26 +52,35 @@ export async function setBoardingPassOverride(
   active: boolean,
   setBy: string,
   now: Date = new Date(),
+  meta?: WriteMeta,
 ): Promise<void> {
-  await writeOverlayRecord<BoardingPassOverrideRecord>(STORE, {
-    id: RECORD_ID,
-    active,
-    day: pacificDayString(now),
-    setAt: now.toISOString(),
-    setBy,
-  });
+  await writeOverlayRecord<BoardingPassOverrideRecord>(
+    STORE,
+    {
+      id: RECORD_ID,
+      active,
+      day: pacificDayString(now),
+      setAt: now.toISOString(),
+      setBy,
+    },
+    meta,
+  );
 }
 
 /** Remove the override immediately (revert to the automatic estimate). */
-export async function clearBoardingPassOverride(): Promise<void> {
-  await writeOverlayRecord<BoardingPassOverrideRecord & { _deleted: true }>(STORE, {
-    id: RECORD_ID,
-    active: false,
-    day: "",
-    setAt: "",
-    setBy: "",
-    _deleted: true,
-  });
+export async function clearBoardingPassOverride(meta?: WriteMeta): Promise<void> {
+  await writeOverlayRecord<BoardingPassOverrideRecord & { _deleted: true }>(
+    STORE,
+    {
+      id: RECORD_ID,
+      active: false,
+      day: "",
+      setAt: "",
+      setBy: "",
+      _deleted: true,
+    },
+    meta,
+  );
 }
 
 /**

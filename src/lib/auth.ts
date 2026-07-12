@@ -1,21 +1,22 @@
 // Self-hosted auth for the business / nonprofit / admin portals.
 //
 // Design: invite-based accounts (the Chamber controls who gets in), scrypt
-// password hashes, and stateless HMAC-signed session cookies — no database,
-// no third-party auth service. Users live in .data/auth/users.json.
+// password hashes, and stateless HMAC-signed session cookies — no third-party
+// auth service. Users and invites live in the Postgres data layer (E05) via
+// the overlay-store contract: the "auth-users" / "auth-invites" stores.
+//
+// Reads deliberately use readOverlay (ANY status) and filter tombstones here:
+// a status-gated read (readMerged merges only `live` rows) could lock every
+// admin out if a future moderation pass touched auth rows (E05 trap #8).
 //
 // Bootstrap: when no users exist, /portal/setup creates the first admin.
 // After that, admins mint invite codes tied to a role + the listing/org ids
 // the account may edit.
 //
-// Server-only module (uses node:crypto and fs).
+// Server-only module (uses node:crypto).
 
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "crypto";
-import { mkdir, readFile, writeFile } from "fs/promises";
-import path from "path";
-import { dataPath } from "./data-dir";
-import { hasDb } from "./db";
-import { readMerged, writeOverlayRecord } from "./stores/json-store";
+import { readOverlay, writeOverlayRecord, type WriteMeta } from "./stores/json-store";
 import { cookies } from "next/headers";
 
 export type Role = "business" | "nonprofit" | "admin";
@@ -40,14 +41,11 @@ export interface InviteCode {
   usedBy?: string;
 }
 
-const AUTH_DIR = dataPath("auth");
-const USERS_FILE = path.join(AUTH_DIR, "users.json");
-const INVITES_FILE = path.join(AUTH_DIR, "invites.json");
 const SESSION_COOKIE = "vk-session";
 const SESSION_DAYS = 30;
 
-// Overlay-table store keys for the DB backend (prod). Invites are keyed by
-// their code (mapped onto the overlay table's `id` column).
+// Overlay-table store keys. Invites are keyed by their code (mirrored onto
+// the overlay table's `id` column).
 const USERS_STORE = "auth-users";
 const INVITES_STORE = "auth-invites";
 type InviteRow = InviteCode & { id: string };
@@ -58,17 +56,9 @@ function secret(): string {
   return s;
 }
 
-async function readJson<T>(file: string, fallback: T): Promise<T> {
-  try {
-    return JSON.parse(await readFile(file, "utf8")) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-async function writeJson(file: string, data: unknown): Promise<void> {
-  await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, JSON.stringify(data, null, 1), "utf8");
+/** Audit meta for an action performed by a signed-in user. */
+function actorMeta(user: User): WriteMeta {
+  return { actor: user.email, source: user.role === "admin" ? "admin" : "portal" };
 }
 
 // ---------- passwords ----------
@@ -90,8 +80,9 @@ export function verifyPassword(password: string, stored: string): boolean {
 // ---------- users ----------
 
 export async function listUsers(): Promise<User[]> {
-  if (hasDb()) return readMerged<User>(USERS_STORE, []);
-  return readJson<User[]>(USERS_FILE, []);
+  // Any-status read; only tombstones are filtered (see module header).
+  const rows = await readOverlay<User>(USERS_STORE);
+  return rows.filter((u) => !u._deleted) as User[];
 }
 
 export async function hasAnyUsers(): Promise<boolean> {
@@ -103,13 +94,16 @@ export async function findUserByEmail(email: string): Promise<User | undefined> 
   return users.find((u) => u.email.toLowerCase() === email.toLowerCase());
 }
 
-export async function createUser(input: {
-  email: string;
-  name: string;
-  role: Role;
-  linkedIds: string[];
-  password: string;
-}): Promise<User> {
+export async function createUser(
+  input: {
+    email: string;
+    name: string;
+    role: Role;
+    linkedIds: string[];
+    password: string;
+  },
+  meta?: WriteMeta,
+): Promise<User> {
   const users = await listUsers();
   if (users.some((u) => u.email.toLowerCase() === input.email.toLowerCase())) {
     throw new Error("An account with that email already exists");
@@ -123,26 +117,19 @@ export async function createUser(input: {
     passwordHash: hashPassword(input.password),
     createdAt: new Date().toISOString(),
   };
-  if (hasDb()) {
-    await writeOverlayRecord(USERS_STORE, user);
-  } else {
-    users.push(user);
-    await writeJson(USERS_FILE, users);
-  }
+  // Default: session-less bootstrap (first-admin setup) — the acting party is
+  // the new account itself, arriving through a public surface.
+  await writeOverlayRecord(
+    USERS_STORE,
+    user,
+    meta ?? { actor: input.email || "system", source: "public" },
+  );
   return user;
 }
 
-/** Persist changes to an existing user (dual-backend, keyed by id). */
-export async function saveUser(user: User): Promise<void> {
-  if (hasDb()) {
-    await writeOverlayRecord(USERS_STORE, user);
-    return;
-  }
-  const users = await listUsers();
-  const idx = users.findIndex((u) => u.id === user.id);
-  if (idx < 0) throw new Error("User not found");
-  users[idx] = user;
-  await writeJson(USERS_FILE, users);
+/** Persist changes to an existing user (keyed by id). */
+export async function saveUser(user: User, meta?: WriteMeta): Promise<void> {
+  await writeOverlayRecord(USERS_STORE, user, meta);
 }
 
 /**
@@ -162,19 +149,23 @@ export async function changeOwnPassword(
   if (!verifyPassword(currentPassword, user.passwordHash)) {
     throw new Error("Current password is incorrect");
   }
-  await saveUser({ ...user, passwordHash: hashPassword(newPassword) });
+  await saveUser({ ...user, passwordHash: hashPassword(newPassword) }, actorMeta(user));
 }
 
 /**
  * Admin reset: sets a random temporary password and returns it ONCE so the
  * admin can hand it to the account holder (who should change it right away).
+ * `meta` lets the route thread the acting admin into the audit trail.
  */
-export async function adminResetPassword(userId: string): Promise<string> {
+export async function adminResetPassword(userId: string, meta?: WriteMeta): Promise<string> {
   const users = await listUsers();
   const user = users.find((u) => u.id === userId);
   if (!user) throw new Error("User not found");
   const temp = randomBytes(9).toString("base64url"); // ~12 chars, URL-safe
-  await saveUser({ ...user, passwordHash: hashPassword(temp) });
+  await saveUser(
+    { ...user, passwordHash: hashPassword(temp) },
+    meta ?? { actor: "system", source: "admin" },
+  );
   return temp;
 }
 
@@ -198,23 +189,27 @@ export async function updateOwnProfile(
     name: input.name?.trim() || user.name,
     email: email || user.email,
   };
-  await saveUser(updated);
+  // Actor = the email the account authenticated with (pre-update).
+  await saveUser(updated, actorMeta(user));
   return updated;
 }
 
 // ---------- invites ----------
 
 export async function listInvites(): Promise<InviteCode[]> {
-  if (hasDb()) return readMerged<InviteRow>(INVITES_STORE, []);
-  return readJson<InviteCode[]>(INVITES_FILE, []);
+  // Any-status read; only tombstones are filtered (see module header).
+  const rows = await readOverlay<InviteRow>(INVITES_STORE);
+  return rows.filter((i) => !i._deleted) as InviteCode[];
 }
 
-export async function createInvite(input: {
-  role: Role;
-  linkedIds: string[];
-  note?: string;
-}): Promise<InviteCode> {
-  const invites = await listInvites();
+export async function createInvite(
+  input: {
+    role: Role;
+    linkedIds: string[];
+    note?: string;
+  },
+  meta?: WriteMeta,
+): Promise<InviteCode> {
   const invite: InviteCode = {
     code: randomBytes(6).toString("hex"),
     role: input.role,
@@ -222,12 +217,7 @@ export async function createInvite(input: {
     note: input.note,
     createdAt: new Date().toISOString(),
   };
-  if (hasDb()) {
-    await writeOverlayRecord<InviteRow>(INVITES_STORE, { ...invite, id: invite.code });
-  } else {
-    invites.push(invite);
-    await writeJson(INVITES_FILE, invites);
-  }
+  await writeOverlayRecord<InviteRow>(INVITES_STORE, { ...invite, id: invite.code }, meta);
   return invite;
 }
 
@@ -238,19 +228,23 @@ export async function redeemInvite(
   const invites = await listInvites();
   const invite = invites.find((i) => i.code === code && !i.usedBy);
   if (!invite) throw new Error("Invalid or already-used invite code");
-  const user = await createUser({
-    email: account.email,
-    name: account.name,
-    role: invite.role,
-    linkedIds: invite.linkedIds,
-    password: account.password,
-  });
-  invite.usedBy = user.id;
-  if (hasDb()) {
-    await writeOverlayRecord<InviteRow>(INVITES_STORE, { ...invite, id: invite.code });
-  } else {
-    await writeJson(INVITES_FILE, invites);
-  }
+  // Session-less public flow: the acting party is the new account.
+  const meta: WriteMeta = { actor: account.email || "system", source: "public" };
+  const user = await createUser(
+    {
+      email: account.email,
+      name: account.name,
+      role: invite.role,
+      linkedIds: invite.linkedIds,
+      password: account.password,
+    },
+    meta,
+  );
+  await writeOverlayRecord<InviteRow>(
+    INVITES_STORE,
+    { ...invite, usedBy: user.id, id: invite.code },
+    meta,
+  );
   return user;
 }
 

@@ -24,7 +24,7 @@ import {
   type FerryPayment,
   type Source,
 } from "../data/ferry-info";
-import { readMerged, writeOverlayRecord } from "./json-store";
+import { readMerged, writeOverlayRecord, type WriteMeta } from "./json-store";
 
 const STORE = "ferry-info";
 
@@ -79,6 +79,7 @@ export async function getFerryInfo(): Promise<FerryInfo> {
 export async function saveFerryInfoRecord(
   id: FerryInfoId,
   doc: unknown,
+  meta?: WriteMeta,
 ): Promise<void> {
-  await writeOverlayRecord<FerryInfoRecord>(STORE, { id, doc });
+  await writeOverlayRecord<FerryInfoRecord>(STORE, { id, doc }, meta);
 }

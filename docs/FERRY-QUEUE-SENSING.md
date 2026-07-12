@@ -334,10 +334,10 @@ interface BehavioralState { lastArc; arcTrend; slowSampleCount; firstSlowTs }
 ```
 `rate-limit.ts` proves Redis is *optional* with a per-instance `Map` fallback — correct for a single-instance server, **wrong for the live queue count on multi-instance** (Render can run multiple instances; anchors would split per instance and counts fragment). So: **if `UPSTASH_REDIS_REST_URL` is absent in production, queue sensing fails closed / stays admin-preview only.** The in-memory fallback is acceptable for local dev and single-instance, never for the public count on a fleet.
 
-**Overlay records** (existing `overlay` table / `.data/stores/*.json` via `readMerged`/`writeOverlayRecord` in `src/lib/stores/json-store.ts` — **no DDL**):
+**Overlay records** (existing `record` table — since E05 — via `readMerged`/`writeOverlayRecord` in `src/lib/stores/json-store.ts`; **no DDL**):
 - Queue-path line + alternate-staging line + exclusion areas + QR-sign markers → `MapFeature` docs in the existing `map-features` store (`doc` is jsonb, so `signId`/`arc`/`lanes`/`corridorM` are free-form, no column change).
 - One new `MapView` `{ id:"queue-sensing", published:false }` in the `map-views` store.
-- Gate record → `overlay(store="ferry-queue-sensing", id="settings")`, doc `{ enabled, setAt, setBy }` — identical shape to the existing `ferry-prediction` record.
+- Gate record → `record(store="ferry-queue-sensing", id="settings")`, doc `{ enabled, setAt, setBy }` — identical shape to the existing `ferry-prediction` record.
 
 **Aggregate (durable) — the ONE new table, section-level only, k-anonymous.**
 Since E05, there is a single schema source of truth: add the table to

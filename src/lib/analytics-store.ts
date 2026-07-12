@@ -1,11 +1,9 @@
 // Privacy-first visitor analytics for the Chamber's LTAC/JLARC reporting.
 //
-// Append-only JSONL store, same pattern as survey-store.ts: local development
-// appends to .data/analytics/events.jsonl so the Chamber can export a file.
-// summarize() reads the whole file on every call — fine at Kingston scale
-// (thousands of rows). Upgrade path: when volume grows or the app moves to a
-// serverless host with a read-only filesystem, swap this module's internals
-// for a database (Vercel Postgres / Supabase) keeping the same exports.
+// Append-only Postgres log (analytics_event), same pattern as survey-store.ts,
+// via the data layer's append helpers (src/lib/db/append.ts). summarize()
+// reads the whole log on every call — fine at Kingston scale (thousands of
+// rows); revisit with incremental aggregation if volume ever grows.
 //
 // What we store, and only this: a timestamp, a pageview/outbound-click/
 // geo-ping type, the in-app path, a random client-generated session id
@@ -23,11 +21,8 @@
 // The anonymous visitor survey (survey-store.ts) remains the only zip source;
 // this store answers "roughly where from" and "where did they go".
 
-import { appendFile, mkdir, readFile } from "fs/promises";
-import path from "path";
+import { appendAnalyticsEvent, readAnalyticsEvents } from "./db/append";
 
-import { dataPath } from "./data-dir";
-import { hasDb, db, ensureSchema } from "./db";
 export type GeoSource = "vercel-headers" | "dev-local" | "unknown";
 
 /** Coarse, connection-derived geography. Never an address or coordinates. */
@@ -187,17 +182,8 @@ export interface AnalyticsSummary {
   byDay: { day: string; pageviews: number; outboundClicks: number; sessions: number }[];
 }
 
-const DATA_FILE = dataPath("analytics", "events.jsonl");
-
 export async function saveEvent(event: AnalyticsEvent): Promise<void> {
-  if (hasDb()) {
-    await ensureSchema();
-    const sql = db();
-    await sql`INSERT INTO analytics_event (event) VALUES (${JSON.stringify(event)}::jsonb)`;
-    return;
-  }
-  await mkdir(path.dirname(DATA_FILE), { recursive: true });
-  await appendFile(DATA_FILE, JSON.stringify(event) + "\n", "utf8");
+  await appendAnalyticsEvent(event);
 }
 
 /** Event timestamp -> Kingston-local "YYYY-MM-DD" (mirrors src/lib/time.ts). */
@@ -212,29 +198,7 @@ function pacificDay(ts: string): string {
 }
 
 export async function summarize(): Promise<AnalyticsSummary> {
-  const events: AnalyticsEvent[] = [];
-
-  if (hasDb()) {
-    await ensureSchema();
-    const sql = db();
-    const rows = (await sql`SELECT event FROM analytics_event`) as { event: AnalyticsEvent }[];
-    for (const row of rows) events.push(row.event);
-  } else {
-    let lines: string[] = [];
-    try {
-      lines = (await readFile(DATA_FILE, "utf8")).split("\n").filter(Boolean);
-    } catch {
-      // no events yet
-    }
-
-    for (const line of lines) {
-      try {
-        events.push(JSON.parse(line) as AnalyticsEvent);
-      } catch {
-        // skip a corrupt line rather than losing the whole summary
-      }
-    }
-  }
+  const events = await readAnalyticsEvents<AnalyticsEvent>();
 
   const sessions = new Set<string>();
   const byPath = new Map<string, number>();

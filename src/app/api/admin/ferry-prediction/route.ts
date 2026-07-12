@@ -15,6 +15,7 @@ import {
   getFerryPredictionSetting,
   setFerryPredictionEnabled,
 } from "@/lib/stores/ferry-prediction-store";
+import { RecordValidationError } from "@/lib/db/store-schemas";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +58,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "enabled must be a boolean" }, { status: 400 });
   }
 
-  await setFerryPredictionEnabled(body.enabled, gate.user.name || gate.user.email || "admin");
+  try {
+    await setFerryPredictionEnabled(body.enabled, gate.user.name || gate.user.email || "admin", {
+      actor: gate.user.email,
+      source: "admin",
+    });
+  } catch (err) {
+    if (err instanceof RecordValidationError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
+  }
   return NextResponse.json({ ok: true, ...(await snapshot()) });
 }

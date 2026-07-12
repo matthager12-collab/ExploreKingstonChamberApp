@@ -7,7 +7,7 @@
 import type { Lodging, Webcam } from "../types";
 import { lodging as lodgingSeed } from "../data/lodging";
 import { webcams as webcamSeed } from "../data/webcams";
-import { readMerged, writeOverlayRecord } from "./json-store";
+import { readMerged, writeOverlayRecord, type WriteMeta } from "./json-store";
 
 const LODGING_STORE = "lodging";
 const WEBCAM_STORE = "webcams";
@@ -18,14 +18,16 @@ export async function getLodging(): Promise<Lodging[]> {
   return readMerged<Lodging>(LODGING_STORE, lodgingSeed);
 }
 
-export async function saveLodging(record: Lodging): Promise<void> {
-  await writeOverlayRecord(LODGING_STORE, record);
+export async function saveLodging(record: Lodging, meta?: WriteMeta): Promise<void> {
+  await writeOverlayRecord(LODGING_STORE, record, meta);
 }
 
-export async function deleteLodging(id: string): Promise<void> {
-  await writeOverlayRecord(LODGING_STORE, { id, _deleted: true } as Lodging & {
-    _deleted: true;
-  });
+export async function deleteLodging(id: string, meta?: WriteMeta): Promise<void> {
+  await writeOverlayRecord(
+    LODGING_STORE,
+    { id, _deleted: true } as Lodging & { _deleted: true },
+    meta,
+  );
 }
 
 /* ---------------------------------- Webcams --------------------------------- */
@@ -34,12 +36,14 @@ export async function getWebcams(): Promise<Webcam[]> {
   return readMerged<Webcam>(WEBCAM_STORE, webcamSeed);
 }
 
-export async function saveWebcam(record: Webcam): Promise<void> {
-  await writeOverlayRecord(WEBCAM_STORE, record);
+export async function saveWebcam(record: Webcam, meta?: WriteMeta): Promise<void> {
+  await writeOverlayRecord(WEBCAM_STORE, record, meta);
 }
 
-export async function deleteWebcam(id: string): Promise<void> {
-  await writeOverlayRecord(WEBCAM_STORE, { id, _deleted: true } as Webcam & {
-    _deleted: true;
-  });
+export async function deleteWebcam(id: string, meta?: WriteMeta): Promise<void> {
+  await writeOverlayRecord(
+    WEBCAM_STORE,
+    { id, _deleted: true } as Webcam & { _deleted: true },
+    meta,
+  );
 }

@@ -18,6 +18,7 @@ import {
   getEffectiveBoardingPass,
   setBoardingPassOverride,
 } from "@/lib/stores/boarding-pass-store";
+import { RecordValidationError } from "@/lib/db/store-schemas";
 
 export const dynamic = "force-dynamic";
 
@@ -60,11 +61,19 @@ export async function POST(request: NextRequest) {
 
   const action = typeof body.action === "string" ? body.action : "";
   const setBy = gate.user.name || gate.user.email || "admin";
+  const meta = { actor: gate.user.email, source: "admin" } as const;
 
-  if (action === "on") await setBoardingPassOverride(true, setBy);
-  else if (action === "off") await setBoardingPassOverride(false, setBy);
-  else if (action === "auto") await clearBoardingPassOverride();
-  else return NextResponse.json({ error: 'action must be "on", "off", or "auto"' }, { status: 400 });
+  try {
+    if (action === "on") await setBoardingPassOverride(true, setBy, undefined, meta);
+    else if (action === "off") await setBoardingPassOverride(false, setBy, undefined, meta);
+    else if (action === "auto") await clearBoardingPassOverride(meta);
+    else return NextResponse.json({ error: 'action must be "on", "off", or "auto"' }, { status: 400 });
+  } catch (err) {
+    if (err instanceof RecordValidationError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
+  }
 
   return NextResponse.json({ ok: true, ...(await snapshot()) });
 }

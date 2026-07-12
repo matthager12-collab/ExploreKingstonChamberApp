@@ -517,19 +517,23 @@ full audit + keyboard-first map alternative formalized.
 ### NFR-10 Deployability & persistence portability (the seam)
 
 The system must run unchanged on a persistent-disk host **or** a serverless host
-with no code change above the store layer. Every store branches on env presence
-(`src/lib/data-dir.ts`, `db.ts`, `blob-store.ts`, `rate-limit.ts`); nothing
-above the stores knows which backend is active.
+with no code change above the store layer. Since E05 structured data lives in
+Neon Postgres on every host; only the image and rate-limit seams
+(`src/lib/data-dir.ts`, `blob-store.ts`, `rate-limit.ts`) still branch on env
+presence, and nothing above the stores knows which backend is active.
 
-- **File mode** (default, Phase 1): state under `DATA_DIR` (default `.data/`).
-- **Cloud mode** (Phase 2, Vercel-style): Neon Postgres when `DATABASE_URL` is
-  set (`overlay` table backs every seed+overlay collection *and* auth; append
-  tables for analytics/survey/observations; schema self-creates), Vercel Blob
-  for uploaded images when `BLOB_READ_WRITE_TOKEN` is set, Upstash Redis for
-  rate limiting.
-- A **health probe** (`/api/health`) reports `{ ok, dataDir, dataWritable }`
-  and returns 503 until the data directory is writable, so a read-only/unmounted
-  volume is caught before real users hit it.
+- **Postgres (required, E05):** the `record` table backs every seed+overlay
+  collection *and* auth; append tables for analytics/survey/observations.
+  Schema from `src/lib/db/schema.ts` → checked-in `db/migrations/`, applied at
+  boot; every write goes through the audited zod choke point
+  (`src/lib/db/records.ts`). Seeds in git remain the merge baseline.
+- **Disk (`DATA_DIR`, default `.data/`):** images/hunt photos only (until
+  E15); Vercel Blob takes them when `BLOB_READ_WRITE_TOKEN` is set; Upstash
+  Redis for serverless rate limiting.
+- A **health probe** (`/api/health`) reports `{ ok, dataDir, dataWritable,
+  dbOk }` and returns 503 until the data directory is writable **and**
+  Postgres answers — a read-only volume or a deploy missing `DATABASE_URL` is
+  caught before real users hit it (deploys fail closed).
 - **Backup/restore** must exist: an admin-gated JSON bundle of the whole data
   directory (`/api/admin/backup`, "⤓ Download backup" on `/admin`,
   restore via `scripts/restore-backup.mjs`), plus host-level snapshots.
@@ -556,9 +560,9 @@ it learns from.
 | `WSDOT_API_KEY` | no | Live ferry data; absent → labeled fallback schedule |
 | `NEXT_PUBLIC_SITE_URL` | **yes** in production | Absolute base URL for feeds/canonical links; **build-time** (inlined into the client bundle at build) |
 | `SETUP_TOKEN` | no | Gates first-run admin bootstrap fail-closed; unused once an admin exists |
-| `DATA_DIR` | Phase 1 | Persistent volume path (e.g. `/data`) |
+| `DATA_DIR` | disk hosts | Persistent volume path (e.g. `/data`) — images/hunt photos since E05 |
 | `FERRY_OBSERVE_TOKEN` | no | Locks `/api/ferry/observe` when an off-site scheduler calls it |
-| `DATABASE_URL` | Phase 2 | Neon Postgres (pooled URL); enables DB mode |
+| `DATABASE_URL` | **yes** (E05) | Neon Postgres (pooled URL) — the structured-data home; health 503s without it |
 | `BLOB_READ_WRITE_TOKEN` | Phase 2 | Vercel Blob for uploaded images |
 | `UPSTASH_REDIS_REST_URL` / `_TOKEN` | Phase 2 | Shared rate-limit backend |
 
@@ -566,9 +570,9 @@ it learns from.
 
 - Web platform only: no background location; camera/GPS by permission only;
   local storage is per-browser (documented in player copy).
-- Single-node file persistence (`.data/` or a mounted `DATA_DIR`) is correct on
-  a single persistent-disk host; serverless requires the cloud backends of
-  NFR-10 (DB migration is **done**, so this is a config choice, not a blocker).
+- Structured data is Postgres everywhere (E05); the single-node disk (`.data/`
+  or a mounted `DATA_DIR`) now carries only images, so serverless needs just
+  the Blob/Upstash backends of NFR-10 — a config choice, not a blocker.
 - Kingston is unincorporated Kitsap County — county code + posted signs govern
   parking; the Port governs its own property.
 - The owner's git/hosting identity separation (personal vs work) per

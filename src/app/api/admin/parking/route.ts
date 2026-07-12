@@ -18,6 +18,7 @@ import {
   getParkingZones,
   saveParkingZone,
 } from "@/lib/stores/parking-store";
+import { RecordValidationError } from "@/lib/db/store-schemas";
 
 const RULES: ParkingRule[] = [
   "free-2hr",
@@ -52,25 +53,27 @@ function isLatLng(p: unknown): p is [number, number] {
   );
 }
 
-/** Admin gate: null when allowed, otherwise the 401/403 response to return. */
-async function requireAdmin(): Promise<NextResponse | null> {
+/** Admin gate: returns the user when allowed, else the 401/403 response. */
+async function requireAdmin(): Promise<
+  { ok: true; user: { name: string; email: string } } | { ok: false; res: NextResponse }
+> {
   const user = await getSessionUser();
-  if (!user) return NextResponse.json({ error: "Sign in first" }, { status: 401 });
+  if (!user) return { ok: false, res: NextResponse.json({ error: "Sign in first" }, { status: 401 }) };
   if (user.role !== "admin") {
-    return NextResponse.json({ error: "Chamber admins only" }, { status: 403 });
+    return { ok: false, res: NextResponse.json({ error: "Chamber admins only" }, { status: 403 }) };
   }
-  return null;
+  return { ok: true, user };
 }
 
 export async function GET() {
-  const denied = await requireAdmin();
-  if (denied) return denied;
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate.res;
   return NextResponse.json({ zones: await getParkingZones() });
 }
 
 export async function POST(request: NextRequest) {
-  const denied = await requireAdmin();
-  if (denied) return denied;
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate.res;
 
   let body: Record<string, unknown>;
   try {
@@ -155,13 +158,20 @@ export async function POST(request: NextRequest) {
     ...(sourceNote ? { sourceNote } : {}),
   };
 
-  await saveParkingZone(zone);
+  try {
+    await saveParkingZone(zone, { actor: gate.user.email, source: "admin" });
+  } catch (err) {
+    if (err instanceof RecordValidationError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
+  }
   return NextResponse.json({ ok: true, zone });
 }
 
 export async function DELETE(request: NextRequest) {
-  const denied = await requireAdmin();
-  if (denied) return denied;
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate.res;
 
   const id = request.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
@@ -170,6 +180,13 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "Zone not found" }, { status: 404 });
   }
 
-  await deleteParkingZone(id);
+  try {
+    await deleteParkingZone(id, { actor: gate.user.email, source: "admin" });
+  } catch (err) {
+    if (err instanceof RecordValidationError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
+  }
   return NextResponse.json({ ok: true });
 }

@@ -12,6 +12,7 @@ import { randomBytes } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { canEdit, getSessionUser } from "@/lib/auth";
 import { getCharity, saveCharity } from "@/lib/stores/charity-store";
+import { RecordValidationError } from "@/lib/db/store-schemas";
 import { deleteEvent, getEvent, saveEvent } from "@/lib/stores/event-store";
 import { pacificWallTimeToISO } from "@/lib/time";
 import type { Charity, EventCategory, EventItem } from "@/lib/types";
@@ -77,7 +78,17 @@ export async function PUT(request: NextRequest) {
         ? body.contactEmail.trim() || undefined
         : existing.contactEmail,
   };
-  await saveCharity(updated);
+  try {
+    await saveCharity(updated, {
+      actor: user.email,
+      source: user.role === "admin" ? "admin" : "portal",
+    });
+  } catch (err) {
+    if (err instanceof RecordValidationError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
+  }
   return NextResponse.json({ ok: true, org: updated });
 }
 
@@ -153,7 +164,17 @@ export async function POST(request: NextRequest) {
       charityId: orgId,
       ownerId: orgId,
     };
-    await saveEvent(record);
+    try {
+      await saveEvent(record, {
+        actor: user.email,
+        source: user.role === "admin" ? "admin" : "portal",
+      });
+    } catch (err) {
+      if (err instanceof RecordValidationError) {
+        return NextResponse.json({ error: err.message }, { status: 400 });
+      }
+      throw err;
+    }
     return NextResponse.json({ ok: true, event: record });
   }
 
@@ -165,7 +186,17 @@ export async function POST(request: NextRequest) {
     if (!canEdit(user, current.ownerId ?? current.charityId ?? "")) {
       return NextResponse.json({ error: "not allowed to delete this event" }, { status: 403 });
     }
-    await deleteEvent(id);
+    try {
+      await deleteEvent(id, {
+        actor: user.email,
+        source: user.role === "admin" ? "admin" : "portal",
+      });
+    } catch (err) {
+      if (err instanceof RecordValidationError) {
+        return NextResponse.json({ error: err.message }, { status: 400 });
+      }
+      throw err;
+    }
     return NextResponse.json({ ok: true });
   }
 

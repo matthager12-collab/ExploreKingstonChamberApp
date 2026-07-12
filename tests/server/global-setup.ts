@@ -6,10 +6,14 @@
 // here so the walk + axe suites exercise exactly what deploys.
 
 import { spawn, type ChildProcess } from "child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { cpSync, existsSync, mkdtempSync, rmSync } from "fs";
 import { randomBytes, scryptSync } from "crypto";
 import os from "os";
 import path from "path";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { sql } from "drizzle-orm";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
+import { Pool } from "pg";
 import { BASE_URL, PORT } from "./config";
 
 // Mirrors src/lib/auth.ts hashPassword (format `scrypt$<salt>$<hash>`). Reproduced
@@ -43,12 +47,23 @@ export default async function setup() {
     cpSync(publicSrc, path.join(standaloneDir, "public"), { recursive: true });
   }
 
-  // Fresh scratch DATA_DIR seeded with one admin user. Seeding a user puts the
-  // server in production posture: the pre-setup grace window is closed and
-  // POST /api/auth/setup is locked (403) — which the walk test asserts.
-  const dataDir = mkdtempSync(path.join(os.tmpdir(), "vk-server-test-"));
-  const authDir = path.join(dataDir, "auth");
-  mkdirSync(authDir, { recursive: true });
+  // E05: structured data lives in Postgres — the server tier needs a REAL,
+  // THROWAWAY database. It must come from the explicit TEST_DATABASE_URL (CI:
+  // the postgres:16 service container; locally: `docker run postgres:16` or a
+  // Neon dev branch). The parent's DATABASE_URL is still deliberately ignored
+  // so an operator shell can never point tests at real Neon — same hygiene as
+  // before, now with an explicit opt-in var. The setup migrates the schema
+  // (same checked-in db/migrations the boot migrator uses), WIPES record/
+  // audit/quarantine, and seeds the admin into the auth-users store.
+  const testDbUrl = process.env.TEST_DATABASE_URL;
+  if (!testDbUrl) {
+    throw new Error(
+      "Server tests require TEST_DATABASE_URL (a THROWAWAY Postgres — CI uses a " +
+        "postgres:16 service; locally: docker run -e POSTGRES_PASSWORD=ci -p 5432:5432 postgres:16 " +
+        "then TEST_DATABASE_URL=postgres://postgres:ci@127.0.0.1:5432/postgres).",
+    );
+  }
+
   const admin = {
     id: "ci-admin",
     email: "ci@example.test",
@@ -58,13 +73,31 @@ export default async function setup() {
     passwordHash: hashPassword("ci-admin-password"),
     createdAt: new Date().toISOString(),
   };
-  writeFileSync(path.join(authDir, "users.json"), JSON.stringify([admin], null, 2), "utf8");
 
-  // Child env: inherit the parent's, but STRIP DATABASE_URL/UPSTASH_* so an
-  // operator shell that exports them can never point the server at real Neon/Redis
-  // (same hygiene as tests/setup/unit-env.ts). Then set the standalone runtime knobs.
+  {
+    const pool = new Pool({ connectionString: testDbUrl, max: 1 });
+    const db = drizzle(pool);
+    await migrate(db, { migrationsFolder: path.join(root, "db", "migrations") });
+    // TRUNCATE deliberately: row triggers (audit immutability) don't fire on
+    // TRUNCATE, and a test DB must start empty. Safe only because this is the
+    // explicit TEST_DATABASE_URL.
+    await db.execute(sql`TRUNCATE record, audit, quarantine`);
+    await db.execute(sql`
+      INSERT INTO record (store, id, doc, status, source, updated_by)
+      VALUES ('auth-users', ${admin.id}, ${JSON.stringify(admin)}::jsonb, 'live', 'import', 'server-tests')
+    `);
+    await pool.end();
+  }
+
+  // Fresh scratch DATA_DIR: photos and the health route's write probe are
+  // still disk-backed. Auth is Postgres-only — the admin was seeded into the
+  // auth-users store above, not into any users.json.
+  const dataDir = mkdtempSync(path.join(os.tmpdir(), "vk-server-test-"));
+
+  // Child env: inherit the parent's, but pin DATABASE_URL to the test DB and
+  // STRIP UPSTASH_* (never real Redis). Then set the standalone runtime knobs.
   const env: Record<string, string | undefined> = { ...process.env };
-  delete env.DATABASE_URL;
+  env.DATABASE_URL = testDbUrl;
   delete env.UPSTASH_REDIS_REST_URL;
   delete env.UPSTASH_REDIS_REST_TOKEN;
   env.PORT = String(PORT);
