@@ -436,12 +436,14 @@ admin-gated `/api/admin/backup` — a JSON bundle of the whole `DATA_DIR`
 `scripts/backup-data.sh` (tar) is the local equivalent. Full runbook:
 [OPERATIONS.md](OPERATIONS.md).
 
-Migration path (mid-rebuild by E05): schema DDL is generated from
+Migration path (rebuilt by E05): schema DDL is generated from
 `src/lib/db/schema.ts` into `db/migrations/` (`npm run db:generate`) and
-applied at boot (`src/instrumentation.ts`) or via `npm run db:migrate`;
-`scripts/migrate-to-db.mjs` (run directly with `node --env-file=…`) still
-targets the legacy `overlay` tables — which the stores no longer read — and is
-superseded by E05's importer; `db.ts` / `ensureSchema()` are gone.
+applied at boot (`src/instrumentation.ts`) or via `npm run db:migrate`; the
+one-time data move is **`npm run import:data-dir`** (`scripts/import-data-dir.ts`),
+which reads a restored backup bundle or `DATA_DIR` tree read-only, dry-runs by
+default (`--apply --yes` to write), validates records against the store
+schemas, and parks failures in the `quarantine` table instead of `record`. The
+legacy data-move script and `db.ts` / `ensureSchema()` are gone.
 
 ---
 

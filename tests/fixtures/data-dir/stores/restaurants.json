@@ -1,0 +1,25 @@
+[
+  {
+    "id": "the-oak-table",
+    "name": "The Oak Table",
+    "cuisine": "brunch",
+    "address": "1 Main St, Kingston WA",
+    "url": "https://example.test/oak-table"
+  },
+  {
+    "id": "downpour-brewing",
+    "name": "Downpour Brewing",
+    "cuisine": "brewery",
+    "kidFriendly": true
+  },
+  {
+    "id": "no-name-cafe",
+    "cuisine": "coffee",
+    "note": "deliberately schema-invalid: no name field, must be quarantined"
+  },
+  {
+    "id": "closed-diner",
+    "name": "Closed Diner",
+    "_deleted": true
+  }
+]

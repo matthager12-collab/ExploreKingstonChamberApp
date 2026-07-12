@@ -7,7 +7,7 @@
 
 import "server-only";
 
-import { asc, sql } from "drizzle-orm";
+import { asc, count, sql } from "drizzle-orm";
 
 import { getDb } from "./client";
 import { analyticsEvent, ferryObservation, surveyResponse } from "./schema";
@@ -46,6 +46,20 @@ export async function readFerryObservations<T>(): Promise<T[]> {
     .from(ferryObservation)
     .orderBy(asc(ferryObservation.ts));
   return rows.map((r) => r.obs as T);
+}
+
+/** Row counts for the three append tables — the importer's run-once guard
+ *  and per-table report need them. */
+export async function countAppendRows(): Promise<{
+  analytics_event: number;
+  survey_response: number;
+  ferry_observation: number;
+}> {
+  const db = getDb();
+  const [a] = await db.select({ n: count() }).from(analyticsEvent);
+  const [s] = await db.select({ n: count() }).from(surveyResponse);
+  const [f] = await db.select({ n: count() }).from(ferryObservation);
+  return { analytics_event: a.n, survey_response: s.n, ferry_observation: f.n };
 }
 
 /** Retention pruning for ferry observations (the store's existing policy —

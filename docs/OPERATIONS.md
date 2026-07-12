@@ -441,35 +441,50 @@ for the hardcoded values called out in §6 (fares, seasonal hours strings).
 
 ## 8. The DB-migration path (eventual Vercel move)
 
-Phase 2 (Vercel serverless) is a **supported alternative**, not a rewrite — the
-store seam already branches on env. When/if the app moves to Vercel:
+Phase 2 (Vercel serverless) is a **supported alternative**, not a rewrite —
+since E05 the structured data already lives in Neon Postgres on **every** host
+(`DATABASE_URL` is required everywhere; `/api/health` 503s without it), so a
+Vercel move is a hosting change, not a data-model change. When/if the app moves
+to Vercel:
 
 1. **Provision cloud stores** and set the env (never in git;
    `.env.production.example` documents the shape): `DATABASE_URL` (Neon Postgres
-   **pooled** URL, host contains `-pooler`), `BLOB_READ_WRITE_TOKEN` (Vercel
-   Blob), `UPSTASH_REDIS_REST_URL` + `_TOKEN` (shared rate limiter). Do **not**
-   set `DATA_DIR` on Vercel.
+   **pooled** URL, host contains `-pooler` — already required on any host),
+   `BLOB_READ_WRITE_TOKEN` (Vercel Blob, for images), `UPSTASH_REDIS_REST_URL`
+   + `_TOKEN` (shared rate limiter). Do **not** set `DATA_DIR` on Vercel.
 2. **Create the schema:** the checked-in Drizzle migrations (`db/migrations/`,
    generated from `src/lib/db/schema.ts`) apply automatically at server boot
-   (`src/instrumentation.ts`), or up front via `npm run db:migrate`. The legacy
-   `overlay` + append tables are still self-created lazily by `ensureSchema()`
-   until E05 completes.
-3. **Move the data once:**
-   `node --env-file=.env.local scripts/migrate-to-db.mjs`. It reads the on-disk
-   `DATA_DIR` tree and loads it into the cloud backends:
+   (`src/instrumentation.ts`), or up front via `npm run db:migrate`. Migrations
+   are the **only** schema mechanism — the legacy lazy `ensureSchema()` path
+   was removed by E05.
+3. **Move the data once (only if importing pre-E05 file-era state):**
+   `npm run import:data-dir -- --data-dir <dir>`. The importer reads a
+   `DATA_DIR`-shaped tree — either a live `.data/` copy or a backup bundle
+   restored with `scripts/restore-backup.mjs` — strictly read-only:
    - `stores/*.json`, `auth/users.json` (`auth-users`), `auth/invites.json`
-     (`auth-invites`), `hunts/custom-hunts.json` (`custom-hunts`),
-     `hunts/submissions.jsonl` (`hunt-submissions`), and map features → the
-     Neon **`overlay`** table (`_deleted` lifted into the `deleted` column).
+     (`auth-invites`), `hunts/custom-hunts.json` (`custom-hunts`), and
+     `hunts/submissions.jsonl` (`hunt-submissions`, legacy id-less rows get
+     deterministic synthetic ids) → the **`record`** table, written through
+     the app's write choke point (each write audited as `import`).
    - `analytics/events.jsonl` → `analytics_event`; `ltac-responses.jsonl` →
-     `survey_response` (append tables).
-   - Hunt reference/player photos and `map/images/**` → Vercel Blob, with the
-     record image fields rewritten to the returned `https` URLs.
-   - **Idempotency:** overlay upserts use `ON CONFLICT DO UPDATE` (safe to
-     re-run). The **append tables are INSERT-only and run-once** — the script
-     skips each if it already has rows (`--force` to override, which
-     **doubles** them). Blob uploads need the token; without it, image files are
-     left as relative paths and a warning is printed — re-run with the token.
+     `survey_response`; `ferry/observations.jsonl` → `ferry_observation`
+     (append tables).
+   - **Dry-run by default:** the bare command only prints a per-store diff
+     (new/changed/unchanged/tombstones/quarantined). Add `--apply` to write —
+     it asks you to type the target DB host to confirm (`--yes` skips the
+     prompt for scripted runs).
+   - **Quarantine workflow:** records that fail the store schemas land in the
+     `quarantine` table + the QUARANTINE report, never in `record`; corrupt
+     JSONL lines are reported per-line. Exit codes: 0 clean · 1 halt
+     (unparseable file / aborted) · 2 completed with quarantines — cut over
+     only on 0, or after acknowledging every quarantined row.
+   - **Idempotency:** record upserts are safe to re-run (unchanged rows are
+     skipped). The **append tables are INSERT-only and run-once** — each is
+     skipped if the target already has rows (`--force-append` to override,
+     which **doubles** them).
+   - **Images are not moved:** the importer does no Blob uploads or path
+     rewriting (hunt photos and `map/images/**` stay on disk this epic) —
+     carrying image files to Vercel Blob is a separate, still-unscripted step.
 
 See [DEPLOY.md §a/§g](DEPLOY.md) for the full Vercel walkthrough and cost caveat.
 Render stays the running home until there's a reason to move.

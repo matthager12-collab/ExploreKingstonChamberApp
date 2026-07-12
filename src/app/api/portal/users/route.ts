@@ -36,7 +36,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const tempPassword = await adminResetPassword(body.userId);
+    const tempPassword = await adminResetPassword(body.userId, {
+      actor: user.email,
+      source: "admin",
+    });
     return NextResponse.json({ ok: true, tempPassword });
   } catch (err) {
     const message = err instanceof Error ? err.message : "could not reset password";

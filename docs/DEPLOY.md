@@ -270,29 +270,40 @@ left unset. This section is the one-time stand-up.
    (drizzle-kit; reads `DATABASE_URL` from the environment). The legacy
    self-creating `overlay` path is gone — migrations are the only schema
    mechanism.
-6. **Migrate existing `.data/` (only if carrying over Render's state).** Pull the
-   production env and run the migration once:
+6. **Import existing file-era data (only if carrying over pre-E05 state).**
+   Point the E05 importer at a `DATA_DIR`-shaped tree — a live `.data/` copy,
+   or a backup bundle unpacked with `scripts/restore-backup.mjs` — with the
+   production `DATABASE_URL` in the environment:
    ```bash
-   vercel env pull .env.production.local     # writes DATABASE_URL + BLOB token
-   node --env-file=.env.production.local scripts/migrate-to-db.mjs
+   vercel env pull .env.production.local          # writes DATABASE_URL
+   set -a; source .env.production.local; set +a
+   npm run import:data-dir -- --data-dir ./restored-data           # dry run (default)
+   npm run import:data-dir -- --data-dir ./restored-data --apply   # write for real
    ```
-   `scripts/migrate-to-db.mjs` upserts overlay rows (auth, portal overlays,
-   custom hunts, submissions, map views/features), appends analytics/survey
-   rows, and uploads images to Blob (rewriting each record's URL field to the
-   blob URL). It **refuses to run without `DATABASE_URL`**. **E05 caveat:** the
-   script predates the substrate cutover and writes the legacy `overlay`
-   tables, which the stores no longer read — E05's importer supersedes it for
-   structured data. Idempotency:
-   - overlay upserts use `ON CONFLICT DO UPDATE` — **safe to re-run**.
-   - the append tables (`analytics_event`, `survey_response`) are **run-once**:
-     the script skips each if it already has rows; pass `--force` to append
-     anyway (which would double them).
+   The importer reads the tree **read-only**, validates every record against
+   the store schemas, and writes through the app's own choke point (each write
+   audited as `import`). It **refuses to run without `DATABASE_URL`**.
+   Semantics:
+   - **Dry-run by default** — prints a per-store diff
+     (new/changed/unchanged/tombstones/quarantined) with no writes. `--apply`
+     asks you to type the target DB host before writing; `--yes` skips the
+     prompt for scripted runs.
+   - **Quarantine, not silent drops** — records failing validation land in the
+     `quarantine` table + the printed QUARANTINE report, never in `record`;
+     corrupt JSONL lines are reported per-line. Exit codes: 0 clean · 1 halt
+     (unparseable file / aborted) · 2 quarantines exist — cut over only on 0,
+     or after reviewing every quarantined row.
+   - **Idempotent for records** — unchanged rows are skipped; re-running is
+     safe. The append tables (`analytics_event`, `survey_response`,
+     `ferry_observation`) are **run-once**: skipped if the target already has
+     rows; `--force-append` overrides (which would double them).
+   - **Images are not moved** — the importer does no Blob uploads or path
+     rewriting; hunt photos and map images need a separate copy step onto Blob
+     when leaving a disk host.
 
-   (Since E05, `npm run db:migrate` is drizzle-kit's schema migrator, NOT this
-   data-move script — always run `scripts/migrate-to-db.mjs` via the explicit
-   `node --env-file=…` form.) Without `BLOB_READ_WRITE_TOKEN` the
-   script leaves image fields as relative paths and warns. A fresh Chamber
-   deploy with no prior data skips this step entirely.
+   (`npm run db:migrate` is drizzle-kit's **schema** migrator — step 5 — not
+   this data move.) A fresh Chamber deploy with no prior data skips this step
+   entirely.
 7. **Verify `/api/health`** returns `200 {ok:true,...}`, then smoke-test a write:
    create the admin at `/portal/setup` and confirm it survives a redeploy —
    proof that Neon, not an ephemeral disk, holds state.
