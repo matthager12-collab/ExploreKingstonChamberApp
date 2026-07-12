@@ -46,6 +46,13 @@ services:
       - key: DATA_DIR
         value: /data
 
+      # E05 Postgres substrate: structured data lives in Neon. Value is set
+      # ONLY in the dashboard (production at cutover, staging for rehearsal) —
+      # never in this file. A release started without it fails /api/health
+      # (dbOk:false) and Render keeps the previous release serving.
+      - key: DATABASE_URL
+        sync: false
+
       # Gates POST /api/auth/setup (first-run admin bootstrap) fail-closed.
       # Render generates a random value on first deploy; the operator reads it
       # from the dashboard to complete setup once. Deploys that already have an
@@ -102,6 +109,12 @@ services:
         sync: false
       - key: DATA_DIR
         value: /data
+      # E05 Postgres substrate: structured data lives in Neon. Value is set
+      # ONLY in the dashboard (production at cutover, staging for rehearsal) —
+      # never in this file. A release started without it fails /api/health
+      # (dbOk:false) and Render keeps the previous release serving.
+      - key: DATABASE_URL
+        sync: false
       # Fresh disk on first deploy has zero users — this bootstraps the
       # staging admin account (same mechanism as production).
       - key: SETUP_TOKEN

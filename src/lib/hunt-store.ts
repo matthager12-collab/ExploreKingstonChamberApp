@@ -1,28 +1,28 @@
 // Server-only hunt storage. Do NOT import from client components (it touches
 // the filesystem); `import type { ... }` is fine anywhere.
 //
-// Seed hunts ship in src/lib/data/hunts.ts. Admin-created/edited hunts live in
-// .data/hunts/custom-hunts.json (gitignored) and OVERRIDE a seed hunt with the
-// same id. Reference photos and player submissions live under .data/hunts too:
+// Seed hunts ship in src/lib/data/hunts.ts. Admin-created/edited hunts are
+// overlay records in the "custom-hunts" store (json-store → Postgres) and
+// OVERRIDE a seed hunt with the same id; player submissions are id-keyed
+// overlay records in "hunt-submissions". PHOTO BYTES stay off the database:
+// reference photos and player photos live under .data/hunts (or Vercel Blob
+// when configured):
 //
-//   .data/hunts/custom-hunts.json            admin hunts (full StoredHunt objects)
 //   .data/hunts/refs/<huntId>-<stopId>.<ext> per-stop reference photos
 //   .data/hunts/photos/<huntId>/<stopId>/…   player submissions
-//   .data/hunts/submissions.jsonl            one JSON line per submission
 //
 // Check-off decision: a submission is `verified` when it arrived with GPS
 // coordinates and the haversine distance to the stop is within radiusMeters.
 // No coords (denied / unavailable) → accepted but verified: false, and the
 // player UI labels it honor-system.
 
-import { appendFile, mkdir, readdir, readFile, stat, unlink, writeFile } from "fs/promises";
+import { mkdir, readdir, readFile, stat, unlink, writeFile } from "fs/promises";
 import path from "path";
 import { dataPath } from "./data-dir";
 import { hunts as seedHunts } from "@/lib/data/hunts";
 import type { Hunt, HuntStop } from "@/lib/types";
-import { hasDb } from "@/lib/db";
 import { hasBlob, putImage } from "@/lib/blob-store";
-import { readOverlay, writeOverlayRecord, readMerged } from "@/lib/stores/json-store";
+import { readOverlay, writeOverlayRecord, readMerged, type WriteMeta } from "@/lib/stores/json-store";
 
 // ---------------------------------------------------------------------------
 // Types (extend the domain model locally — types.ts stays untouched)
@@ -58,10 +58,8 @@ export interface HuntSubmission {
 // ---------------------------------------------------------------------------
 
 const DATA_ROOT = dataPath("hunts");
-const CUSTOM_FILE = path.join(DATA_ROOT, "custom-hunts.json");
-const SUBMISSIONS_FILE = path.join(DATA_ROOT, "submissions.jsonl");
 
-// json-store overlay collection names used on the DB path.
+// json-store overlay collection names.
 const CUSTOM_STORE = "custom-hunts";
 const SUBMISSIONS_STORE = "hunt-submissions";
 
@@ -174,37 +172,14 @@ export function haversineMeters(aLat: number, aLng: number, bLat: number, bLng: 
 }
 
 async function readCustomHunts(): Promise<StoredHunt[]> {
-  if (hasDb()) {
-    // Overlay rows for this store ARE the custom hunts (seed lives in git).
-    const overlay = await readOverlay<StoredHunt>(CUSTOM_STORE);
-    return overlay.filter((h) => !h._deleted).map(({ _deleted, ...rest }) => rest as StoredHunt);
-  }
-  try {
-    const raw = await readFile(CUSTOM_FILE, "utf8");
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as StoredHunt[]) : [];
-  } catch {
-    return []; // no custom hunts yet (or unreadable file — treat as empty)
-  }
+  // Overlay rows for this store ARE the custom hunts (seed lives in git).
+  const overlay = await readOverlay<StoredHunt>(CUSTOM_STORE);
+  return overlay.filter((h) => !h._deleted).map(({ _deleted, ...rest }) => rest as StoredHunt);
 }
 
-async function writeCustomHunts(hunts: StoredHunt[]): Promise<void> {
-  await mkdir(DATA_ROOT, { recursive: true });
-  await writeFile(CUSTOM_FILE, JSON.stringify(hunts, null, 2) + "\n", "utf8");
-}
-
-/** Upsert a single custom hunt. DB path writes one overlay record; fs path
- *  rewrites the whole custom-hunts.json array (matching legacy behavior). */
-async function putCustomHunt(record: StoredHunt): Promise<void> {
-  if (hasDb()) {
-    await writeOverlayRecord<StoredHunt>(CUSTOM_STORE, record);
-    return;
-  }
-  const custom = await readCustomHunts();
-  const idx = custom.findIndex((h) => h.id === record.id);
-  if (idx >= 0) custom[idx] = record;
-  else custom.push(record);
-  await writeCustomHunts(custom);
+/** Upsert a single custom hunt as one overlay record. */
+async function putCustomHunt(record: StoredHunt, meta?: WriteMeta): Promise<void> {
+  await writeOverlayRecord<StoredHunt>(CUSTOM_STORE, record, meta);
 }
 
 // ---------------------------------------------------------------------------
@@ -236,30 +211,12 @@ export async function getHuntById(id: string): Promise<AdminHunt | undefined> {
 }
 
 export async function listSubmissions(huntId?: string): Promise<HuntSubmission[]> {
-  if (hasDb()) {
-    // Each submission is one overlay record (id-keyed); no seed submissions.
-    const subs = await readMerged<HuntSubmission & { id: string }>(SUBMISSIONS_STORE, []);
-    const filtered = huntId ? subs.filter((s) => s.huntId === huntId) : subs;
-    // ts ascending in insertion order isn't guaranteed by the overlay query, so
-    // sort by timestamp; newest first (matches the fs reverse() semantics).
-    return filtered.sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0));
-  }
-  let lines: string[] = [];
-  try {
-    lines = (await readFile(SUBMISSIONS_FILE, "utf8")).split("\n").filter(Boolean);
-  } catch {
-    // no submissions yet
-  }
-  const subs: HuntSubmission[] = [];
-  for (const line of lines) {
-    try {
-      subs.push(JSON.parse(line) as HuntSubmission);
-    } catch {
-      // skip corrupt line
-    }
-  }
+  // Each submission is one overlay record (id-keyed); no seed submissions.
+  const subs = await readMerged<HuntSubmission & { id: string }>(SUBMISSIONS_STORE, []);
   const filtered = huntId ? subs.filter((s) => s.huntId === huntId) : subs;
-  return filtered.reverse(); // newest first
+  // ts ascending in insertion order isn't guaranteed by the overlay query, so
+  // sort by timestamp; newest first.
+  return filtered.sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0));
 }
 
 // ---------------------------------------------------------------------------
@@ -267,12 +224,12 @@ export async function listSubmissions(huntId?: string): Promise<HuntSubmission[]
 // ---------------------------------------------------------------------------
 
 /**
- * Create or update a hunt in custom-hunts.json. The caller is expected to have
+ * Create or update a hunt in the "custom-hunts" store. The caller is expected to have
  * validated the shape; this function re-checks ids (they become file paths),
  * guards against slug collisions, and preserves any reference photo already
  * on record when the incoming stop omits one.
  */
-export async function saveHunt(hunt: StoredHunt): Promise<StoredHunt> {
+export async function saveHunt(hunt: StoredHunt, meta?: WriteMeta): Promise<StoredHunt> {
   if (!isSafeId(hunt.id)) throw new Error("invalid hunt id");
   for (const stop of hunt.stops) {
     if (!isSafeId(stop.id)) throw new Error(`invalid stop id: ${String(stop.id)}`);
@@ -313,13 +270,13 @@ export async function saveHunt(hunt: StoredHunt): Promise<StoredHunt> {
     }),
   };
 
-  await putCustomHunt(toSave);
+  await putCustomHunt(toSave, meta);
   return toSave;
 }
 
 /**
  * Save a stop's reference photo and point the hunt record at it. If the hunt
- * only exists as a seed, it is materialized into custom-hunts.json first (the
+ * only exists as a seed, it is materialized into the "custom-hunts" store first (the
  * custom copy then overrides the seed).
  */
 export async function saveReferencePhoto(
@@ -327,6 +284,7 @@ export async function saveReferencePhoto(
   stopId: string,
   data: Uint8Array,
   ext: string,
+  meta?: WriteMeta,
 ): Promise<string> {
   if (!isSafeId(huntId) || !isSafeId(stopId)) throw new Error("invalid hunt or stop id");
   if (!EXT_CONTENT_TYPES[ext]) throw new Error("unsupported image type");
@@ -375,7 +333,7 @@ export async function saveReferencePhoto(
     stops: hunt.stops,
   };
   record.stops = record.stops.map((s) => (s.id === stopId ? { ...s, referencePhoto: stored } : s));
-  await putCustomHunt(record);
+  await putCustomHunt(record, meta);
 
   return stored;
 }
@@ -385,14 +343,17 @@ export async function saveReferencePhoto(
  * verified = GPS coords present AND haversine distance <= stop.radiusMeters.
  * Missing/denied GPS still saves the photo, just unverified (honor system).
  */
-export async function saveSubmission(input: {
-  huntId: string;
-  stopId: string;
-  photo: Uint8Array;
-  ext: string;
-  lat?: number;
-  lng?: number;
-}): Promise<HuntSubmission> {
+export async function saveSubmission(
+  input: {
+    huntId: string;
+    stopId: string;
+    photo: Uint8Array;
+    ext: string;
+    lat?: number;
+    lng?: number;
+  },
+  meta?: WriteMeta,
+): Promise<HuntSubmission> {
   const { huntId, stopId, photo, ext, lat, lng } = input;
   if (!isSafeId(huntId) || !isSafeId(stopId)) throw new Error("invalid hunt or stop id");
   if (!EXT_CONTENT_TYPES[ext]) throw new Error("unsupported image type");
@@ -434,15 +395,14 @@ export async function saveSubmission(input: {
     verified,
   };
 
-  if (hasDb()) {
-    await writeOverlayRecord<HuntSubmission & { id: string }>(SUBMISSIONS_STORE, {
+  await writeOverlayRecord<HuntSubmission & { id: string }>(
+    SUBMISSIONS_STORE,
+    {
       ...submission,
       id,
-    });
-  } else {
-    await mkdir(DATA_ROOT, { recursive: true });
-    await appendFile(SUBMISSIONS_FILE, JSON.stringify(submission) + "\n", "utf8");
-  }
+    },
+    meta,
+  );
   return submission;
 }
 

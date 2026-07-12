@@ -13,18 +13,31 @@
 
 import "server-only";
 
-import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
+import { drizzle } from "drizzle-orm/node-postgres";
+import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import { Pool } from "pg";
 
 import * as schema from "./schema";
 
-export type Db = NodePgDatabase<typeof schema>;
+/** Any Postgres-flavored Drizzle instance over our schema. Widened beyond
+ *  NodePgDatabase so the vitest suites can inject a PGlite-backed instance
+ *  (drizzle-orm/pglite) through __setDbForTests. */
+export type Db = PgDatabase<PgQueryResultHKT, typeof schema>;
 
 let cached: Db | null = null;
+let testOverride: Db | null = null;
+
+/** Test-only seam: vitest suites inject a PGlite-backed Drizzle instance
+ *  (migrated over db/migrations/) so the data layer runs against a real
+ *  Postgres engine without a server. Never called from app code. */
+export function __setDbForTests(db: Db | null): void {
+  testOverride = db;
+}
 
 /** The shared Drizzle instance. Throws (with the env var named) when
  *  DATABASE_URL is unset — the substrate has no filesystem fallback. */
 export function getDb(): Db {
+  if (testOverride) return testOverride;
   if (!process.env.DATABASE_URL) {
     throw new Error(
       "DATABASE_URL is not set — structured data lives in Postgres (E05). " +

@@ -3,7 +3,7 @@
 
 import type { EventItem } from "../types";
 import { events as seed } from "../data/events";
-import { readMerged, writeOverlayRecord } from "./json-store";
+import { readMerged, writeOverlayRecord, type WriteMeta } from "./json-store";
 
 const STORE = "events";
 
@@ -16,12 +16,12 @@ export async function getEvent(id: string): Promise<EventItem | undefined> {
   return (await getEvents()).find((e) => e.id === id);
 }
 
-export async function saveEvent(record: EventItem): Promise<void> {
-  await writeOverlayRecord(STORE, record);
+export async function saveEvent(record: EventItem, meta?: WriteMeta): Promise<void> {
+  await writeOverlayRecord(STORE, record, meta);
 }
 
-export async function deleteEvent(id: string): Promise<void> {
-  await writeOverlayRecord(STORE, { id, _deleted: true } as EventItem & { _deleted: true });
+export async function deleteEvent(id: string, meta?: WriteMeta): Promise<void> {
+  await writeOverlayRecord(STORE, { id, _deleted: true } as EventItem & { _deleted: true }, meta);
 }
 
 const pacificDay = new Intl.DateTimeFormat("en-CA", {

@@ -8,14 +8,17 @@ on push) — without passing the `ci` check.
 
 | Suite | Config | What it covers |
 | --- | --- | --- |
-| Unit | `vitest.config.ts` | Pure/characterization tests. Two first-class homes: the central `tests/unit/**/*.test.ts` and the colocated `src/**/*.test.ts` (both run). No server, no network, no `DATABASE_URL`. |
-| Server | `vitest.server.config.ts` | Boots the **standalone production build** once (`node .next/standalone/server.js`) and runs the route-gating walk + axe smoke against it. |
+| Unit | `vitest.config.ts` | Pure/characterization tests. Two first-class homes: the central `tests/unit/**/*.test.ts` and the colocated `src/**/*.test.ts` (both run). No server, no network, no real `DATABASE_URL` — the E05 data-layer suites run against an in-memory **PGlite** Postgres (`tests/setup/pglite-db.ts`) migrated with the checked-in `db/migrations/`. |
+| Server | `vitest.server.config.ts` | Boots the **standalone production build** once (`node .next/standalone/server.js`) against a **throwaway Postgres** (`TEST_DATABASE_URL`; a `postgres:16` service container in CI) and runs the route-gating walk + axe smoke against it. |
 
-Unit homes cover: json-store overlay/tombstone semantics, auth/session mechanics,
-the hours engine, the pure ferry model (incl. the `empiricalBucketKey` golden and
-the `wsf.ts` ↔ `ferry-forecast.ts` boarding-pass parity alarm), the ferry-reminder
-ICS builder + wait-time parser, and copy-registry consistency. Server covers: the
-generated unauthenticated admin/portal route-gating walk, and the axe a11y smoke.
+Unit homes cover: the E05 data layer (records-parity merge semantics carried
+forward from the old json-store characterization suite, write-choke audit
+guarantees, the status gate, DB-level audit immutability, the two-probe health
+route), auth/session mechanics, the hours engine, the pure ferry model (incl.
+the `empiricalBucketKey` golden and the `wsf.ts` ↔ `ferry-forecast.ts`
+boarding-pass parity alarm), the ferry-reminder ICS builder + wait-time parser,
+and copy-registry consistency. Server covers: the generated unauthenticated
+admin/portal route-gating walk, and the axe a11y smoke.
 
 ## Local commands
 
@@ -32,9 +35,14 @@ node scripts/check-frozen.mjs     # frozen-manifest guard (see below)
 ```
 
 The server suite fails fast with "run `npm run build` first" if `.next/standalone`
-is missing. It seeds a scratch admin user and a temp `DATA_DIR`, and strips
-`DATABASE_URL`/`UPSTASH_*` from the spawned server's env so it can never hit real
-Neon/Redis.
+is missing, and with a setup hint if `TEST_DATABASE_URL` is unset (E05: structured
+data lives in Postgres, so the spawned server needs a THROWAWAY database — locally:
+`docker run -e POSTGRES_PASSWORD=ci -p 5432:5432 postgres:16`, then
+`TEST_DATABASE_URL=postgres://postgres:ci@127.0.0.1:5432/postgres npm run test:server`).
+The setup migrates the schema, wipes `record`/`audit`/`quarantine`, seeds a scratch
+admin (into the DB and the temp `DATA_DIR`), and still strips `UPSTASH_*`; the
+parent shell's `DATABASE_URL` is deliberately ignored — only the explicit test var
+is used, so the suite can never point at real Neon/Redis.
 
 ## The route-gating walk (`tests/server/admin-walk.test.ts`)
 

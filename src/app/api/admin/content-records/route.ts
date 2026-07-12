@@ -31,6 +31,7 @@ import {
   getRestaurants,
   saveRestaurant,
 } from "@/lib/stores/business-store";
+import { RecordValidationError } from "@/lib/db/store-schemas";
 
 export const dynamic = "force-dynamic";
 
@@ -70,14 +71,16 @@ function httpUrl(v: unknown): string | undefined {
   return /^https?:\/\//.test(s) ? s : undefined;
 }
 
-/** Admin gate: null when allowed, otherwise the 401/403 response to return. */
-async function requireAdmin(): Promise<NextResponse | null> {
+/** Admin gate: returns the user when allowed, else the 401/403 response. */
+async function requireAdmin(): Promise<
+  { ok: true; user: { name: string; email: string } } | { ok: false; res: NextResponse }
+> {
   const user = await getSessionUser();
-  if (!user) return NextResponse.json({ error: "Sign in first" }, { status: 401 });
+  if (!user) return { ok: false, res: NextResponse.json({ error: "Sign in first" }, { status: 401 }) };
   if (user.role !== "admin") {
-    return NextResponse.json({ error: "Chamber admins only" }, { status: 403 });
+    return { ok: false, res: NextResponse.json({ error: "Chamber admins only" }, { status: 403 }) };
   }
-  return null;
+  return { ok: true, user };
 }
 
 function bad(error: string): NextResponse {
@@ -279,8 +282,8 @@ async function sanitizeRestaurant(
 /* --------------------------------- handlers -------------------------------- */
 
 export async function GET(request: NextRequest) {
-  const denied = await requireAdmin();
-  if (denied) return denied;
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate.res;
 
   const domain = parseDomain(request.nextUrl.searchParams.get("domain"));
   if (!domain) return bad(`domain must be one of: ${DOMAINS.join(", ")}`);
@@ -298,8 +301,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const denied = await requireAdmin();
-  if (denied) return denied;
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate.res;
 
   let body: Record<string, unknown>;
   try {
@@ -313,33 +316,39 @@ export async function POST(request: NextRequest) {
   if (!body.record || typeof body.record !== "object") return bad("record required");
   const raw = body.record as Record<string, unknown>;
 
-  if (domain === "itineraries") {
-    const record = await sanitizeItinerary(raw);
+  const meta = { actor: gate.user.email, source: "admin" } as const;
+  try {
+    if (domain === "itineraries") {
+      const record = await sanitizeItinerary(raw);
+      if (typeof record === "string") return bad(record);
+      await saveItinerary(record, meta);
+      return NextResponse.json({ ok: true, record });
+    }
+    if (domain === "lodging") {
+      const record = sanitizeLodging(raw);
+      if (typeof record === "string") return bad(record);
+      await saveLodging(record, meta);
+      return NextResponse.json({ ok: true, record });
+    }
+    if (domain === "restaurants") {
+      const record = await sanitizeRestaurant(raw);
+      if (typeof record === "string") return bad(record);
+      await saveRestaurant(record, meta);
+      return NextResponse.json({ ok: true, record });
+    }
+    const record = sanitizeWebcam(raw);
     if (typeof record === "string") return bad(record);
-    await saveItinerary(record);
+    await saveWebcam(record, meta);
     return NextResponse.json({ ok: true, record });
+  } catch (err) {
+    if (err instanceof RecordValidationError) return bad(err.message);
+    throw err;
   }
-  if (domain === "lodging") {
-    const record = sanitizeLodging(raw);
-    if (typeof record === "string") return bad(record);
-    await saveLodging(record);
-    return NextResponse.json({ ok: true, record });
-  }
-  if (domain === "restaurants") {
-    const record = await sanitizeRestaurant(raw);
-    if (typeof record === "string") return bad(record);
-    await saveRestaurant(record);
-    return NextResponse.json({ ok: true, record });
-  }
-  const record = sanitizeWebcam(raw);
-  if (typeof record === "string") return bad(record);
-  await saveWebcam(record);
-  return NextResponse.json({ ok: true, record });
 }
 
 export async function DELETE(request: NextRequest) {
-  const denied = await requireAdmin();
-  if (denied) return denied;
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate.res;
 
   const domain = parseDomain(request.nextUrl.searchParams.get("domain"));
   if (!domain) return bad(`domain must be one of: ${DOMAINS.join(", ")}`);
@@ -358,10 +367,16 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "Record not found" }, { status: 404 });
   }
 
-  if (domain === "itineraries") await deleteItinerary(id);
-  else if (domain === "lodging") await deleteLodging(id);
-  else if (domain === "webcams") await deleteWebcam(id);
-  else await deleteRestaurant(id);
+  const meta = { actor: gate.user.email, source: "admin" } as const;
+  try {
+    if (domain === "itineraries") await deleteItinerary(id, meta);
+    else if (domain === "lodging") await deleteLodging(id, meta);
+    else if (domain === "webcams") await deleteWebcam(id, meta);
+    else await deleteRestaurant(id, meta);
+  } catch (err) {
+    if (err instanceof RecordValidationError) return bad(err.message);
+    throw err;
+  }
 
   return NextResponse.json({ ok: true });
 }

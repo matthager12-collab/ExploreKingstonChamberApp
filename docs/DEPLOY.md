@@ -3,9 +3,10 @@
 The authoritative deploy guide for Explore Kingston. **July 2026.**
 
 **Status:** Phase 1 is **LIVE on Render** at <https://explore-kingston.onrender.com>
-(persistent-disk / filesystem mode). Phase 2 (Vercel serverless) is fully built
-and migration-tested but **not yet the running home** — it's the documented
-alternative / future move, not a pending chore.
+— since E05, Neon Postgres holds all structured data (`DATABASE_URL` is
+required) and the persistent disk holds images/hunt photos. Phase 2 (Vercel
+serverless) is fully built but **not yet the running home** — it's the
+documented alternative / future move, not a pending chore.
 
 Companion docs: [OPERATIONS.md](OPERATIONS.md) (day-2 runbook, backups, env-var
 reference, troubleshooting), [ARCHITECTURE.md](ARCHITECTURE.md) (deployment
@@ -18,48 +19,53 @@ DNS facts), [SYNDICATION.md](SYNDICATION.md) (outbound feeds / any future email)
 
 The app writes all of its mutable state — accounts, portal edits, hunts +
 photos, analytics, survey responses, ferry observations, CMS copy/visibility,
-map views/features — outside the code tree. Where that state lands is chosen
-**per store, at runtime, by which env vars are present.** Nothing above the
-store modules (routes, components, domain types) ever branches. Three seam
-files:
+map views/features — outside the code tree. Since E05, **structured data has
+exactly one home: Neon Postgres** (`record` + append tables; every write goes
+through the audited zod choke point `src/lib/db/records.ts`), and
+`DATABASE_URL` is required on every deploy — `/api/health` reports
+`dbOk:false` and 503s without it, so a mis-configured release fails closed.
+Only images and rate limiting still pick a backend by env presence; nothing
+above the store modules (routes, components, domain types) ever branches:
 
 | Seam file | Detector | Backend when set | Fallback when unset |
 |---|---|---|---|
-| `src/lib/data-dir.ts` | `DATA_DIR` present | absolute path on a **persistent disk** | `<repo>/.data/` |
-| `src/lib/db.ts` | `hasDb()` = `DATABASE_URL` set | **Neon Postgres** (`overlay` + append tables) | filesystem JSON via `data-dir` |
+| `src/lib/data-dir.ts` | `DATA_DIR` present | absolute path on a **persistent disk** — images/hunt photos only since E05 (until E15) | `<repo>/.data/` |
 | `src/lib/blob-store.ts` | `hasBlob()` = `BLOB_READ_WRITE_TOKEN` set | **Vercel Blob** (public CDN) for images | image bytes under `DATA_DIR`, served by the app's image routes |
 | `src/lib/rate-limit.ts` | `UPSTASH_REDIS_REST_URL` set | **Upstash Redis** shared sliding window | in-process `Map` (single-instance only) |
 
 Two consequences:
 
-- **Phase 1** sets `DATA_DIR` and *none* of the cloud vars → every store uses
-  the disk. This is the current live shape on Render.
-- **Phase 2** sets the cloud vars and *leaves `DATA_DIR` unset* → `hasDb()` /
-  `hasBlob()` / Upstash route each store to Neon / Blob / Redis. This is the
-  Vercel shape.
+- **Phase 1** sets `DATA_DIR` **and `DATABASE_URL`**, none of the other cloud
+  vars → Neon holds structured data, the disk holds images. This is the
+  current live shape on Render.
+- **Phase 2** additionally sets Blob/Upstash and *leaves `DATA_DIR` unset* →
+  images go to Blob and rate limiting to Redis; the DB is the same Neon either
+  way. This is the Vercel shape.
 
-`npm run dev` sets none of them, so local development runs entirely on `.data/`
-— the same code path Phase 1 uses in production, just at a different `DATA_DIR`.
+`npm run dev` needs a `DATABASE_URL` too (a throwaway local Postgres container
+or a personal Neon dev branch — see [OPERATIONS.md §1](OPERATIONS.md)); images
+land under `.data/` — the same code path Phase 1 uses in production, just at a
+different `DATA_DIR`.
 
-### What maps to which backend in Phase 2
+### Where each kind of data lives (since E05)
 
-| Data | Phase 1 (disk) | Phase 2 backend |
+| Data | Home (every deploy) | Phase-2 delta |
 |---|---|---|
-| auth users + invites | `.data/auth/{users,invites}.json` | `overlay` rows, `store='auth-users'` / `'auth-invites'` |
-| portal overlays (restaurants, events, charities, needs, lodging, webcams, parking zones, itineraries, ferry-info, boarding-pass, ferry-prediction, site copy/pages, map views/features) | `.data/stores/<name>.json` | `overlay` rows keyed `(store, id)`, `deleted` column carries `_deleted` tombstones |
-| custom hunts + submissions | `.data/hunts/*` | `overlay` (`custom-hunts`, `hunt-submissions`) |
-| hunt reference/player photos, map-feature images | files under `.data/` | **Vercel Blob** (public URL stored on the record) |
-| analytics events | `.data/analytics/events.jsonl` | `analytics_event` append table |
-| LTAC survey responses | `.data/ltac-responses.jsonl` | `survey_response` append table |
-| ferry observations (busyness forecast learning log) | `.data/…` jsonl | `ferry_observation` append table |
-| auth login/setup/redeem rate limiting | in-process `Map` | **Upstash Redis** shared counter |
+| auth users + invites | `record` rows, `store='auth-users'` / `'auth-invites'` | — |
+| portal overlays (restaurants, events, charities, needs, lodging, webcams, parking zones, itineraries, ferry-info, boarding-pass, ferry-prediction, site copy/pages, map views/features) | `record` rows keyed `(store, id)`, `deleted` column carries `_deleted` tombstones | — |
+| custom hunts + submissions | `record` (`custom-hunts`, `hunt-submissions`) | — |
+| hunt reference/player photos, map-feature images | files under `DATA_DIR` (until E15) | **Vercel Blob** (public URL stored on the record) |
+| analytics events | `analytics_event` append table | — |
+| LTAC survey responses | `survey_response` append table | — |
+| ferry observations (busyness forecast learning log) | `ferry_observation` append table | — |
+| auth login/setup/redeem rate limiting | in-process `Map` (single instance) | **Upstash Redis** shared counter |
 
 The schema's source of truth is `src/lib/db/schema.ts` (Drizzle, E05): DDL is
 generated into checked-in migrations under `db/migrations/` (`npm run
 db:generate`) and applied at server boot by `src/instrumentation.ts` (or
-manually via `npm run db:migrate`). The legacy `ensureSchema()` in `db.ts`
-still creates the old `overlay` + append tables lazily on first use; it is
-retired when E05's store-layer cutover completes.
+manually via `npm run db:migrate`). The legacy `ensureSchema()` / `overlay`
+path in `src/lib/db.ts` is retired by E05's store-layer cutover — migrations
+are the only schema mechanism.
 
 ---
 
@@ -76,12 +82,13 @@ make this turnkey:
   `nextjs`, defaults `DATA_DIR=/data`, declares `VOLUME ["/data"]`, and its
   `HEALTHCHECK` hits `/api/health`.
 - **`GET /api/health`** (`src/app/api/health/route.ts`) write-tests `DATA_DIR`
-  (mkdir + write + unlink a probe file) and returns
-  `200 {ok:true, dataDir, dataWritable:true, time}` when writable, `503`
-  otherwise. This is the exact failure (unmounted / read-only volume) that must
-  be caught before real users hit the box. Wire it as the host's health check.
+  (mkdir + write + unlink a probe file) **and pings Postgres** (E05), returning
+  `200 {ok:true, dataDir, dataWritable:true, dbOk:true, time}` only when both
+  pass, `503` otherwise. This catches the exact failures (unmounted /
+  read-only volume; a boot without `DATABASE_URL`) that must be caught before
+  real users hit the box. Wire it as the host's health check.
 
-The file store is single-writer and fine for a one-admin Chamber — Phase 1 is a
+The single-instance shape is fine for a one-admin Chamber — Phase 1 is a
 real production deployment, not demo grade (see [ARCHITECTURE.md](ARCHITECTURE.md)).
 
 ### 2a. Render (the live host) — Blueprint
@@ -114,14 +121,18 @@ Blueprint that declares the Docker web service, a **1 GB Disk mounted at
      read the value from the dashboard to complete first-run bootstrap once
      (see [§4 First run](#4-first-run-in-production)); already-bootstrapped
      deploys never consult it (`hasAnyUsers()` is checked first).
-   - **No `DATABASE_URL` / `BLOB_*` / `UPSTASH_*` are set** → every store uses
-     the `/data` disk. Render runs in pure **filesystem mode**.
+   - `DATABASE_URL` — `sync: false` (E05); the Neon **pooled** connection
+     string, entered in the dashboard, never in `render.yaml`. **Required**: a
+     release booted without it fails `/api/health` (`dbOk:false`) and Render
+     keeps the previous release serving.
+   - **`BLOB_*` / `UPSTASH_*` stay unset on Render** — images live on the
+     `/data` disk and the single instance uses the in-process rate limiter.
 3. **First deploy** runs automatically on blueprint create. Render builds the
    image and boots `server.js`.
-4. **Confirm the volume.** `GET https://explore-kingston.onrender.com/api/health`
-   returns `200 {"ok":true,"dataWritable":true,"dataDir":"/data",...}`. A `503`
-   means the Disk isn't mounted or `DATA_DIR` is wrong — fix before anything
-   writes state.
+4. **Confirm the volume and the DB.** `GET https://explore-kingston.onrender.com/api/health`
+   returns `200 {"ok":true,"dataWritable":true,"dbOk":true,"dataDir":"/data",...}`.
+   A `503` means the Disk isn't mounted, `DATA_DIR` is wrong, or Postgres is
+   unreachable / `DATABASE_URL` missing — fix before anything writes state.
 5. **Bootstrap admin** — see [§4 First run](#4-first-run-in-production).
 
 **Running config today:** Starter web service + 1 GB Disk in the `oregon`
@@ -215,23 +226,26 @@ creates it (Render dashboard), per the new-spend sign-off rule.
 ## 3. Phase 2 — Vercel serverless (built, not yet used)
 
 Vercel has no persistent filesystem: writes land on an ephemeral instance and
-vanish. So the stores run against Neon (Postgres), Vercel Blob (images), and
-Upstash Redis (shared rate limit) instead — all auto-detected from env presence
-(see [§1](#1-the-persistence-seam-why-there-are-two-phases)). The DB migration is
-complete and tested; this section is the one-time stand-up.
+vanish. Structured data already lives in Neon on every deploy (E05); the
+Vercel deltas are Vercel Blob (images) and Upstash Redis (shared rate limit),
+auto-detected from env presence
+(see [§1](#1-the-persistence-seam-why-there-are-two-phases)), with `DATA_DIR`
+left unset. This section is the one-time stand-up.
 
 ### Steps
 
 1. **Import the repo** at [vercel.com/new](https://vercel.com/new). Vercel
    auto-detects Next.js; keep defaults (`next build`, no root-dir change).
-   Don't deploy yet — provision stores + env first, or the first build ships
-   with the filesystem fallback and no persistence.
+   Don't deploy yet — provision stores + env first: without `DATABASE_URL` the
+   first deploy fails its health check (`dbOk:false`, by design — E05), and
+   without the Blob token image uploads land on an ephemeral disk.
 2. **Install the three Marketplace integrations** from the project's **Storage**
    tab. Each **injects its env vars into the project automatically** — no
    hand-copying secrets:
    - **Neon** → injects **`DATABASE_URL`**. Use the **pooled** string (host
      contains `-pooler`); the `@neondatabase/serverless` HTTP driver wants it.
-     Backs the `overlay` table + the three append tables.
+     Backs the `record`/`audit`/`quarantine` tables + the three append tables
+     — the app's entire structured-data home (E05).
    - **Vercel Blob** → create a **public** Blob store; injects
      **`BLOB_READ_WRITE_TOKEN`**. Public so image URLs serve straight from the
      CDN with no Function in the path.
@@ -254,8 +268,8 @@ complete and tested; this section is the one-time stand-up.
    migrations: they apply automatically at server boot
    (`src/instrumentation.ts`), or up front with **`npm run db:migrate`**
    (drizzle-kit; reads `DATABASE_URL` from the environment). The legacy
-   `overlay` + append tables are still self-created lazily by `ensureSchema()`
-   until E05 completes.
+   self-creating `overlay` path is gone — migrations are the only schema
+   mechanism.
 6. **Migrate existing `.data/` (only if carrying over Render's state).** Pull the
    production env and run the migration once:
    ```bash
@@ -265,7 +279,10 @@ complete and tested; this section is the one-time stand-up.
    `scripts/migrate-to-db.mjs` upserts overlay rows (auth, portal overlays,
    custom hunts, submissions, map views/features), appends analytics/survey
    rows, and uploads images to Blob (rewriting each record's URL field to the
-   blob URL). It **refuses to run without `DATABASE_URL`**. Idempotency:
+   blob URL). It **refuses to run without `DATABASE_URL`**. **E05 caveat:** the
+   script predates the substrate cutover and writes the legacy `overlay`
+   tables, which the stores no longer read — E05's importer supersedes it for
+   structured data. Idempotency:
    - overlay upserts use `ON CONFLICT DO UPDATE` — **safe to re-run**.
    - the append tables (`analytics_event`, `survey_response`) are **run-once**:
      the script skips each if it already has rows; pass `--force` to append
@@ -338,12 +355,13 @@ it backs up is not a backup:
 15 3 * * * DATA_DIR=/data BACKUP_DIR=/data/backups /app/scripts/backup-data.sh >> /var/log/kingston-backup.log 2>&1
 ```
 
-**`DATA_DIR` is the entire backup surface** in Phase 1 — everything else (code,
-seed content, brand assets, generated parking overlay) rebuilds from git +
-`npm install`. `.data/` is gitignored on purpose (password hashes, photos) — do
-not commit it. In **Phase 2** the backup surface moves to Neon (use its
-branch/PITR features) + Blob (versioned object store); the JSON-bundle route and
-`backup-data.sh` are Phase-1 filesystem tools.
+**Since E05 the backup surface is split: Neon holds structured data** (use its
+PITR/branching) **and `DATA_DIR` holds images/hunt photos** — everything else
+(code, seed content, brand assets, generated parking overlay) rebuilds from
+git + `npm install`. The JSON-bundle route and `backup-data.sh` still walk the
+whole `DATA_DIR`. `.data/` is gitignored on purpose (photos; pre-E05 disks
+also carry password hashes) — do not commit it. In **Phase 2** the image half
+moves to Blob (versioned object store).
 
 ---
 
@@ -376,18 +394,18 @@ launch**; the app currently lives at the raw `explore-kingston.onrender.com`.
 
 | | **Render (Phase 1, LIVE)** | **Vercel (Phase 2, ready)** |
 |---|---|---|
-| Persistence | 1 GB disk at `/data`, filesystem stores | Neon + Blob + Upstash |
-| Env shape | `DATA_DIR=/data`, no cloud vars | cloud vars set, `DATA_DIR` unset |
-| Schema/migration | none — files on disk | Drizzle migrations (`db/migrations/`, applied at boot — E05); data move via `scripts/migrate-to-db.mjs` |
+| Persistence | Neon Postgres (structured data, E05) + 1 GB disk at `/data` (images/photos) | Neon + Blob + Upstash |
+| Env shape | `DATA_DIR=/data` + `DATABASE_URL`, no Blob/Upstash vars | all cloud vars set, `DATA_DIR` unset |
+| Schema/migration | Drizzle migrations (`db/migrations/`, applied at boot — E05) | same migrations; image move to Blob |
 | Rate limit | in-process `Map` (single instance, correct) | Upstash shared window (required) |
-| Cost | ~$7.25/mo (Starter + 1 GB disk) | ~$20/mo Pro + free-tier stores |
-| Backups | daily disk snapshots + off-site JSON bundle | Neon PITR + Blob versioning |
+| Cost | ~$7.25/mo (Starter + 1 GB disk) + Neon free tier | ~$20/mo Pro + free-tier stores |
+| Backups | Neon PITR + daily disk snapshots + off-site JSON bundle | Neon PITR + Blob versioning |
 | Scaling | single warm instance | serverless, multi-instance |
 | Ops burden | one box, one disk, snapshots | three managed services |
 | Status | **running the app today** | supported alternative / future move |
 
 **Pick Render** while the Chamber is one admin at Kingston's scale — cheaper,
-simpler, single-writer file store, and already live. **Move to Vercel** only if
+simpler, one warm instance, and already live. **Move to Vercel** only if
 scale or a serverless mandate demands it; the seam makes it a config change, not
 a rewrite.
 

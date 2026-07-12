@@ -1,7 +1,18 @@
 import { NextRequest } from "next/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+// E05: auth is Postgres-only — this route test runs against an in-memory
+// PGlite migrated with the checked-in db/migrations.
+import { createTestDb, type TestDb } from "../../../../tests/setup/pglite-db";
 import { hasAnyUsers } from "@/lib/auth";
 import { POST } from "@/app/api/auth/setup/route";
+
+let tdb: TestDb;
+beforeAll(async () => {
+  tdb = await createTestDb();
+});
+afterAll(async () => {
+  await tdb.close();
+});
 
 function post(ip: string, body: Record<string, unknown>) {
   return POST(

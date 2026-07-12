@@ -9,7 +9,7 @@ import { dataPath } from "../data-dir";
 import type { MapFeature, MapView } from "../map/types";
 import { mapViews as viewSeed } from "../data/map-views";
 import { mapFeatures as featureSeed } from "../data/map-features";
-import { readMerged, writeOverlayRecord } from "./json-store";
+import { readMerged, writeOverlayRecord, type WriteMeta } from "./json-store";
 import { hasBlob, putImage } from "../blob-store";
 
 const VIEW_STORE = "map-views";
@@ -24,12 +24,12 @@ export async function getMapView(id: string): Promise<MapView | undefined> {
   return (await getMapViews()).find((v) => v.id === id);
 }
 
-export async function saveMapView(view: MapView): Promise<void> {
-  await writeOverlayRecord(VIEW_STORE, view);
+export async function saveMapView(view: MapView, meta?: WriteMeta): Promise<void> {
+  await writeOverlayRecord(VIEW_STORE, view, meta);
 }
 
-export async function deleteMapView(id: string): Promise<void> {
-  await writeOverlayRecord(VIEW_STORE, { id, _deleted: true } as MapView & { _deleted: true });
+export async function deleteMapView(id: string, meta?: WriteMeta): Promise<void> {
+  await writeOverlayRecord(VIEW_STORE, { id, _deleted: true } as MapView & { _deleted: true }, meta);
 }
 
 export async function getMapFeatures(): Promise<MapFeature[]> {
@@ -41,12 +41,16 @@ export async function getFeaturesForView(viewId: string): Promise<MapFeature[]> 
   return (await getMapFeatures()).filter((f) => f.views.includes(viewId));
 }
 
-export async function saveMapFeature(feature: MapFeature): Promise<void> {
-  await writeOverlayRecord(FEATURE_STORE, feature);
+export async function saveMapFeature(feature: MapFeature, meta?: WriteMeta): Promise<void> {
+  await writeOverlayRecord(FEATURE_STORE, feature, meta);
 }
 
-export async function deleteMapFeature(id: string): Promise<void> {
-  await writeOverlayRecord(FEATURE_STORE, { id, _deleted: true } as MapFeature & { _deleted: true });
+export async function deleteMapFeature(id: string, meta?: WriteMeta): Promise<void> {
+  await writeOverlayRecord(
+    FEATURE_STORE,
+    { id, _deleted: true } as MapFeature & { _deleted: true },
+    meta,
+  );
 }
 
 // ---------- feature images ----------

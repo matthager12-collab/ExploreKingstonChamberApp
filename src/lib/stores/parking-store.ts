@@ -6,7 +6,7 @@
 
 import type { MapZone } from "../data/parking";
 import { parkingZones as seed } from "../data/parking";
-import { readMerged, writeOverlayRecord } from "./json-store";
+import { readMerged, writeOverlayRecord, type WriteMeta } from "./json-store";
 
 const STORE = "parking-zones";
 
@@ -18,10 +18,10 @@ export async function getParkingZone(id: string): Promise<MapZone | undefined> {
   return (await getParkingZones()).find((z) => z.id === id);
 }
 
-export async function saveParkingZone(zone: MapZone): Promise<void> {
-  await writeOverlayRecord(STORE, zone);
+export async function saveParkingZone(zone: MapZone, meta?: WriteMeta): Promise<void> {
+  await writeOverlayRecord(STORE, zone, meta);
 }
 
-export async function deleteParkingZone(id: string): Promise<void> {
-  await writeOverlayRecord(STORE, { id, _deleted: true } as MapZone & { _deleted: true });
+export async function deleteParkingZone(id: string, meta?: WriteMeta): Promise<void> {
+  await writeOverlayRecord(STORE, { id, _deleted: true } as MapZone & { _deleted: true }, meta);
 }

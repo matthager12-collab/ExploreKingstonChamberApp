@@ -7,12 +7,13 @@
 // /api/hunts/submit.
 
 import { NextRequest } from "next/server";
-import { requireAdmin } from "@/lib/auth";
+import { getSessionUser, requireAdmin } from "@/lib/auth";
 import { MAX_PHOTO_BYTES, imageExtension, photoUrl, saveReferencePhoto } from "@/lib/hunt-store";
 
 export async function POST(request: NextRequest) {
   const denied = await requireAdmin();
   if (denied) return denied;
+  const user = await getSessionUser();
 
   let form: FormData;
   try {
@@ -51,6 +52,7 @@ export async function POST(request: NextRequest) {
       stopId,
       new Uint8Array(await photo.arrayBuffer()),
       ext,
+      { actor: user?.email, source: "admin" },
     );
     return Response.json({
       ok: true,

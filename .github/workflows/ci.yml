@@ -24,6 +24,22 @@ jobs:
     timeout-minutes: 20
     env:
       NEXT_TELEMETRY_DISABLED: "1"
+      # E05: the server-test tier boots the standalone build against a real
+      # Postgres (structured data has no filesystem fallback anymore). This is
+      # the ephemeral service container below — still keyless, no secrets.
+      TEST_DATABASE_URL: postgres://postgres:ci@127.0.0.1:5432/postgres
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 } # full history: the frozen-manifest check diffs against the PR base

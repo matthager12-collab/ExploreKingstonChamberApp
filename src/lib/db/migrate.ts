@@ -8,9 +8,11 @@ import "server-only";
 
 import path from "node:path";
 
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 
 import { getDb } from "./client";
+import type * as schema from "./schema";
 
 let applied: Promise<void> | null = null;
 
@@ -22,7 +24,9 @@ let applied: Promise<void> | null = null;
 export function runMigrations(): Promise<void> {
   if (!process.env.DATABASE_URL) return Promise.resolve();
   if (!applied) {
-    applied = migrate(getDb(), {
+    // getDb() is typed wide (Db) so tests can inject PGlite; at boot it is
+    // always the node-postgres instance the migrator expects.
+    applied = migrate(getDb() as NodePgDatabase<typeof schema>, {
       migrationsFolder: path.join(process.cwd(), "db", "migrations"),
     });
     // If it failed, let a later call retry instead of caching the rejection

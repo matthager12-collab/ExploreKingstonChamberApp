@@ -18,6 +18,7 @@ import {
   getEvents,
   saveEvent,
 } from "@/lib/stores/event-store";
+import { RecordValidationError } from "@/lib/db/store-schemas";
 import { normalizeEventTimestamp } from "@/lib/time";
 import type { EventCategory, EventItem } from "@/lib/types";
 
@@ -163,7 +164,17 @@ export async function POST(request: NextRequest) {
     };
   }
 
-  await saveEvent(event);
+  try {
+    await saveEvent(event, {
+      actor: user.email,
+      source: user.role === "admin" ? "admin" : "portal",
+    });
+  } catch (err) {
+    if (err instanceof RecordValidationError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
+  }
   return NextResponse.json({ ok: true, event });
 }
 
@@ -180,6 +191,16 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "You don't manage that event" }, { status: 403 });
   }
 
-  await deleteEvent(id);
+  try {
+    await deleteEvent(id, {
+      actor: user.email,
+      source: user.role === "admin" ? "admin" : "portal",
+    });
+  } catch (err) {
+    if (err instanceof RecordValidationError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
+  }
   return NextResponse.json({ ok: true });
 }

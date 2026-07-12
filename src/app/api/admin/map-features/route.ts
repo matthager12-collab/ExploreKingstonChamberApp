@@ -26,6 +26,7 @@ import { PARKING_TYPES } from "@/lib/map/types";
 import { isAllowedPaymentLink } from "@/lib/map/payment-link";
 import { deleteMapFeature, getMapFeatures, saveMapFeature } from "@/lib/stores/map-store";
 import { getMapViews } from "@/lib/stores/map-store";
+import { RecordValidationError } from "@/lib/db/store-schemas";
 
 const KINDS: FeatureKind[] = ["marker", "line", "trail", "area"];
 
@@ -50,19 +51,21 @@ function isLatLng(p: unknown): p is [number, number] {
   );
 }
 
-/** Admin gate: null when allowed, otherwise the 401/403 response to return. */
-async function requireAdmin(): Promise<NextResponse | null> {
+/** Admin gate: returns the user when allowed, else the 401/403 response. */
+async function requireAdmin(): Promise<
+  { ok: true; user: { name: string; email: string } } | { ok: false; res: NextResponse }
+> {
   const user = await getSessionUser();
-  if (!user) return NextResponse.json({ error: "Sign in first" }, { status: 401 });
+  if (!user) return { ok: false, res: NextResponse.json({ error: "Sign in first" }, { status: 401 }) };
   if (user.role !== "admin") {
-    return NextResponse.json({ error: "Chamber admins only" }, { status: 403 });
+    return { ok: false, res: NextResponse.json({ error: "Chamber admins only" }, { status: 403 }) };
   }
-  return null;
+  return { ok: true, user };
 }
 
 export async function GET(request: NextRequest) {
-  const denied = await requireAdmin();
-  if (denied) return denied;
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate.res;
 
   const view = request.nextUrl.searchParams.get("view");
   const features = await getMapFeatures();
@@ -72,8 +75,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const denied = await requireAdmin();
-  if (denied) return denied;
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate.res;
 
   let body: Record<string, unknown>;
   try {
@@ -257,13 +260,20 @@ export async function POST(request: NextRequest) {
     ...(polygon ? { polygon } : {}),
   };
 
-  await saveMapFeature(feature);
+  try {
+    await saveMapFeature(feature, { actor: gate.user.email, source: "admin" });
+  } catch (err) {
+    if (err instanceof RecordValidationError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
+  }
   return NextResponse.json({ ok: true, feature });
 }
 
 export async function DELETE(request: NextRequest) {
-  const denied = await requireAdmin();
-  if (denied) return denied;
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate.res;
 
   const id = request.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
@@ -272,6 +282,13 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "Feature not found" }, { status: 404 });
   }
 
-  await deleteMapFeature(id);
+  try {
+    await deleteMapFeature(id, { actor: gate.user.email, source: "admin" });
+  } catch (err) {
+    if (err instanceof RecordValidationError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
+  }
   return NextResponse.json({ ok: true });
 }

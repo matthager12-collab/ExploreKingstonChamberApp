@@ -4,16 +4,17 @@
 // per-direction delay, but never ARCHIVES either. So we snapshot them (throttled)
 // from the same feed the ferry pages already fetch, append them here, and
 // aggregate them into an empirical busyness table the forecast blends in
-// (src/lib/ferry-forecast). Append-only, same filesystem/DB seam as
-// analytics-store.ts; retention pruning keeps the row count bounded.
+// (src/lib/ferry-forecast). Append-only Postgres log (ferry_observation) via
+// the data layer's append helpers (src/lib/db/append.ts); retention pruning
+// keeps the row count bounded.
 //
 // Scope: Edmonds–Kingston only (terminals 8/12), matching the planner.
 
-import { appendFile, mkdir, readFile, writeFile } from "fs/promises";
-import path from "path";
-
-import { dataPath } from "../data-dir";
-import { hasDb, db, ensureSchema } from "../db";
+import {
+  appendFerryObservation,
+  pruneFerryObservationsBefore,
+  readFerryObservations,
+} from "../db/append";
 import type { Direction } from "../types";
 import type { SailingSpace, RouteDelays } from "../wsf";
 import {
@@ -23,10 +24,9 @@ import {
   type BusyLevel,
   type EmpiricalTable,
 } from "../ferry-forecast";
-import { readMerged, writeOverlayRecord } from "./json-store";
+import { readMerged, writeOverlayRecord, type WriteMeta } from "./json-store";
 
 const TZ = "America/Los_Angeles";
-const DATA_FILE = dataPath("ferry", "observations.jsonl");
 
 // Snapshot at most this often (any process): the pages poll every 60s and many
 // tabs can be open, but ~10 min captures the fill trajectory without flooding.
@@ -117,15 +117,8 @@ export async function recordSailingSpaceSnapshot(
   ];
   if (observations.length === 0) return false;
 
-  if (hasDb()) {
-    await ensureSchema();
-    const sql = db();
-    for (const obs of observations) {
-      await sql`INSERT INTO ferry_observation (obs) VALUES (${JSON.stringify(obs)}::jsonb)`;
-    }
-  } else {
-    await mkdir(path.dirname(DATA_FILE), { recursive: true });
-    await appendFile(DATA_FILE, observations.map((o) => JSON.stringify(o)).join("\n") + "\n", "utf8");
+  for (const obs of observations) {
+    await appendFerryObservation(obs);
   }
 
   aggCache = null; // fresh data — let the next read recompute
@@ -137,27 +130,7 @@ export async function recordSailingSpaceSnapshot(
 }
 
 async function readObservations(): Promise<FerryObservation[]> {
-  if (hasDb()) {
-    await ensureSchema();
-    const sql = db();
-    const rows = (await sql`SELECT obs FROM ferry_observation`) as { obs: FerryObservation }[];
-    return rows.map((r) => r.obs);
-  }
-  let lines: string[] = [];
-  try {
-    lines = (await readFile(DATA_FILE, "utf8")).split("\n").filter(Boolean);
-  } catch {
-    return []; // nothing logged yet
-  }
-  const out: FerryObservation[] = [];
-  for (const line of lines) {
-    try {
-      out.push(JSON.parse(line) as FerryObservation);
-    } catch {
-      // skip a corrupt line rather than losing the aggregate
-    }
-  }
-  return out;
+  return readFerryObservations<FerryObservation>();
 }
 
 /**
@@ -215,28 +188,7 @@ export async function getEmpiricalBusyness(): Promise<EmpiricalResult> {
 /** Drop observations older than the retention window. Best-effort. */
 async function prune(nowMs: number): Promise<void> {
   const cutoff = nowMs - RETENTION_DAYS * 24 * 60 * 60 * 1000;
-  if (hasDb()) {
-    await ensureSchema();
-    const sql = db();
-    await sql`DELETE FROM ferry_observation WHERE ts < ${new Date(cutoff).toISOString()}`;
-    return;
-  }
-  let lines: string[] = [];
-  try {
-    lines = (await readFile(DATA_FILE, "utf8")).split("\n").filter(Boolean);
-  } catch {
-    return;
-  }
-  const kept = lines.filter((line) => {
-    try {
-      return Date.parse((JSON.parse(line) as FerryObservation).ts) >= cutoff;
-    } catch {
-      return false; // drop corrupt lines while we're rewriting anyway
-    }
-  });
-  if (kept.length !== lines.length) {
-    await writeFile(DATA_FILE, kept.length ? kept.join("\n") + "\n" : "", "utf8");
-  }
+  await pruneFerryObservationsBefore(new Date(cutoff).toISOString());
 }
 
 // ---- Accuracy backtest -----------------------------------------------------
@@ -323,16 +275,20 @@ export async function computeAccuracy(): Promise<AccuracyMetrics> {
 }
 
 /** Compute accuracy now and append it to the rolling history (kept ~60 runs). */
-export async function recordAccuracySnapshot(): Promise<AccuracyMetrics> {
+export async function recordAccuracySnapshot(meta?: WriteMeta): Promise<AccuracyMetrics> {
   const metrics = await computeAccuracy();
   const rows = await readMerged<AccuracyRecord>(ACCURACY_STORE, []);
   const existing = rows.find((r) => r.id === ACCURACY_ID);
   const history = [...(existing?.history ?? []), metrics].slice(-60);
-  await writeOverlayRecord<AccuracyRecord>(ACCURACY_STORE, {
-    id: ACCURACY_ID,
-    latest: metrics,
-    history,
-  });
+  await writeOverlayRecord<AccuracyRecord>(
+    ACCURACY_STORE,
+    {
+      id: ACCURACY_ID,
+      latest: metrics,
+      history,
+    },
+    meta,
+  );
   return metrics;
 }
 

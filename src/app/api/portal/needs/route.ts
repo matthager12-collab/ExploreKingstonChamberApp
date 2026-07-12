@@ -16,6 +16,7 @@ import {
   getVolunteerNeeds,
   saveVolunteerNeed,
 } from "@/lib/stores/charity-store";
+import { RecordValidationError } from "@/lib/db/store-schemas";
 import { eventsSharingDate } from "@/lib/stores/event-store";
 import { pacificWallTimeToISO } from "@/lib/time";
 import type { VolunteerNeed } from "@/lib/types";
@@ -86,7 +87,17 @@ export async function POST(request: NextRequest) {
       ...need,
       slotsFilled: Math.max(0, Math.min(need.slotsTotal, need.slotsFilled + delta)),
     };
-    await saveVolunteerNeed(updated);
+    try {
+      await saveVolunteerNeed(updated, {
+        actor: user.email,
+        source: user.role === "admin" ? "admin" : "portal",
+      });
+    } catch (err) {
+      if (err instanceof RecordValidationError) {
+        return NextResponse.json({ error: err.message }, { status: 400 });
+      }
+      throw err;
+    }
     return NextResponse.json({ ok: true, need: updated });
   }
 
@@ -147,7 +158,17 @@ export async function POST(request: NextRequest) {
     slotsFilled,
     description: typeof body.description === "string" ? body.description.trim() : "",
   };
-  await saveVolunteerNeed(record);
+  try {
+    await saveVolunteerNeed(record, {
+      actor: user.email,
+      source: user.role === "admin" ? "admin" : "portal",
+    });
+  } catch (err) {
+    if (err instanceof RecordValidationError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
+  }
   return NextResponse.json({ ok: true, need: record });
 }
 
@@ -163,6 +184,16 @@ export async function DELETE(request: NextRequest) {
   if (!canEdit(user, need.charityId)) {
     return NextResponse.json({ error: "not allowed to delete this shift" }, { status: 403 });
   }
-  await deleteVolunteerNeed(id);
+  try {
+    await deleteVolunteerNeed(id, {
+      actor: user.email,
+      source: user.role === "admin" ? "admin" : "portal",
+    });
+  } catch (err) {
+    if (err instanceof RecordValidationError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
+  }
   return NextResponse.json({ ok: true });
 }

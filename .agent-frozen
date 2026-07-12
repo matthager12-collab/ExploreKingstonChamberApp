@@ -12,7 +12,9 @@
 # Globs: * matches within a path segment, ** matches across segments.
 
 # --- Pure, audit-named domain modules (characterization-tested, must stay stable) ---
-src/lib/stores/json-store.ts
+# json-store.ts UNFROZEN by E05 (P1-E05 plan step 2, the chartered rewrite epic):
+# it becomes a thin delegate over src/lib/db/records.ts; the records-parity
+# suite carries the old characterization guarantees forward.
 src/lib/hours.ts
 src/lib/ferry-forecast.ts
 src/lib/wsf.ts

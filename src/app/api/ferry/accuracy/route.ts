@@ -9,6 +9,7 @@
 // a matching ?token= or `Authorization: Bearer` is required.
 
 import type { NextRequest } from "next/server";
+import { RecordValidationError } from "@/lib/db/store-schemas";
 import { recordAccuracySnapshot } from "@/lib/stores/ferry-observations";
 
 export const dynamic = "force-dynamic";
@@ -25,8 +26,15 @@ async function handle(request: NextRequest): Promise<Response> {
     }
   }
 
-  const metrics = await recordAccuracySnapshot();
-  return Response.json({ ok: true, metrics });
+  try {
+    const metrics = await recordAccuracySnapshot({ actor: "system", source: "sync" });
+    return Response.json({ ok: true, metrics });
+  } catch (err) {
+    if (err instanceof RecordValidationError) {
+      return Response.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
+  }
 }
 
 export async function GET(request: NextRequest): Promise<Response> {

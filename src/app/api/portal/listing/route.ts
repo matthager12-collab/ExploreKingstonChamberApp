@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { canEdit, getSessionUser } from "@/lib/auth";
 import { getRestaurant, saveRestaurant } from "@/lib/stores/business-store";
+import { RecordValidationError } from "@/lib/db/store-schemas";
 import type { Restaurant, WeeklyHours } from "@/lib/types";
 
 const PLATFORMS = ["toast", "square", "doordash", "own-site", "phone-only"] as const;
@@ -124,6 +125,16 @@ export async function PUT(request: NextRequest) {
   }
 
   next.id = stored.id; // belt and braces — never client-controlled
-  await saveRestaurant(next);
+  try {
+    await saveRestaurant(next, {
+      actor: user.email,
+      source: user.role === "admin" ? "admin" : "portal",
+    });
+  } catch (err) {
+    if (err instanceof RecordValidationError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
+  }
   return NextResponse.json({ ok: true, listing: next });
 }

@@ -4,7 +4,7 @@
 
 import type { Itinerary } from "../types";
 import { itineraries as seed } from "../data/itineraries";
-import { readMerged, writeOverlayRecord } from "./json-store";
+import { readMerged, writeOverlayRecord, type WriteMeta } from "./json-store";
 
 const STORE = "itineraries";
 
@@ -17,12 +17,14 @@ export async function getItinerary(slug: string): Promise<Itinerary | undefined>
   return (await getItineraries()).find((i) => i.slug === slug);
 }
 
-export async function saveItinerary(record: Itinerary): Promise<void> {
-  await writeOverlayRecord(STORE, record);
+export async function saveItinerary(record: Itinerary, meta?: WriteMeta): Promise<void> {
+  await writeOverlayRecord(STORE, record, meta);
 }
 
-export async function deleteItinerary(id: string): Promise<void> {
-  await writeOverlayRecord(STORE, { id, _deleted: true } as Itinerary & {
-    _deleted: true;
-  });
+export async function deleteItinerary(id: string, meta?: WriteMeta): Promise<void> {
+  await writeOverlayRecord(
+    STORE,
+    { id, _deleted: true } as Itinerary & { _deleted: true },
+    meta,
+  );
 }

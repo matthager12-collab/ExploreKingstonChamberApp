@@ -10,7 +10,7 @@
 // "settings", in store "ferry-prediction". No seed (absence = OFF).
 
 import { getSessionUser } from "../auth";
-import { readMerged, writeOverlayRecord } from "./json-store";
+import { readMerged, writeOverlayRecord, type WriteMeta } from "./json-store";
 
 const STORE = "ferry-prediction";
 const RECORD_ID = "settings";
@@ -36,13 +36,21 @@ export async function getFerryPredictionEnabled(): Promise<boolean> {
 }
 
 /** Turn the public prediction feature on or off. */
-export async function setFerryPredictionEnabled(enabled: boolean, setBy: string): Promise<void> {
-  await writeOverlayRecord<FerryPredictionRecord>(STORE, {
-    id: RECORD_ID,
-    enabled,
-    setAt: new Date().toISOString(),
-    setBy,
-  });
+export async function setFerryPredictionEnabled(
+  enabled: boolean,
+  setBy: string,
+  meta?: WriteMeta,
+): Promise<void> {
+  await writeOverlayRecord<FerryPredictionRecord>(
+    STORE,
+    {
+      id: RECORD_ID,
+      enabled,
+      setAt: new Date().toISOString(),
+      setBy,
+    },
+    meta,
+  );
 }
 
 export interface FerryPredictionAccess {
