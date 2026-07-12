@@ -212,6 +212,22 @@ PITR/branching is the recovery path for records) and **`DATA_DIR`** (`/data`
 on Render) holds images/hunt photos. The bundle layers below still walk the
 whole `DATA_DIR`. There are **three backup layers**, deliberately independent:
 
+> **The nightly export.** The off-site job (Layer 3,
+> `.github/workflows/backup-offsite.yml`, daily 09:23 UTC) pulls
+> `GET /api/admin/backup` with the scoped `BACKUP_TOKEN` — since E05 that
+> endpoint returns the **v2 bundle**: the old disk-file walk PLUS a `db`
+> section (every `record` row with its governance metadata, the append-only
+> audit trail, quarantine, and the three telemetry tables), `"version": 2`,
+> pretty-printed so a volunteer can open it in a text editor (the
+> human-readable export / vendor-exit path, M-20-07). **Checking
+> "last backup" age:** the workflow run list IS the check — a red X on
+> `Off-site encrypted backup` means the nightly bundle did NOT land that day
+> (there is no separate alert channel); the encrypted `.age` files in the R2
+> bucket carry date-stamped names for a second opinion. Restore paths:
+> disk files via `scripts/restore-backup.mjs`, the `db` section via
+> `npm run restore:db` (see [RUNBOOK-CUTOVER.md](RUNBOOK-CUTOVER.md) §Restore
+> drill — rehearsed quarterly).
+
 ### Layer 1 — Render daily disk snapshots (on-host, automatic)
 
 Render snapshots the `/data` disk **daily** with a **7-day** restore window.
