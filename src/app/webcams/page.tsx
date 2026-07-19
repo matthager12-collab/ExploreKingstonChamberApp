@@ -26,13 +26,9 @@ export default async function WebcamsPage() {
     <>
       {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
-        eyebrow={copyText(copy, "webcams.header.eyebrow", "Check before you drive")}
-        title={copyText(copy, "webcams.header.title", "Webcams")}
-        intro={copyText(
-          copy,
-          "webcams.header.intro",
-          "Eleven WSDOT cameras watch the Edmonds–Kingston run. They're still images, not video — most update about once a minute — but they'll tell you how long the ferry line is before you commit to getting in it.",
-        )}
+        eyebrow={copyText(copy, "webcams.header.eyebrow")}
+        title={copyText(copy, "webcams.header.title")}
+        intro={copyText(copy, "webcams.header.intro")}
       />
 
       <Section>

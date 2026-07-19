@@ -21,7 +21,7 @@ import { COPY_BLOCKS } from "@/lib/site-copy-registry";
 import { HIDEABLE_PAGES } from "@/lib/page-visibility";
 import { RecordValidationError } from "@/lib/db/store-schemas";
 
-const COPY_KEYS = new Set(COPY_BLOCKS.map((b) => b.key));
+const COPY_KEYS = new Set<string>(COPY_BLOCKS.map((b) => b.key));
 const HIDEABLE = new Set(HIDEABLE_PAGES.map((p) => p.path));
 const MAX_TEXT_LENGTH = 2000;
 

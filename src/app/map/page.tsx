@@ -24,13 +24,9 @@ export default async function MapPage() {
     <>
       {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
-        eyebrow={copyText(copy, "map.header.eyebrow", "Get your bearings")}
-        title={copyText(copy, "map.header.title", "Kingston, mapped")}
-        intro={copyText(
-          copy,
-          "map.header.intro",
-          "Pick a layer — where to eat, where to park, what to explore — and see it all on one map of downtown Kingston.",
-        )}
+        eyebrow={copyText(copy, "map.header.eyebrow")}
+        title={copyText(copy, "map.header.title")}
+        intro={copyText(copy, "map.header.intro")}
       />
 
       <Section>

@@ -67,6 +67,28 @@ line up, the schema is wrong, not the interface.
    `source`, `updated_by`, …) belongs to the Drizzle layer (E05), and
    status-gated rendering belongs to E08 — don't duplicate either here.
 
+## The copy-registry contract (E07)
+
+The same drift problem existed for site copy, and got the same fix:
+`src/lib/site-copy-registry.ts` is the **only** home of default wording.
+
+- Call sites pass keys only: `copyText(overrides, key)` (server),
+  `useCopy(key)` / `<EditableText copyKey … />` (client). No inline fallbacks
+  anywhere — the resolvers read `copyFallback(key)` from the registry.
+- `CopyKey` is the literal union of registered keys, so a typo at a call site
+  is a `tsc` error before it is anything else.
+- `tests/unit/site-copy-registry.test.ts` enforces the bijection: every
+  call-site key exists in the registry, every registry block is referenced by
+  at least one call site (`ALLOW_UNREFERENCED` is the explicit exception
+  list, empty today), no call site carries an inline fallback, keys are
+  unique, fallbacks non-empty.
+- Consequence for operators: the "default" shown in `/admin/content` and the
+  "Reset to default" button are truthful by construction — they can no longer
+  drift from what the site renders.
+
+Adding a copy block: add it to `COPY_BLOCKS` *and* reference it from a call
+site in the same change; the test fails the build if either half is missing.
+
 ## Deliberate behavior changes (E07)
 
 Two, both documented in the E07 PR:

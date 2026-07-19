@@ -28,13 +28,9 @@ export default async function ItinerariesPage() {
     <>
       {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
-        eyebrow={copyText(copy, "itineraries.header.eyebrow", "Plan your day")}
-        title={copyText(copy, "itineraries.header.title", "Itineraries")}
-        intro={copyText(
-          copy,
-          "itineraries.header.intro",
-          "Four ready-made Kingston days, built around real ferry arrivals and real local spots. Steal one whole or mix and match — everything downtown is within a few blocks of the dock.",
-        )}
+        eyebrow={copyText(copy, "itineraries.header.eyebrow")}
+        title={copyText(copy, "itineraries.header.title")}
+        intro={copyText(copy, "itineraries.header.intro")}
       />
       <Section>
         <div className="grid gap-4 sm:grid-cols-2">

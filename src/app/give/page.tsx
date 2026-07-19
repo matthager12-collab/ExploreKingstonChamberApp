@@ -82,22 +82,14 @@ export default async function GiveBackPage() {
     <>
       {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
-        eyebrow={copyText(copy, "give.header.eyebrow", "Give back")}
-        title={copyText(copy, "give.header.title", "Kingston runs on volunteers")}
-        intro={copyText(
-          copy,
-          "give.header.intro",
-          "The fireworks, the market, the food bank, the Village Green — none of it happens without neighbors raising their hands. Here's who does the work, where help is needed this summer, and a shared calendar so two good causes don't book the same day.",
-        )}
+        eyebrow={copyText(copy, "give.header.eyebrow")}
+        title={copyText(copy, "give.header.title")}
+        intro={copyText(copy, "give.header.intro")}
       />
 
       <Section
         title="Nonprofit directory"
-        subtitle={copyText(
-          copy,
-          "give.directory.subtitle",
-          "The orgs doing the heavy lifting around town. Reach out directly — they're small, friendly, and always short a pair of hands.",
-        )}
+        subtitle={copyText(copy, "give.directory.subtitle")}
       >
         <div className="grid gap-4 sm:grid-cols-2">
           {charities.map((c) => (
@@ -127,11 +119,7 @@ export default async function GiveBackPage() {
 
       <Section
         title="Volunteer right now"
-        subtitle={copyText(
-          copy,
-          "give.volunteer.subtitle",
-          "Real shifts this summer, a couple hours each. No account needed — v1 keeps it simple: you contact the org, they put you to work.",
-        )}
+        subtitle={copyText(copy, "give.volunteer.subtitle")}
       >
         {sortedNeeds.length === 0 && (
           <Card>
@@ -215,11 +203,7 @@ export default async function GiveBackPage() {
 
       <Section
         title="Planning a fundraiser? Deconflict first"
-        subtitle={copyText(
-          copy,
-          "give.deconflict.subtitle",
-          "Two good causes on the same day split the same crowd — and the same wallets. Scan the dates below before you book yours.",
-        )}
+        subtitle={copyText(copy, "give.deconflict.subtitle")}
       >
         {dateEntries.length === 0 ? (
           <Card>

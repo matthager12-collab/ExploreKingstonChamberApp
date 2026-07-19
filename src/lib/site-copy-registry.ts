@@ -1,12 +1,17 @@
-// The site-wide editable-copy registry.
+// The site-wide editable-copy registry — the ONLY home of default copy (E07).
 //
 // Each CopyBlock names one piece of headline text on a public page. The
-// `fallback` is the exact string hardcoded in the page component — the page
-// renders copyText(overrides, key, fallback), so an untouched block always
-// tracks the code, and the admin UI (/admin/content) can show the current
-// default next to any override. Overrides live in the "site-copy" overlay
-// store (src/lib/stores/site-store.ts); this file is pure data and safe to
-// import anywhere.
+// `fallback` is the default the site renders when no admin override exists:
+// call sites resolve copyText(overrides, key) / useCopy(key) /
+// <EditableText copyKey … /> and the wording comes from here via
+// copyFallback(key) — never from an inline string at the call site, so the
+// admin UI's "default" and "Reset to default" are truthful by construction.
+// tests/unit/site-copy-registry.test.ts enforces the contract both ways:
+// every call-site key exists here, every block is referenced by some call
+// site (or sits in the test's explicit allowlist), and no call site carries
+// an inline fallback. Overrides live in the "site-copy" overlay store
+// (src/lib/stores/site-store.ts); this file is pure data and safe to import
+// anywhere, client components included.
 //
 // Key naming: "<page>.<block>", e.g. "eat.header.intro".
 
@@ -21,7 +26,7 @@ export interface CopyBlock {
   fallback: string;
 }
 
-export const COPY_BLOCKS: CopyBlock[] = [
+export const COPY_BLOCKS = [
   // ------------------------------------------------------------- Home (/)
   {
     key: "home.hero.eyebrow",
@@ -36,30 +41,12 @@ export const COPY_BLOCKS: CopyBlock[] = [
     fallback: "Discover",
   },
   {
-    key: "home.hero.title2",
-    page: "Home",
-    label: "Hero headline, line 2 (the script “Kingston.” is appended after)",
-    fallback: "Now make the most of",
-  },
-  {
     key: "home.hero.intro",
     page: "Home",
     label: "Hero intro paragraph",
     multiline: true,
     fallback:
       "Ferry times, food worth walking to, and everything happening in our little town.",
-  },
-  {
-    key: "home.hero.ctaPrimary",
-    page: "Home",
-    label: "Primary button label",
-    fallback: "Next boats →",
-  },
-  {
-    key: "home.hero.ctaSecondary",
-    page: "Home",
-    label: "Secondary button label",
-    fallback: "Plan my day",
   },
 
   // ------------------------------------------------------------- /ferry
@@ -411,30 +398,12 @@ export const COPY_BLOCKS: CopyBlock[] = [
     fallback: "away.",
   },
   {
-    key: "home.hero.edmonds.title3",
-    page: "Home — Edmonds side",
-    label: "Hero headline, line 2",
-    fallback: "Plan the crossing, then the day.",
-  },
-  {
     key: "home.hero.edmonds.intro",
     page: "Home — Edmonds side",
     label: "Hero intro",
     multiline: true,
     fallback:
       "Catch the Edmonds–Kingston boat and you're minutes from our little town on Appletree Cove.",
-  },
-  {
-    key: "home.hero.edmonds.ctaPrimary",
-    page: "Home — Edmonds side",
-    label: "Primary button",
-    fallback: "Directions to the Edmonds dock →",
-  },
-  {
-    key: "home.hero.edmonds.ctaSecondary",
-    page: "Home — Edmonds side",
-    label: "Secondary button",
-    fallback: "Plan my Kingston day",
   },
   {
     key: "ferry.header.edmonds.eyebrow",
@@ -604,35 +573,10 @@ export const COPY_BLOCKS: CopyBlock[] = [
   },
   // Home (live strip)
   {
-    key: "home.strip.toEdmonds",
-    page: "Home (live strip)",
-    label: "Label: next boat to Edmonds",
-    fallback: "Next boat to Edmonds",
-  },
-  {
-    key: "home.strip.fromEdmonds",
-    page: "Home (live strip)",
-    label: "Label: next arrival from Edmonds",
-    fallback: "Next arrival from Edmonds",
-  },
-  {
     key: "home.strip.fastFerry",
     page: "Home (live strip)",
     label: "Label: fast ferry to Seattle",
     fallback: "Fast Ferry:",
-  },
-  {
-    key: "home.strip.weather",
-    page: "Home (live strip)",
-    label: "Label: weather (fallback when no forecast)",
-    fallback: "Weather",
-  },
-  {
-    key: "home.strip.notLive",
-    page: "Home (live strip)",
-    label: "Not-live disclaimer line",
-    multiline: true,
-    fallback: "Schedule times, not live status — confirm at wsdot.wa.gov/ferries.",
   },
   // Footer
   {
@@ -657,4 +601,14 @@ export const COPY_BLOCKS: CopyBlock[] = [
     rich: true,
     fallback: "Built with the Greater Kingston Chamber of Commerce, publisher of [explorekingstonwa.com](https://explorekingstonwa.com). Ferry data courtesy of WSDOT. Always confirm sailings with Washington State Ferries before traveling.",
   },
-];
+] as const satisfies readonly CopyBlock[];
+
+/** Union of every registered copy key — a typo at a call site is a tsc error. */
+export type CopyKey = (typeof COPY_BLOCKS)[number]["key"];
+
+const FALLBACKS = new Map<string, string>(COPY_BLOCKS.map((b) => [b.key, b.fallback]));
+
+/** The registry-owned default wording for one block (E07: single-sourced). */
+export function copyFallback(key: CopyKey): string {
+  return FALLBACKS.get(key) ?? "";
+}

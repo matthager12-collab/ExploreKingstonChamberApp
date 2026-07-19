@@ -34,7 +34,7 @@ export default async function AdminContentPage() {
       <ContentManager
         pages={HIDEABLE_PAGES}
         initialHidden={hiddenPaths}
-        blocks={COPY_BLOCKS}
+        blocks={[...COPY_BLOCKS]}
         initialOverrides={overrides}
       />
     </>

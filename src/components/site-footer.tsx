@@ -45,15 +45,11 @@ export function SiteFooter({
             />
           </a>
           <p className="font-display mt-3 text-lg font-semibold">
-            {copyText(copy, "footer.brand", "Explore Kingston")}
+            {copyText(copy, "footer.brand")}
           </p>
           <p className="mt-2 text-sm text-seaglass">
             <RichText
-              text={copyText(
-                copy,
-                "footer.tagline",
-                "The interactive companion to [explorekingstonwa.com](https://explorekingstonwa.com) — your community guide to Kingston, Washington, ferry gateway to the Kitsap Peninsula and the Olympic Peninsula beyond.",
-              )}
+              text={copyText(copy, "footer.tagline")}
             />
           </p>
         </div>
@@ -82,11 +78,7 @@ export function SiteFooter({
       <div className="border-t border-white/10">
         <p className="mx-auto max-w-5xl px-4 py-4 text-xs text-seaglass/80">
           <RichText
-            text={copyText(
-              copy,
-              "footer.credit",
-              "Built with the Greater Kingston Chamber of Commerce, publisher of [explorekingstonwa.com](https://explorekingstonwa.com). Ferry data courtesy of WSDOT. Always confirm sailings with Washington State Ferries before traveling.",
-            )}
+            text={copyText(copy, "footer.credit")}
           />
         </p>
       </div>

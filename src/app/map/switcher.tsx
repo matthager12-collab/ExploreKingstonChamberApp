@@ -23,9 +23,7 @@ export function MapSwitcher({ views }: { views: SwitcherView[] }) {
       <EditableText
         as="p"
         className="text-ink-soft"
-        copyKey="mapswitcher.empty"
-        fallback="No maps are published yet."
-      />
+        copyKey="mapswitcher.empty"/>
     );
   }
 

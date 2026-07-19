@@ -159,13 +159,9 @@ export default async function EatPage() {
     <>
       {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
-        eyebrow={copyText(copy, "eat.header.eyebrow", "Downtown Kingston")}
-        title={copyText(copy, "eat.header.title", "Eat & Drink")}
-        intro={copyText(
-          copy,
-          "eat.header.intro",
-          "Everything here is a walk from the ferry dock — two minutes to a crêpe, ten up the hill to the shops by Grocery Outlet. Heads up: plenty of Kingston kitchens take orders by phone, not app. That's normal here.",
-        )}
+        eyebrow={copyText(copy, "eat.header.eyebrow")}
+        title={copyText(copy, "eat.header.title")}
+        intro={copyText(copy, "eat.header.intro")}
       />
 
       <Section>
@@ -201,18 +197,10 @@ export default async function EatPage() {
 
       <Section>
         <Callout
-          title={copyText(
-            copy,
-            "eat.callout.title",
-            "Menus and hours change — trust the kitchen, not the internet.",
-          )}
+          title={copyText(copy, "eat.callout.title")}
         >
           <p>
-            {copyText(
-              copy,
-              "eat.callout.body",
-              "We verify this list against the real world, but small-town kitchens move fast. When it matters, call ahead or check the restaurant's own site. Run a food spot in Kingston?",
-            )}{" "}
+            {copyText(copy, "eat.callout.body")}{" "}
             <a
               href={`mailto:${CHAMBER_EMAIL}?subject=Update%20my%20Visit%20Kingston%20listing`}
               className="font-medium text-tide-deep underline decoration-seaglass underline-offset-2 hover:text-sound"

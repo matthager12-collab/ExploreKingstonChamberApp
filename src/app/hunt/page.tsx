@@ -38,13 +38,9 @@ export default async function HuntPage() {
     <>
       {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
-        eyebrow={copyText(copy, "hunt.header.eyebrow", "Get out and play")}
-        title={copyText(copy, "hunt.header.title", "Kingston Scavenger Hunt")}
-        intro={copyText(
-          copy,
-          "hunt.header.intro",
-          "Free, self-guided, and built for your phone. Solve riddles around town and post a photo at each spot to check in. No app to download, no account to make — just heads up that posted photos go to the hunt organizers.",
-        )}
+        eyebrow={copyText(copy, "hunt.header.eyebrow")}
+        title={copyText(copy, "hunt.header.title")}
+        intro={copyText(copy, "hunt.header.intro")}
       />
 
       <Section title="How it works">

@@ -79,13 +79,9 @@ export default async function StayPage() {
     <>
       {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
-        eyebrow={copyText(copy, "stay.header.eyebrow", "Spend the night")}
-        title={copyText(copy, "stay.header.title", "Stay the night")}
-        intro={copyText(
-          copy,
-          "stay.header.intro",
-          "Day-trippers catch the boat home right when the light gets good. Stay over instead: watch the evening ferry cross a gold Puget Sound, walk Appletree Cove after dinner, and have the waterfront nearly to yourself at breakfast.",
-        )}
+        eyebrow={copyText(copy, "stay.header.eyebrow")}
+        title={copyText(copy, "stay.header.title")}
+        intro={copyText(copy, "stay.header.intro")}
       />
 
       <Section

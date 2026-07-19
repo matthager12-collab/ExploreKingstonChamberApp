@@ -111,8 +111,8 @@ interface Result {
 export function NearMe({ places }: { places: NearMePlace[] }) {
   const [status, setStatus] = useState<Status>("idle");
   const [results, setResults] = useState<Result[]>([]);
-  const idleLabel = useCopy("nearme.button.idle", "What's open near me?");
-  const locatingLabel = useCopy("nearme.button.locating", "Finding you…");
+  const idleLabel = useCopy("nearme.button.idle");
+  const locatingLabel = useCopy("nearme.button.locating");
   // ONE ping per page visit, even across re-taps.
   const pingSent = useRef(false);
 
@@ -161,27 +161,21 @@ export function NearMe({ places }: { places: NearMePlace[] }) {
         <EditableText
           as="p"
           className="text-xs text-ink-soft"
-          copyKey="nearme.disclosure"
-          fallback="Uses your location once, rounded to about a block, to sort this list — helps Kingston's visitor stats too."
-        />
+          copyKey="nearme.disclosure"/>
       </div>
 
       {status === "denied" && (
         <EditableText
           as="p"
           className="mt-3 text-sm text-ink-soft"
-          copyKey="nearme.denied"
-          fallback="No problem — we never see your location unless you say yes. Everything below is sorted by walk time from the ferry dock instead."
-        />
+          copyKey="nearme.denied"/>
       )}
 
       {status === "error" && (
         <EditableText
           as="p"
           className="mt-3 text-sm text-ink-soft"
-          copyKey="nearme.error"
-          fallback="Couldn't get a location fix just now. Kingston is small — the walk times from the ferry on each card below are a good guide."
-        />
+          copyKey="nearme.error"/>
       )}
 
       {status === "ready" && (

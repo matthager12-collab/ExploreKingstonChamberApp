@@ -87,23 +87,15 @@ export default async function FerryPage() {
       {hiddenPreview && <HiddenPageBanner />}
       {side === "edmonds" ? (
         <PageHeader
-          eyebrow={copyText(copy, "ferry.header.edmonds.eyebrow", "Crossing to Kingston")}
-          title={copyText(copy, "ferry.header.edmonds.title", "Ferry times")}
-          intro={copyText(
-            copy,
-            "ferry.header.edmonds.intro",
-            "From Edmonds, the car ferry reaches Kingston in about 30 minutes, every day, and walk-ons are always welcome — board at the Edmonds dock. There's also a passengers-only fast ferry from downtown Seattle's Pier 50 to Kingston in 39 minutes.",
-          )}
+          eyebrow={copyText(copy, "ferry.header.edmonds.eyebrow")}
+          title={copyText(copy, "ferry.header.edmonds.title")}
+          intro={copyText(copy, "ferry.header.edmonds.intro")}
         />
       ) : (
         <PageHeader
-          eyebrow={copyText(copy, "ferry.header.eyebrow", "Getting here and back")}
-          title={copyText(copy, "ferry.header.title", "Ferry times")}
-          intro={copyText(
-            copy,
-            "ferry.header.intro",
-            "Two boats serve Kingston: the Edmonds–Kingston car ferry — about 30 minutes, every day, walk-ons welcome — and a passengers-only fast ferry straight to downtown Seattle in 39 minutes.",
-          )}
+          eyebrow={copyText(copy, "ferry.header.eyebrow")}
+          title={copyText(copy, "ferry.header.title")}
+          intro={copyText(copy, "ferry.header.intro")}
         />
       )}
 

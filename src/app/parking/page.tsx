@@ -36,22 +36,14 @@ export default async function ParkingPage() {
     <>
       {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
-        eyebrow={copyText(copy, "parking.header.eyebrow", "Plan your visit")}
-        title={copyText(copy, "parking.header.title", "Parking")}
-        intro={copyText(
-          copy,
-          "parking.header.intro",
-          "Kingston's parking universe is small but full of gotchas: a paid Port lot by the marina, a commuter lot one block up, a strictly enforced free 2-hour row, a couple of genuinely unrestricted streets, and two free park & rides. The Chamber's live parking map shows where to leave the car — color-coded by type, with owner, payment, and time-limit details.",
-        )}
+        eyebrow={copyText(copy, "parking.header.eyebrow")}
+        title={copyText(copy, "parking.header.title")}
+        intro={copyText(copy, "parking.header.intro")}
       />
 
       <Section
         title="The map"
-        subtitle={copyText(
-          copy,
-          "parking.map.subtitle",
-          "The Chamber's live parking map, built and kept current in the portal. Tap any lot for its type, owner, how to pay, and time limits. Colors are set automatically by parking type.",
-        )}
+        subtitle={copyText(copy, "parking.map.subtitle")}
       >
         {parkingMap ? (
           <FeatureMap resolved={parkingMap} height="500px" />

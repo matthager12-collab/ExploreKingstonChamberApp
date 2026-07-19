@@ -39,24 +39,16 @@ export async function FerryLineInfo({
           <div className="min-w-0">
             <p className="flex items-center gap-2 text-lg font-semibold text-sound-deep">
               <span aria-hidden>🚗</span>{" "}
-              {copyText(copy, "ferryLine.edmonds.title", "Driving to Kingston?")}
+              {copyText(copy, "ferryLine.edmonds.title")}
             </p>
             <p className="mt-1 text-sm text-ink-soft">
               <RichText
-                text={copyText(
-                  copy,
-                  "ferryLine.edmonds.body1",
-                  "You board the ferry at the **Edmonds terminal** — not Kingston. The Kingston SR-104 boarding-pass line only matters for the trip back.",
-                )}
+                text={copyText(copy, "ferryLine.edmonds.body1")}
               />
             </p>
             <p className="mt-1.5 text-sm text-ink-soft">
               <RichText
-                text={copyText(
-                  copy,
-                  "ferryLine.edmonds.body2",
-                  "There are **no vehicle reservations** on this run, so in summer arrive early — the Edmonds car line can fill hours ahead of the boat you want.",
-                )}
+                text={copyText(copy, "ferryLine.edmonds.body2")}
               />
             </p>
           </div>
@@ -68,7 +60,7 @@ export async function FerryLineInfo({
               rel="noopener noreferrer"
               className="inline-flex items-center justify-center gap-1.5 rounded-full bg-coral px-5 py-2.5 text-sm font-semibold text-white shadow hover:bg-coral-deep"
             >
-              {copyText(copy, "ferryLine.edmonds.navButton", "Directions to the Edmonds dock →")}
+              {copyText(copy, "ferryLine.edmonds.navButton")}
             </a>
           </div>
         </div>
@@ -92,24 +84,16 @@ export async function FerryLineInfo({
         <div className="min-w-0">
           <p className="flex items-center gap-2 text-lg font-semibold text-sound-deep">
             <span aria-hidden>🚗</span>{" "}
-            {copyText(copy, "ferryLine.title", "Driving onto the ferry?")}
+            {copyText(copy, "ferryLine.title")}
           </p>
           <p className="mt-1 text-sm text-ink-soft">
             <RichText
-              text={copyText(
-                copy,
-                "ferryLine.body1",
-                "When the overhead signs at **SR 104 & Barber Cutoff Rd** are flashing, Kingston's boarding-pass system is on. Follow the signal into the ferry lane, **take a pass at the dispenser near Lindvog Rd**, then wait for a green light to pull up to the tollbooths — leave the line and your pass is void.",
-              )}
+              text={copyText(copy, "ferryLine.body1")}
             />
           </p>
           <p className="mt-1.5 text-sm text-ink-soft">
             <RichText
-              text={copyText(
-                copy,
-                "ferryLine.body2",
-                "Active daily **8 a.m.–8 p.m.** in season, plus weekends and holidays. Walk-ons, cyclists, and motorcycles skip it.",
-              )}
+              text={copyText(copy, "ferryLine.body2")}
             />
           </p>
         </div>
@@ -122,8 +106,8 @@ export async function FerryLineInfo({
             className="inline-flex items-center justify-center gap-1.5 rounded-full bg-coral px-5 py-2.5 text-sm font-semibold text-white shadow hover:bg-coral-deep"
           >
             {pass.active
-              ? copyText(copy, "ferryLine.navButtonPass", "Get in the ferry line →")
-              : copyText(copy, "ferryLine.navButton", "Navigate to the ferry →")}
+              ? copyText(copy, "ferryLine.navButtonPass")
+              : copyText(copy, "ferryLine.navButton")}
           </a>
           {pass.active && (
             <p className="max-w-[12rem] text-center text-xs text-coral-deep">
@@ -136,7 +120,7 @@ export async function FerryLineInfo({
             href="/ferry#ferry-line-map"
             className="text-center text-xs font-medium text-tide-deep underline decoration-seaglass underline-offset-2 hover:text-sound"
           >
-            {copyText(copy, "ferryLine.mapLink", "see the line map")}
+            {copyText(copy, "ferryLine.mapLink")}
           </Link>
         </div>
       </div>

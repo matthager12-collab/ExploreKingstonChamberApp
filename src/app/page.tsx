@@ -86,37 +86,29 @@ export default async function Home() {
           {side === "edmonds" ? (
             <>
               <p className="font-nav text-sm font-semibold tracking-[0.25em] text-cyan-200 uppercase">
-                {copyText(copy, "home.hero.edmonds.eyebrow", "Headed across the water?")}
+                {copyText(copy, "home.hero.edmonds.eyebrow")}
               </p>
               <h1 className="font-display mt-3 max-w-2xl text-5xl leading-tight font-semibold sm:text-6xl drop-shadow-lg">
-                {copyText(copy, "home.hero.edmonds.title1", "Kingston is a")}{" "}
+                {copyText(copy, "home.hero.edmonds.title1")}{" "}
                 <span className="font-script text-[1.15em] font-normal text-cyan-100">short sail</span>{" "}
-                {copyText(copy, "home.hero.edmonds.title2", "away.")}
+                {copyText(copy, "home.hero.edmonds.title2")}
               </h1>
               <p className="mt-4 max-w-xl text-lg text-white/90 drop-shadow-md">
-                {copyText(
-                  copy,
-                  "home.hero.edmonds.intro",
-                  "Catch the Edmonds–Kingston boat and you're minutes from our little town on Appletree Cove.",
-                )}
+                {copyText(copy, "home.hero.edmonds.intro")}
               </p>
             </>
           ) : (
             <>
               <p className="font-nav text-sm font-semibold tracking-[0.25em] text-cyan-200 uppercase">
-                {copyText(copy, "home.hero.eyebrow", "Gateway to the Peninsula")}
+                {copyText(copy, "home.hero.eyebrow")}
               </p>
               <h1 className="font-display mt-3 max-w-2xl text-5xl leading-tight font-semibold sm:text-7xl drop-shadow-xl">
-                {copyText(copy, "home.hero.title1", "Discover")}
+                {copyText(copy, "home.hero.title1")}
                 <br />
                 <span className="font-script text-[1.15em] font-normal text-cyan-100">Kingston's</span> Magic.
               </h1>
               <p className="mt-4 max-w-xl text-lg text-white/90 drop-shadow-md">
-                {copyText(
-                  copy,
-                  "home.hero.intro",
-                  "Ferry times, food worth walking to, and everything happening in our little town.",
-                )}
+                {copyText(copy, "home.hero.intro")}
               </p>
             </>
           )}
@@ -129,7 +121,7 @@ export default async function Home() {
             <div className="mt-5 flex flex-wrap items-baseline gap-x-8 gap-y-2 border-t border-white/15 pt-4 text-sm">
               <div className="flex items-center gap-2">
                 <span className="text-cyan-200 font-medium">
-                  {copyText(copy, "home.strip.fastFerry", "Fast Ferry:")}
+                  {copyText(copy, "home.strip.fastFerry")}
                 </span>
                 <span className="font-bold text-white">{nextFastOut ?? "Not today"}</span>
               </div>

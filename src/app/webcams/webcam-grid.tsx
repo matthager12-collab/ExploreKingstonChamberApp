@@ -26,8 +26,8 @@ function WebcamCard({ cam }: { cam: Webcam }) {
   const [stamp, setStamp] = useState<number | null>(null);
   const [now, setNow] = useState<number>(0);
   const [offline, setOffline] = useState(false);
-  const connectingLabel = useCopy("webcams.card.connecting", "Connecting…");
-  const noImageLabel = useCopy("webcams.card.noImage", "No image right now");
+  const connectingLabel = useCopy("webcams.card.connecting");
+  const noImageLabel = useCopy("webcams.card.noImage");
 
   useEffect(() => {
     const start = Date.now();
@@ -52,20 +52,16 @@ function WebcamCard({ cam }: { cam: Webcam }) {
       <div className="relative aspect-[4/3] w-full bg-sound/5">
         {stamp === null ? (
           <div className="flex h-full items-center justify-center text-sm text-ink-soft">
-            <EditableText copyKey="webcams.card.loading" fallback="Loading camera…" />
+            <EditableText copyKey="webcams.card.loading"/>
           </div>
         ) : offline ? (
           <div className="flex h-full flex-col items-center justify-center gap-1 px-4 text-center">
             <EditableText
               className="text-sm font-semibold text-ink"
-              copyKey="webcams.card.offlineTitle"
-              fallback="Camera offline"
-            />
+              copyKey="webcams.card.offlineTitle"/>
             <EditableText
               className="text-xs text-ink-soft"
-              copyKey="webcams.card.offlineBody"
-              fallback="WSDOT feeds hiccup sometimes — we’ll retry automatically."
-            />
+              copyKey="webcams.card.offlineBody"/>
           </div>
         ) : (
           // eslint-disable-next-line @next/next/no-img-element

@@ -22,13 +22,9 @@ export default async function AboutPage() {
     <>
       {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
-        eyebrow={copyText(copy, "about.header.eyebrow", "The story")}
-        title={copyText(copy, "about.header.title", "About Visit Kingston")}
-        intro={copyText(
-          copy,
-          "about.header.intro",
-          "This site is a community project, built with the Greater Kingston Chamber of Commerce by people who live here. It's free to use and free of ads — no sponsored placements, no pay-to-rank listings. If it's on the site, it's because it's useful.",
-        )}
+        eyebrow={copyText(copy, "about.header.eyebrow")}
+        title={copyText(copy, "about.header.title")}
+        intro={copyText(copy, "about.header.intro")}
       />
 
       <Section title="Why your visit counts">

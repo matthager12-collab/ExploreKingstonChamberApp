@@ -12,6 +12,7 @@
 //    Enforcement helper: src/lib/page-visibility.ts.
 
 import { readMerged, writeOverlayRecord, type WriteMeta } from "./json-store";
+import { copyFallback, type CopyKey } from "@/lib/site-copy-registry";
 
 const COPY_STORE = "site-copy";
 const PAGES_STORE = "site-pages";
@@ -32,14 +33,11 @@ export async function getCopyOverrides(): Promise<Record<string, string>> {
   return Object.fromEntries(rows.map((r) => [r.id, r.text]));
 }
 
-/** Resolve one block: admin override if present (non-empty), else fallback. */
-export function copyText(
-  overrides: Record<string, string>,
-  key: string,
-  fallback: string,
-): string {
+/** Resolve one block: admin override if present (non-empty), else the
+ *  registry fallback (E07: single-sourced — call sites pass keys only). */
+export function copyText(overrides: Record<string, string>, key: CopyKey): string {
   const t = overrides[key];
-  return t && t.trim().length > 0 ? t : fallback;
+  return t && t.trim().length > 0 ? t : copyFallback(key);
 }
 
 export async function saveCopyOverride(key: string, text: string, meta?: WriteMeta): Promise<void> {

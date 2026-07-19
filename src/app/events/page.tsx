@@ -154,13 +154,9 @@ export default async function EventsPage() {
     <>
       {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
-        eyebrow={copyText(copy, "events.header.eyebrow", "What's happening")}
-        title={copyText(copy, "events.header.title", "Events")}
-        intro={copyText(
-          copy,
-          "events.header.intro",
-          "Markets on the marina lawn, free concerts two nights a week in high summer, and the whole town out for the 4th. Most of it is a short walk from the ferry.",
-        )}
+        eyebrow={copyText(copy, "events.header.eyebrow")}
+        title={copyText(copy, "events.header.title")}
+        intro={copyText(copy, "events.header.intro")}
       />
 
       {thisWeekend.length === 0 && byMonth.size === 0 && (
