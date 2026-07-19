@@ -95,7 +95,12 @@ export async function POST(request: NextRequest) {
 
   const domain = parseDomain(trimOrEmpty(body.domain) || null);
   if (!domain) return bad(`domain must be one of: ${DOMAINS.join(", ")}`);
-  if (!body.record || typeof body.record !== "object") return bad("record required");
+  // Array.isArray guard: arrays pass typeof === "object" and would surface
+  // zod's raw "expected object, received array" — a message no operator
+  // should ever see.
+  if (!body.record || typeof body.record !== "object" || Array.isArray(body.record)) {
+    return bad("record required");
+  }
   const raw = body.record as Record<string, unknown>;
 
   const meta = { actor, source: "admin" } as const;
