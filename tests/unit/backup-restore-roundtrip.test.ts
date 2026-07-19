@@ -22,10 +22,14 @@ import {
   analyticsEvent,
   audit,
   ferryObservation,
+  invites,
+  orgs,
   quarantine,
   record,
   surveyResponse,
+  users,
 } from "@/lib/db/schema";
+import { __setDbForTests } from "@/lib/db/client";
 import { createTestDb, type TestDb } from "../setup/pglite-db";
 
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
@@ -65,6 +69,45 @@ beforeAll(async () => {
   await appendSurveyResponse({ q1: "came for the ferry" });
   await appendFerryObservation({ vessel: "Spokane", pct: 42 });
 
+  // E06 auth tables. Accounts no longer ride inside `record`, so a bundle that
+  // omitted these would restore to a site with zero users — the reason these
+  // sections exist at all.
+  await source.db.insert(orgs).values({
+    id: "org-cafe",
+    name: "Café Roundtrip",
+    kind: "business",
+    linkedIds: ["cafe"],
+  });
+  await source.db.insert(users).values([
+    {
+      id: "u-admin",
+      email: "director@example.test",
+      name: "Director",
+      role: "admin",
+      orgId: null,
+      passwordHash: HASH,
+      sessionVersion: 3,
+      disabled: false,
+      lastLoginAt: new Date("2026-07-01T12:00:00Z"),
+    },
+    {
+      id: "u-owner",
+      email: "owner@example.test",
+      name: "Owner",
+      role: "member-business",
+      orgId: "org-cafe",
+      passwordHash: HASH,
+      disabled: true,
+    },
+  ]);
+  await source.db.insert(invites).values({
+    code: "inv-roundtrip",
+    role: "viewer",
+    email: "invited@example.test",
+    createdBy: "u-admin",
+    expiresAt: new Date("2026-12-31T00:00:00Z"),
+  });
+
   section = await serializeDb();
 });
 
@@ -74,7 +117,18 @@ afterAll(async () => {
 });
 
 async function tableCounts(tdb: TestDb) {
-  const one = async (t: typeof record | typeof audit | typeof quarantine | typeof analyticsEvent | typeof surveyResponse | typeof ferryObservation) => {
+  const one = async (
+    t:
+      | typeof record
+      | typeof audit
+      | typeof quarantine
+      | typeof analyticsEvent
+      | typeof surveyResponse
+      | typeof ferryObservation
+      | typeof orgs
+      | typeof users
+      | typeof invites,
+  ) => {
     const [{ n }] = await tdb.db.select({ n: count() }).from(t);
     return n;
   };
@@ -85,19 +139,27 @@ async function tableCounts(tdb: TestDb) {
     analytics_event: await one(analyticsEvent),
     survey_response: await one(surveyResponse),
     ferry_observation: await one(ferryObservation),
+    orgs: await one(orgs),
+    users: await one(users),
+    invites: await one(invites),
   };
 }
 
 describe("backup/restore roundtrip", () => {
   it("serializeDb returns records keyed by store, full metadata, and a version-agnostic section", () => {
-    // Version-agnostic: exactly the six table keys, no version field of its own.
+    // Version-agnostic: exactly the table keys, no version field of its own.
+    // E06 added orgs/users/invites — accounts left the `record` table, so
+    // without these three a bundle restores to a site nobody can log in to.
     expect(Object.keys(section).sort()).toEqual([
       "analytics_event",
       "audit",
       "ferry_observation",
+      "invites",
+      "orgs",
       "quarantine",
       "records",
       "survey_response",
+      "users",
     ]);
 
     expect(Object.keys(section.records).sort()).toEqual([
@@ -171,6 +233,57 @@ describe("backup/restore roundtrip", () => {
         (r) => r.id,
       );
     expect(await auditIds(target)).toEqual(await auditIds(source));
+
+    // --- Accounts come back usable (E06) ---------------------------------
+    // The failure this guards against is silent: a bundle that restores
+    // cleanly but leaves nobody able to sign in.
+    const restoredUsers = await target.db.select().from(users).orderBy(asc(users.id));
+    expect(restoredUsers.map((u) => u.id)).toEqual(["u-admin", "u-owner"]);
+
+    const admin = restoredUsers.find((u) => u.id === "u-admin")!;
+    // Without the hash the account exists but is unusable — the whole point.
+    expect(admin.passwordHash).toBe(HASH);
+    expect(admin.role).toBe("admin");
+    // sessionVersion must survive verbatim: resetting it to 0 would silently
+    // re-validate session cookies that were revoked before the backup.
+    expect(admin.sessionVersion).toBe(3);
+    expect(admin.lastLoginAt?.toISOString()).toBe("2026-07-01T12:00:00.000Z");
+
+    // A disabled account must NOT come back enabled.
+    expect(restoredUsers.find((u) => u.id === "u-owner")!.disabled).toBe(true);
+
+    // Org linkage survives, so member-business editing rights are intact.
+    const [org] = await target.db.select().from(orgs);
+    expect(org.linkedIds).toEqual(["cafe"]);
+    expect(restoredUsers.find((u) => u.id === "u-owner")!.orgId).toBe("org-cafe");
+
+    // Invites keep their binding and expiry, not a fresh 14-day window.
+    const [invite] = await target.db.select().from(invites);
+    expect(invite.email).toBe("invited@example.test");
+    expect(invite.expiresAt.toISOString()).toBe("2026-12-31T00:00:00.000Z");
+  });
+
+  it("restores a PRE-E06 bundle that carries no auth sections", async () => {
+    // Older bundles predate the users/orgs/invites tables. They must still
+    // restore rather than throwing on a missing key.
+    const legacy = await createTestDb();
+    try {
+      const withoutAuth: DbSection = { ...section };
+      delete withoutAuth.orgs;
+      delete withoutAuth.users;
+      delete withoutAuth.invites;
+
+      const counts = await restoreDb(withoutAuth, { force: false });
+      expect(counts.users).toBe(0);
+      expect(counts.orgs).toBe(0);
+      expect(counts.record).toBeGreaterThan(0);
+    } finally {
+      // createTestDb/close drive ONE global slot (see the file header), so
+      // closing this throwaway would leave getDb() unbound for every test
+      // after it. Hand the slot back to `target`.
+      await legacy.close();
+      __setDbForTests(target!.db);
+    }
   });
 
   it("REFUSES a non-empty target without force, naming --force", async () => {

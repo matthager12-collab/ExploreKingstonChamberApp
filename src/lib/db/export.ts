@@ -30,8 +30,11 @@ import {
   analyticsEvent,
   audit,
   ferryObservation,
+  invites,
+  orgs,
   quarantine,
   surveyResponse,
+  users,
   record,
   type RecordSource,
   type RecordStatus,
@@ -78,6 +81,56 @@ export type AnalyticsEventRow = { ts: string; event: unknown };
 export type SurveyResponseRow = { ts: string; response: unknown };
 export type FerryObservationRow = { ts: string; obs: unknown };
 
+// --- Auth tables (E06) ------------------------------------------------------
+// Before E06 accounts lived in `record` under the "auth-users" store, so they
+// rode along in every bundle for free. Once auth moved to dedicated tables,
+// omitting them here would have made bundles restore to a site with ZERO
+// users — a total lockout, discovered only during a real recovery. These
+// sections close that hole.
+
+export type OrgBackupRow = {
+  id: string;
+  name: string;
+  kind: string;
+  linkedIds: string[];
+  externalIds: Record<string, unknown>;
+  entitlements: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type UserBackupRow = {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  orgId: string | null;
+  /** scrypt$salt$hash. See the sensitivity note at the top of this file. */
+  passwordHash: string;
+  sessionVersion: number;
+  disabled: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type InviteBackupRow = {
+  code: string;
+  role: string;
+  orgId: string | null;
+  newOrgName: string | null;
+  newOrgKind: string | null;
+  linkedIds: string[];
+  email: string | null;
+  note: string | null;
+  createdBy: string;
+  createdAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  usedBy: string | null;
+  usedAt: string | null;
+};
+
 /** The `db` section of a v2 backup bundle: the entire Postgres substrate.
  *  Deliberately version-agnostic — the wrapping bundle carries `version`. */
 export type DbSection = {
@@ -87,6 +140,10 @@ export type DbSection = {
   analytics_event: AnalyticsEventRow[];
   survey_response: SurveyResponseRow[];
   ferry_observation: FerryObservationRow[];
+  /** E06. Optional on READ so bundles taken before E06 still restore. */
+  orgs?: OrgBackupRow[];
+  users?: UserBackupRow[];
+  invites?: InviteBackupRow[];
 };
 
 export type RestoreCounts = {
@@ -96,6 +153,9 @@ export type RestoreCounts = {
   analytics_event: number;
   survey_response: number;
   ferry_observation: number;
+  orgs: number;
+  users: number;
+  invites: number;
 };
 
 function toIso(v: Date | string): string {
@@ -146,6 +206,9 @@ export async function serializeDb(): Promise<DbSection> {
     .select()
     .from(ferryObservation)
     .orderBy(asc(ferryObservation.ts));
+  const orgRows = await db.select().from(orgs).orderBy(asc(orgs.id));
+  const userRows = await db.select().from(users).orderBy(asc(users.id));
+  const inviteRows = await db.select().from(invites).orderBy(asc(invites.code));
 
   return {
     records,
@@ -171,6 +234,48 @@ export async function serializeDb(): Promise<DbSection> {
     analytics_event: analyticsRows.map((r) => ({ ts: toIso(r.ts), event: r.event })),
     survey_response: surveyRows.map((r) => ({ ts: toIso(r.ts), response: r.response })),
     ferry_observation: ferryRows.map((r) => ({ ts: toIso(r.ts), obs: r.obs })),
+    orgs: orgRows.map((o) => ({
+      id: o.id,
+      name: o.name,
+      kind: o.kind,
+      linkedIds: o.linkedIds,
+      externalIds: o.externalIds,
+      entitlements: o.entitlements,
+      createdAt: toIso(o.createdAt),
+      updatedAt: toIso(o.updatedAt),
+    })),
+    users: userRows.map((u) => ({
+      id: u.id,
+      email: u.email,
+      name: u.name,
+      role: u.role,
+      orgId: u.orgId,
+      // Restoring an account without its hash would lock the owner out, so
+      // the bundle carries it — which is exactly why bundles are treated as
+      // secrets (encrypted at rest by the off-site workflow).
+      passwordHash: u.passwordHash,
+      sessionVersion: u.sessionVersion,
+      disabled: u.disabled,
+      lastLoginAt: u.lastLoginAt ? toIso(u.lastLoginAt) : null,
+      createdAt: toIso(u.createdAt),
+      updatedAt: toIso(u.updatedAt),
+    })),
+    invites: inviteRows.map((i) => ({
+      code: i.code,
+      role: i.role,
+      orgId: i.orgId,
+      newOrgName: i.newOrgName,
+      newOrgKind: i.newOrgKind,
+      linkedIds: i.linkedIds,
+      email: i.email,
+      note: i.note,
+      createdBy: i.createdBy,
+      createdAt: toIso(i.createdAt),
+      expiresAt: toIso(i.expiresAt),
+      revokedAt: i.revokedAt ? toIso(i.revokedAt) : null,
+      usedBy: i.usedBy,
+      usedAt: i.usedAt ? toIso(i.usedAt) : null,
+    })),
   };
 }
 
@@ -206,10 +311,80 @@ export async function restoreDb(
         "Pass --force to insert into a non-empty database anyway.",
     );
   }
+  // Same guard for accounts (E06): a database can hold zero records but real
+  // users, and restoring over them would collide on the primary key mid-
+  // transaction rather than failing cleanly here.
+  const [{ n: existingUsers }] = await db.select({ n: count() }).from(users);
+  if (existingUsers > 0 && !opts.force) {
+    throw new Error(
+      `target users table is non-empty (${existingUsers} account(s)) — refusing to restore. ` +
+        "Pass --force to insert into a non-empty database anyway.",
+    );
+  }
 
   const recordRows = Object.values(section.records).flat();
+  // Pre-E06 bundles carry no auth sections; treat them as empty rather than
+  // failing, so an older backup still restores.
+  const orgRows = section.orgs ?? [];
+  const userRows = section.users ?? [];
+  const inviteRows = section.invites ?? [];
 
   await db.transaction(async (tx) => {
+    // Orgs FIRST: users.org_id and invites.org_id reference them.
+    for (const batch of chunks(orgRows)) {
+      await tx.insert(orgs).values(
+        batch.map((o) => ({
+          id: o.id,
+          name: o.name,
+          kind: o.kind as (typeof orgs.$inferInsert)["kind"],
+          linkedIds: o.linkedIds,
+          externalIds: o.externalIds,
+          entitlements: o.entitlements,
+          createdAt: new Date(o.createdAt),
+          updatedAt: new Date(o.updatedAt),
+        })),
+      );
+    }
+
+    for (const batch of chunks(userRows)) {
+      await tx.insert(users).values(
+        batch.map((u) => ({
+          id: u.id,
+          email: u.email,
+          name: u.name,
+          role: u.role as (typeof users.$inferInsert)["role"],
+          orgId: u.orgId,
+          passwordHash: u.passwordHash,
+          sessionVersion: u.sessionVersion,
+          disabled: u.disabled,
+          lastLoginAt: u.lastLoginAt ? new Date(u.lastLoginAt) : null,
+          createdAt: new Date(u.createdAt),
+          updatedAt: new Date(u.updatedAt),
+        })),
+      );
+    }
+
+    for (const batch of chunks(inviteRows)) {
+      await tx.insert(invites).values(
+        batch.map((i) => ({
+          code: i.code,
+          role: i.role as (typeof invites.$inferInsert)["role"],
+          orgId: i.orgId,
+          newOrgName: i.newOrgName,
+          newOrgKind: i.newOrgKind as (typeof invites.$inferInsert)["newOrgKind"],
+          linkedIds: i.linkedIds,
+          email: i.email,
+          note: i.note,
+          createdBy: i.createdBy,
+          createdAt: new Date(i.createdAt),
+          expiresAt: new Date(i.expiresAt),
+          revokedAt: i.revokedAt ? new Date(i.revokedAt) : null,
+          usedBy: i.usedBy,
+          usedAt: i.usedAt ? new Date(i.usedAt) : null,
+        })),
+      );
+    }
+
     for (const batch of chunks(recordRows)) {
       await tx.insert(record).values(
         batch.map((r) => ({
@@ -287,5 +462,8 @@ export async function restoreDb(
     analytics_event: section.analytics_event.length,
     survey_response: section.survey_response.length,
     ferry_observation: section.ferry_observation.length,
+    orgs: orgRows.length,
+    users: userRows.length,
+    invites: inviteRows.length,
   };
 }
