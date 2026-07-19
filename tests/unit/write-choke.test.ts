@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { deleteRecord, readRecords, writeRecord } from "@/lib/db/records";
 import { audit, record } from "@/lib/db/schema";
 import { RecordValidationError } from "@/lib/db/store-schemas";
+import { validLodging, validRestaurant } from "../setup/domain-docs";
 import { createTestDb, type TestDb } from "../setup/pglite-db";
 
 let tdb: TestDb;
@@ -27,9 +28,13 @@ describe("writeRecord choke point", () => {
   it("create → update → tombstone emits exactly one audit row each, with correct actor/action/source/before/after", async () => {
     const meta = { actor: "mat@example.test", source: "admin" as const };
 
-    await writeRecord("restaurants", { id: "cafe", name: "Cafe v1" }, meta);
-    await writeRecord("restaurants", { id: "cafe", name: "Cafe v2" }, meta);
-    await writeRecord("restaurants", { id: "cafe", name: "Cafe v2", _deleted: true }, meta);
+    await writeRecord("restaurants", validRestaurant({ id: "cafe", name: "Cafe v1" }), meta);
+    await writeRecord("restaurants", validRestaurant({ id: "cafe", name: "Cafe v2" }), meta);
+    await writeRecord(
+      "restaurants",
+      validRestaurant({ id: "cafe", name: "Cafe v2", _deleted: true }),
+      meta,
+    );
 
     const rows = await auditRows("restaurants");
     expect(rows.map((r) => r.action)).toEqual(["create", "update", "delete"]);
@@ -44,7 +49,7 @@ describe("writeRecord choke point", () => {
   });
 
   it("defaults when no meta is passed: actor 'system', source 'admin', status 'live'", async () => {
-    await writeRecord("lodging", { id: "inn", name: "The Inn" });
+    await writeRecord("lodging", validLodging({ id: "inn", name: "The Inn" }));
     const [row] = await tdb.db
       .select()
       .from(record)

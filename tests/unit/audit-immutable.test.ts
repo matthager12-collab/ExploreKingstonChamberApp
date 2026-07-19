@@ -7,12 +7,13 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { writeRecord } from "@/lib/db/records";
+import { validRestaurant } from "../setup/domain-docs";
 import { createTestDb, type TestDb } from "../setup/pglite-db";
 
 let tdb: TestDb;
 beforeAll(async () => {
   tdb = await createTestDb();
-  await writeRecord("restaurants", { id: "row-under-test", name: "Immutable Cafe" });
+  await writeRecord("restaurants", validRestaurant({ id: "row-under-test", name: "Immutable Cafe" }));
 });
 afterAll(async () => {
   await tdb.close();

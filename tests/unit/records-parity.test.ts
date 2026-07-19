@@ -16,6 +16,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { record } from "@/lib/db/schema";
 import { readMerged, readOverlay, writeOverlayRecord } from "@/lib/stores/json-store";
+import { validWebcam } from "../setup/domain-docs";
 import { createTestDb, type TestDb } from "../setup/pglite-db";
 
 type Row = { id: string; name: string };
@@ -47,11 +48,12 @@ describe("records parity — merge semantics over Postgres", () => {
       { id: "a", name: "seed-Alpha" },
       { id: "b", name: "seed-Bravo" },
     ];
-    await writeOverlayRecord<Row>("webcams", { id: "a", name: "overlay-Alpha" });
+    const overlayAlpha = validWebcam({ id: "a", name: "overlay-Alpha" });
+    await writeOverlayRecord("webcams", overlayAlpha);
     // Seed id order preserved (seed inserted first into the Map), but "a" now
     // carries the overlay's value; "b" is untouched.
     expect(await readMerged("webcams", seed)).toEqual([
-      { id: "a", name: "overlay-Alpha" },
+      overlayAlpha,
       { id: "b", name: "seed-Bravo" },
     ]);
   });

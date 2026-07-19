@@ -4,12 +4,21 @@
     "name": "The Oak Table",
     "cuisine": "brunch",
     "address": "1 Main St, Kingston WA",
+    "priceLevel": 2,
+    "lat": 47.798,
+    "lng": -122.498,
+    "walkMinutesFromFerry": 3,
     "url": "https://example.test/oak-table"
   },
   {
     "id": "downpour-brewing",
     "name": "Downpour Brewing",
     "cuisine": "brewery",
+    "address": "2 Ohio Ave NE, Kingston WA",
+    "priceLevel": 1,
+    "lat": 47.799,
+    "lng": -122.499,
+    "walkMinutesFromFerry": 6,
     "kidFriendly": true
   },
   {
