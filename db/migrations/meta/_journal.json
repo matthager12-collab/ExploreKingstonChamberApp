@@ -15,6 +15,13 @@
       "when": 1783811338280,
       "tag": "0001_audit-immutability",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784482870786,
+      "tag": "0002_ancient_doctor_strange",
+      "breakpoints": true
     }
   ]
 }
