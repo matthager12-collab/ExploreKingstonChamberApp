@@ -4,9 +4,10 @@
 // old overlay contract promised: `doc` is stored WITHOUT `_deleted` (the
 // tombstone lives in the `deleted` column) and readRecords re-attaches it.
 //
-// This module is the only one that queries the `record` and `audit` tables.
-// Append-only logs (analytics/survey/ferry observations) are NOT records —
-// they bypass this module by design and write no audit rows.
+// This module is the only one that queries the `record` table. The `audit`
+// table has exactly three writers: this module, auth-store.ts (E06), and
+// worklist.ts (E08). Append-only logs (analytics/survey/ferry observations)
+// are NOT records — they bypass this module by design and write no audit rows.
 
 import "server-only";
 
