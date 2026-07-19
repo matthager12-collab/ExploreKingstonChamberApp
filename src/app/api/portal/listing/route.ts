@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { can, getSessionUser } from "@/lib/auth";
 import { getRestaurant, saveRestaurant } from "@/lib/stores/business-store";
+import { holdEditProposal } from "@/lib/moderation";
 import { RecordValidationError } from "@/lib/db/store-schemas";
 import type { Restaurant } from "@/lib/types";
 // Field rules come from the shared domain schemas (E07, vk/domain-schemas):
@@ -122,15 +123,22 @@ export async function PUT(request: NextRequest) {
   }
 
   try {
-    await saveRestaurant(next, {
-      actor: user.email,
-      source: user.role === "admin" ? "admin" : "portal",
-    });
+    if (user.role === "admin") {
+      await saveRestaurant(next, { actor: user.email, source: "admin" });
+    } else {
+      // MODERATION FLOOR (E08): the live listing keeps serving untouched —
+      // the full proposed revision waits in the worklist for Chamber review.
+      await holdEditProposal("restaurants", next, next.name, user);
+    }
   } catch (err) {
     if (err instanceof RecordValidationError) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }
     throw err;
   }
-  return NextResponse.json({ ok: true, listing: next });
+  return NextResponse.json(
+    user.role === "admin"
+      ? { ok: true, listing: next }
+      : { ok: true, listing: next, pending: true },
+  );
 }

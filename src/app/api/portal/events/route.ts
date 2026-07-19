@@ -2,11 +2,15 @@
 //
 // GET  ?onDate=YYYY-MM-DD[&exclude=id] — public: other events on that Pacific
 //      calendar date (the "what else happens that day" deconfliction check).
-// GET  ?ownerId=X                      — auth + can(…, "edit-record"): the events X manages.
+// GET  ?ownerId=X                      — auth + can(…, "edit-record"): the events X manages,
+//      including X's own pending submissions (status surfaced).
 // POST                                 — auth: create/update an event whose
 //      ownerId ∈ user.linkedIds (or admin). New events get a slug+random id.
+//      MODERATION (E08): member writes hold for Chamber review — see
+//      src/lib/moderation.ts; admin writes publish directly.
 // DELETE ?id=X                         — auth: load the event, check can(…, "edit-record")
-//      against its stored ownerId, then tombstone it.
+//      against its stored ownerId. Admin → tombstone now; member → takedown
+//      request (live) or immediate withdrawal (their own pending record).
 
 import { randomBytes } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
@@ -14,10 +18,17 @@ import { can, getSessionUser } from "@/lib/auth";
 import {
   deleteEvent,
   eventsSharingDate,
-  getEvent,
-  getEvents,
+  getEventAdmin,
+  getEventsForOwner,
   saveEvent,
 } from "@/lib/stores/event-store";
+import {
+  holdEditProposal,
+  holdNewRecord,
+  requestTakedown,
+  updatePendingRecord,
+  withdrawPendingRecord,
+} from "@/lib/moderation";
 import { RecordValidationError } from "@/lib/db/store-schemas";
 import { normalizeEventTimestamp } from "@/lib/time";
 import type { EventCategory, EventItem } from "@/lib/types";
@@ -54,7 +65,9 @@ export async function GET(request: NextRequest) {
     if (!can(user, "edit-record", ownerId)) {
       return NextResponse.json({ error: "You don't manage that listing" }, { status: 403 });
     }
-    const events = (await getEvents()).filter((e) => e.ownerId === ownerId);
+    // Owner-scoped read (E08): includes the owner's own pending submissions,
+    // each carrying `status` so the portal can badge "awaiting review".
+    const events = await getEventsForOwner(ownerId);
     return NextResponse.json({ events });
   }
 
@@ -129,16 +142,23 @@ export async function POST(request: NextRequest) {
       : undefined;
 
   let event: EventItem;
+  let storedStatus: "live" | "pending" | "other" | "none" = "none";
   if (typeof body.id === "string" && body.id) {
     // Update: the STORED event's owner decides who may touch it — never trust
-    // the client-sent id alone.
-    const existing = await getEvent(body.id);
+    // the client-sent id alone. Any-status lookup so a member can still fix
+    // their own pending (not-yet-public) submission.
+    const existing = await getEventAdmin(body.id);
     if (!existing) return NextResponse.json({ error: "Event not found" }, { status: 404 });
     if (!can(user, "edit-record", existing.ownerId ?? "")) {
       return NextResponse.json({ error: "You don't manage that event" }, { status: 403 });
     }
+    storedStatus =
+      existing.status === "live" ? "live" : existing.status === "pending" ? "pending" : "other";
+    // `status` is record metadata, not part of the event doc — strip it
+    // before building the proposal so it never lands inside the stored doc.
+    const { status: _status, ...existingDoc } = existing;
     event = {
-      ...existing,
+      ...existingDoc,
       title,
       start: normalizedStart,
       end,
@@ -164,18 +184,29 @@ export async function POST(request: NextRequest) {
     };
   }
 
+  // MODERATION FLOOR (E08): admin saves publish directly; member writes hold
+  // for Chamber review — new records land as 'pending' (publicly invisible),
+  // edits of live records ride the worklist payload so the live record is
+  // never touched, and edits of their own pending records update in place.
+  const isAdmin = user.role === "admin";
   try {
-    await saveEvent(event, {
-      actor: user.email,
-      source: user.role === "admin" ? "admin" : "portal",
-    });
+    if (isAdmin) {
+      await saveEvent(event, { actor: user.email, source: "admin" });
+    } else if (storedStatus === "none") {
+      await holdNewRecord("events", event, event.title, user);
+    } else if (storedStatus === "pending") {
+      await updatePendingRecord("events", event, event.title, user);
+    } else {
+      // Live (or seed/hidden) record: propose, never mutate.
+      await holdEditProposal("events", event, event.title, user);
+    }
   } catch (err) {
     if (err instanceof RecordValidationError) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }
     throw err;
   }
-  return NextResponse.json({ ok: true, event });
+  return NextResponse.json(isAdmin ? { ok: true, event } : { ok: true, event, pending: true });
 }
 
 export async function DELETE(request: NextRequest) {
@@ -185,17 +216,24 @@ export async function DELETE(request: NextRequest) {
   const id = request.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
-  const existing = await getEvent(id);
+  const existing = await getEventAdmin(id);
   if (!existing) return NextResponse.json({ error: "Event not found" }, { status: 404 });
   if (!can(user, "edit-record", existing.ownerId ?? "")) {
     return NextResponse.json({ error: "You don't manage that event" }, { status: 403 });
   }
 
+  // MODERATION FLOOR (E08): removing a live record changes public content,
+  // so member deletes hold for review; withdrawing their own pending
+  // submission is immediate (it was never public). Admin deletes are direct.
   try {
-    await deleteEvent(id, {
-      actor: user.email,
-      source: user.role === "admin" ? "admin" : "portal",
-    });
+    if (user.role === "admin") {
+      await deleteEvent(id, { actor: user.email, source: "admin" });
+    } else if (existing.status === "pending") {
+      await withdrawPendingRecord("events", id, user);
+    } else {
+      await requestTakedown("events", id, existing.title, user);
+      return NextResponse.json({ ok: true, pending: true });
+    }
   } catch (err) {
     if (err instanceof RecordValidationError) {
       return NextResponse.json({ error: err.message }, { status: 400 });

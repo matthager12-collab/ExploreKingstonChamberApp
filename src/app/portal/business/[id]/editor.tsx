@@ -119,16 +119,25 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+/** Member saves hold for Chamber review (E08); the API says so with
+ *  `pending: true` and the success copy must not promise instant publish. */
+const PENDING_TEXT = "Submitted — goes live after Chamber review.";
+
 function useSave() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
-  async function save(run: () => Promise<void>, successText: string) {
+  /** run() returns true when the API held the write for review. */
+  async function save(
+    run: () => Promise<boolean | void>,
+    successText: string,
+    pendingText: string = PENDING_TEXT,
+  ) {
     setBusy(true);
     setMessage(null);
     try {
-      await run();
-      setMessage({ ok: true, text: successText });
+      const pending = await run();
+      setMessage({ ok: true, text: pending === true ? pendingText : successText });
     } catch (err) {
       setMessage({
         ok: false,
@@ -154,7 +163,9 @@ function SaveMessage({ message }: { message: { ok: boolean; text: string } | nul
   );
 }
 
-async function putListing(payload: Record<string, unknown>): Promise<Restaurant> {
+async function putListing(
+  payload: Record<string, unknown>,
+): Promise<{ listing: Restaurant; pending: boolean }> {
   const res = await fetch("/api/portal/listing", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -163,9 +174,10 @@ async function putListing(payload: Record<string, unknown>): Promise<Restaurant>
   const data = (await res.json().catch(() => ({}))) as {
     error?: string;
     listing?: Restaurant;
+    pending?: boolean;
   };
   if (!res.ok || !data.listing) throw new Error(data.error ?? "Save failed");
-  return data.listing;
+  return { listing: data.listing, pending: Boolean(data.pending) };
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -229,7 +241,7 @@ export function BusinessEditor({
   function saveDetails(e: FormEvent) {
     e.preventDefault();
     void detailsSave.save(async () => {
-      await putListing({
+      const result = await putListing({
         id: initial.id,
         description: details.description,
         phone: details.phone,
@@ -242,6 +254,7 @@ export function BusinessEditor({
         tags: details.tags.split(",").map((t) => t.trim()).filter(Boolean),
         address: details.address,
       });
+      return result.pending;
     }, "Saved — live on every page this listing appears.");
   }
 
@@ -276,13 +289,14 @@ export function BusinessEditor({
       const today = new Date().toLocaleDateString("en-CA", {
         timeZone: "America/Los_Angeles",
       });
-      const updated = await putListing({
+      const result = await putListing({
         id: initial.id,
         weeklyHours: weekly,
         hours: composedHours,
         hoursVerified: today,
       });
-      setVerified(updated.hoursVerified);
+      setVerified(result.listing.hoursVerified);
+      return result.pending;
     }, "Hours saved and marked verified today. The open-now badge follows instantly.");
   }
 
@@ -373,6 +387,7 @@ export function BusinessEditor({
       const data = (await res.json().catch(() => ({}))) as {
         error?: string;
         event?: EventItem;
+        pending?: boolean;
       };
       if (!res.ok || !data.event) throw new Error(data.error ?? "Save failed");
       const saved = data.event;
@@ -383,15 +398,30 @@ export function BusinessEditor({
           .sort((a, b) => a.start.localeCompare(b.start)),
       );
       setDraft(null);
+      return Boolean(data.pending);
     }, "Event saved — it's on the town calendar now.");
   }
 
   async function removeEvent(ev: EventItem) {
     if (!window.confirm(`Delete "${ev.title}"? It disappears from the calendar.`)) return;
-    const res = await fetch(`/api/portal/events?id=${encodeURIComponent(ev.id)}`, {
-      method: "DELETE",
-    });
-    if (res.ok) setEvents((prev) => prev.filter((x) => x.id !== ev.id));
+    void eventSave.save(
+      async () => {
+        const res = await fetch(`/api/portal/events?id=${encodeURIComponent(ev.id)}`, {
+          method: "DELETE",
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          pending?: boolean;
+        };
+        if (!res.ok) throw new Error(data.error ?? "Delete failed");
+        // A member removal of a live event holds for review — keep it in the
+        // list so the portal doesn't pretend it's already gone.
+        if (!data.pending) setEvents((prev) => prev.filter((x) => x.id !== ev.id));
+        return Boolean(data.pending);
+      },
+      "Event deleted.",
+      "Removal submitted — the event stays on the calendar until the Chamber approves.",
+    );
   }
 
   // ---------- render ----------

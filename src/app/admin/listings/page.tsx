@@ -4,8 +4,8 @@
 // admin role server-side.
 
 import type { Metadata } from "next";
-import { getLodging, getWebcams } from "@/lib/stores/listing-stores";
-import { getRestaurants } from "@/lib/stores/business-store";
+import { getLodgingAdmin, getWebcamsAdmin } from "@/lib/stores/listing-stores";
+import { getRestaurantsAdmin } from "@/lib/stores/business-store";
 import { restaurants as restaurantSeed } from "@/lib/data/restaurants";
 import { lodging as lodgingSeed } from "@/lib/data/lodging";
 import { webcams as webcamSeed } from "@/lib/data/webcams";
@@ -20,10 +20,12 @@ export const metadata: Metadata = {
 };
 
 export default async function AdminListingsPage() {
+  // Admin read (E08): includes pending/draft records with status surfaced —
+  // once members submit work, the reviewers must be able to see it.
   const [restaurants, lodging, webcams] = await Promise.all([
-    getRestaurants(),
-    getLodging(),
-    getWebcams(),
+    getRestaurantsAdmin(),
+    getLodgingAdmin(),
+    getWebcamsAdmin(),
   ]);
 
   return (

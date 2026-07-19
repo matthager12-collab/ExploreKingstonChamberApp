@@ -58,7 +58,11 @@ function formValues(e: FormEvent<HTMLFormElement>): Record<string, string> {
   ) as Record<string, string>;
 }
 
-type ApiResult<T> = Partial<T> & { ok?: boolean; error?: string };
+/** Member writes hold for Chamber review (E08); the API marks those
+ *  responses with `pending: true` and the UI copy must say so. */
+const PENDING_TEXT = "Submitted — goes live after Chamber review.";
+
+type ApiResult<T> = Partial<T> & { ok?: boolean; error?: string; pending?: boolean };
 
 async function api<T>(url: string, method: string, body?: unknown): Promise<ApiResult<T>> {
   try {
@@ -121,13 +125,13 @@ export function NonprofitEditor({
 function OrgProfileForm({ org, onSaved }: { org: Charity; onSaved: (o: Charity) => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+  const [savedText, setSavedText] = useState<string | null>(null);
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     const values = formValues(e);
     setBusy(true);
     setError(null);
-    setSaved(false);
+    setSavedText(null);
     const data = await api<{ org: Charity }>("/api/portal/org", "PUT", {
       id: org.id,
       ...values,
@@ -138,7 +142,7 @@ function OrgProfileForm({ org, onSaved }: { org: Charity; onSaved: (o: Charity) 
       return;
     }
     onSaved(data.org);
-    setSaved(true);
+    setSavedText(data.pending ? PENDING_TEXT : "Saved");
   }
 
   return (
@@ -174,7 +178,7 @@ function OrgProfileForm({ org, onSaved }: { org: Charity; onSaved: (o: Charity) 
           <button type="submit" disabled={busy} className={buttonClass}>
             {busy ? "Saving…" : "Save profile"}
           </button>
-          {saved && <span className="text-sm font-medium text-fern">Saved</span>}
+          {savedText && <span className="text-sm font-medium text-fern">{savedText}</span>}
         </div>
       </form>
     </Card>
@@ -196,6 +200,7 @@ function NeedsSection({
 }) {
   const [editing, setEditing] = useState<VolunteerNeed | "new" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const sorted = [...needs].sort((a, b) => a.date.localeCompare(b.date));
   const upcoming = sorted.filter((n) => n.date.slice(0, 10) >= today);
@@ -203,6 +208,7 @@ function NeedsSection({
 
   async function adjustSlots(need: VolunteerNeed, delta: 1 | -1) {
     setError(null);
+    setNotice(null);
     // Optimistic bump; the server response (or a revert) settles it.
     setNeeds((prev) =>
       prev.map((n) =>
@@ -217,7 +223,12 @@ function NeedsSection({
       delta,
     });
     const saved = data.ok ? data.need : undefined;
-    if (saved) {
+    if (saved && data.pending) {
+      // Held for Chamber review (E08): the public count hasn't changed —
+      // revert the optimistic bump so this list matches what the site shows.
+      setNeeds((prev) => prev.map((n) => (n.id === need.id ? need : n)));
+      setNotice("Signup change submitted — the public count updates after Chamber review.");
+    } else if (saved) {
       setNeeds((prev) => prev.map((n) => (n.id === saved.id ? saved : n)));
     } else {
       setNeeds((prev) => prev.map((n) => (n.id === need.id ? need : n)));
@@ -228,8 +239,12 @@ function NeedsSection({
   async function remove(need: VolunteerNeed) {
     if (!window.confirm(`Delete the shift "${need.title}"?`)) return;
     setError(null);
+    setNotice(null);
     const data = await api("/api/portal/needs?id=" + encodeURIComponent(need.id), "DELETE");
-    if (data.ok) {
+    if (data.ok && data.pending) {
+      // Removal of a live shift holds for review — keep it in the list.
+      setNotice("Removal submitted — the shift stays up until the Chamber approves.");
+    } else if (data.ok) {
       setNeeds((prev) => prev.filter((n) => n.id !== need.id));
       if (editing !== "new" && editing?.id === need.id) setEditing(null);
     } else {
@@ -237,14 +252,16 @@ function NeedsSection({
     }
   }
 
-  function upsert(saved: VolunteerNeed) {
+  function upsert(saved: VolunteerNeed, pending?: boolean) {
     setNeeds((prev) => [...prev.filter((n) => n.id !== saved.id), saved]);
     setEditing(null);
+    setNotice(pending ? PENDING_TEXT : null);
   }
 
   return (
     <div className="space-y-4">
       {error && <p className="text-sm font-medium text-coral-deep">{error}</p>}
+      {notice && <p className="text-sm font-medium text-fern">{notice}</p>}
 
       {upcoming.length === 0 && (
         <p className="text-sm text-ink-soft">No upcoming shifts — post one below.</p>
@@ -364,7 +381,7 @@ function NeedForm({
 }: {
   org: Charity;
   initial?: VolunteerNeed;
-  onSaved: (need: VolunteerNeed) => void;
+  onSaved: (need: VolunteerNeed, pending?: boolean) => void;
   onCancel: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -389,7 +406,7 @@ function NeedForm({
       setError(data.error ?? "Something went wrong");
       return;
     }
-    onSaved(data.need);
+    onSaved(data.need, data.pending);
   }
 
   return (
@@ -488,6 +505,7 @@ function EventsSection({
 }) {
   const [editing, setEditing] = useState<EventItem | "new" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const sorted = [...events].sort((a, b) => a.start.localeCompare(b.start));
   const upcoming = sorted.filter((e) => e.start.slice(0, 10) >= today);
@@ -497,8 +515,12 @@ function EventsSection({
     if (!window.confirm(`Delete "${ev.title}"? This removes it from the public calendar.`))
       return;
     setError(null);
+    setNotice(null);
     const data = await api("/api/portal/org", "POST", { action: "deleteEvent", id: ev.id });
-    if (data.ok) {
+    if (data.ok && data.pending) {
+      // Removal of a live event holds for review — keep it in the list.
+      setNotice("Removal submitted — the event stays on the calendar until the Chamber approves.");
+    } else if (data.ok) {
       setEvents((prev) => prev.filter((e) => e.id !== ev.id));
       if (editing !== "new" && editing?.id === ev.id) setEditing(null);
     } else {
@@ -506,14 +528,16 @@ function EventsSection({
     }
   }
 
-  function upsert(saved: EventItem) {
+  function upsert(saved: EventItem, pending?: boolean) {
     setEvents((prev) => [...prev.filter((e) => e.id !== saved.id), saved]);
     setEditing(null);
+    setNotice(pending ? PENDING_TEXT : null);
   }
 
   return (
     <div className="space-y-4">
       {error && <p className="text-sm font-medium text-coral-deep">{error}</p>}
+      {notice && <p className="text-sm font-medium text-fern">{notice}</p>}
 
       {upcoming.length === 0 && (
         <p className="text-sm text-ink-soft">No upcoming events on the calendar.</p>
@@ -598,7 +622,7 @@ function EventForm({
 }: {
   org: Charity;
   initial?: EventItem;
-  onSaved: (event: EventItem) => void;
+  onSaved: (event: EventItem, pending?: boolean) => void;
   onCancel: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -655,7 +679,7 @@ function EventForm({
       setError(data.error ?? "Something went wrong");
       return;
     }
-    onSaved(data.event);
+    onSaved(data.event, data.pending);
   }
 
   return (

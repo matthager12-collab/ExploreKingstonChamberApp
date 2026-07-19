@@ -14,11 +14,13 @@ import { hasBlob } from "@/lib/blob-store";
 import {
   MAX_PHOTO_BYTES,
   MAX_PHOTO_STORAGE_BYTES,
+  getHuntById,
   imageExtension,
   photoStorageBytes,
   saveSubmission,
 } from "@/lib/hunt-store";
 import { checkRateLimit, clientKey } from "@/lib/rate-limit";
+import { createWorklistItem } from "@/lib/stores/worklist-store";
 
 export async function POST(request: NextRequest) {
   const limit = await checkRateLimit(clientKey(request, "hunt-submit"), {
@@ -90,6 +92,25 @@ export async function POST(request: NextRequest) {
       },
       { actor: "public", source: "public" },
     );
+    // E08: photo review joins the unified worklist. The photo itself never
+    // renders publicly (storage and response are unchanged) — the item puts
+    // it in the same queue as everything else the Chamber reviews. Best
+    // effort: a queue hiccup must not fail the player's check-off.
+    try {
+      const hunt = await getHuntById(huntId);
+      await createWorklistItem(
+        {
+          type: "moderation",
+          subjectStore: "hunt-submissions",
+          subjectId: submission.id ?? `${huntId}/${stopId}`,
+          subjectLabel: `Hunt photo — ${hunt?.title ?? huntId} / ${stopId}`,
+          payload: { kind: "new", note: submission.verified ? "GPS-verified" : "Unverified (no GPS)" },
+        },
+        { actor: "public", source: "public" },
+      );
+    } catch (queueErr) {
+      console.error("hunt-submit: worklist enqueue failed", queueErr);
+    }
     return Response.json({
       ok: true,
       verified: submission.verified,

@@ -3,7 +3,7 @@
 // (/api/admin/content-records) re-checks the admin role server-side.
 
 import type { Metadata } from "next";
-import { getItineraries } from "@/lib/stores/itinerary-store";
+import { getItinerariesAdmin } from "@/lib/stores/itinerary-store";
 import { itineraries as seedItineraries } from "@/lib/data/itineraries";
 import { PageHeader, Section } from "@/components/ui";
 import { ItineraryEditor } from "./editor";
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 };
 
 export default async function AdminItinerariesPage() {
-  const itineraries = await getItineraries();
+  const itineraries = await getItinerariesAdmin();
   const seedIds = seedItineraries.map((i) => i.id);
 
   return (

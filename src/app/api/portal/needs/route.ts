@@ -13,9 +13,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { can, getSessionUser } from "@/lib/auth";
 import {
   deleteVolunteerNeed,
-  getVolunteerNeeds,
+  getVolunteerNeedsAdmin,
+  getVolunteerNeedsForCharity,
   saveVolunteerNeed,
 } from "@/lib/stores/charity-store";
+import {
+  holdEditProposal,
+  holdNewRecord,
+  requestTakedown,
+  updatePendingRecord,
+  withdrawPendingRecord,
+} from "@/lib/moderation";
 import { RecordValidationError } from "@/lib/db/store-schemas";
 import { eventsSharingDate } from "@/lib/stores/event-store";
 import { pacificWallTimeToISO } from "@/lib/time";
@@ -53,7 +61,9 @@ export async function GET(request: NextRequest) {
     if (!can(user, "edit-record", charityId)) {
       return NextResponse.json({ error: "not allowed" }, { status: 403 });
     }
-    const needs = (await getVolunteerNeeds()).filter((n) => n.charityId === charityId);
+    // Owner-scoped read (E08): includes the org's own pending submissions,
+    // each carrying `status` so the portal can badge "awaiting review".
+    const needs = await getVolunteerNeedsForCharity(charityId);
     return NextResponse.json({ ok: true, needs });
   }
 
@@ -72,33 +82,45 @@ export async function POST(request: NextRequest) {
   }
 
   // Quick +/- stepper: track signups as they come in by email or phone.
+  // MODERATION (E08): for members this is still a write to a live public
+  // record (the slots-left count renders on /give), so it holds for review
+  // like any other member edit — the moderation floor has no fast lanes.
   if (body.action === "slots") {
     const id = typeof body.id === "string" ? body.id : "";
     const delta = body.delta;
     if (!id || (delta !== 1 && delta !== -1)) {
       return NextResponse.json({ error: "id and delta of +1 or -1 required" }, { status: 400 });
     }
-    const need = (await getVolunteerNeeds()).find((n) => n.id === id);
+    const need = (await getVolunteerNeedsAdmin()).find((n) => n.id === id);
     if (!need) return NextResponse.json({ error: "shift not found" }, { status: 404 });
     if (!can(user, "edit-record", need.charityId)) {
       return NextResponse.json({ error: "not allowed to edit this shift" }, { status: 403 });
     }
+    const { status: needStatus, ...needDoc } = need;
     const updated: VolunteerNeed = {
-      ...need,
+      ...needDoc,
       slotsFilled: Math.max(0, Math.min(need.slotsTotal, need.slotsFilled + delta)),
     };
+    const isAdmin = user.role === "admin";
     try {
-      await saveVolunteerNeed(updated, {
-        actor: user.email,
-        source: user.role === "admin" ? "admin" : "portal",
-      });
+      if (isAdmin) {
+        await saveVolunteerNeed(updated, { actor: user.email, source: "admin" });
+      } else if (needStatus === "pending") {
+        await updatePendingRecord("volunteer-needs", updated, updated.title, user);
+      } else {
+        await holdEditProposal("volunteer-needs", updated, updated.title, user);
+      }
     } catch (err) {
       if (err instanceof RecordValidationError) {
         return NextResponse.json({ error: err.message }, { status: 400 });
       }
       throw err;
     }
-    return NextResponse.json({ ok: true, need: updated });
+    return NextResponse.json(
+      isAdmin || needStatus === "pending"
+        ? { ok: true, need: updated }
+        : { ok: true, need: updated, pending: true },
+    );
   }
 
   // Create or update a shift.
@@ -125,9 +147,11 @@ export async function POST(request: NextRequest) {
   let id: string;
   let charityId: string;
   let eventId: string | undefined;
+  let storedStatus: "live" | "pending" | "other" | "none" = "none";
   if (typeof body.id === "string" && body.id) {
     // Update: ownership comes from the stored record, never the client.
-    const existing = (await getVolunteerNeeds()).find((n) => n.id === body.id);
+    // Any-status lookup (E08) so an org can still fix its pending submission.
+    const existing = (await getVolunteerNeedsAdmin()).find((n) => n.id === body.id);
     if (!existing) return NextResponse.json({ error: "shift not found" }, { status: 404 });
     if (!can(user, "edit-record", existing.charityId)) {
       return NextResponse.json({ error: "not allowed to edit this shift" }, { status: 403 });
@@ -135,6 +159,8 @@ export async function POST(request: NextRequest) {
     id = existing.id;
     charityId = existing.charityId;
     eventId = existing.eventId;
+    storedStatus =
+      existing.status === "live" ? "live" : existing.status === "pending" ? "pending" : "other";
   } else {
     charityId = typeof body.charityId === "string" ? body.charityId : "";
     if (!charityId) return NextResponse.json({ error: "charityId required" }, { status: 400 });
@@ -158,18 +184,28 @@ export async function POST(request: NextRequest) {
     slotsFilled,
     description: typeof body.description === "string" ? body.description.trim() : "",
   };
+  // MODERATION FLOOR (E08): admin saves publish directly; member writes hold
+  // for Chamber review (see src/lib/moderation.ts).
+  const isAdmin = user.role === "admin";
   try {
-    await saveVolunteerNeed(record, {
-      actor: user.email,
-      source: user.role === "admin" ? "admin" : "portal",
-    });
+    if (isAdmin) {
+      await saveVolunteerNeed(record, { actor: user.email, source: "admin" });
+    } else if (storedStatus === "none") {
+      await holdNewRecord("volunteer-needs", record, record.title, user);
+    } else if (storedStatus === "pending") {
+      await updatePendingRecord("volunteer-needs", record, record.title, user);
+    } else {
+      await holdEditProposal("volunteer-needs", record, record.title, user);
+    }
   } catch (err) {
     if (err instanceof RecordValidationError) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }
     throw err;
   }
-  return NextResponse.json({ ok: true, need: record });
+  return NextResponse.json(
+    isAdmin ? { ok: true, need: record } : { ok: true, need: record, pending: true },
+  );
 }
 
 export async function DELETE(request: NextRequest) {
@@ -179,16 +215,22 @@ export async function DELETE(request: NextRequest) {
   const id = request.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
-  const need = (await getVolunteerNeeds()).find((n) => n.id === id);
+  const need = (await getVolunteerNeedsAdmin()).find((n) => n.id === id);
   if (!need) return NextResponse.json({ error: "shift not found" }, { status: 404 });
   if (!can(user, "edit-record", need.charityId)) {
     return NextResponse.json({ error: "not allowed to delete this shift" }, { status: 403 });
   }
+  // MODERATION FLOOR (E08): member removal of a live shift holds for review;
+  // withdrawing their own pending submission is immediate; admin is direct.
   try {
-    await deleteVolunteerNeed(id, {
-      actor: user.email,
-      source: user.role === "admin" ? "admin" : "portal",
-    });
+    if (user.role === "admin") {
+      await deleteVolunteerNeed(id, { actor: user.email, source: "admin" });
+    } else if (need.status === "pending") {
+      await withdrawPendingRecord("volunteer-needs", id, user);
+    } else {
+      await requestTakedown("volunteer-needs", id, need.title, user);
+      return NextResponse.json({ ok: true, pending: true });
+    }
   } catch (err) {
     if (err instanceof RecordValidationError) {
       return NextResponse.json({ error: err.message }, { status: 400 });

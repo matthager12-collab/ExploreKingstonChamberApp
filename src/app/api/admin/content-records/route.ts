@@ -19,20 +19,21 @@ import { getSessionUser, requireAdmin } from "@/lib/auth";
 import {
   deleteItinerary,
   getItineraries,
+  getItinerariesAdmin,
   saveItinerary,
 } from "@/lib/stores/itinerary-store";
 import {
   deleteLodging,
   deleteWebcam,
-  getLodging,
-  getWebcams,
+  getLodgingAdmin,
+  getWebcamsAdmin,
   saveLodging,
   saveWebcam,
 } from "@/lib/stores/listing-stores";
 import {
   deleteRestaurant,
   getRestaurant,
-  getRestaurants,
+  getRestaurantsAdmin,
   saveRestaurant,
 } from "@/lib/stores/business-store";
 import { RecordValidationError } from "@/lib/db/store-schemas";
@@ -68,14 +69,15 @@ export async function GET(request: NextRequest) {
   const domain = parseDomain(request.nextUrl.searchParams.get("domain"));
   if (!domain) return bad(`domain must be one of: ${DOMAINS.join(", ")}`);
 
+  // Admin read (E08): pending/draft records included, status surfaced.
   const records =
     domain === "itineraries"
-      ? await getItineraries()
+      ? await getItinerariesAdmin()
       : domain === "lodging"
-        ? await getLodging()
+        ? await getLodgingAdmin()
         : domain === "webcams"
-          ? await getWebcams()
-          : await getRestaurants();
+          ? await getWebcamsAdmin()
+          : await getRestaurantsAdmin();
 
   return NextResponse.json({ records });
 }
@@ -158,14 +160,15 @@ export async function DELETE(request: NextRequest) {
   const id = request.nextUrl.searchParams.get("id");
   if (!id) return bad("id required");
 
+  // Admin read (E08): an admin must be able to tombstone a pending record too.
   const records: { id: string }[] =
     domain === "itineraries"
-      ? await getItineraries()
+      ? await getItinerariesAdmin()
       : domain === "lodging"
-        ? await getLodging()
+        ? await getLodgingAdmin()
         : domain === "webcams"
-          ? await getWebcams()
-          : await getRestaurants();
+          ? await getWebcamsAdmin()
+          : await getRestaurantsAdmin();
   if (!records.some((r) => r.id === id)) {
     return NextResponse.json({ error: "Record not found" }, { status: 404 });
   }

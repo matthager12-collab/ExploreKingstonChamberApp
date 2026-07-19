@@ -25,6 +25,7 @@ import { validateRecord } from "./store-schemas";
 
 export type WithId = { id: string };
 export type OverlayRow<T extends WithId> = T & { _deleted?: boolean };
+export type { RecordStatus } from "./schema";
 
 /** Cross-cutting metadata stamped onto a write. Everything is optional so
  *  the store modules' existing call sites keep compiling; routes thread
@@ -174,6 +175,84 @@ export async function writeRecord<T extends WithId>(
       after: redactSecrets(doc) as Record<string, unknown>,
       source,
     });
+  });
+}
+
+/** A domain record with its lifecycle status surfaced (E08 admin reads). */
+export type WithStatus<T> = T & { status: RecordStatus };
+
+/** PRIVILEGED seed+overlay merge (E08): same semantics as readMergedRecords
+ *  but overlay rows of EVERY status participate (narrow via opts.statuses,
+ *  e.g. live+pending for owner-scoped portal reads) and each returned record
+ *  carries its status — seed-only records read as 'live'. Explicitly named so
+ *  a future agent adding a public page gets the fail-closed default getter,
+ *  never this. */
+export async function readMergedRecordsAdmin<T extends WithId>(
+  store: string,
+  seed: T[],
+  opts?: { statuses?: RecordStatus[] },
+): Promise<WithStatus<T>[]> {
+  const byId = new Map<string, WithStatus<T> & { _deleted?: boolean }>();
+  for (const s of seed) byId.set(s.id, { ...s, status: "live" as RecordStatus });
+  if (!buildingWithoutDb()) {
+    const db = getDb();
+    const rows = await db
+      .select({ doc: record.doc, deleted: record.deleted, status: record.status })
+      .from(record)
+      .where(
+        opts?.statuses?.length
+          ? and(eq(record.store, store), inArray(record.status, opts.statuses))
+          : eq(record.store, store),
+      );
+    for (const r of rows) {
+      byId.set((r.doc as T).id, {
+        ...(r.doc as T),
+        status: r.status,
+        ...(r.deleted ? { _deleted: true as const } : {}),
+      });
+    }
+  }
+  return [...byId.values()]
+    .filter((r) => !r._deleted)
+    .map(({ _deleted: _ignored, ...rest }) => rest as WithStatus<T>);
+}
+
+/** Flip ONLY the lifecycle status of an overlay row, preserving its doc —
+ *  the approve/takedown primitive. Audited as a status-change with the old
+ *  and new status. Returns false when no overlay row exists (seed-only
+ *  records have nothing to flip — take one down by overlaying it with its
+ *  seed doc and the new status via writeRecord) or the row is a tombstone. */
+export async function setRecordStatus(
+  store: string,
+  id: string,
+  status: RecordStatus,
+  meta?: WriteMeta,
+): Promise<boolean> {
+  const db = getDb();
+  const actor = meta?.actor ?? "system";
+  const source = meta?.source ?? "admin";
+  const now = new Date();
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(record)
+      .where(and(eq(record.store, store), eq(record.id, id)))
+      .for("update");
+    if (!row || row.deleted) return false;
+    await tx
+      .update(record)
+      .set({ status, updatedAt: now, updatedBy: actor })
+      .where(and(eq(record.store, store), eq(record.id, id)));
+    await tx.insert(audit).values({
+      actor,
+      action: "status-change",
+      store,
+      recordId: id,
+      before: { status: row.status },
+      after: { status },
+      source,
+    });
+    return true;
   });
 }
 

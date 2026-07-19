@@ -16,13 +16,15 @@
 
 import {
   readMergedRecords,
+  readMergedRecordsAdmin,
   readRecords,
   writeRecord,
   type OverlayRow,
+  type RecordStatus,
   type WriteMeta,
 } from "../db/records";
 
-export type { WriteMeta } from "../db/records";
+export type { RecordStatus, WriteMeta, WithStatus } from "../db/records";
 
 export type WithId = { id: string };
 export type Overlay<T extends WithId> = (T & { _deleted?: boolean })[];
@@ -42,4 +44,15 @@ export async function writeOverlayRecord<T extends WithId>(
 /** Seed + overlay merge: overlay wins by id; _deleted hides a record. */
 export async function readMerged<T extends WithId>(name: string, seed: T[]): Promise<T[]> {
   return readMergedRecords(name, seed);
+}
+
+/** PRIVILEGED merge (E08): every status participates (or the ones named in
+ *  opts.statuses) and records carry their status. For admin pages and
+ *  owner-scoped portal reads only — public surfaces use readMerged. */
+export async function readMergedAdmin<T extends WithId>(
+  name: string,
+  seed: T[],
+  opts?: { statuses?: RecordStatus[] },
+) {
+  return readMergedRecordsAdmin(name, seed, opts);
 }

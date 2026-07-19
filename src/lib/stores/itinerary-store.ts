@@ -4,12 +4,23 @@
 
 import type { Itinerary } from "../types";
 import { itineraries as seed } from "../data/itineraries";
-import { readMerged, writeOverlayRecord, type WriteMeta } from "./json-store";
+import {
+  readMerged,
+  readMergedAdmin,
+  writeOverlayRecord,
+  type WithStatus,
+  type WriteMeta,
+} from "./json-store";
 
 const STORE = "itineraries";
 
 export async function getItineraries(): Promise<Itinerary[]> {
   return readMerged<Itinerary>(STORE, seed);
+}
+
+/** PRIVILEGED (E08): every status, status surfaced — admin surfaces only. */
+export async function getItinerariesAdmin(): Promise<WithStatus<Itinerary>[]> {
+  return readMergedAdmin<Itinerary>(STORE, seed);
 }
 
 /** Match on slug across merged records (seed + overlay). */

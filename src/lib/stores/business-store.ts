@@ -3,7 +3,13 @@
 
 import type { Restaurant } from "../types";
 import { restaurants as seed } from "../data/restaurants";
-import { readMerged, writeOverlayRecord, type WriteMeta } from "./json-store";
+import {
+  readMerged,
+  readMergedAdmin,
+  writeOverlayRecord,
+  type WithStatus,
+  type WriteMeta,
+} from "./json-store";
 
 const STORE = "restaurants";
 
@@ -13,6 +19,11 @@ export async function getRestaurants(): Promise<Restaurant[]> {
 
 export async function getRestaurant(id: string): Promise<Restaurant | undefined> {
   return (await getRestaurants()).find((r) => r.id === id);
+}
+
+/** PRIVILEGED (E08): every status, status surfaced — admin surfaces only. */
+export async function getRestaurantsAdmin(): Promise<WithStatus<Restaurant>[]> {
+  return readMergedAdmin<Restaurant>(STORE, seed);
 }
 
 export async function saveRestaurant(record: Restaurant, meta?: WriteMeta): Promise<void> {

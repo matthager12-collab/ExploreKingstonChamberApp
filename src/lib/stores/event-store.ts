@@ -3,7 +3,13 @@
 
 import type { EventItem } from "../types";
 import { events as seed } from "../data/events";
-import { readMerged, writeOverlayRecord, type WriteMeta } from "./json-store";
+import {
+  readMerged,
+  readMergedAdmin,
+  writeOverlayRecord,
+  type WithStatus,
+  type WriteMeta,
+} from "./json-store";
 
 const STORE = "events";
 
@@ -14,6 +20,30 @@ export async function getEvents(): Promise<EventItem[]> {
 
 export async function getEvent(id: string): Promise<EventItem | undefined> {
   return (await getEvents()).find((e) => e.id === id);
+}
+
+/** PRIVILEGED (E08): every status, status surfaced — admin surfaces only. */
+export async function getEventsAdmin(): Promise<WithStatus<EventItem>[]> {
+  const all = await readMergedAdmin<EventItem>(STORE, seed);
+  return all.sort((a, b) => a.start.localeCompare(b.start));
+}
+
+/** PRIVILEGED (E08): one event, any status — for auth-gated update paths
+ *  where the subject may be a pending submission (invisible to getEvent). */
+export async function getEventAdmin(id: string): Promise<WithStatus<EventItem> | undefined> {
+  return (await getEventsAdmin()).find((e) => e.id === id);
+}
+
+/** Owner-scoped read (E08): the owner's events including their own pending
+ *  submissions, status surfaced so the portal can badge "awaiting review".
+ *  Admin drafts stay invisible even to the owner. */
+export async function getEventsForOwner(ownerId: string): Promise<WithStatus<EventItem>[]> {
+  const all = await readMergedAdmin<EventItem>(STORE, seed, {
+    statuses: ["live", "pending"],
+  });
+  return all
+    .filter((e) => e.ownerId === ownerId || e.charityId === ownerId)
+    .sort((a, b) => a.start.localeCompare(b.start));
 }
 
 export async function saveEvent(record: EventItem, meta?: WriteMeta): Promise<void> {

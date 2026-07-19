@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { can, getSessionUser } from "@/lib/auth";
-import { getCharity, getVolunteerNeeds } from "@/lib/stores/charity-store";
-import { getEvents } from "@/lib/stores/event-store";
+import { getCharity, getVolunteerNeedsForCharity } from "@/lib/stores/charity-store";
+import { getEventsForOwner } from "@/lib/stores/event-store";
 import { todayPacific } from "@/lib/time";
 import { PageHeader } from "@/components/ui";
 import { NonprofitEditor } from "./editor";
@@ -24,16 +24,19 @@ export default async function ManageOrgPage({
   const org = await getCharity(id);
   if (!org) notFound();
 
-  const needs = (await getVolunteerNeeds()).filter((n) => n.charityId === id);
-  const events = (await getEvents()).filter((e) => e.charityId === id || e.ownerId === id);
+  // Owner-scoped reads (E08): include this org's pending submissions with
+  // status surfaced, so the editor can badge "awaiting review".
+  const needs = await getVolunteerNeedsForCharity(id);
+  const events = await getEventsForOwner(id);
+
+  const intro =
+    user.role === "admin"
+      ? "Your profile, volunteer shifts, and events — changes go live on the site the moment you save."
+      : "Your profile, volunteer shifts, and events — changes are submitted for a quick Chamber review and go live once approved.";
 
   return (
     <>
-      <PageHeader
-        eyebrow="Nonprofit portal"
-        title={org.name}
-        intro="Your profile, volunteer shifts, and events — changes go live on the site the moment you save."
-      />
+      <PageHeader eyebrow="Nonprofit portal" title={org.name} intro={intro} />
       <p className="mx-auto -mt-2 max-w-5xl px-4 text-sm">
         <Link
           href="/portal/nonprofit"

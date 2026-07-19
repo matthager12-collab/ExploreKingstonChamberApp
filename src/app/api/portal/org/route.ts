@@ -12,8 +12,15 @@ import { randomBytes } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { can, getSessionUser } from "@/lib/auth";
 import { getCharity, saveCharity } from "@/lib/stores/charity-store";
+import {
+  holdEditProposal,
+  holdNewRecord,
+  requestTakedown,
+  updatePendingRecord,
+  withdrawPendingRecord,
+} from "@/lib/moderation";
 import { RecordValidationError } from "@/lib/db/store-schemas";
-import { deleteEvent, getEvent, saveEvent } from "@/lib/stores/event-store";
+import { deleteEvent, getEventAdmin, saveEvent } from "@/lib/stores/event-store";
 import { pacificWallTimeToISO } from "@/lib/time";
 import type { Charity, EventCategory, EventItem } from "@/lib/types";
 
@@ -78,18 +85,23 @@ export async function PUT(request: NextRequest) {
         ? body.contactEmail.trim() || undefined
         : existing.contactEmail,
   };
+  // MODERATION FLOOR (E08): the live profile keeps serving — a member's
+  // proposed revision waits in the worklist; admin edits publish directly.
   try {
-    await saveCharity(updated, {
-      actor: user.email,
-      source: user.role === "admin" ? "admin" : "portal",
-    });
+    if (user.role === "admin") {
+      await saveCharity(updated, { actor: user.email, source: "admin" });
+    } else {
+      await holdEditProposal("charities", updated, updated.name, user);
+    }
   } catch (err) {
     if (err instanceof RecordValidationError) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }
     throw err;
   }
-  return NextResponse.json({ ok: true, org: updated });
+  return NextResponse.json(
+    user.role === "admin" ? { ok: true, org: updated } : { ok: true, org: updated, pending: true },
+  );
 }
 
 export async function POST(request: NextRequest) {
@@ -133,15 +145,19 @@ export async function POST(request: NextRequest) {
     }
 
     // Existing id? Verify the caller actually owns that event before
-    // overwriting — a client-sent id is never trusted on its own.
+    // overwriting — a client-sent id is never trusted on its own. Any-status
+    // lookup (E08) so an org can still fix its own pending submission.
     let id: string;
+    let storedStatus: "live" | "pending" | "other" | "none" = "none";
     if (typeof ev.id === "string" && ev.id) {
-      const current = await getEvent(ev.id);
+      const current = await getEventAdmin(ev.id);
       if (!current) return NextResponse.json({ error: "event not found" }, { status: 404 });
       if (!can(user, "edit-record", current.ownerId ?? current.charityId ?? "")) {
         return NextResponse.json({ error: "not allowed to edit this event" }, { status: 403 });
       }
       id = current.id;
+      storedStatus =
+        current.status === "live" ? "live" : current.status === "pending" ? "pending" : "other";
     } else {
       id = slugId(title);
     }
@@ -164,33 +180,49 @@ export async function POST(request: NextRequest) {
       charityId: orgId,
       ownerId: orgId,
     };
+    // MODERATION FLOOR (E08): member writes hold for Chamber review; admin
+    // writes publish directly (see src/lib/moderation.ts).
+    const isAdmin = user.role === "admin";
     try {
-      await saveEvent(record, {
-        actor: user.email,
-        source: user.role === "admin" ? "admin" : "portal",
-      });
+      if (isAdmin) {
+        await saveEvent(record, { actor: user.email, source: "admin" });
+      } else if (storedStatus === "none") {
+        await holdNewRecord("events", record, record.title, user);
+      } else if (storedStatus === "pending") {
+        await updatePendingRecord("events", record, record.title, user);
+      } else {
+        await holdEditProposal("events", record, record.title, user);
+      }
     } catch (err) {
       if (err instanceof RecordValidationError) {
         return NextResponse.json({ error: err.message }, { status: 400 });
       }
       throw err;
     }
-    return NextResponse.json({ ok: true, event: record });
+    return NextResponse.json(
+      isAdmin ? { ok: true, event: record } : { ok: true, event: record, pending: true },
+    );
   }
 
   if (body.action === "deleteEvent") {
     const id = typeof body.id === "string" ? body.id : "";
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-    const current = await getEvent(id);
+    const current = await getEventAdmin(id);
     if (!current) return NextResponse.json({ error: "event not found" }, { status: 404 });
     if (!can(user, "edit-record", current.ownerId ?? current.charityId ?? "")) {
       return NextResponse.json({ error: "not allowed to delete this event" }, { status: 403 });
     }
+    // MODERATION FLOOR (E08): member removal of a live event holds for
+    // review; withdrawing their own pending submission is immediate.
     try {
-      await deleteEvent(id, {
-        actor: user.email,
-        source: user.role === "admin" ? "admin" : "portal",
-      });
+      if (user.role === "admin") {
+        await deleteEvent(id, { actor: user.email, source: "admin" });
+      } else if (current.status === "pending") {
+        await withdrawPendingRecord("events", id, user);
+      } else {
+        await requestTakedown("events", id, current.title, user);
+        return NextResponse.json({ ok: true, pending: true });
+      }
     } catch (err) {
       if (err instanceof RecordValidationError) {
         return NextResponse.json({ error: err.message }, { status: 400 });
