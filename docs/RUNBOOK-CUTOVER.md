@@ -66,6 +66,8 @@ All of these must be true before scheduling the freeze:
    Render.** Do not skip this. Paste the exact string you are about to enter,
    in quotes, and confirm all three lines answer:
 
+   **If you have `psql`:**
+
    ```bash
    URL='<the exact production pooled URL you are about to paste>'
    psql "$URL" -c "select 1"                              # connects + authenticates
@@ -73,8 +75,30 @@ All of these must be true before scheduling the freeze:
    psql "$URL" -c "select current_database(), inet_server_addr()"
    ```
 
-   A typo, a truncated paste, a stale password, or the wrong Neon branch all
-   surface here — while the site is still up and nothing has changed.
+   **If you do not** (psql is NOT installed on the operator Mac as of
+   2026-07-19) — this uses the repo's own `pg` driver and needs nothing extra.
+   Put the URL on the clipboard first, then run it from the repo root, so the
+   thing being tested is the exact bytes you are about to paste:
+
+   ```bash
+   node -e 'const {Client}=require("pg");
+   const u=require("child_process").execSync("pbpaste").toString().trim();
+   if(u.length===0){console.log("❌ clipboard is EMPTY");process.exit(1)}
+   new Client({connectionString:u}).connect().then(async function(){
+     const r=await this.query("select current_database() db, inet_server_addr() host, (select count(*) from record) records");
+     console.log("✅",r.rows[0]); await this.end();
+   }).catch(e=>console.log("❌ FAILS:",e.message));' 2>&1 | grep -v Warning
+   ```
+
+   A typo, a truncated paste, a stale password, an empty clipboard, or the
+   wrong Neon branch all surface here — while the site is still up and nothing
+   has changed.
+
+   > This is not hypothetical. On 2026-07-19 the staging paste went in as the
+   > BARE HOSTNAME (55 of 147 characters), and separate `db` / `user` env vars
+   > appeared alongside it — fragments of the same connection string split
+   > across fields. The clipboard check caught it before it reached the
+   > dashboard.
 
 5. **[HUMAN]** Render dashboard → service `explore-kingston` → Environment →
    add `DATABASE_URL` = that same validated URL → save (triggers a deploy of
