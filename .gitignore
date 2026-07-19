@@ -47,3 +47,15 @@ next-env.d.ts
 
 # Local git credential (token) — never commit
 .env.git
+
+# SSH keys / credentials at the repo root — never commit (E06: secrets live in env only).
+# OpenSSH private keys carry no extension, so *.pem above does not catch them.
+# Root-anchored (leading /) so nothing under public/ or app/ is caught by accident.
+/MaluDB
+/MaluDB.pub
+/id_ed25519*
+/id_rsa*
+/id_ecdsa*
+/*.key
+/*.ppk
+/*.ovpn
