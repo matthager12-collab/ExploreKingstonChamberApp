@@ -128,7 +128,8 @@ describe("weekly hours", () => {
     expect(
       parseWeeklyHours({ ...good, mon: [["01:00", "02:00"], ["03:00", "04:00"], ["05:00", "06:00"]] }),
     ).toBeNull(); // >2 spans
-    const { sun: _sun, ...missingDay } = good;
+    const missingDay: Record<string, unknown> = { ...good };
+    delete missingDay.sun;
     expect(parseWeeklyHours(missingDay)).toBeNull();
   });
 

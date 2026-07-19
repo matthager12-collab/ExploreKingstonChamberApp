@@ -1,0 +1,100 @@
+# Domain schemas (E07)
+
+Every editable content domain has exactly **one** zod schema in
+`src/lib/schemas/`, consumed by all three validation surfaces:
+
+| surface | file | how |
+| --- | --- | --- |
+| Admin API | `src/app/api/admin/content-records/route.ts` | `POST` runs `<domain>Schema.safeParse(record)`; failures 400 with `firstZodMessage` |
+| Admin editors | `src/components/admin/record-editor.tsx` (engine), `src/app/admin/itineraries/editor.tsx` (bespoke stops UI) | `buildRecord` coerces the form draft, then parses with the **same schema object** |
+| Portal self-edit | `src/app/api/portal/listing/route.ts` | field rules imported from the schemas; the merged record gets a belt-and-braces `restaurantSchema.safeParse` before save |
+
+Before E07 the server sanitizers and the client `buildRecord`s were hand-synced
+copies, and they had already drifted once (the client never learned the numeric
+ranges). Now there is nothing to sync.
+
+## The pattern — how a domain is built
+
+Each domain module (`restaurant.ts`, `lodging.ts`, `webcam.ts`, `itinerary.ts`)
+exports:
+
+1. **`<domain>Schema`** — a `z.object` in default *strip* mode (unknown keys are
+   dropped, not rejected — parity with the old "rebuilt from known fields"
+   sanitizers). Every rule carries an explicit, plain-English message; raw zod
+   phrasing like "Invalid input" must never reach an operator.
+2. **`<domain>Fields: FieldDef[]`** — the admin form's field list (label, kind,
+   help text, placeholders). Itineraries have none: their nested-stops UI is
+   bespoke and only shares the schema.
+3. **Pure helpers for IO-bound rules** — anything that needs a store read stays
+   *out* of zod as a pure function the route calls (e.g.
+   `findItinerarySlugClash(existing, record)`); the route supplies the store
+   read, the helper stays unit-testable.
+
+`shared.ts` holds the building blocks, and they encode the **coercion parity
+contract** with the old sanitizers:
+
+- numeric strings convert (`"2"` → priceLevel `2`); `roundedInt` rounds like the
+  old `Math.round(num(v))`, `numberInRange` keeps decimals (lat/lng);
+- text trims; empty optional fields parse to `undefined` so the key is **absent
+  after `JSON.stringify`**, never stored as `""`;
+- `tagsSchema` coerces a non-array to `[]` instead of erroring (old `strArray`
+  behavior — only reachable via direct API calls);
+- restaurant `hidden`: only `true` survives; `false`/absent → key omitted.
+
+`type-parity.ts` asserts mutual assignability between each `z.infer<…>` and its
+interface in `src/lib/types.ts` — `src/lib/types.ts` stays the type source the
+app imports, and schema/type drift is a `tsc --noEmit` failure. The bar is
+mutual assignability, not identical optionality tokens; if an assertion won't
+line up, the schema is wrong, not the interface.
+
+`index.ts` exports `DOMAIN_SCHEMAS` keyed by the API's domain names
+(`restaurants | lodging | webcams | itineraries`) plus re-exports of everything.
+
+## Adding a domain (E08 moderated UGC, E12 events, E17 imports)
+
+1. Create `src/lib/schemas/<domain>.ts`: the zod schema (messages included),
+   the `FieldDef[]` if it runs on the shared editor engine, and pure helpers
+   for any rule that needs IO.
+2. Add a parity assertion in `type-parity.ts` against the interface in
+   `src/lib/types.ts`.
+3. Register it in `DOMAIN_SCHEMAS` in `index.ts` (and the API route's domain
+   union, if it's served by `content-records`).
+4. Write the test suite: valid fixture, every message verbatim, the coercion
+   matrix, and — if the domain has git-committed seeds — extend
+   `seeds.test.ts` so every seed record parses **and round-trips
+   byte-identically** (parsing a canonical record must be a no-op).
+5. Schemas validate the domain *document* only. Record metadata (`status`,
+   `source`, `updated_by`, …) belongs to the Drizzle layer (E05), and
+   status-gated rendering belongs to E08 — don't duplicate either here.
+
+## Deliberate behavior changes (E07)
+
+Two, both documented in the E07 PR:
+
+1. **Client forms now enforce the server's numeric ranges** (lat/lng bounds,
+   walk minutes 0–120, refreshSeconds 15–3600, priceLevel 1|2|3). Before, the
+   client only checked `Number.isFinite` and the operator learned about ranges
+   from the server round-trip. Strictly better feedback; the rules themselves
+   are unchanged.
+2. **Invalid optional URLs are a 400 with a friendly message** (e.g. lodging
+   `website: "foo"` → `website must be an http(s) URL`). The old sanitizers
+   silently dropped invalid optional URLs, which lost operator input without
+   telling anyone.
+
+## Wiring the importer (deferred — ask-first)
+
+E05's importer (`scripts/import-core.ts`) validates through `validateRecord` /
+`STORE_SCHEMAS` in `src/lib/db/store-schemas.ts`, whose header anticipates E07
+swapping in the full domain schemas ("keep the export shape"). That swap is
+**deliberately not done in E07**, because `STORE_SCHEMAS` also gates the
+runtime write choke point used by backup **restore**: E05 chose its baseline
+rules so that a field is only required when 100% of real records (git seeds
+*and* the production backup bundle) carry it. Registering the strict schemas
+there could send legitimate pre-E07 production records to quarantine during a
+restore or re-import.
+
+Safe path when an epic picks this up (likely E17): decrypt the current
+production backup bundle, run every record of the four domains through
+`DOMAIN_SCHEMAS`, and only after that reports clean, swap the four entries in
+`STORE_SCHEMAS` (the export shape already matches). `seeds.test.ts` covers the
+git side of that guarantee today.
