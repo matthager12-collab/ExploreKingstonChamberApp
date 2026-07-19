@@ -24,6 +24,12 @@ import {
   timestamp,
 } from "drizzle-orm/pg-core";
 
+// E06 auth tables (users/orgs/invites) live in their own file. Re-exported
+// here because this module is the schema aggregation point: client.ts does
+// `import * as schema from "./schema"` and drizzle.config.ts generates from
+// this path, so a re-export is what makes those tables real to both.
+export * from "./auth-schema";
+
 /** Lifecycle states a structured record can be in. Everything is 'live'
  *  this epic (behavior-preserving); E08 starts writing 'pending' from
  *  submission surfaces. */
