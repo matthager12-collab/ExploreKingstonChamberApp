@@ -1,0 +1,34 @@
+[
+  {
+    "id": "u-admin",
+    "email": "director@kingstonchamber.test",
+    "name": "Chamber Director",
+    "role": "admin",
+    "linkedIds": [],
+    "passwordHash": "scrypt$55dc6cdc52260753730591734b94565c$773af62f4c9fee51ee6dba7577c94c2bfc0b41f6a471f6d309213cd15e2b0d58340f8af2ebfc7c567ff3474940d0ffe8d32263c6ba2d180faa96659cd64ca3a3",
+    "createdAt": "2025-01-05T00:00:00.000Z"
+  },
+  {
+    "id": "u-a",
+    "email": "front@marinagrill.test",
+    "name": "Marina Grill (front)",
+    "role": "business",
+    "linkedIds": [
+      "marina-grill"
+    ],
+    "passwordHash": "scrypt$dcff3ece232be4c1eddca213098c8401$f7bba8ae08aaba2f40c1f03da58be0d7e38efeb40e606eb902956f41ee84f3366fc217567b0caf9f9fd15677adbbdd915935673d35ffa27dcaf2b75bed3278ed",
+    "createdAt": "2025-05-01T00:00:00.000Z"
+  },
+  {
+    "id": "u-b",
+    "email": "owner@marinagrill.test",
+    "name": "Marina Grill (owner)",
+    "role": "business",
+    "linkedIds": [
+      "marina-grill",
+      "marina-grill-catering"
+    ],
+    "passwordHash": "scrypt$45ab699ae8204147718968691e91824a$143a50807864e404f2194417d92c3a57ff4ac3efa43836d85236a4e782806da140940d530bba5968f50fa26da4ed35eef91299e735e500d7a512679f6358d6d8",
+    "createdAt": "2025-05-09T00:00:00.000Z"
+  }
+]

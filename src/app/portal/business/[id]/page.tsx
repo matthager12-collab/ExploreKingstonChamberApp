@@ -1,11 +1,11 @@
-// Listing editor page (server side): await params, enforce canEdit against
+// Listing editor page (server side): await params, enforce can(…, "edit-record") against
 // the session, load the restaurant plus the events it owns, hand everything
 // to the client editor.
 
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { canEdit, getSessionUser } from "@/lib/auth";
+import { can, getSessionUser } from "@/lib/auth";
 import { getRestaurant } from "@/lib/stores/business-store";
 import { getEvents } from "@/lib/stores/event-store";
 import { PageHeader } from "@/components/ui";
@@ -23,7 +23,7 @@ export default async function EditListingPage({
 
   const user = await getSessionUser();
   if (!user) redirect("/portal");
-  if (!canEdit(user, id)) redirect("/portal");
+  if (!can(user, "edit-record", id)) redirect("/portal");
 
   const restaurant = await getRestaurant(id);
   if (!restaurant) redirect("/portal/business");

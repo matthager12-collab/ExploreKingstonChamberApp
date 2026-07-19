@@ -1,0 +1,20 @@
+[
+  {
+    "code": "abc123",
+    "role": "business",
+    "linkedIds": [
+      "marina-grill"
+    ],
+    "note": "Marina Grill",
+    "createdAt": "2025-06-01T00:00:00.000Z"
+  },
+  {
+    "code": "used99",
+    "role": "nonprofit",
+    "linkedIds": [
+      "kingston-food-bank"
+    ],
+    "createdAt": "2025-04-01T00:00:00.000Z",
+    "usedBy": "u-fb"
+  }
+]

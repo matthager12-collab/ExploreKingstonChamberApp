@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser, hasAnyUsers } from "@/lib/auth";
-import { Card, PageHeader, Section } from "@/components/ui";
+import { ROLE_LABELS } from "@/lib/auth/roles";
+import { Callout, Card, PageHeader, Section } from "@/components/ui";
 import { LoginForm, LogoutButton } from "./forms";
 
 export const metadata: Metadata = { title: "Portal" };
@@ -34,14 +35,14 @@ export default async function PortalPage() {
     title: "My account",
     blurb: "Update your name, email, and password.",
   });
-  if (user.role === "business" || user.role === "admin") {
+  if (user.role === "member-business" || user.role === "admin") {
     cards.push({
       href: "/portal/business",
       title: "My business",
       blurb: "Hours, listing details, menus & ordering links, and your events.",
     });
   }
-  if (user.role === "nonprofit" || user.role === "admin") {
+  if (user.role === "org-editor" || user.role === "admin") {
     cards.push({
       href: "/portal/nonprofit",
       title: "My organization",
@@ -53,6 +54,11 @@ export default async function PortalPage() {
     title: "Push it everywhere",
     blurb: "Feeds for your website plus checklists for Google, Apple, Yelp, and socials.",
   });
+  // moderator and viewer are provisioned and ENFORCED in E06 (they sign in and
+  // get correct 403s) but have no surfaces yet: the moderation queue is E08 and
+  // the role-scoped admin shell is E10. Say so plainly rather than showing an
+  // empty dashboard that looks broken.
+  const awaitingTools = user.role === "moderator" || user.role === "viewer";
   if (user.role === "admin") {
     cards.push(
       {
@@ -111,6 +117,13 @@ export default async function PortalPage() {
         intro="Everything you manage, in one place."
       />
       <Section>
+        {awaitingTools && (
+          <Callout title={`${ROLE_LABELS[user.role]} access is set up`}>
+            Your account and permissions are active. The tools for this role arrive
+            in a later phase — until then you can manage your own account details
+            here.
+          </Callout>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           {cards.map((c) => (
             <Link key={c.href} href={c.href}>

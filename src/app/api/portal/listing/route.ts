@@ -1,13 +1,13 @@
 // Portal listing API — PUT updates a restaurant/business listing.
 //
-// Server-side rules: valid session required; canEdit against the STORED
+// Server-side rules: valid session required; can(…, "edit-record") against the STORED
 // record's id (never the client's word); only whitelisted fields merge onto
 // the stored record. id can never change, and placement fields (lat/lng/
 // walkMinutesFromFerry) plus the display name stay Chamber-controlled unless
 // the caller is an admin.
 
 import { NextRequest, NextResponse } from "next/server";
-import { canEdit, getSessionUser } from "@/lib/auth";
+import { can, getSessionUser } from "@/lib/auth";
 import { getRestaurant, saveRestaurant } from "@/lib/stores/business-store";
 import { RecordValidationError } from "@/lib/db/store-schemas";
 import type { Restaurant, WeeklyHours } from "@/lib/types";
@@ -53,7 +53,7 @@ export async function PUT(request: NextRequest) {
 
   const stored = await getRestaurant(id);
   if (!stored) return NextResponse.json({ error: "Listing not found" }, { status: 404 });
-  if (!canEdit(user, stored.id)) {
+  if (!can(user, "edit-record", stored.id)) {
     return NextResponse.json({ error: "You don't manage this listing" }, { status: 403 });
   }
 

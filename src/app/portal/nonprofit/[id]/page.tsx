@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { canEdit, getSessionUser } from "@/lib/auth";
+import { can, getSessionUser } from "@/lib/auth";
 import { getCharity, getVolunteerNeeds } from "@/lib/stores/charity-store";
 import { getEvents } from "@/lib/stores/event-store";
 import { todayPacific } from "@/lib/time";
@@ -19,7 +19,7 @@ export default async function ManageOrgPage({
   const { id } = await params;
 
   const user = await getSessionUser();
-  if (!user || !canEdit(user, id)) redirect("/portal");
+  if (!user || !can(user, "edit-record", id)) redirect("/portal");
 
   const org = await getCharity(id);
   if (!org) notFound();

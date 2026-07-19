@@ -7,7 +7,6 @@
 
 import { spawn, type ChildProcess } from "child_process";
 import { cpSync, existsSync, mkdtempSync, rmSync } from "fs";
-import { randomBytes, scryptSync } from "crypto";
 import os from "os";
 import path from "path";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -16,14 +15,13 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 import { BASE_URL, PORT } from "./config";
 
-// Mirrors src/lib/auth.ts hashPassword (format `scrypt$<salt>$<hash>`). Reproduced
-// in-process rather than imported because src/lib/auth.ts imports next/headers at
-// module scope, which we must not load in a plain-Node globalSetup context.
-function hashPassword(password: string): string {
-  const salt = randomBytes(16).toString("hex");
-  const hash = scryptSync(password, salt, 64).toString("hex");
-  return `scrypt$${salt}$${hash}`;
-}
+// E06: imported, no longer hand-copied. This file used to reproduce scrypt
+// hashing in-process because src/lib/auth.ts imported next/headers at module
+// scope and could not be loaded here — two implementations that had to stay in
+// sync or every server test would authenticate against a hash the app rejects.
+// src/lib/auth/tokens.ts is pure (no next/headers, no DB), so it loads fine in
+// a plain-Node globalSetup.
+import { hashPassword } from "../../src/lib/auth/tokens";
 
 export default async function setup() {
   const root = process.cwd();
@@ -64,14 +62,13 @@ export default async function setup() {
     );
   }
 
+  // E06: accounts live in the `users` table, not a record-store doc.
   const admin = {
     id: "ci-admin",
     email: "ci@example.test",
     name: "CI Admin",
     role: "admin",
-    linkedIds: [] as string[],
     passwordHash: hashPassword("ci-admin-password"),
-    createdAt: new Date().toISOString(),
   };
 
   {
@@ -81,10 +78,12 @@ export default async function setup() {
     // TRUNCATE deliberately: row triggers (audit immutability) don't fire on
     // TRUNCATE, and a test DB must start empty. Safe only because this is the
     // explicit TEST_DATABASE_URL.
-    await db.execute(sql`TRUNCATE record, audit, quarantine`);
+    await db.execute(sql`TRUNCATE record, audit, quarantine, users, invites, orgs`);
+    // org_id stays NULL: admin is a Chamber-staff role, and users_org_binding
+    // rejects a staff row that carries an org.
     await db.execute(sql`
-      INSERT INTO record (store, id, doc, status, source, updated_by)
-      VALUES ('auth-users', ${admin.id}, ${JSON.stringify(admin)}::jsonb, 'live', 'import', 'server-tests')
+      INSERT INTO users (id, email, name, role, password_hash)
+      VALUES (${admin.id}, ${admin.email}, ${admin.name}, ${admin.role}, ${admin.passwordHash})
     `);
     await pool.end();
   }

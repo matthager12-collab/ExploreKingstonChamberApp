@@ -10,7 +10,7 @@
 // UI; these handlers re-check because API routes bypass layouts.
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUser, requireAdmin } from "@/lib/auth";
 import {
   getCopyOverrides,
   getPageSettings,
@@ -25,21 +25,9 @@ const COPY_KEYS = new Set(COPY_BLOCKS.map((b) => b.key));
 const HIDEABLE = new Set(HIDEABLE_PAGES.map((p) => p.path));
 const MAX_TEXT_LENGTH = 2000;
 
-/** Admin gate: returns the user when allowed, else the 401/403 response. */
-async function requireAdmin(): Promise<
-  { ok: true; user: { name: string; email: string } } | { ok: false; res: NextResponse }
-> {
-  const user = await getSessionUser();
-  if (!user) return { ok: false, res: NextResponse.json({ error: "Sign in first" }, { status: 401 }) };
-  if (user.role !== "admin") {
-    return { ok: false, res: NextResponse.json({ error: "Chamber admins only" }, { status: 403 }) };
-  }
-  return { ok: true, user };
-}
-
 export async function GET() {
-  const gate = await requireAdmin();
-  if (!gate.ok) return gate.res;
+  const denied = await requireAdmin();
+  if (denied) return denied;
   const [copyOverrides, pageSettings] = await Promise.all([
     getCopyOverrides(),
     getPageSettings(),
@@ -48,8 +36,10 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const gate = await requireAdmin();
-  if (!gate.ok) return gate.res;
+  const denied = await requireAdmin();
+  if (denied) return denied;
+  // The gate proved a session exists — this only re-reads it for the audit actor.
+  const actor = (await getSessionUser())!.email;
 
   let body: Record<string, unknown>;
   try {
@@ -68,7 +58,7 @@ export async function POST(request: NextRequest) {
     }
     const text = body.text.slice(0, MAX_TEXT_LENGTH);
     try {
-      await saveCopyOverride(key, text, { actor: gate.user.email, source: "admin" });
+      await saveCopyOverride(key, text, { actor, source: "admin" });
     } catch (err) {
       if (err instanceof RecordValidationError) {
         return NextResponse.json({ error: err.message }, { status: 400 });
@@ -87,7 +77,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "hidden must be a boolean" }, { status: 400 });
     }
     try {
-      await setPageHidden(path, body.hidden, { actor: gate.user.email, source: "admin" });
+      await setPageHidden(path, body.hidden, { actor, source: "admin" });
     } catch (err) {
       if (err instanceof RecordValidationError) {
         return NextResponse.json({ error: err.message }, { status: 400 });

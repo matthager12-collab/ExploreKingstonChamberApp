@@ -10,7 +10,7 @@
 // editor UI; these handlers re-check because API routes bypass layouts.
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUser, requireAdmin } from "@/lib/auth";
 import type { Itinerary, ItineraryStop, Lodging, Restaurant, Webcam } from "@/lib/types";
 import {
   deleteItinerary,
@@ -69,18 +69,6 @@ function num(v: unknown): number {
 function httpUrl(v: unknown): string | undefined {
   const s = str(v);
   return /^https?:\/\//.test(s) ? s : undefined;
-}
-
-/** Admin gate: returns the user when allowed, else the 401/403 response. */
-async function requireAdmin(): Promise<
-  { ok: true; user: { name: string; email: string } } | { ok: false; res: NextResponse }
-> {
-  const user = await getSessionUser();
-  if (!user) return { ok: false, res: NextResponse.json({ error: "Sign in first" }, { status: 401 }) };
-  if (user.role !== "admin") {
-    return { ok: false, res: NextResponse.json({ error: "Chamber admins only" }, { status: 403 }) };
-  }
-  return { ok: true, user };
 }
 
 function bad(error: string): NextResponse {
@@ -282,8 +270,8 @@ async function sanitizeRestaurant(
 /* --------------------------------- handlers -------------------------------- */
 
 export async function GET(request: NextRequest) {
-  const gate = await requireAdmin();
-  if (!gate.ok) return gate.res;
+  const denied = await requireAdmin();
+  if (denied) return denied;
 
   const domain = parseDomain(request.nextUrl.searchParams.get("domain"));
   if (!domain) return bad(`domain must be one of: ${DOMAINS.join(", ")}`);
@@ -301,8 +289,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const gate = await requireAdmin();
-  if (!gate.ok) return gate.res;
+  const denied = await requireAdmin();
+  if (denied) return denied;
+  // The gate proved a session exists — this only re-reads it for the audit actor.
+  const actor = (await getSessionUser())!.email;
 
   let body: Record<string, unknown>;
   try {
@@ -316,7 +306,7 @@ export async function POST(request: NextRequest) {
   if (!body.record || typeof body.record !== "object") return bad("record required");
   const raw = body.record as Record<string, unknown>;
 
-  const meta = { actor: gate.user.email, source: "admin" } as const;
+  const meta = { actor, source: "admin" } as const;
   try {
     if (domain === "itineraries") {
       const record = await sanitizeItinerary(raw);
@@ -347,8 +337,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const gate = await requireAdmin();
-  if (!gate.ok) return gate.res;
+  const denied = await requireAdmin();
+  if (denied) return denied;
+  const actor = (await getSessionUser())!.email;
 
   const domain = parseDomain(request.nextUrl.searchParams.get("domain"));
   if (!domain) return bad(`domain must be one of: ${DOMAINS.join(", ")}`);
@@ -367,7 +358,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "Record not found" }, { status: 404 });
   }
 
-  const meta = { actor: gate.user.email, source: "admin" } as const;
+  const meta = { actor, source: "admin" } as const;
   try {
     if (domain === "itineraries") await deleteItinerary(id, meta);
     else if (domain === "lodging") await deleteLodging(id, meta);

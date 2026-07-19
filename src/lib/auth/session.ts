@@ -25,6 +25,7 @@ import { makeSessionToken, sessionCookie, verifySessionToken } from "./tokens";
 export interface SessionUser extends AuthSubject {
   orgName: string | null;
   lastLoginAt: Date | null;
+  createdAt: Date;
 }
 
 function secret(): string {
@@ -52,6 +53,7 @@ async function toSessionUser(user: UserRow): Promise<SessionUser> {
     editableIds: org?.linkedIds ?? [],
     entitlements: org?.entitlements ?? {},
     lastLoginAt: user.lastLoginAt,
+    createdAt: user.createdAt,
   };
 }
 

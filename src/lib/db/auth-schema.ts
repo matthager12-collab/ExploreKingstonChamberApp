@@ -19,6 +19,7 @@
 //                                                 (invites_org_binding)
 
 import { sql } from "drizzle-orm";
+import { ORG_KINDS, ORG_ROLES, ROLES, type OrgKind, type Role } from "@/lib/auth/roles";
 import {
   boolean,
   check,
@@ -30,26 +31,10 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
-/** The five least-privilege roles (E06 decisions doc).
- *  `moderator` and `viewer` are provisioned and ENFORCED here but get no new
- *  UI surfaces until E10 (admin shell) / E08 (moderation queue). */
-export const ROLES = [
-  "admin",
-  "moderator",
-  "org-editor",
-  "member-business",
-  "viewer",
-] as const;
-export type Role = (typeof ROLES)[number];
-
-/** Roles that belong to an organization; the rest are Chamber staff and
- *  carry org_id = null. */
-export const ORG_ROLES = ["org-editor", "member-business"] as const;
-
-/** What kind of entity an org is — drives which content store its
- *  linked_ids point into (restaurants vs charities). */
-export const ORG_KINDS = ["business", "nonprofit"] as const;
-export type OrgKind = (typeof ORG_KINDS)[number];
+// The role vocabulary lives in src/lib/auth/roles.ts, which imports nothing —
+// so client components can share these names without pulling drizzle-orm into
+// the browser bundle. Re-exported here for schema-side callers.
+export { ORG_KINDS, ORG_ROLES, ROLES, type OrgKind, type Role } from "@/lib/auth/roles";
 
 const roleList = sql.raw(ROLES.map((r) => `'${r}'`).join(", "));
 const orgRoleList = sql.raw(ORG_ROLES.map((r) => `'${r}'`).join(", "));

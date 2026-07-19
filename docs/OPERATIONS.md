@@ -62,7 +62,7 @@ working copy's `.env.local` — reference that, don't reprint secrets.
 
 | Key | Required? | Where the value comes from |
 |-----|-----------|----------------------------|
-| `AUTH_SECRET` | **Yes** for the portals — `src/lib/auth.ts` `secret()` throws `AUTH_SECRET missing` without it | Any long random string, e.g. `openssl rand -hex 32`. Signs the stateless `vk-session` HMAC cookie. **Changing it logs everyone out** (see §8). |
+| `AUTH_SECRET` | **Yes** for the portals — `src/lib/auth/session.ts` `secret()` throws `AUTH_SECRET missing` without it (and `src/proxy.ts` fails CLOSED, redirecting every gated route to the login page) | Any long random string, e.g. `openssl rand -hex 32`. Signs the stateless `vk-session` HMAC cookie. **Changing it logs everyone out** (see §8). |
 | `WSDOT_API_KEY` | No — app falls back to the bundled schedule, labeled not-live | Free access code from <https://wsdot.wa.gov/traffic/api/> (enter an email, code issued instantly). Current code registered under matt.hager12@gmail.com; already in `.env.local`. Rotating = registering again. |
 | `NEXT_PUBLIC_SITE_URL` | No locally (defaults to `http://localhost:3000`); **set in production** | Absolute production origin for share-card/canonical URLs (`src/app/layout.tsx` `metadataBase` — the app spreads by visitors texting links). **Build-time var** — inlined into the client bundle at `npm run build`; a dashboard-only change needs a rebuild. |
 | `DATA_DIR` | No locally (defaults to `<repo>/.data`); **set in production** | Absolute path to the mutable-state root, resolved via `src/lib/data-dir.ts`. Leave unset locally. In production it **must** be an absolute path on a mounted persistent volume (`/data` on Render/Fly) or redeploys wipe accounts, portal edits, and photos. |
@@ -329,15 +329,19 @@ use layer 2 (bundle) for the off-site copy. See [DEPLOY.md §d](DEPLOY.md).
 
 ## 5. Admin operations
 
-Everything under `/admin` is gated by `src/app/admin/layout.tsx` (role `admin`,
-or open-with-banner pre-bootstrap). Editors write overlay records into
-Postgres (audited, E05) and public pages pick them up on the next ISR
-revalidate (~60 s).
+Everything under `/admin` is gated in three places (E06): `src/proxy.ts` turns
+away requests with no valid session cookie at the request boundary,
+`src/app/admin/layout.tsx` re-checks `role === "admin"`, and every
+`/api/admin/*` route calls the shared gate itself (route handlers bypass
+layouts). The old "open with an amber banner before bootstrap" grace is GONE —
+`/admin` is never public, and a fresh install bootstraps through `/portal`,
+which redirects to `/portal/setup`. Editors write records into Postgres
+(audited, E05) and public pages pick them up on the next ISR revalidate (~60 s).
 
 | Admin page | What it does |
 |---|---|
 | `/admin` | Visitor insights (analytics + survey rollups for LTAC reporting) **and** the "⤓ Download backup" button |
-| `/admin/accounts` | Mint invite codes (role + `linkedIds`), see users/invites, admin **password reset** (returns a temp password shown **once** — `adminResetPassword`) |
+| `/admin/accounts` | Mint invite codes (five roles, optional **email binding**, 14-day expiry, org join-or-create), **revoke** un-redeemed invites, see users with role / last login / disabled state, **disable / enable / change role / delete** accounts, and admin **password reset** (temp password shown **once** — `adminResetPassword`) |
 | `/admin/content` | Content CMS: edit the 77 copy blocks (`src/lib/site-copy-registry.ts`, reaching client components via `copy-context.tsx`) and **show/hide pages** (page-visibility) |
 | `/admin/ferry-info` | Structured ferry **facts** (payment / boarding-pass / cash-tips / sources), the **prediction on/off** toggle, and the **SR-104 boarding-pass override** |
 | `/admin/listings` | Restaurants (add / edit / hide via tombstone), lodging, and webcams |
@@ -350,6 +354,102 @@ revalidate (~60 s).
 (the `ferry-prediction` record) defaults to **OFF**: the public sees nothing,
 but **signed-in admins get a preview** so they can validate before flipping it
 on. Flip it on only once you trust the estimate against reality.
+
+### Off-board a volunteer the same day (E06)
+
+The common case: someone leaves the Chamber, or a laptop with a live session
+goes missing. Sessions are 30-day cookies, so "wait for it to expire" is not an
+answer.
+
+1. `/admin/accounts` → find the person → **Disable**.
+2. That bumps their `session_version`, which invalidates **every outstanding
+   cookie for that account immediately** — not on next login, not in 30 days.
+   Their very next request is a 401.
+3. Verify: ask them to reload `/portal`, or `curl` any `/api/portal/*` route
+   with their cookie — it must return `401`.
+4. Optional: **Delete** removes the account row entirely. Their audit history
+   SURVIVES (the actor id stays as a dangling reference by design) — the trail
+   must outlive the account.
+
+**If they were the only admin,** the last-admin guard refuses the change with an
+explanation. Promote or invite another admin first; this is deliberate, and it
+is the one case where you cannot lock the Chamber out of its own site.
+
+Related: an admin **password reset** and a user's own **password change** also
+bump `session_version`, so either one kills a stolen cookie too.
+
+### Revoke an invite
+
+An invite that has been emailed but not yet redeemed is still a live grant.
+`/admin/accounts` → the invite row → **Revoke**. The code stops working at
+once; redeeming it returns the same "invalid or expired" message as a code that
+never existed.
+
+Invites now expire on their own after **14 days**, and an invite bound to an
+email address only works for that address. An **admin** invite cannot be minted
+without an email binding at all — a forwarded admin code would otherwise be a
+bearer grant on the whole site.
+
+### Deploy day: everyone signs in again (one time)
+
+The auth-v2 release changes the session-token format (it adds the `sv`
+revocation claim). Tokens without it cannot be revoked, so they are not
+honored.
+
+**Every signed-in user is logged out once when this release deploys.** There
+are roughly 20 accounts and they are all known to the Chamber — announce it
+first. Nobody loses data, nobody needs a new password: they sign in again with
+the credentials they already have.
+
+Order of operations (staging first, then production in a quiet window):
+
+1. Apply the Drizzle migration (`npm run db:migrate`).
+2. Dry-run, and **point `--data-dir` at an empty directory**:
+
+   ```bash
+   node scripts/migrate-auth-v2.mjs --data-dir "$(mktemp -d)" --dry-run
+   ```
+
+   Read the diff. It exits **2** and writes nothing if anything is ambiguous
+   (two accounts sharing a listing id, colliding emails, an unmappable role).
+   Resolve those by hand and re-run; do not "just apply".
+
+   **Why the empty `--data-dir`** (found during the 2026-07-19 staging
+   rehearsal): the script reads BOTH legacy homes — `<data-dir>/auth/*.json`
+   and the `record` table — and HALTS if both hold users, because merging them
+   could silently drop or resurrect accounts. When you run this from a local
+   checkout against a REMOTE database, your own stale `.data/auth/users.json`
+   (a dev leftover) counts as the second source and trips that guard:
+
+   ```
+   HALTED: CONFLICT: both legacy sources hold users — 1 in
+   <data-dir>/auth/users.json and 2 in the record table
+   ```
+
+   That is the guard working, not a bug — but here the "conflict" is just your
+   laptop. An empty `--data-dir` makes the database the only source, which is
+   what you want for staging and production. Omit it **only** when migrating a
+   host whose accounts really do live on disk (a pre-E05 release).
+
+3. `node scripts/migrate-auth-v2.mjs --data-dir "$(mktemp -d)" --apply`.
+   Safe to re-run — orgs and users upsert by id, and the `owner_org_id`
+   backfill only touches rows where it is still NULL.
+4. Deploy the code. **The auth tables must exist before the new code serves
+   traffic** — apply step 1's migration first, or the app boots against tables
+   it cannot see.
+5. Sign in yourself and confirm: an admin sees `/admin`, a business account can
+   still edit its own listing and nothing else.
+
+**Rollback window:** redeploy the previous release. The legacy accounts are
+left untouched in place for one release (ADR-D1) — the migration never deletes
+its source. After that release, they can be cleaned up.
+
+### `AUTH_SECRET` rotation — now the blunt instrument, not the only tool
+
+Before E06 the only way to end a session was to rotate `AUTH_SECRET`, which
+logs out **every** user at once. That is still the break-glass move for a
+suspected secret compromise, but it is no longer how you off-board one person —
+use **Disable** above. See §10 "Portal login loops" and §11.
 
 **Boarding-pass override** (`/admin/ferry-info` → `POST /api/admin/boarding-pass
 {action:"on"|"off"|"auto"}`): pins the SR-104 vehicle-boarding-pass verdict for
@@ -663,7 +763,7 @@ plan) — no new spend.
 | `BACKUP_TOKEN` | Quarterly (align with the §6 quarterly checklist) | `openssl rand -hex 32` → update the Render dashboard env var on **both** services → update the GitHub Actions repo secret (`gh secret set BACKUP_TOKEN`, value piped via stdin, never a CLI arg) → no redeploy required (runtime var) |
 | `FERRY_OBSERVE_TOKEN` | Quarterly | Same procedure as `BACKUP_TOKEN` above — one value shared by both ferry cron workflows |
 | age keypair (`BACKUP_AGE_RECIPIENT`) | Annually, or immediately on any suspicion of exposure | `age-keygen` → new **public** key becomes the repo variable `BACKUP_AGE_RECIPIENT` (`gh variable set`) → new **private** key goes to 1Password ("ExploreKingston backup age key") → **keep every old private key** — backups encrypted under a retired key can only be decrypted with it, and rotation is forward-only (old backups are never re-encrypted) |
-| `AUTH_SECRET` | Never casually — rotating logs **every** signed-in user out (see §10 "Portal login loops"). Only rotate on a real compromise. | Render dashboard env var → redeploy. There is no per-session revocation, so this is the only "log everyone out" lever. |
+| `AUTH_SECRET` | Never casually — rotating logs **every** signed-in user out (see §10 "Portal login loops"). Only rotate on a real compromise. | Render dashboard env var → redeploy. Since E06 there IS per-user revocation (disable / reset / role change bump `session_version`), so rotating this is only for a compromise of the SECRET itself — to remove one person, use §5 "Off-board a volunteer". |
 
 Never echo a secret value in a terminal, script, or CI log — this repo is
 public, so a logged secret is an exposed secret. `gh secret set NAME` reads

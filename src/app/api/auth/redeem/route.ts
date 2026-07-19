@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { makeSessionToken, redeemInvite, sessionCookie } from "@/lib/auth";
+import { redeemInvite, sessionCookie, tokenFor } from "@/lib/auth";
 import { checkRateLimit, clientKey } from "@/lib/rate-limit";
 
 function tooMany(retryAfterSeconds: number): NextResponse {
@@ -32,13 +32,15 @@ export async function POST(request: NextRequest) {
   const codeLimit = await checkRateLimit("redeem:" + body.code.trim());
   if (!codeLimit.ok) return tooMany(codeLimit.retryAfterSeconds);
   try {
-    const user = await redeemInvite(body.code.trim(), {
+    // Creates the org (or joins an existing one) and the user atomically;
+    // expired / revoked / used / email-mismatch all reject inside.
+    const { user } = await redeemInvite(body.code.trim(), {
       email: body.email,
       name: body.name,
       password: body.password,
     });
     const res = NextResponse.json({ ok: true, role: user.role });
-    res.cookies.set(sessionCookie.name, makeSessionToken(user.id), sessionCookie.options);
+    res.cookies.set(sessionCookie.name, tokenFor(user), sessionCookie.options);
     return res;
   } catch (e) {
     return NextResponse.json(

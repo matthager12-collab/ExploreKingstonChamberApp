@@ -15,11 +15,11 @@ export const dynamic = "force-dynamic";
 export default async function BusinessPortalPage() {
   const user = await getSessionUser();
   if (!user) redirect("/portal");
-  if (user.role !== "business" && user.role !== "admin") redirect("/portal");
+  if (user.role !== "member-business" && user.role !== "admin") redirect("/portal");
 
   const all = await getRestaurants();
   const listings =
-    user.role === "admin" ? all : all.filter((r) => user.linkedIds.includes(r.id));
+    user.role === "admin" ? all : all.filter((r) => user.editableIds.includes(r.id));
 
   return (
     <>

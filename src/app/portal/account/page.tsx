@@ -8,6 +8,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
+import { ROLE_LABELS, ROLE_TONES } from "@/lib/auth/roles";
 import { getRestaurants } from "@/lib/stores/business-store";
 import { getCharities } from "@/lib/stores/charity-store";
 import { Badge, Card, PageHeader, Section } from "@/components/ui";
@@ -16,8 +17,6 @@ import { AccountSettings } from "./settings";
 export const metadata: Metadata = { title: "My account" };
 export const dynamic = "force-dynamic";
 
-const roleTone = { admin: "navy", business: "teal", nonprofit: "green" } as const;
-const roleLabel = { admin: "Admin", business: "Business", nonprofit: "Nonprofit" } as const;
 
 export default async function AccountPage() {
   const user = await getSessionUser();
@@ -27,12 +26,13 @@ export default async function AccountPage() {
   const nameById = new Map<string, string>();
   for (const r of restaurants) nameById.set(r.id, r.name);
   for (const c of charities) nameById.set(c.id, c.name);
-  const linkedNames = user.linkedIds.map((id) => nameById.get(id) ?? id);
+  const linkedNames = user.editableIds.map((id: string) => nameById.get(id) ?? id);
 
-  const created = new Date(user.createdAt);
-  const createdLabel = Number.isNaN(created.getTime())
-    ? user.createdAt
-    : created.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  const createdLabel = user.createdAt.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
 
   return (
     <>
@@ -56,7 +56,7 @@ export default async function AccountPage() {
             <div>
               <dt className="font-semibold text-ink">Role</dt>
               <dd className="mt-1">
-                <Badge tone={roleTone[user.role]}>{roleLabel[user.role]}</Badge>
+                <Badge tone={ROLE_TONES[user.role]}>{ROLE_LABELS[user.role]}</Badge>
               </dd>
             </div>
             <div>

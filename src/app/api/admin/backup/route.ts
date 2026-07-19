@@ -18,11 +18,15 @@
 // as before. The bundle contains password hashes — treat the downloaded file
 // as sensitive. (Audit rows redact password material at write time, but the
 // record rows for auth-users still contain the hashes.)
+//
+// 401 signed out · 403 signed in but not admin. This route used to answer 403
+// to both; E06 normalized it onto the shared gate so every endpoint reports
+// "who are you?" and "may you?" with distinct codes.
 
 import { timingSafeEqual } from "crypto";
 import { readdir, readFile } from "fs/promises";
 import path from "path";
-import { getSessionUser } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import { dataDir } from "@/lib/data-dir";
 import { serializeDb } from "@/lib/db/export";
 
@@ -72,11 +76,12 @@ function hasValidBackupToken(request: Request): boolean {
 }
 
 export async function GET(request: Request) {
+  // The bearer token is a full ALTERNATIVE to a session, not an addition to it:
+  // the scheduled workflow has no cookie to send, so a valid token skips the
+  // session gate entirely. Everything else falls through to the shared gate.
   if (!hasValidBackupToken(request)) {
-    const user = await getSessionUser();
-    if (user?.role !== "admin") {
-      return Response.json({ error: "admin only" }, { status: 403 });
-    }
+    const denied = await requireAdmin();
+    if (denied) return denied;
   }
 
   const root = dataDir();

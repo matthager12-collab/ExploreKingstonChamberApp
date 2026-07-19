@@ -7,7 +7,7 @@
 // used to grind the current-password check.
 
 import { NextRequest, NextResponse } from "next/server";
-import { changeOwnPassword, getSessionUser } from "@/lib/auth";
+import { changeOwnPassword, getSessionUser, sessionCookie, tokenFor } from "@/lib/auth";
 import { checkRateLimit, clientKey } from "@/lib/rate-limit";
 
 function tooMany(retryAfterSeconds: number): NextResponse {
@@ -39,12 +39,22 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  let updated;
   try {
-    await changeOwnPassword(user.id, body.current, body.next);
+    updated = await changeOwnPassword(user.id, body.current, body.next);
   } catch (err) {
     const message = err instanceof Error ? err.message : "could not change password";
     const status = message === "Current password is incorrect" ? 401 : 400;
     return NextResponse.json({ error: message }, { status });
   }
-  return NextResponse.json({ ok: true });
+
+  // changeOwnPassword bumped session_version, which just invalidated EVERY
+  // outstanding token for this user — including the cookie this request
+  // arrived with. Re-issue one at the new version or the user silently logs
+  // themselves out by changing their own password. Every OTHER session (a
+  // second browser, or an attacker's stolen cookie) stays dead, which is the
+  // entire point of the bump.
+  const res = NextResponse.json({ ok: true });
+  res.cookies.set(sessionCookie.name, tokenFor(updated), sessionCookie.options);
+  return res;
 }

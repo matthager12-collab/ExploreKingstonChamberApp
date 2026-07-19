@@ -126,7 +126,9 @@ export async function recordLogin(user: UserRow): Promise<UserRow> {
   );
 }
 
-export async function recordLogout(user: UserRow): Promise<void> {
+/** Takes only what it writes, so a SessionUser (which has no passwordHash)
+ *  satisfies it as readily as a UserRow. */
+export async function recordLogout(user: Pick<UserRow, "id" | "email">): Promise<void> {
   await appendAuthAudit({
     actor: user.email,
     action: "logout",

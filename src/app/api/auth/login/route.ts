@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findUserByEmail, makeSessionToken, sessionCookie, verifyPassword } from "@/lib/auth";
+import { recordLogin, sessionCookie, tokenFor, verifyCredentials } from "@/lib/auth";
 import { checkRateLimit, clientKey } from "@/lib/rate-limit";
 
 function tooMany(retryAfterSeconds: number): NextResponse {
@@ -29,12 +29,20 @@ export async function POST(request: NextRequest) {
   const emailLimit = await checkRateLimit("login:" + body.email.trim().toLowerCase());
   if (!emailLimit.ok) return tooMany(emailLimit.retryAfterSeconds);
 
-  const user = await findUserByEmail(body.email);
-  if (!user || !verifyPassword(body.password, user.passwordHash)) {
+  // verifyCredentials returns null for an unknown email, a wrong password, AND
+  // a disabled account — all three collapse into the one uniform 401 below, so
+  // the endpoint never reveals that an address exists or has been switched off.
+  const user = await verifyCredentials(body.email, body.password);
+  if (!user) {
     return NextResponse.json({ error: "wrong email or password" }, { status: 401 });
   }
 
-  const res = NextResponse.json({ ok: true, role: user.role });
-  res.cookies.set(sessionCookie.name, makeSessionToken(user.id), sessionCookie.options);
+  // Stamps last_login_at (FR-A09's account list) and audits the sign-in.
+  const signedIn = await recordLogin(user);
+
+  const res = NextResponse.json({ ok: true, role: signedIn.role });
+  // Minted at the user's CURRENT session_version: any token issued before a
+  // revocation is already dead.
+  res.cookies.set(sessionCookie.name, tokenFor(signedIn), sessionCookie.options);
   return res;
 }

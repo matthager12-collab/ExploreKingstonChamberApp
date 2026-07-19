@@ -2,15 +2,15 @@
 //
 // GET  ?onDate=YYYY-MM-DD[&exclude=id] — public: other events on that Pacific
 //      calendar date (the "what else happens that day" deconfliction check).
-// GET  ?ownerId=X                      — auth + canEdit: the events X manages.
+// GET  ?ownerId=X                      — auth + can(…, "edit-record"): the events X manages.
 // POST                                 — auth: create/update an event whose
 //      ownerId ∈ user.linkedIds (or admin). New events get a slug+random id.
-// DELETE ?id=X                         — auth: load the event, check canEdit
+// DELETE ?id=X                         — auth: load the event, check can(…, "edit-record")
 //      against its stored ownerId, then tombstone it.
 
 import { randomBytes } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { canEdit, getSessionUser } from "@/lib/auth";
+import { can, getSessionUser } from "@/lib/auth";
 import {
   deleteEvent,
   eventsSharingDate,
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
   if (ownerId) {
     const user = await getSessionUser();
     if (!user) return NextResponse.json({ error: "Sign in first" }, { status: 401 });
-    if (!canEdit(user, ownerId)) {
+    if (!can(user, "edit-record", ownerId)) {
       return NextResponse.json({ error: "You don't manage that listing" }, { status: 403 });
     }
     const events = (await getEvents()).filter((e) => e.ownerId === ownerId);
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
 
   const ownerId = typeof body.ownerId === "string" ? body.ownerId : "";
   if (!ownerId) return NextResponse.json({ error: "ownerId required" }, { status: 400 });
-  if (!canEdit(user, ownerId)) {
+  if (!can(user, "edit-record", ownerId)) {
     return NextResponse.json({ error: "You don't manage that listing" }, { status: 403 });
   }
 
@@ -134,7 +134,7 @@ export async function POST(request: NextRequest) {
     // the client-sent id alone.
     const existing = await getEvent(body.id);
     if (!existing) return NextResponse.json({ error: "Event not found" }, { status: 404 });
-    if (!canEdit(user, existing.ownerId ?? "")) {
+    if (!can(user, "edit-record", existing.ownerId ?? "")) {
       return NextResponse.json({ error: "You don't manage that event" }, { status: 403 });
     }
     event = {
@@ -187,7 +187,7 @@ export async function DELETE(request: NextRequest) {
 
   const existing = await getEvent(id);
   if (!existing) return NextResponse.json({ error: "Event not found" }, { status: 404 });
-  if (!canEdit(user, existing.ownerId ?? "")) {
+  if (!can(user, "edit-record", existing.ownerId ?? "")) {
     return NextResponse.json({ error: "You don't manage that event" }, { status: 403 });
   }
 

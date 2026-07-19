@@ -11,11 +11,17 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ viewId: st
   if (!view) {
     return NextResponse.json({ error: "unknown view" }, { status: 404 });
   }
-  // Unpublished (draft) views are only served to admins.
+  // Unpublished (draft) views are only served to admins. This branch alone is
+  // gated — a published view stays fully public, no session required.
+  //
+  // The gate's VERDICT is consumed here but its response is deliberately not
+  // returned: a draft view's very existence is non-public, so answering 401/403
+  // would confirm the id to anyone probing. 404 is the same answer an unknown
+  // id gets, which is the point. (Imported lazily so the public path above
+  // never pulls the auth/DB module graph in at module scope.)
   if (!view.published) {
-    const { getSessionUser } = await import("@/lib/auth");
-    const user = await getSessionUser();
-    if (user?.role !== "admin") {
+    const { requireAdmin } = await import("@/lib/auth");
+    if (await requireAdmin()) {
       return NextResponse.json({ error: "not found" }, { status: 404 });
     }
   }

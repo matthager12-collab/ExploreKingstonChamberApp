@@ -137,7 +137,19 @@ export function JoinForm() {
         <input name="name" required className={inputClass} />
       </Field>
       <Field label="Email">
-        <input name="email" type="email" required className={inputClass} />
+        <input
+          name="email"
+          type="email"
+          required
+          aria-describedby="join-email-hint"
+          className={inputClass}
+        />
+        {/* Invites can be bound to a specific address (E06), and admin invites
+            always are. Saying so here turns "This invite is bound to a
+            different email address" from a dead end into an obvious fix. */}
+        <p id="join-email-hint" className="mt-1 text-xs text-ink-soft">
+          If the Chamber sent your invite to a particular address, use that one.
+        </p>
       </Field>
       <Field label="Password (8+ characters)">
         <input
@@ -149,7 +161,11 @@ export function JoinForm() {
           className={inputClass}
         />
       </Field>
-      {error && <p className="text-sm font-medium text-coral-deep">{error}</p>}
+      {error && (
+        <p role="alert" className="text-sm font-medium text-coral-deep">
+          {error}
+        </p>
+      )}
       <button type="submit" disabled={busy} className={buttonClass}>
         {busy ? "Creating…" : "Create account"}
       </button>

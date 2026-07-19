@@ -12,7 +12,7 @@
 // editor UI; these handlers re-check because API routes bypass layouts.
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUser, requireAdmin } from "@/lib/auth";
 import type {
   FeatureKind,
   MapFeature,
@@ -51,21 +51,9 @@ function isLatLng(p: unknown): p is [number, number] {
   );
 }
 
-/** Admin gate: returns the user when allowed, else the 401/403 response. */
-async function requireAdmin(): Promise<
-  { ok: true; user: { name: string; email: string } } | { ok: false; res: NextResponse }
-> {
-  const user = await getSessionUser();
-  if (!user) return { ok: false, res: NextResponse.json({ error: "Sign in first" }, { status: 401 }) };
-  if (user.role !== "admin") {
-    return { ok: false, res: NextResponse.json({ error: "Chamber admins only" }, { status: 403 }) };
-  }
-  return { ok: true, user };
-}
-
 export async function GET(request: NextRequest) {
-  const gate = await requireAdmin();
-  if (!gate.ok) return gate.res;
+  const denied = await requireAdmin();
+  if (denied) return denied;
 
   const view = request.nextUrl.searchParams.get("view");
   const features = await getMapFeatures();
@@ -75,8 +63,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const gate = await requireAdmin();
-  if (!gate.ok) return gate.res;
+  const denied = await requireAdmin();
+  if (denied) return denied;
+  // The gate proved a session exists — this only re-reads it for the audit actor.
+  const actor = (await getSessionUser())!.email;
 
   let body: Record<string, unknown>;
   try {
@@ -261,7 +251,7 @@ export async function POST(request: NextRequest) {
   };
 
   try {
-    await saveMapFeature(feature, { actor: gate.user.email, source: "admin" });
+    await saveMapFeature(feature, { actor, source: "admin" });
   } catch (err) {
     if (err instanceof RecordValidationError) {
       return NextResponse.json({ error: err.message }, { status: 400 });
@@ -272,8 +262,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const gate = await requireAdmin();
-  if (!gate.ok) return gate.res;
+  const denied = await requireAdmin();
+  if (denied) return denied;
+  const actor = (await getSessionUser())!.email;
 
   const id = request.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
@@ -283,7 +274,7 @@ export async function DELETE(request: NextRequest) {
   }
 
   try {
-    await deleteMapFeature(id, { actor: gate.user.email, source: "admin" });
+    await deleteMapFeature(id, { actor, source: "admin" });
   } catch (err) {
     if (err instanceof RecordValidationError) {
       return NextResponse.json({ error: err.message }, { status: 400 });

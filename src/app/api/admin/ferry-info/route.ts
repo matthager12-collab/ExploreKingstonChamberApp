@@ -10,7 +10,7 @@
 // editor UI; these handlers re-check because API routes bypass layouts.
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUser, requireAdmin } from "@/lib/auth";
 import {
   FERRY_INFO_IDS,
   getFerryInfoRecords,
@@ -51,18 +51,6 @@ function strList(v: unknown): string[] {
 function httpUrl(v: unknown): string | undefined {
   const s = str(v);
   return /^https?:\/\//.test(s) ? s : undefined;
-}
-
-/** Admin gate: returns the user when allowed, else the 401/403 response. */
-async function requireAdmin(): Promise<
-  { ok: true; user: { name: string; email: string } } | { ok: false; res: NextResponse }
-> {
-  const user = await getSessionUser();
-  if (!user) return { ok: false, res: NextResponse.json({ error: "Sign in first" }, { status: 401 }) };
-  if (user.role !== "admin") {
-    return { ok: false, res: NextResponse.json({ error: "Chamber admins only" }, { status: 403 }) };
-  }
-  return { ok: true, user };
 }
 
 function bad(error: string): NextResponse {
@@ -127,15 +115,17 @@ function buildSources(doc: unknown): Source[] | string {
 /* --------------------------------- handlers -------------------------------- */
 
 export async function GET() {
-  const gate = await requireAdmin();
-  if (!gate.ok) return gate.res;
+  const denied = await requireAdmin();
+  if (denied) return denied;
   const records = await getFerryInfoRecords();
   return NextResponse.json({ records });
 }
 
 export async function POST(request: NextRequest) {
-  const gate = await requireAdmin();
-  if (!gate.ok) return gate.res;
+  const denied = await requireAdmin();
+  if (denied) return denied;
+  // The gate proved a session exists — this only re-reads it for the audit actor.
+  const actor = (await getSessionUser())!.email;
 
   let body: Record<string, unknown>;
   try {
@@ -165,7 +155,7 @@ export async function POST(request: NextRequest) {
 
   try {
     await saveFerryInfoRecord(id as FerryInfoId, clean, {
-      actor: gate.user.email,
+      actor,
       source: "admin",
     });
   } catch (err) {

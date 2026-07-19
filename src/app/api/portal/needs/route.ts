@@ -3,14 +3,14 @@
 // GET  ?onDate=YYYY-MM-DD[&excludeId=] — public: other events on that
 //        Pacific calendar date (the deconfliction check shown before an
 //        org commits to a date).
-// GET  ?charityId=                     — auth + canEdit: that org's needs.
+// GET  ?charityId=                     — auth + can(…, "edit-record"): that org's needs.
 // POST                                 — create/update a need, or
 //        { id, action: "slots", delta: +1|-1 } for the quick signup stepper.
-// DELETE ?id=                          — auth + canEdit on the need's org.
+// DELETE ?id=                          — auth + can(…, "edit-record") on the need's org.
 
 import { randomBytes } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { canEdit, getSessionUser } from "@/lib/auth";
+import { can, getSessionUser } from "@/lib/auth";
 import {
   deleteVolunteerNeed,
   getVolunteerNeeds,
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
   if (charityId) {
     const user = await getSessionUser();
     if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
-    if (!canEdit(user, charityId)) {
+    if (!can(user, "edit-record", charityId)) {
       return NextResponse.json({ error: "not allowed" }, { status: 403 });
     }
     const needs = (await getVolunteerNeeds()).filter((n) => n.charityId === charityId);
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
     }
     const need = (await getVolunteerNeeds()).find((n) => n.id === id);
     if (!need) return NextResponse.json({ error: "shift not found" }, { status: 404 });
-    if (!canEdit(user, need.charityId)) {
+    if (!can(user, "edit-record", need.charityId)) {
       return NextResponse.json({ error: "not allowed to edit this shift" }, { status: 403 });
     }
     const updated: VolunteerNeed = {
@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
     // Update: ownership comes from the stored record, never the client.
     const existing = (await getVolunteerNeeds()).find((n) => n.id === body.id);
     if (!existing) return NextResponse.json({ error: "shift not found" }, { status: 404 });
-    if (!canEdit(user, existing.charityId)) {
+    if (!can(user, "edit-record", existing.charityId)) {
       return NextResponse.json({ error: "not allowed to edit this shift" }, { status: 403 });
     }
     id = existing.id;
@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
   } else {
     charityId = typeof body.charityId === "string" ? body.charityId : "";
     if (!charityId) return NextResponse.json({ error: "charityId required" }, { status: 400 });
-    if (!canEdit(user, charityId)) {
+    if (!can(user, "edit-record", charityId)) {
       return NextResponse.json(
         { error: "not allowed to add shifts for this organization" },
         { status: 403 },
@@ -181,7 +181,7 @@ export async function DELETE(request: NextRequest) {
 
   const need = (await getVolunteerNeeds()).find((n) => n.id === id);
   if (!need) return NextResponse.json({ error: "shift not found" }, { status: 404 });
-  if (!canEdit(user, need.charityId)) {
+  if (!can(user, "edit-record", need.charityId)) {
     return NextResponse.json({ error: "not allowed to delete this shift" }, { status: 403 });
   }
   try {

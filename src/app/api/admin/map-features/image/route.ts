@@ -6,7 +6,7 @@
 // 401 signed out · 403 signed in but not admin.
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import { saveFeatureImage } from "@/lib/stores/map-store";
 
 const MAX_BYTES = 8 * 1024 * 1024; // ~8MB
@@ -19,15 +19,6 @@ const TYPE_EXT: Record<string, string> = {
   "image/webp": "webp",
   "image/gif": "gif",
 };
-
-async function requireAdmin(): Promise<NextResponse | null> {
-  const user = await getSessionUser();
-  if (!user) return NextResponse.json({ error: "Sign in first" }, { status: 401 });
-  if (user.role !== "admin") {
-    return NextResponse.json({ error: "Chamber admins only" }, { status: 403 });
-  }
-  return null;
-}
 
 export async function POST(request: NextRequest) {
   const denied = await requireAdmin();

@@ -1,38 +1,35 @@
 // Auth gate for EVERYTHING under /admin (insights, hunts, accounts, …).
 //
 // Rules:
-//  - role "admin"  → allowed.
-//  - no users yet  → allowed with a loud amber banner (pre-setup grace so a
-//    fresh local install can reach /admin before the first admin account is
-//    created at /portal/setup — otherwise bootstrap could lock itself out).
-//  - anyone else   → redirect to /portal (login or their own dashboard).
+//  - role "admin" → allowed.
+//  - anyone else, INCLUDING an unauthenticated visitor on a fresh install →
+//    redirect to /portal.
 //
-// Pages below may still re-check the role themselves — defense in depth.
+// E06 removed the "pre-setup grace" that used to leave /admin world-readable
+// (behind an amber banner) whenever zero users existed. It was the audit's
+// highest-risk finding, because the two conditions that trigger it are the
+// same event: anything that empties the user store — a bad restore, a failed
+// migration, a dropped table — simultaneously re-arms /portal/setup AND throws
+// /admin open to the public, at exactly the moment the operator is distracted
+// by the outage.
+//
+// Bootstrap still works without it: /portal redirects to /portal/setup when no
+// users exist, so the first-admin flow is reachable from the front door and
+// /admin is never the entry point. (/portal/setup is itself gated by
+// SETUP_TOKEN — see src/app/api/auth/setup/route.ts.)
+//
+// This layout is defense in depth, not the only gate: src/proxy.ts turns away
+// unauthenticated requests at the request boundary, and every /api/admin route
+// re-checks the role itself, because route handlers bypass layouts entirely.
 
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
-import { getSessionUser, hasAnyUsers } from "@/lib/auth";
+import { getSessionUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const user = await getSessionUser();
   if (user?.role === "admin") return <>{children}</>;
-
-  if (!(await hasAnyUsers())) {
-    return (
-      <>
-        <div className="border-b border-amber-400 bg-amber-100 px-4 py-3 text-center text-sm font-semibold text-amber-900">
-          No accounts yet — /admin is open until the first admin is created at{" "}
-          <a href="/portal/setup" className="underline underline-offset-2">
-            /portal/setup
-          </a>
-          .
-        </div>
-        {children}
-      </>
-    );
-  }
-
   redirect("/portal");
 }

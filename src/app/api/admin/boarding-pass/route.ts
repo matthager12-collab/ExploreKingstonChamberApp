@@ -10,7 +10,7 @@
 // this handler re-checks because API routes bypass layouts.
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUser, requireAdmin } from "@/lib/auth";
 import { getBoardingPassStatus } from "@/lib/wsf";
 import {
   clearBoardingPassOverride,
@@ -22,18 +22,6 @@ import { RecordValidationError } from "@/lib/db/store-schemas";
 
 export const dynamic = "force-dynamic";
 
-/** Admin gate: returns the user when allowed, else the 401/403 response. */
-async function requireAdmin(): Promise<
-  { ok: true; user: { name: string; email: string } } | { ok: false; res: NextResponse }
-> {
-  const user = await getSessionUser();
-  if (!user) return { ok: false, res: NextResponse.json({ error: "Sign in first" }, { status: 401 }) };
-  if (user.role !== "admin") {
-    return { ok: false, res: NextResponse.json({ error: "Chamber admins only" }, { status: 403 }) };
-  }
-  return { ok: true, user };
-}
-
 async function snapshot() {
   const [override, effective] = await Promise.all([
     getBoardingPassOverride(),
@@ -43,14 +31,16 @@ async function snapshot() {
 }
 
 export async function GET() {
-  const gate = await requireAdmin();
-  if (!gate.ok) return gate.res;
+  const denied = await requireAdmin();
+  if (denied) return denied;
   return NextResponse.json(await snapshot());
 }
 
 export async function POST(request: NextRequest) {
-  const gate = await requireAdmin();
-  if (!gate.ok) return gate.res;
+  const denied = await requireAdmin();
+  if (denied) return denied;
+  // The gate proved a session exists — this only re-reads it to attribute the pin.
+  const user = (await getSessionUser())!;
 
   let body: { action?: unknown };
   try {
@@ -60,8 +50,8 @@ export async function POST(request: NextRequest) {
   }
 
   const action = typeof body.action === "string" ? body.action : "";
-  const setBy = gate.user.name || gate.user.email || "admin";
-  const meta = { actor: gate.user.email, source: "admin" } as const;
+  const setBy = user.name || user.email || "admin";
+  const meta = { actor: user.email, source: "admin" } as const;
 
   try {
     if (action === "on") await setBoardingPassOverride(true, setBy, undefined, meta);

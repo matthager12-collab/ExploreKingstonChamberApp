@@ -9,7 +9,7 @@
 // this handler re-checks because API routes bypass layouts.
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUser, requireAdmin } from "@/lib/auth";
 import {
   getFerryPredictionEnabled,
   getFerryPredictionSetting,
@@ -18,17 +18,6 @@ import {
 import { RecordValidationError } from "@/lib/db/store-schemas";
 
 export const dynamic = "force-dynamic";
-
-async function requireAdmin(): Promise<
-  { ok: true; user: { name: string; email: string } } | { ok: false; res: NextResponse }
-> {
-  const user = await getSessionUser();
-  if (!user) return { ok: false, res: NextResponse.json({ error: "Sign in first" }, { status: 401 }) };
-  if (user.role !== "admin") {
-    return { ok: false, res: NextResponse.json({ error: "Chamber admins only" }, { status: 403 }) };
-  }
-  return { ok: true, user };
-}
 
 async function snapshot() {
   const [enabled, setting] = await Promise.all([
@@ -39,14 +28,16 @@ async function snapshot() {
 }
 
 export async function GET() {
-  const gate = await requireAdmin();
-  if (!gate.ok) return gate.res;
+  const denied = await requireAdmin();
+  if (denied) return denied;
   return NextResponse.json(await snapshot());
 }
 
 export async function POST(request: NextRequest) {
-  const gate = await requireAdmin();
-  if (!gate.ok) return gate.res;
+  const denied = await requireAdmin();
+  if (denied) return denied;
+  // The gate proved a session exists — this only re-reads it to attribute the flip.
+  const user = (await getSessionUser())!;
 
   let body: { enabled?: unknown };
   try {
@@ -59,8 +50,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await setFerryPredictionEnabled(body.enabled, gate.user.name || gate.user.email || "admin", {
-      actor: gate.user.email,
+    await setFerryPredictionEnabled(body.enabled, user.name || user.email || "admin", {
+      actor: user.email,
       source: "admin",
     });
   } catch (err) {

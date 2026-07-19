@@ -22,7 +22,7 @@ A tourism web app for Kingston, WA (unincorporated Kitsap County; the Edmonds–
 **Core architectural decisions:**
 
 - **Dual-backend persistence seam (§3) — the central architectural fact.** Every store branches on env presence; nothing above the store modules changes. Local / persistent-disk hosts write JSON/JSONL under `DATA_DIR` (default `.data/`); on Vercel-style serverless the same stores use Neon Postgres, Vercel Blob, and Upstash Redis, all auto-detected. **Phase 1 (filesystem) is the live production home** (Render, `/data` disk). *(Superseded by E05: structured data is Postgres-only — `record` + append tables, every write through the audited zod choke point `src/lib/db/records.ts`, `DATABASE_URL` required (health 503s without it); the `DATA_DIR` disk keeps only images/hunt photos until E15.)*
-- **Self-hosted auth (§4).** Invite-based accounts, scrypt password hashes, stateless HMAC-signed session cookies, rate-limited login/setup/redeem, self-service and admin password flows. No third-party auth.
+- **Self-hosted auth (§4).** Invite-based accounts, scrypt password hashes, stateless HMAC-signed session cookies carrying a revocation claim, five least-privilege roles over an org entity, invite expiry/email-binding/revoke, a request-boundary proxy gate, rate-limited login/setup/redeem, self-service and admin password flows. No third-party auth.
 - **Fail soft everywhere (§5).** Every external dependency (WSDOT, NOAA, NWS, webcams, the stores themselves) degrades to a bundled fallback or a silent no-op, never an error page. Non-live data is always labelled (`live: boolean`, "estimate", "Schedule only").
 - **Privacy-first analytics.** Cookie-less pageview/outbound tracking with server-side coarse geo; opt-in geo-pings rounded to ~100 m and bucketed into named areas; an anonymous survey. No PII, no IP storage.
 - **Server components by default.** Client components are deliberate islands (§11) — anything needing the browser clock, geolocation, Leaflet, localStorage, or form state.
@@ -77,7 +77,7 @@ Header contract: *"Every feature reads these types; data adapters in src/lib/dat
 - **`MapZone` + `ParkingRule`** (`src/lib/data/parking.ts`): the parking dataset. `rule: free-2hr | free-unrestricted | paid | park-and-ride-24h | prohibited | load-zone | permit`; **`confidence: "verified" | "probable" | "unverified"`** with `sourceNote` — a first-class product feature (badges, italic caveats, popup captions; "probable" curb entries all trace to the 2015 county study). `center: [lat,lng]`, optional `polygon`.
 - **Ferry-info facts** (`src/lib/data/ferry-info.ts`): `FerryPayment`, `BoardingPass`, `Source`, `CASH_TIPS`, and the `FerryInfo` assembly — structured, admin-editable (§8).
 - **Ferry forecast model types** (`src/lib/ferry-forecast.ts`): `BusyLevel`, `TravelMode`, `EmpiricalBucket`/`EmpiricalTable`, `ForecastAt`, `ForecastPoint`, `DayExtreme`, `LevelMeta` (§6).
-- **Auth** — `User`/`InviteCode`/`Role` (`src/lib/auth.ts`, §4).
+- **Auth** — `SessionUser`/`OrgRow`/`InviteRow`/`Role` (`src/lib/auth/`, §4); tables in `src/lib/db/auth-schema.ts`.
 - **Hunt store** — `StoredHunt`/`StoredHuntStop`/`AdminHunt`/`HuntSubmission` (`src/lib/hunt-store.ts`, §3).
 - **Analytics/survey** — `AnalyticsEvent`/`AnalyticsGeo`/`AreaBox`/`AnalyticsSummary` (`analytics-store.ts`), `SurveyStore`/`SurveySummary` (`survey-store.ts`).
 - **Side** — `WaterSide` (`src/lib/side.ts`, §7).
@@ -168,55 +168,137 @@ Server-only (touches the filesystem; `import type` is fine anywhere). Dual-backe
 
 ---
 
-## 4. Authentication & authorization (`src/lib/auth.ts`)
+## 4. Authentication & authorization (`src/lib/auth/`)
 
-Self-hosted, server-only (node:crypto + fs + `next/headers`). Invite-based accounts, scrypt hashes, stateless HMAC cookies. Dual-backend (`hasDb()` per call). *(Superseded by E05: Postgres-only — users/invites are `record` rows; no `hasDb()` branch.)*
+Self-hosted, server-only. Invite-based accounts, scrypt hashes, stateless
+HMAC cookies, Postgres-backed. No third-party auth provider or IdP — that was
+rejected by the audit and is binding (decisions doc §4).
+
+**E06 restructured the single `src/lib/auth.ts` into a directory.** The split is
+by what each part is allowed to depend on, which is what makes the pieces
+reusable:
+
+| Module | Contains | Depends on |
+|---|---|---|
+| `tokens.ts` | password hashing, session-token make/verify, cookie attrs | **nothing** — pure `node:crypto` |
+| `authz.ts` | the five roles, `can()`, gate response shapes | nothing (pure, synchronous) |
+| `identity.ts` | users/orgs/invites as business operations (the rules) | `db/auth-store.ts` |
+| `session.ts` | cookie → `SessionUser`, and the route gates | `next/headers`, `identity` |
+| `index.ts` | the barrel every consumer imports (`@/lib/auth`) | all of the above |
+
+`tokens.ts` is pure *deliberately*: `src/proxy.ts` must verify a token without
+touching the database, and `tests/server/global-setup.ts` needs `hashPassword`
+in a plain-Node context. Before E06 that file hand-copied the scrypt logic
+because `auth.ts` imported `next/headers` at module scope.
+
+Table SQL lives in `src/lib/db/auth-store.ts`, not in `src/lib/auth/` — only
+`src/lib/db/**` may import the Postgres client (`db-client-only-via-db-layer`
+in `.dependency-cruiser.cjs`). `identity.ts` is the domain layer over it, the
+same shape as `json-store.ts` → `records.ts`.
 
 ### 4.1 Passwords
 - `hashPassword`: 16-byte hex salt, `scryptSync(pw, salt, 64)`, stored `scrypt$<salt>$<hash>`.
 - `verifyPassword`: splits on `$`, requires scheme `scrypt`, recomputes, `timingSafeEqual` after a length check. Any malformed value → `false`.
+- **Unchanged from v1 byte-for-byte.** E06 ships no rehash migration, so every stored hash keeps verifying. A fixture in `tests/unit/auth-v2-identity.test.ts` pins a v1-format hash to catch any drift.
 
-### 4.2 Session token — stateless HMAC cookie
-- **Format:** `base64url(JSON{uid,exp}) + "." + base64url(HMAC-SHA256(payload, AUTH_SECRET))`. `exp` = `Date.now() + 30 days`.
-- **Verify** (`parseSessionToken`): split on `.`; recompute; length-guarded `timingSafeEqual`; parse; enforce `exp >= now`. No server-side session list.
-- **Cookie** (`sessionCookie`): name **`vk-session`**, `httpOnly`, `sameSite:"lax"`, `path:"/"`, `maxAge` 30 days, and `secure` in production (`NODE_ENV==="production"` → the `Secure` attribute; off in dev so `http://localhost` login works).
-- `getSessionUser()` reads the cookie, parses, and looks the uid up in the live user list — so **deleting a user invalidates their outstanding tokens** despite statelessness.
-- `secret()` **throws** if `AUTH_SECRET` is missing — auth cannot run unsigned.
+### 4.2 Session token — stateless HMAC cookie with a revocation claim
+- **Format:** `base64url(JSON{uid,sv,exp}) + "." + base64url(HMAC-SHA256(payload, AUTH_SECRET))`. `exp` = `Date.now() + 30 days`.
+- **`sv` is new in E06** — the user's `session_version`. `getSessionUser()` rejects the token when it does not equal the stored value, so bumping that integer invalidates **every outstanding cookie for one user** without any server-side session store.
+- Bumped by: self password change, admin reset, disable, enable, and role change.
+- **Tokens without `sv` are rejected.** Pre-E06 cookies cannot be versioned, therefore cannot be revoked, therefore are not honored — this forces one re-login for everyone at the auth-v2 deploy (see `docs/OPERATIONS.md`).
+- **Verify** (`verifySessionToken`, pure): split, recompute, length-guarded `timingSafeEqual`, parse, enforce `exp >= now` and an integer `sv`. Signature and expiry ONLY — it cannot see `disabled` or the stored `sv`.
+- **Cookie** (`sessionCookie`): name **`vk-session`**, `httpOnly`, `sameSite:"lax"`, `path:"/"`, `maxAge` 30 days, `secure` in production. Unchanged; renaming it is a non-goal.
+- `getSessionUser()` re-reads the user every request and rejects: unknown uid, `disabled`, and `sv` mismatch.
 
-### 4.3 Role model & `canEdit`
-`Role = "business" | "nonprofit" | "admin"`. `User.linkedIds` = the restaurant/charity ids the account manages. The single authz primitive:
+### 4.3 Role model, orgs, and `can()`
+Five least-privilege roles (`src/lib/auth/roles.ts` — a zero-import module, so
+client components share the vocabulary without pulling drizzle into the bundle):
+
+| Role | May do |
+|---|---|
+| `admin` | everything: accounts, invites, backups, all content |
+| `moderator` | the moderation queue (E08). Hard 403 on accounts, invites, resets, backup |
+| `org-editor` | their org's profile, events, volunteer needs (replaces `nonprofit`) |
+| `member-business` | their org's linked listings and events (replaces `business`) |
+| `viewer` | read-only reporting/grant views (E10). No writes anywhere |
+
+`moderator` and `viewer` are provisioned and **enforced** in E06 — they sign in
+and get correct 403s — but have no UI surfaces until E08/E10.
+
+**Orgs.** An `orgs` row sits between users and content. `linked_ids` moved off
+the user onto the org, so permission follows the organization and a second
+account at the same business inherits it. Users carry `org_id`; Chamber-staff
+roles carry `NULL` (enforced by the `users_org_binding` check constraint).
+`orgs.external_ids` (E16, AMS member id) and `orgs.entitlements` (E19, paid
+tiers) exist and are empty.
+
+`canEdit(user, id)` is replaced by:
 
 ```ts
-export function canEdit(user: User, id: string): boolean {
-  return user.role === "admin" || user.linkedIds.includes(id);
-}
+can(user: AuthSubject, action: Action, resource?: Resource): boolean
 ```
 
-Admins edit everything; others exactly their linked ids. No finer grain anywhere.
+Actions are a closed set: `edit-record`, `manage-accounts`, `moderate`,
+`view-reports`, `manage-site`. Adding one without a rule is a **compile error**
+(the `never` exhaustiveness branch), so a new action fails closed.
+
+`can()` is synchronous and pure — portal server pages call it inline while
+rendering, and the data it needs (the org's linked ids and entitlements) is
+joined once by `getSessionUser()`.
+
+**Entitlements narrow, never widen.** `can()` consults `org.entitlements`
+structurally so E19 wires tiers without a signature change, but an entitlement
+may only turn an allowed action into a denied one. `roleAllows()` is therefore
+the permanent ceiling: since E16 syncs that jsonb blob from an external AMS,
+a widening contract would make a bad sync a privilege escalation. Full matrix
+(5 roles × 5 actions × 3 resource contexts) in `tests/unit/authz-matrix.test.ts`.
+
+**Stored-record-decides is preserved.** Every portal route checks authorization
+against the loaded record's owner, never a client-sent id.
 
 ### 4.4 Invite lifecycle
-1. **Mint** (`POST /api/portal/invites`, admin): 12-hex code, validated `linkedIds` against the *real* stores; admin invites forced `linkedIds:[]`; note ≤ 200 chars.
-2. **Redeem** (`POST /api/auth/redeem` → `redeemInvite`): unused code required; creates the user (email unique, case-insensitive) and marks `usedBy`. One-time; used codes kept as an audit record. Invites don't expire.
-3. `/admin/accounts` generates a paste-ready join blurb.
+1. **Mint** (`POST /api/portal/invites`, admin): `randomBytes(12)` hex code; `linkedIds` validated against the *real* stores; note ≤ 200 chars; **`expires_at` = now + 14 days**; optional **email binding**; either an existing `org_id` or a `new_org_name`+`new_org_kind` to create on redemption.
+2. **Redeem** (`POST /api/auth/redeem` → `redeemInvite`): the invite row is re-read `FOR UPDATE` inside the transaction that creates the org + user and burns the code, so a double-redeem serializes and the second attempt loses. Expired / revoked / used / unknown all return the SAME message — the endpoint is not an oracle for which codes exist.
+3. **Revoke** (`DELETE /api/portal/invites?code=`, admin): sets `revoked_at` on an un-redeemed code (FR-A09).
+4. `/admin/accounts` shows derived state (active / used / revoked / expired) and generates a paste-ready join blurb.
+
+Three invariants are enforced by the **database**, not app code, because an
+in-app check is a TOCTOU window and E16's AMS sync will be a second writer:
+
+- `users_email_lower_idx` — one account per email, case-insensitively.
+- `invites_admin_requires_email` — an admin invite must be email-bound, so a forwarded code can never be a bearer admin grant.
+- `invites_org_binding` — join XOR create, never both or neither.
 
 ### 4.5 First-run bootstrap
-- `POST /api/auth/setup` creates the **first** account (hard-coded `role:"admin"`, `linkedIds:[]`); 403 once `hasAnyUsers()`.
+- `POST /api/auth/setup` creates the **first** account (`role:"admin"`, `org_id: null`); 403 once any user exists, and 403 unless the request carries the operator-set **`SETUP_TOKEN`** (E01).
 - `/portal/setup` UI redirects to `/portal` once users exist; `/portal` redirects to `/portal/setup` while none.
-- **`/admin` no-users grace** (`src/app/admin/layout.tsx`): one server layout gates everything under `/admin` — role `admin` → allowed; **zero users → allowed with a loud amber banner** (so a fresh install can bootstrap); anyone else → `redirect("/portal")`.
+- **The `/admin` no-users grace is GONE (E06).** It previously left `/admin` world-readable behind an amber banner whenever the user store was empty — the audit's highest-risk finding, because the event that empties the store (bad restore, failed migration) is exactly the event that re-opened `/admin`, while the operator was distracted. Bootstrap still works: `/portal` is the front door and redirects to `/portal/setup`, so `/admin` is never the entry point.
 
-### 4.6 Self-service & admin password flows (added since v1)
-- **`PUT /api/auth/account`** — self-service profile (name/email; email uniqueness enforced), session-gated, rate-limited (`profile`, 10/window). Backs `/portal/account`.
-- **`POST /api/auth/password`** — self-service password change (`changeOwnPassword` verifies the current password; new ≥ 8 chars), session-gated, rate-limited (`pwchange`, 5/window per IP and per user).
-- **`POST /api/portal/users`** with `{action:"reset-password", userId}` — admin resets to a random temp password (`adminResetPassword`) returned **once** (`{ok, tempPassword}`); hashes are one-way, so a lost temp requires another reset.
+### 4.6 Account lifecycle & self-service
+- **`PUT /api/auth/account`** — self-service profile (name/email), session-gated, rate-limited (`profile`, 10/window).
+- **`POST /api/auth/password`** — self-service change (`changeOwnPassword` verifies the current password; new ≥ 8 chars), rate-limited (`pwchange`, 5/window per IP and per user). Bumps `session_version` and **sets a fresh cookie on the response** — otherwise the user would log themselves out by changing their own password, while every *other* session stays correctly dead.
+- **`POST /api/portal/users`** (admin) — `reset-password` (temp returned **once**; only the hash is persisted, and the temp is never audited), plus `disable`, `enable`, `set-role`, `delete`. All bump `session_version`, so a change takes effect on the target's next request rather than whenever their 30-day cookie expires.
+- **Last-admin guard:** disabling, deleting, or demoting the only *enabled* admin returns 400 with an explanation. Mechanical — it counts enabled admins rather than trusting the caller.
+- **`delete` is a hard delete.** Audit rows survive with the actor id intact: a dangling reference by design, because the trail must outlive the account.
+- **`GET /api/portal/users`** returns `role`, `disabled`, `lastLoginAt`, `orgId` (FR-A09's account list) via `toPublicUser()`, a type with **no `passwordHash` field at all** — hashes cannot leak by a careless spread.
 
 ### 4.7 Rate limiting (§3.1 `rate-limit.ts`)
-Login, first-run setup, and redeem are rate-limited (8/60 s default; setup 5), keyed by IP (`clientKey`) **and** by account dimension (`login:<email>`, `redeem:<code>`) so IP spoofing can't fully escape. Profile/password changes limited too. Upstash-shared in cloud mode, per-instance Map otherwise.
+Unchanged by E06 — every call site and key is ported as-is. Login, setup, and
+redeem are limited (8/60 s default; setup 5), keyed by IP (`clientKey`) **and**
+by account dimension (`login:<email>`, `redeem:<code>`) so IP rotation cannot
+fully escape. Profile/password changes limited too.
 
 ### 4.8 Page-level visibility gating (`src/lib/page-visibility.tsx`)
-Public pages call `await assertPageVisible("/hunt")` at the top of their server component. Hidden page + visitor → `notFound()` (clean 404); hidden page + admin → renders with `<HiddenPageBanner/>` for preview. `HIDEABLE_PAGES` (11 paths — ferry, eat, events, itineraries, stay, parking, webcams, map, give, hunt, about) is the single source of truth shared by the admin UI and the nav filter. Home, portal, admin, and api are deliberately not hideable.
+Public pages call `await assertPageVisible("/hunt")` at the top of their server component. Hidden page + visitor → `notFound()`; hidden page + admin → renders with `<HiddenPageBanner/>` for preview. `HIDEABLE_PAGES` (11 paths) is the single source of truth shared by the admin UI and the nav filter.
 
-### 4.9 Defense in depth
-The layout gate is not trusted alone: every `/api/portal/*` and `/api/admin/*` route independently calls `getSessionUser()` and re-checks role/ownership from the **stored** record; `/admin/accounts` re-checks role and strips `passwordHash` before serializing to the client. Portal `[id]` pages redirect server-side on `!canEdit`.
+### 4.9 Defense in depth — four layers
+1. **`src/proxy.ts`** (E06, Next 16 convention — *not* `middleware.ts`). Matches `/admin`, the signed-in `/portal` sub-pages, `/api/admin/*`, `/api/portal/*`. Verifies the cookie's signature + expiry only: **no database access**, per the Next docs' rule that a proxy must not rely on shared app state. It therefore cannot see `disabled`, `session_version`, or role — a valid signature is not a valid session. Unauthenticated: `/api/*` → 401 JSON, pages → redirect to `/portal`. Fails **closed** if `AUTH_SECRET` is missing.
+2. **The `/admin` layout** re-checks `role === "admin"`.
+3. **Every route handler** calls the shared gate — `requireRole()` / `requireCan()` / `requireUser()` from `@/lib/auth`. This is the **authoritative** check, because it is the only layer that can read the database. Route handlers bypass layouts entirely, so this is not optional.
+4. **CI tripwires:** the generated unauthenticated admin-walk (`tests/server/admin-walk.test.ts`) hits every `/api/admin/*` and `/api/portal/*` route with no cookie and asserts 401/403; the gate-coverage static test (`tests/unit/authz-gate-coverage.test.ts`) fails the build if any route file stops referencing a gate. E06 collapsed ~12 divergent private copies of the admin check into one import, and normalized the contract: **401 unauthenticated, 403 wrong role**, everywhere.
+
+**CSRF:** unchanged in E06. The posture is `SameSite=Lax` plus non-GET JSON
+mutations; no token framework was added (explicit non-goal).
 
 ---
 
@@ -515,7 +597,7 @@ src/lib/{data-dir,blob-store,rate-limit}.ts   image/rate seams (§3.1; db.ts del
 src/lib/db/records.ts               E05 audited zod write choke point (all structured writes)
 src/lib/stores/json-store.ts        seed+overlay core (§3.2; E05: thin delegate over db/records.ts)
 src/lib/stores/*                    12 store modules (§3.3)
-src/lib/auth.ts                     auth (§4; E05: Postgres-only)
+src/lib/auth/                       auth (§4; E06: tokens/authz/identity/session + roles)
 src/lib/page-visibility.tsx         page show/hide gate (§4.8)
 src/lib/wsf.ts | kitsap.ts | weather.ts | tides.ts   external adapters (§5)
 src/lib/ferry-status.ts             assembled snapshot (§5.5)

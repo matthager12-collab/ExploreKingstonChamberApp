@@ -1,0 +1,33 @@
+[
+  {
+    "id": "u-admin",
+    "email": "director@kingstonchamber.test",
+    "name": "Chamber Director",
+    "role": "admin",
+    "linkedIds": [],
+    "passwordHash": "scrypt$881d45f0c83fa67a5841b1ef57463f17$2e4b77792f1fc65e8a44b9538e0281a4268d7da53a98e5530c469fe50b0b1598a723445a3b018e28e8fbc3635849beaa8b7ba38c925e75f6381cb188a6dd70a6",
+    "createdAt": "2025-01-05T00:00:00.000Z"
+  },
+  {
+    "id": "u-cafe",
+    "email": "owner@driftwoodcafe.test",
+    "name": "Driftwood Cafe",
+    "role": "business",
+    "linkedIds": [
+      "driftwood-cafe"
+    ],
+    "passwordHash": "scrypt$7c8b27eea830f16bce1344eace8179ec$1e18b2dff253da069b92fbd56c0a48f9c82d0d6de12485001b8f09079ffab40dda969f18d9393fb3c1b50b518089da69067c142d25a90248b3a94559c9a9c93f",
+    "createdAt": "2025-03-11T00:00:00.000Z"
+  },
+  {
+    "id": "u-fb",
+    "email": "coord@kingstonfoodbank.test",
+    "name": "Kingston Food Bank",
+    "role": "nonprofit",
+    "linkedIds": [
+      "kingston-food-bank"
+    ],
+    "passwordHash": "scrypt$c092cb9eafbc66517434c3096afa97b2$27b7e7e43da0b9167729c420aea7d420ec75d2656e597258b48f3d56fc038b4161fd03a41f05ef0facd79a9e3ae8f818b3930f3b7175e15ada4662517b0e113c",
+    "createdAt": "2025-04-02T00:00:00.000Z"
+  }
+]

@@ -4,7 +4,7 @@
 // emails unique and falls back to the existing value when a field is blank.
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionUser, updateOwnProfile } from "@/lib/auth";
+import { AuthError, getSessionUser, updateOwnProfile } from "@/lib/auth";
 import { checkRateLimit, clientKey } from "@/lib/rate-limit";
 
 export async function PUT(request: NextRequest) {
@@ -36,8 +36,14 @@ export async function PUT(request: NextRequest) {
     const updated = await updateOwnProfile(user.id, { name, email });
     return NextResponse.json({ ok: true, name: updated.name, email: updated.email });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "could not update profile";
-    const status = message.includes("already uses") ? 409 : 400;
-    return NextResponse.json({ error: message }, { status });
+    if (err instanceof AuthError) {
+      // 409 specifically for the email clash — the client distinguishes it.
+      const status = err.message.includes("already uses") ? 409 : 400;
+      return NextResponse.json({ error: err.message }, { status });
+    }
+    // A raw DB error here would be the unique index firing on a race the
+    // pre-check missed; report it as the same conflict rather than a 500.
+    console.error("profile update failed", err);
+    return NextResponse.json({ error: "could not update profile" }, { status: 409 });
   }
 }

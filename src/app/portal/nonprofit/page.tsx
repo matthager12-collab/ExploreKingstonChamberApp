@@ -11,11 +11,11 @@ export const dynamic = "force-dynamic";
 export default async function NonprofitPortalPage() {
   const user = await getSessionUser();
   if (!user) redirect("/portal");
-  if (user.role !== "nonprofit" && user.role !== "admin") redirect("/portal");
+  if (user.role !== "org-editor" && user.role !== "admin") redirect("/portal");
 
   const all = await getCharities();
   const orgs =
-    user.role === "admin" ? all : all.filter((c) => user.linkedIds.includes(c.id));
+    user.role === "admin" ? all : all.filter((c) => user.editableIds.includes(c.id));
 
   return (
     <>

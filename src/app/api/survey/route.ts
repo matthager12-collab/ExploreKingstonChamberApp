@@ -58,13 +58,15 @@ export async function POST(request: NextRequest) {
 }
 
 /** Aggregate summary for the Chamber's LTAC/JLARC reporting. Admin-only —
- *  the same numbers render on the gated /admin dashboard. */
+ *  the same numbers render on the gated /admin dashboard. Only GET is gated:
+ *  POST is the anonymous visitor submission and must stay public. */
 export async function GET() {
-  const { getSessionUser } = await import("@/lib/auth");
-  const user = await getSessionUser();
-  if (user?.role !== "admin") {
-    return Response.json({ error: "admin only" }, { status: 403 });
-  }
+  // Imported lazily so the public POST path above never pulls the auth/DB
+  // module graph in at module scope.
+  const { requireAdmin } = await import("@/lib/auth");
+  const denied = await requireAdmin();
+  if (denied) return denied;
+
   const summary = await surveyStore.summarize();
   return Response.json(summary);
 }

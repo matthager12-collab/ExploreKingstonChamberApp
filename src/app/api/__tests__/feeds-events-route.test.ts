@@ -7,14 +7,18 @@ import { POST as portalEventsPost } from "@/app/api/portal/events/route";
 import { GET as feedsGet } from "@/app/api/feeds/events/route";
 
 vi.mock("@/lib/auth", () => ({
+  // E06 SessionUser shape: linked ids moved onto the org and surface as
+  // editableIds; the old per-id edit check became can(user, "edit-record", …).
   getSessionUser: vi.fn(async () => ({
     id: "u1",
     role: "admin",
-    linkedIds: [],
+    orgId: null,
+    editableIds: [],
+    entitlements: {},
     name: "Test",
     email: "t@t.t",
   })),
-  canEdit: vi.fn(() => true),
+  can: vi.fn(() => true),
 }));
 
 let tdb: TestDb;

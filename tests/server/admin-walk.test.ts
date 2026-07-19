@@ -1,12 +1,17 @@
 // Generated unauthenticated route-gating walk.
 //
 // There is no middleware.ts — every admin/portal endpoint gates itself by
-// convention (requireAdmin() or an inline session check). Nothing catches a
-// future route that forgets the gate. This test enumerates every
-// src/app/api/admin/** and src/app/api/portal/** route from disk, derives its
-// URL + exported methods, hits each one WITHOUT a session cookie, and asserts it
-// refuses (401/403). A new route is auto-covered; a route that forgets to gate
-// becomes a CI failure instead of a silent hole.
+// convention, calling a gate from @/lib/auth (E06 collapsed the ~12 hand-rolled
+// copies onto that one import). This test enumerates every src/app/api/admin/**
+// and src/app/api/portal/** route from disk, derives its URL + exported methods,
+// hits each one WITHOUT a session cookie, and asserts it refuses (401/403). A
+// new route is auto-covered; a route that forgets to gate becomes a CI failure
+// instead of a silent hole.
+//
+// This is the RUNTIME half of the guarantee — it needs a live server, so it
+// proves the gate actually fires. tests/unit/authz-gate-coverage.test.ts is the
+// static half: it reads the same files off disk and fails if one stops
+// referencing a shared gate at all. Together: the route is wired, and it works.
 
 import fs from "fs";
 import path from "path";
@@ -68,11 +73,19 @@ async function status(method: Method, urlPath: string): Promise<number> {
   return res.status;
 }
 
-// Public-by-design overrides (documented): the two portal calendar-deconfliction
-// GETs return 400 for a bare request (they need onDate or an owner id), not 401.
-function expectedFor(p: Pair): number[] {
-  if (p.method === "GET" && p.url === "/api/portal/events") return [400];
-  if (p.method === "GET" && p.url === "/api/portal/needs") return [400];
+// E06: there are no longer any public-by-design branches in these namespaces.
+//
+// The two portal calendar-deconfliction GETs used to answer 400 for a bare
+// unauthenticated request ("onDate or ownerId required") because the handler
+// parsed its params before checking the session — which told an anonymous
+// caller that the endpoint exists and what it wants. src/proxy.ts now refuses
+// at the request boundary, so they answer 401 like everything else and the
+// carve-out is gone.
+//
+// This expectation got STRICTER. If a future change makes something here
+// answer 400 again to an unauthenticated caller, that is a regression to
+// investigate, not a carve-out to re-add.
+function expectedFor(_p: Pair): number[] {
   return [401, 403];
 }
 
@@ -94,8 +107,19 @@ describe("admin routes reject unauthenticated callers", () => {
     },
   );
 
-  it("GET /api/admin/backup -> exactly 403 (crown jewels: bundle has password hashes; only gate is role!==admin)", async () => {
-    expect(await status("GET", "/api/admin/backup")).toBe(403);
+  // Pinned to an exact code rather than the generic walk's [401, 403]: this
+  // bundle carries password hashes, so "it refused somehow" is too weak an
+  // assertion to protect it.
+  //
+  // The expected code changed in E06. This route used to hand-roll its gate as
+  // a single `user?.role !== "admin"` check, which collapsed both failure modes
+  // onto 403 — signed-out and signed-in-but-wrong-role were indistinguishable.
+  // It now calls the shared gate, which separates them: no session is 401,
+  // wrong role is 403. This probe sends no cookie, so 401 is the contract.
+  // A 403 here would mean the server somehow recognized a session — which, on
+  // an unauthenticated request to the crown jewels, is exactly worth failing on.
+  it("GET /api/admin/backup -> exactly 401 (crown jewels: bundle has password hashes; unauthenticated is 401 under the E06 gate contract)", async () => {
+    expect(await status("GET", "/api/admin/backup")).toBe(401);
   });
 });
 

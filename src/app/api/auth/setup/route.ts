@@ -3,7 +3,7 @@
 
 import { timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { createUser, hasAnyUsers, makeSessionToken, sessionCookie } from "@/lib/auth";
+import { createFirstAdmin, hasAnyUsers, sessionCookie, tokenFor } from "@/lib/auth";
 import { checkRateLimit, clientKey } from "@/lib/rate-limit";
 
 /** Constant-time string compare (rejects unequal lengths without comparing). */
@@ -55,14 +55,14 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
-  const user = await createUser({
+  // createFirstAdmin re-checks hasAnyUsers() inside, so the bootstrap cannot
+  // be won twice by two concurrent requests slipping past the check above.
+  const user = await createFirstAdmin({
     email: body.email,
     name: body.name,
-    role: "admin",
-    linkedIds: [],
     password: body.password,
   });
   const res = NextResponse.json({ ok: true });
-  res.cookies.set(sessionCookie.name, makeSessionToken(user.id), sessionCookie.options);
+  res.cookies.set(sessionCookie.name, tokenFor(user), sessionCookie.options);
   return res;
 }

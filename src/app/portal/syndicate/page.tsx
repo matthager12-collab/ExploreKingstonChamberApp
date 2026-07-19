@@ -176,7 +176,7 @@ export default async function SyndicatePage() {
   const isAdmin = user.role === "admin";
   const listings: Listing[] = [
     ...restaurants
-      .filter((r) => isAdmin || user.linkedIds.includes(r.id))
+      .filter((r) => isAdmin || user.editableIds.includes(r.id))
       .map((r) => ({
         id: r.id,
         name: r.name,
@@ -185,7 +185,7 @@ export default async function SyndicatePage() {
         hoursVerified: r.hoursVerified,
       })),
     ...charities
-      .filter((c) => isAdmin || user.linkedIds.includes(c.id))
+      .filter((c) => isAdmin || user.editableIds.includes(c.id))
       .map((c) => ({ id: c.id, name: c.name, kind: "nonprofit" as const })),
   ];
 
