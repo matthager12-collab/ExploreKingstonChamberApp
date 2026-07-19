@@ -14,6 +14,7 @@
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { Itinerary } from "@/lib/types";
+import { SLUG_RE, firstZodMessage, itinerarySchema } from "@/lib/schemas";
 import { Badge, Card } from "@/components/ui";
 
 const INPUT =
@@ -96,42 +97,33 @@ function newDraft(): Draft {
   };
 }
 
-/** Client-side mirror of the server's validation — friendlier errors, same rules. */
+/** Draft → validated record via the shared itinerary schema (E07) — the same
+ *  rules the server enforces, surfaced before the round-trip. The client-only
+ *  stop `key` never reaches the record: the schema rebuilds stops from known
+ *  fields. */
 function buildRecord(draft: Draft): { record: Itinerary } | { error: string } {
   const slug = draft.slug.trim().toLowerCase();
-  if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(slug)) {
+  // Slug first, like always — a brand-new itinerary derives its id from it.
+  if (!SLUG_RE.test(slug)) {
     return {
       error: "Slug is required: lowercase letters, numbers, and dashes (e.g. beach-day).",
     };
   }
-  if (!draft.title.trim()) return { error: "The itinerary needs a title." };
-  if (draft.stops.length === 0) return { error: "Add at least one stop." };
-  for (let i = 0; i < draft.stops.length; i++) {
-    if (!draft.stops[i].title.trim()) return { error: `Stop ${i + 1} needs a title.` };
-  }
-  return {
-    record: {
-      id: draft.id || slug,
-      slug,
-      title: draft.title.trim(),
-      tagline: draft.tagline.trim(),
-      duration: draft.duration.trim(),
-      mode: draft.mode,
-      audience: draft.audienceText
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean),
-      stops: draft.stops.map((s) => {
-        const mapQuery = s.mapQuery.trim();
-        return {
-          time: s.time.trim(),
-          title: s.title.trim(),
-          description: s.description.trim(),
-          ...(mapQuery ? { mapQuery } : {}),
-        };
-      }),
-    },
-  };
+  const parsed = itinerarySchema.safeParse({
+    id: draft.id || slug,
+    slug,
+    title: draft.title,
+    tagline: draft.tagline,
+    duration: draft.duration,
+    mode: draft.mode,
+    audience: draft.audienceText
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean),
+    stops: draft.stops,
+  });
+  if (!parsed.success) return { error: firstZodMessage(parsed.error) };
+  return { record: parsed.data };
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
