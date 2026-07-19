@@ -6,10 +6,10 @@
 // domain API on top of this, exactly as src/lib/stores/json-store.ts delegates
 // to src/lib/db/records.ts.
 //
-// This module and records.ts are the ONLY writers of the append-only `audit`
-// table. Auth mutations and their audit rows go in ONE transaction — a
-// lifecycle change that committed without its trail would be worse than one
-// that failed outright.
+// This module, records.ts, and worklist.ts (E08) are the ONLY writers of the
+// append-only `audit` table. Auth mutations and their audit rows go in ONE
+// transaction — a lifecycle change that committed without its trail would be
+// worse than one that failed outright.
 //
 // Audit payloads here are built from an explicit ALLOWLIST (auditableUser),
 // never by dumping a row. records.ts redacts known-secret KEYS on the way out;
