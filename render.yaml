@@ -49,7 +49,13 @@ services:
       # E05 Postgres substrate: structured data lives in Neon. Value is set
       # ONLY in the dashboard (production at cutover, staging for rehearsal) —
       # never in this file. A release started without it fails /api/health
-      # (dbOk:false) and Render keeps the previous release serving.
+      # (dbOk:false) and 503s. NOTE: this does NOT keep the previous release
+      # serving. Both services mount a persistent disk, and a disk can be
+      # mounted by only ONE instance — so Render must stop the old instance
+      # before starting the new one. A release that never goes healthy takes
+      # the service DOWN. Verified on staging 2026-07-19: pushing the E06
+      # release to a service with no DATABASE_URL produced 502 on every path.
+      # Validate the URL from your laptop BEFORE pasting it here.
       - key: DATABASE_URL
         sync: false
 
@@ -112,7 +118,13 @@ services:
       # E05 Postgres substrate: structured data lives in Neon. Value is set
       # ONLY in the dashboard (production at cutover, staging for rehearsal) —
       # never in this file. A release started without it fails /api/health
-      # (dbOk:false) and Render keeps the previous release serving.
+      # (dbOk:false) and 503s. NOTE: this does NOT keep the previous release
+      # serving. Both services mount a persistent disk, and a disk can be
+      # mounted by only ONE instance — so Render must stop the old instance
+      # before starting the new one. A release that never goes healthy takes
+      # the service DOWN. Verified on staging 2026-07-19: pushing the E06
+      # release to a service with no DATABASE_URL produced 502 on every path.
+      # Validate the URL from your laptop BEFORE pasting it here.
       - key: DATABASE_URL
         sync: false
       # Fresh disk on first deploy has zero users — this bootstraps the

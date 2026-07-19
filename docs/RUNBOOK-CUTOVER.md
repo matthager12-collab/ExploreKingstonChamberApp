@@ -62,11 +62,44 @@ All of these must be true before scheduling the freeze:
    **The importer must exit 0** — or every QUARANTINE line must be
    individually acknowledged and noted here before you continue. (Exit 2 =
    quarantines exist; exit 1 = a source file didn't parse — stop entirely.)
-4. **[HUMAN]** Render dashboard → service `explore-kingston` → Environment →
-   add `DATABASE_URL` = the same production pooled URL → save (triggers a
-   deploy of the substrate release).
-5. Watch `/api/health` go **200 with `"dbOk":true`**. Render keeps the old
-   release serving until that happens — a mis-set URL fails closed.
+4. **PRE-FLIGHT — validate the URL from your laptop BEFORE pasting it into
+   Render.** Do not skip this. Paste the exact string you are about to enter,
+   in quotes, and confirm all three lines answer:
+
+   ```bash
+   URL='<the exact production pooled URL you are about to paste>'
+   psql "$URL" -c "select 1"                              # connects + authenticates
+   psql "$URL" -c "select count(*) from record"           # right database, has your data
+   psql "$URL" -c "select current_database(), inet_server_addr()"
+   ```
+
+   A typo, a truncated paste, a stale password, or the wrong Neon branch all
+   surface here — while the site is still up and nothing has changed.
+
+5. **[HUMAN]** Render dashboard → service `explore-kingston` → Environment →
+   add `DATABASE_URL` = that same validated URL → save (triggers a deploy of
+   the substrate release).
+
+6. Watch `/api/health` go **200 with `"dbOk":true`**.
+
+   > ⚠️ **A bad URL here takes the site DOWN — it does not fail closed.**
+   > An earlier version of this runbook said Render keeps the old release
+   > serving until the new one is healthy. **That is false for this service.**
+   > `explore-kingston` mounts a persistent disk (`data`), and a disk can be
+   > mounted by only ONE instance, so Render must stop the old instance before
+   > starting the new one. There is no old release still serving to fall back
+   > to: an unhealthy release means 502 on every path.
+   >
+   > Verified the hard way on 2026-07-19 — the E06 release was pushed to
+   > `explore-kingston-staging`, whose `DATABASE_URL` had never been set, and
+   > staging went 502 on every path rather than continuing to serve its
+   > previous release.
+   >
+   > **If it does go down:** re-check the env var first (a typo is the usual
+   > cause), and if you cannot fix it within your tolerance, use Render's
+   > **Rollback** to the previous deploy — that restores the pre-substrate
+   > release, which runs without `DATABASE_URL`. Keep the freeze on until you
+   > retry; the importer is idempotent, so a second run is safe.
 
 ## Verification
 

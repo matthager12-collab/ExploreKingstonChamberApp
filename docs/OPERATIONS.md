@@ -29,7 +29,11 @@ Phase-2 Vercel path, DNS, pre-launch checklist),
    parking overlay are all reproducible from git + `npm install`. Back up
    **both** Neon (PITR/branching) and `DATA_DIR`.
 2. **`DATABASE_URL` is required on every deploy** — `/api/health` reports
-   `dbOk:false` and 503s without it, so a mis-configured release fails closed.
+   `dbOk:false` and 503s without it. That gate is real, but it does NOT hold
+   back a bad release: both Render services mount a persistent disk, so the old
+   instance must stop before the new one starts. A release without a working
+   `DATABASE_URL` takes the service DOWN (verified on staging 2026-07-19).
+   Always validate the URL with `psql "<url>" -c "select 1"` before setting it.
    The remaining env-detected seams cover only images (Vercel Blob when
    `BLOB_READ_WRITE_TOKEN` is set, else the disk) and rate limiting (Upstash
    when set, else in-process). On Render only `DATABASE_URL` + `DATA_DIR` are

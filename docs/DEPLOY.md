@@ -23,7 +23,9 @@ map views/features — outside the code tree. Since E05, **structured data has
 exactly one home: Neon Postgres** (`record` + append tables; every write goes
 through the audited zod choke point `src/lib/db/records.ts`), and
 `DATABASE_URL` is required on every deploy — `/api/health` reports
-`dbOk:false` and 503s without it, so a mis-configured release fails closed.
+`dbOk:false` and 503s without it. **This does not mean a bad deploy is
+harmless** — see the persistent-disk warning below: an unhealthy release takes
+the service down rather than being held back.
 Only images and rate limiting still pick a backend by env presence; nothing
 above the store modules (routes, components, domain types) ever branches:
 
@@ -124,7 +126,15 @@ Blueprint that declares the Docker web service, a **1 GB Disk mounted at
    - `DATABASE_URL` — `sync: false` (E05); the Neon **pooled** connection
      string, entered in the dashboard, never in `render.yaml`. **Required**: a
      release booted without it fails `/api/health` (`dbOk:false`) and Render
-     keeps the previous release serving.
+     503s. **It does NOT keep the previous release serving.** The service
+     mounts a persistent disk, which only one instance can mount at a time, so
+     Render stops the old instance before starting the new one — an unhealthy
+     release means the service is DOWN, not held back. (Verified on staging
+     2026-07-19.) Validate the URL from your laptop first:
+
+     ```bash
+     psql "<the URL you are about to paste>" -c "select 1"
+     ```
    - **`BLOB_*` / `UPSTASH_*` stay unset on Render** — images live on the
      `/data` disk and the single instance uses the in-process rate limiter.
 3. **First deploy** runs automatically on blueprint create. Render builds the
