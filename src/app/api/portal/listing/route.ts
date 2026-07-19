@@ -10,32 +10,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { can, getSessionUser } from "@/lib/auth";
 import { getRestaurant, saveRestaurant } from "@/lib/stores/business-store";
 import { RecordValidationError } from "@/lib/db/store-schemas";
-import type { Restaurant, WeeklyHours } from "@/lib/types";
-
-const PLATFORMS = ["toast", "square", "doordash", "own-site", "phone-only"] as const;
-const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
-const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-/** Strict shape check: 7 day keys, each 0-2 spans of valid "HH:mm" pairs. */
-function parseWeeklyHours(v: unknown): WeeklyHours | null {
-  if (!v || typeof v !== "object") return null;
-  const out = {} as WeeklyHours;
-  for (const key of DAY_KEYS) {
-    const day = (v as Record<string, unknown>)[key];
-    if (!Array.isArray(day) || day.length > 2) return null;
-    const spans: [string, string][] = [];
-    for (const span of day) {
-      if (!Array.isArray(span) || span.length !== 2) return null;
-      const [open, close] = span as unknown[];
-      if (typeof open !== "string" || typeof close !== "string") return null;
-      if (!TIME_RE.test(open) || !TIME_RE.test(close) || open === close) return null;
-      spans.push([open, close]);
-    }
-    out[key] = spans;
-  }
-  return out;
-}
+import type { Restaurant } from "@/lib/types";
+// Field rules come from the shared domain schemas (E07, vk/domain-schemas):
+// parseWeeklyHours is the same strict shape check that lived here before, and
+// the whole merged record gets a belt-and-braces restaurantSchema parse
+// before it lands in the store.
+import {
+  ISO_DATE_RE,
+  ORDERING_PLATFORMS,
+  PRICE_LEVELS,
+  firstZodMessage,
+  parseWeeklyHours,
+  restaurantSchema,
+} from "@/lib/schemas";
 
 export async function PUT(request: NextRequest) {
   const user = await getSessionUser();
@@ -77,7 +64,7 @@ export async function PUT(request: NextRequest) {
     const v = body.orderingPlatform;
     if (v === "" || v == null) {
       next.orderingPlatform = undefined;
-    } else if (typeof v === "string" && (PLATFORMS as readonly string[]).includes(v)) {
+    } else if (typeof v === "string" && (ORDERING_PLATFORMS as readonly string[]).includes(v)) {
       next.orderingPlatform = v as Restaurant["orderingPlatform"];
     } else {
       return NextResponse.json({ error: "unknown orderingPlatform" }, { status: 400 });
@@ -86,10 +73,10 @@ export async function PUT(request: NextRequest) {
 
   if ("priceLevel" in body) {
     const v = Number(body.priceLevel);
-    if (v !== 1 && v !== 2 && v !== 3) {
+    if (!(PRICE_LEVELS as readonly number[]).includes(v)) {
       return NextResponse.json({ error: "priceLevel must be 1, 2, or 3" }, { status: 400 });
     }
-    next.priceLevel = v;
+    next.priceLevel = v as Restaurant["priceLevel"];
   }
 
   if ("tags" in body) {
@@ -111,7 +98,7 @@ export async function PUT(request: NextRequest) {
     next.weeklyHours = weekly;
   }
 
-  if (typeof body.hoursVerified === "string" && DATE_RE.test(body.hoursVerified)) {
+  if (typeof body.hoursVerified === "string" && ISO_DATE_RE.test(body.hoursVerified)) {
     next.hoursVerified = body.hoursVerified;
   }
 
@@ -125,6 +112,15 @@ export async function PUT(request: NextRequest) {
   }
 
   next.id = stored.id; // belt and braces — never client-controlled
+
+  // Belt-and-braces (E07): the merged record must satisfy the shared schema
+  // before it lands in the store. `next` itself is saved, so the merge
+  // semantics above stay exactly as they were.
+  const checked = restaurantSchema.safeParse(next);
+  if (!checked.success) {
+    return NextResponse.json({ error: firstZodMessage(checked.error) }, { status: 400 });
+  }
+
   try {
     await saveRestaurant(next, {
       actor: user.email,
