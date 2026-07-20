@@ -28,7 +28,7 @@ ones nothing pushes to a phone. Someone should glance at it weekly.
 **Secondary contact: the Chamber board designee.** Fill this in and keep it
 current — this is the whole point of the runbook:
 
-- Name: `____________________`
+- Name: **Jen Skalbeck** (Chamber board)
 - Phone: `____________________`
 - Email: `____________________`
 - Date confirmed: `____________________`
