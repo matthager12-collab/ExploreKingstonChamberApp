@@ -101,19 +101,32 @@ export const record = pgTable(
 /** Append-only audit trail: one row per create/update/delete/import of a
  *  structured record. A DB trigger (see the custom migration) rejects UPDATE
  *  and DELETE — rows can only ever be inserted. E09 builds the UI on top. */
-export const audit = pgTable("audit", {
-  id: bigserial("id", { mode: "number" }).primaryKey(),
-  ts: timestamp("ts", { withTimezone: true }).notNull().defaultNow(),
-  /** email of the acting user, or 'system' / 'public' / 'import:data-dir'. */
-  actor: text("actor").notNull(),
-  /** 'create' | 'update' | 'delete' | 'import' */
-  action: text("action").notNull(),
-  store: text("store").notNull(),
-  recordId: text("record_id").notNull(),
-  before: jsonb("before").$type<Record<string, unknown>>(),
-  after: jsonb("after").$type<Record<string, unknown>>(),
-  source: text("source").notNull(),
-});
+export const audit = pgTable(
+  "audit",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    ts: timestamp("ts", { withTimezone: true }).notNull().defaultNow(),
+    /** email of the acting user, or 'system' / 'public' / 'import:data-dir'. */
+    actor: text("actor").notNull(),
+    /** 'create' | 'update' | 'delete' | 'import' | 'restore' (E09), plus
+     *  'status-change' / 'verify' (E08) and the auth lifecycle events
+     *  (auth-store.ts). Only full-snapshot actions are restorable — see
+     *  src/lib/audit/restore-registry.ts. */
+    action: text("action").notNull(),
+    store: text("store").notNull(),
+    recordId: text("record_id").notNull(),
+    before: jsonb("before").$type<Record<string, unknown>>(),
+    after: jsonb("after").$type<Record<string, unknown>>(),
+    source: text("source").notNull(),
+  },
+  (t) => [
+    // E09: the table grows forever (≥12-month retention floor), so the two
+    // read paths must be indexed — per-record history (store, record_id) and
+    // time-filtered global browsing (ts). Cursor paging rides the id PK.
+    index("audit_store_record_idx").on(t.store, t.recordId),
+    index("audit_ts_idx").on(t.ts),
+  ],
+);
 
 /** Records the importer refused to write because they failed schema
  *  validation — kept whole here (with the zod issues) so nothing is silently
