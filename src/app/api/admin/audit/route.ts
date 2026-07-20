@@ -14,11 +14,16 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import {
+  type AuditEntry,
   type AuditFilters,
   getRecordMetaView,
   listAudit,
   listAuditForExport,
 } from "@/lib/audit/read";
+import {
+  getRestoreEntry,
+  isRestorableAction,
+} from "@/lib/audit/restore-registry";
 import { requireAdmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +44,16 @@ function parseDateParam(
     : raw;
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? "invalid" : d;
+}
+
+/** The UI's restore buttons key off this server-side verdict — the client
+ *  never guesses at registry membership or the restorable-action set. */
+function withRestorable(e: AuditEntry): AuditEntry & { restorable: boolean } {
+  return {
+    ...e,
+    restorable:
+      !e.metadataOnly && isRestorableAction(e.action) && Boolean(getRestoreEntry(e.store)),
+  };
 }
 
 /** CSV cell: formula-injection-proofed (leading = + - @ get a ' prefix),
@@ -102,9 +117,10 @@ export async function GET(request: NextRequest) {
   // the record's current metadata — no second endpoint. Extra filters still
   // apply, so the browser's filter bar composes with a record link.
   const page = await listAudit(filters, { cursor, limit });
+  const entries = page.entries.map(withRestorable);
   if (filters.store && filters.recordId) {
     const recordMeta = await getRecordMetaView(filters.store, filters.recordId);
-    return NextResponse.json({ ...page, recordMeta });
+    return NextResponse.json({ entries, nextCursor: page.nextCursor, recordMeta });
   }
-  return NextResponse.json(page);
+  return NextResponse.json({ entries, nextCursor: page.nextCursor });
 }
