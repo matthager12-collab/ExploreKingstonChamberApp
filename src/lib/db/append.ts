@@ -48,6 +48,18 @@ export async function readFerryObservations<T>(): Promise<T[]> {
   return rows.map((r) => r.obs as T);
 }
 
+/** The payload `ts` of the newest ferry observation — data-freshness of the
+ *  observe cron, for the ops dashboard. Uses obs->>'ts' (the snapshot instant),
+ *  which sorts chronologically as ISO-8601 text; max() over an empty table is
+ *  NULL, so this returns null before the cron has ever run. A targeted MAX
+ *  query, not a full-log scan. */
+export async function latestFerryObservationTs(): Promise<string | null> {
+  const [row] = await getDb()
+    .select({ ts: sql<string | null>`max(${ferryObservation.obs} ->> 'ts')` })
+    .from(ferryObservation);
+  return row?.ts ?? null;
+}
+
 /** Row counts for the three append tables — the importer's run-once guard
  *  and per-table report need them. */
 export async function countAppendRows(): Promise<{

@@ -6,31 +6,24 @@
 // DATABASE_URL never reports healthy, so Render keeps routing to the previous
 // release instead of serving a broken one.
 
-import { mkdir, writeFile, unlink } from "fs/promises";
-import { dataDir, dataPath } from "@/lib/data-dir";
+import { dataDir } from "@/lib/data-dir";
 import { dbHealthy } from "@/lib/db/records";
+import { probeDataDir } from "@/lib/ops-health";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const probe = dataPath(".health-probe");
-  let dataWritable = false;
-  try {
-    await mkdir(dataDir(), { recursive: true });
-    await writeFile(probe, String(Date.now()), "utf8");
-    await unlink(probe);
-    dataWritable = true;
-  } catch {
-    dataWritable = false;
-  }
-
+  // The write-probe now lives in src/lib/ops-health.ts so /admin/ops and this
+  // readiness gate share ONE implementation. The wire body below is unchanged
+  // (Render + UptimeRobot depend on the keys and the 200/503 semantics).
+  const data = await probeDataDir();
   const dbOk = await dbHealthy();
 
-  const ok = dataWritable && dbOk;
+  const ok = data.ok && dbOk;
   const body = {
     ok,
     dataDir: dataDir(),
-    dataWritable,
+    dataWritable: data.ok,
     dbOk,
     time: new Date().toISOString(),
   };

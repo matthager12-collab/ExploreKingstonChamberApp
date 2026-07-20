@@ -30,6 +30,7 @@ import {
   type AnalyticsEvent,
   type AnalyticsGeo,
 } from "@/lib/analytics-store";
+import { lookupGeo } from "@/lib/geoip";
 import { checkRateLimit, clientKey } from "@/lib/rate-limit";
 
 const MAX_PATH = 200;
@@ -83,12 +84,26 @@ function deriveGeo(request: NextRequest): AnalyticsGeo {
     };
   }
 
-  // No platform geo headers. Peek at the connection IP ONLY to classify the
-  // request as local development traffic — the IP is never stored or logged.
+  // No platform geo headers (the self-hosted / Render case). Peek at the
+  // connection IP to classify local dev traffic and, for a public IP, to look up
+  // coarse geography in the local GeoLite2 database. The IP is inspected in
+  // memory and NEVER stored or logged — only the coarse country/region/city
+  // strings returned below persist.
   const forwarded = request.headers.get("x-forwarded-for");
   const ip = (forwarded?.split(",")[0] ?? request.headers.get("x-real-ip") ?? "").trim();
   if (ip && isLoopbackOrPrivate(ip)) {
     return { source: "dev-local" };
+  }
+  if (ip) {
+    const hit = lookupGeo(ip);
+    if (hit) {
+      return {
+        country: trunc(hit.country, MAX_GEO_FIELD),
+        region: trunc(hit.region, MAX_GEO_FIELD),
+        city: trunc(hit.city, MAX_GEO_FIELD),
+        source: "geolite2",
+      };
+    }
   }
   return { source: "unknown" };
 }

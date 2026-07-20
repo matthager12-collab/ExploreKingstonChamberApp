@@ -25,11 +25,16 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
+import { AdminShell } from "@/components/admin/admin-shell";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const user = await getSessionUser();
-  if (user?.role === "admin") return <>{children}</>;
+  // Defense in depth: the shell is only reachable by an admin here, but the proxy
+  // and every /api/admin route still gate independently (route handlers bypass
+  // layouts). Only the admin branch gets the shell; everyone else is redirected,
+  // exactly as before — no world-readable /admin is reintroduced.
+  if (user?.role === "admin") return <AdminShell user={user}>{children}</AdminShell>;
   redirect("/portal");
 }

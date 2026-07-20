@@ -651,6 +651,9 @@ is authoritative):
 - **Airbnb/Vrbo lodging deep links** — listings die when owners delist; check
   in a browser.
 - **Pull an off-site admin backup bundle** (§4) so the off-Render copy stays fresh.
+- **Run the restore drill and log it** — [`docs/runbooks/RESTORE-DRILL.md`](runbooks/RESTORE-DRILL.md). Mode A (filesystem) is non-programmer-runnable; a backup you've never restored is a hope, not a backup.
+- **Confirm the on-call secondary contact and send a test alert** — [`docs/runbooks/ALERTS.md`](runbooks/ALERTS.md). The Chamber board designee's phone must actually ring when Mat is away.
+- **Check the GeoLite2 status** on `/admin/ops` (WARN = a stale/failing self-refresh, usually an expired key) — [`docs/runbooks/GEOIP.md`](runbooks/GEOIP.md).
 - **Rotate `BACKUP_TOKEN`, `FERRY_OBSERVE_TOKEN`, and `WORKLIST_SWEEP_TOKEN`** — see §12 Secret rotation.
 
 Since E08 the staleness sweep (§5 "Worklist & moderation") files Re-verify
@@ -791,6 +794,8 @@ Things a **person** (mostly the Chamber) must do — no code involved.
 | 10 | **Resend email (before businesses self-serve)** — SPF + DKIM for `mail.explorekingstonwa.com` at NameHero so invite email works. Until then hand invite codes over directly. | SYNDICATION "Email" |
 | 11 | **Send the GrowthZone written non-renewal notice by March 1, 2027** — the contract auto-renews each April; notice must land ≥30 days before term end and missing it costs another non-refundable ~$4k year. Confirm the exact April term-end day from the renewal invoice and complete ALL data exports first (no export rights after termination). Full plan: docs/ROLLOFF-GROWTHZONE.md §4. | Mat + Chamber office — calendar this NOW |
 | 12 | **Constant Contact takeover (Mat)** — when the CC export work is set up: inventory which CC lists GrowthZone auto-fills (Contacts → Lists), gather whatever access is needed, export the GZ email/newsletter templates at the same time, and stand up the app→CC list-export runbook (docs/ROLLOFF-GROWTHZONE.md §3). | Mat, with Chamber CC login |
+| 13 | **Name the on-call secondary contact (the Chamber board designee)** — fill in name/phone/email in [`docs/runbooks/ALERTS.md`](runbooks/ALERTS.md), add them as an UptimeRobot alert contact, and grant Render dashboard access. Bus-factor: someone's phone must ring when Mat is unavailable (UE-20 / FR-A29). | Chamber board + Mat |
+| 14 | **Create the free MaxMind GeoLite2 account + license key** for visitor-origin geo on `/admin`, then set `MAXMIND_LICENSE_KEY` on Render — [`docs/runbooks/GEOIP.md`](runbooks/GEOIP.md). Optional: analytics geography shows "Unknown" without it, nothing else changes. | Mat |
 
 ---
 

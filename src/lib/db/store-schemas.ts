@@ -90,6 +90,12 @@ export const STORE_SCHEMAS: Record<string, z.ZodType> = {
   // Invites are keyed by their code, mirrored into id (auth.ts ~line 51); the
   // importer replicates that mirror before validating.
   "auth-invites": z.looseObject({ id: nonempty, code: nonempty }),
+  // E10 ops heartbeats. Permissive id (NOT entityId) on purpose: marker ids are
+  // colon-namespaced ("backup:last-success", "job:<name>"), which the entity
+  // regex rejects — but markers are overwrite-only and never tombstoned, so the
+  // live-write nonempty rule is all that applies. `at` is always stamped by
+  // recordMarker.
+  "ops-markers": z.looseObject({ id: nonempty, at: nonempty }),
 };
 
 /** Unknown stores validate permissively ({ id } only) with a warn-once —

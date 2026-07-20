@@ -24,46 +24,16 @@
 // "who are you?" and "may you?" with distinct codes.
 
 import { timingSafeEqual } from "crypto";
-import { readdir, readFile } from "fs/promises";
-import path from "path";
 import { requireAdmin } from "@/lib/auth";
 import { dataDir } from "@/lib/data-dir";
 import { serializeDb } from "@/lib/db/export";
+import { streamBundleDocument } from "@/lib/backup-bundle";
+import { recordMarker } from "@/lib/stores/ops-markers-store";
 
+// fs walk + pg both need Node; never edge. dynamic so the bundle is never
+// prerendered/cached.
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-interface BundledFile {
-  path: string;
-  encoding: "utf8" | "base64";
-  content: string;
-}
-
-const TEXT_EXT = /\.(json|jsonl|txt|md|csv)$/i;
-
-async function walk(dir: string, base: string): Promise<BundledFile[]> {
-  let entries;
-  try {
-    entries = await readdir(dir, { withFileTypes: true });
-  } catch {
-    return []; // dir doesn't exist yet (nothing written) — empty backup
-  }
-  const out: BundledFile[] = [];
-  for (const e of entries) {
-    const full = path.join(dir, e.name);
-    if (e.isDirectory()) {
-      out.push(...(await walk(full, base)));
-    } else if (e.isFile()) {
-      const buf = await readFile(full);
-      const isText = TEXT_EXT.test(e.name);
-      out.push({
-        path: path.relative(base, full),
-        encoding: isText ? "utf8" : "base64",
-        content: isText ? buf.toString("utf8") : buf.toString("base64"),
-      });
-    }
-  }
-  return out;
-}
 
 function hasValidBackupToken(request: Request): boolean {
   const configured = process.env.BACKUP_TOKEN;
@@ -77,29 +47,62 @@ function hasValidBackupToken(request: Request): boolean {
 
 export async function GET(request: Request) {
   // The bearer token is a full ALTERNATIVE to a session, not an addition to it:
-  // the scheduled workflow has no cookie to send, so a valid token skips the
-  // session gate entirely. Everything else falls through to the shared gate.
+  // the scheduled off-site workflow has no cookie to send, so a valid token skips
+  // the session gate entirely. Everything else falls through to the shared gate.
+  // Order matters: token first, THEN requireAdmin — so an unauthenticated,
+  // no-bearer request returns EXACTLY 401 (the pinned admin-walk assertion),
+  // and a signed-in non-admin (e.g. moderator) gets 403. The bundle carries
+  // password hashes, so only the admin tier may download it.
   if (!hasValidBackupToken(request)) {
     const denied = await requireAdmin();
     if (denied) return denied;
   }
 
   const root = dataDir();
-  const files = await walk(root, root);
-  const bundle = {
-    app: "explore-kingston",
-    version: 2,
-    createdAt: new Date().toISOString(),
-    dataDir: root,
-    fileCount: files.length,
-    files,
-    db: await serializeDb(),
-  };
+  const createdAt = new Date().toISOString();
+  // Serialize the (small) DB section BEFORE the stream opens: a serialize failure
+  // then becomes a clean 500 with no headers sent, preserving the loud-failure
+  // property the off-site cron's `curl -f` relies on. Only file-read errors can
+  // happen mid-stream, and those abort the transfer (below).
+  const dbSection = await serializeDb();
 
-  const date = new Date().toISOString().slice(0, 10);
-  // Pretty-printed (indent 1) per M-20-07: backup bundles must stay
-  // human-readable — the Chamber has to be able to open one in a text editor.
-  return new Response(JSON.stringify(bundle, null, 1), {
+  const iterator = streamBundleDocument(root, { createdAt, dbSection });
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    // Pull-based: the runtime calls pull() only when the consumer has room, so
+    // peak memory is ~one file — not the whole disk (the old buffered impl OOMed
+    // the 512 MB instance under a well-used disk).
+    async pull(controller) {
+      try {
+        const res = await iterator.next();
+        if (res.done) {
+          controller.close();
+          // Bundle fully generated. Record success as best-effort telemetry —
+          // a marker-write failure must not fail a backup that already
+          // succeeded, and a client that disconnected mid-stream never reaches
+          // here, so a partial download is never marked a success.
+          void recordMarker("backup:last-success", {
+            fileCount: res.value,
+            kind: "bundle-download",
+          }).catch(() => {});
+        } else {
+          controller.enqueue(encoder.encode(res.value));
+        }
+      } catch (err) {
+        // Abort the transfer so a mid-stream read failure surfaces as a broken
+        // download (curl -f exits non-zero, the cron alert fires) — NEVER a
+        // truncated 200 the cron encrypts and stores as a good backup.
+        controller.error(err);
+      }
+    },
+    cancel() {
+      // Client/cron disconnected — stop generating and release any open handle.
+      void iterator.return?.(0);
+    },
+  });
+
+  const date = createdAt.slice(0, 10);
+  return new Response(stream, {
     headers: {
       "Content-Type": "application/json",
       "Content-Disposition": `attachment; filename="explore-kingston-backup-${date}.json"`,

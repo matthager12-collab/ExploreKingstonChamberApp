@@ -96,6 +96,17 @@ services:
       - key: WORKLIST_SWEEP_TOKEN
         sync: false
 
+      # MaxMind GeoLite2 license key — geo-IP for the Visitor Insights dashboard
+      # + ops page (src/lib/geoip.ts). Free MaxMind account (docs/runbooks/
+      # GEOIP.md). No-op when unset (analytics geo shows "Unknown", as before).
+      # Server-only; set in the dashboard, never in git.
+      - key: MAXMIND_LICENSE_KEY
+        sync: false
+      # Which GeoLite2 edition to download/serve. GeoLite2-City (~70 MB) is
+      # richer; GeoLite2-Country (~6 MB) is the fallback if memory alarms fire.
+      - key: GEOIP_EDITION
+        value: GeoLite2-City
+
   # Staging target for risky changes (E03). Builds the SAME Dockerfile/image
   # as production; deploy to it with `git push origin <branch>:staging`. It
   # starts from an EMPTY disk (its own `data-staging` volume) — no production
@@ -152,6 +163,11 @@ services:
         sync: false
       - key: WORKLIST_SWEEP_TOKEN
         sync: false
+      # GeoLite2 geo-IP (staging mirrors prod so the ops page behaves the same).
+      - key: MAXMIND_LICENSE_KEY
+        sync: false
+      - key: GEOIP_EDITION
+        value: GeoLite2-City
       # Makes /robots.txt disallow everything (src/app/robots.ts). Plain
       # runtime value, not NEXT_PUBLIC_ — both services ship the same image
       # and branch on this at request time.

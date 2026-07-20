@@ -23,7 +23,10 @@
 
 import { appendAnalyticsEvent, readAnalyticsEvents } from "./db/append";
 
-export type GeoSource = "vercel-headers" | "dev-local" | "unknown";
+// "geolite2" (E10): coarse geography from the self-hosted MaxMind GeoLite2 file
+// — the source on Render, where no platform geo headers exist. The IP is looked
+// up in memory and never stored; only the coarse strings below persist.
+export type GeoSource = "vercel-headers" | "dev-local" | "geolite2" | "unknown";
 
 /** Coarse, connection-derived geography. Never an address or coordinates. */
 export interface AnalyticsGeo {

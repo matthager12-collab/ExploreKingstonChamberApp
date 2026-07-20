@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser, hasAnyUsers } from "@/lib/auth";
 import { ROLE_LABELS } from "@/lib/auth/roles";
+import { adminNavFor } from "@/lib/admin-nav";
 import { Callout, Card, PageHeader, Section } from "@/components/ui";
 import { LoginForm, LogoutButton } from "./forms";
 
@@ -59,64 +60,13 @@ export default async function PortalPage() {
   // the role-scoped admin shell is E10. Say so plainly rather than showing an
   // empty dashboard that looks broken.
   const awaitingTools = user.role === "moderator" || user.role === "viewer";
+  // Admin surfaces come from the ONE nav manifest (src/lib/admin-nav.ts) that the
+  // admin shell also renders — so the portal dashboard and the in-shell nav can
+  // never drift, and adding a surface is a one-line change there, not here.
   if (user.role === "admin") {
-    cards.push(
-      {
-        href: "/admin/accounts",
-        title: "Accounts & invites",
-        blurb: "Invite businesses and nonprofits, manage who edits what.",
-      },
-      {
-        href: "/admin",
-        title: "Visitor insights",
-        blurb: "LTAC-ready analytics: origins, movement, top pages, outbound taps.",
-      },
-      {
-        href: "/admin/hunts",
-        title: "Scavenger hunts",
-        blurb: "Build hunts, reference photos, review submissions.",
-      },
-      {
-        href: "/admin/map",
-        title: "Parking map editor",
-        blurb: "Drag pins and lot shapes to match reality; mark them field-verified.",
-      },
-      {
-        href: "/admin/maps",
-        title: "Map builder",
-        blurb: "Create map views and drop markers, trails, and areas onto them.",
-      },
-      {
-        href: "/admin/content",
-        title: "Site content",
-        blurb: "Edit page text and show or hide entire pages.",
-      },
-      {
-        href: "/admin/ferry-info",
-        title: "Ferry settings",
-        blurb: "Busyness prediction on/off + accuracy, boarding-pass status, and payment/cash facts.",
-      },
-      {
-        href: "/admin/worklist",
-        title: "Worklist / moderation",
-        blurb: "Review member submissions, visitor reports, and content due for a re-check.",
-      },
-      {
-        href: "/admin/itineraries",
-        title: "Itineraries",
-        blurb: "Build and edit the ready-made day plans.",
-      },
-      {
-        href: "/admin/listings",
-        title: "Restaurants, lodging & webcams",
-        blurb: "Edit Eat & Drink vendors — descriptions, show/hide, add new — plus lodging and webcams.",
-      },
-      {
-        href: "/admin/audit",
-        title: "Change history",
-        blurb: "Every edit, who made it, and one-tap restore — nothing is ever lost.",
-      },
-    );
+    for (const entry of adminNavFor(user)) {
+      cards.push({ href: entry.href, title: entry.title, blurb: entry.blurb });
+    }
   }
 
   return (

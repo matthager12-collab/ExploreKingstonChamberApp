@@ -12,6 +12,7 @@
 
 import {
   appendFerryObservation,
+  latestFerryObservationTs,
   pruneFerryObservationsBefore,
   readFerryObservations,
 } from "../db/append";
@@ -297,4 +298,12 @@ export async function getAccuracy(): Promise<{ latest: AccuracyMetrics | null; h
   const rows = await readMerged<AccuracyRecord>(ACCURACY_STORE, []);
   const rec = rows.find((r) => r.id === ACCURACY_ID);
   return { latest: rec?.latest ?? null, history: rec?.history ?? [] };
+}
+
+/** ISO timestamp of the most recent logged observation, or null when the
+ *  observe cron has never produced a row — the ops dashboard's freshness read.
+ *  A thin wrapper so callers outside the data layer never import the DB client
+ *  directly (the eslint/dependency-cruiser boundary). */
+export async function latestObservationAt(): Promise<string | null> {
+  return latestFerryObservationTs();
 }

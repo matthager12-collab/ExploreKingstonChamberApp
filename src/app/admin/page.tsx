@@ -4,8 +4,7 @@
 // track here — the tracker itself skips /admin paths). force-dynamic because
 // the numbers must be fresh on every load, never a cached build-time snapshot.
 //
-// NOTE: access is gated by src/app/admin/layout.tsx (admin role required;
-// open only during pre-setup grace before any account exists).
+// NOTE: access is gated by src/app/admin/layout.tsx (admin role required).
 
 import type { Metadata } from "next";
 import { areaLabel, summarize, type AnalyticsSummary } from "@/lib/analytics-store";
@@ -113,6 +112,11 @@ export default async function AdminPage() {
           <p className="text-sm text-ink-soft">
             Render snapshots the disk daily (7-day restore). For an off-site copy —
             accounts, listings, events, survey &amp; analytics — download a bundle any time.
+            Backup status and system health live on{" "}
+            <a href="/admin/ops" className="font-medium text-tide-deep underline">
+              Ops &amp; status
+            </a>
+            .
           </p>
           <a
             href="/api/admin/backup"
@@ -306,9 +310,7 @@ export default async function AdminPage() {
             evidence of reach and of traffic sent to local businesses.
           </p>
           <p className="mt-2 font-semibold text-coral-deep">
-            This dashboard is gated to admin accounts. One thing still on the to-do list before
-            a public launch: the scavenger-hunt upload routes (/api/hunts/*) aren&apos;t
-            authenticated yet, so lock those down before promoting the hunts widely.
+            This dashboard is gated to admin accounts.
           </p>
         </Callout>
       </Section>
