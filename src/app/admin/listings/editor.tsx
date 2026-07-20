@@ -4,7 +4,8 @@
 // on the shared schema-driven record editor (E07). Each domain is one
 // DomainDef — field list + the same zod schema the API route validates with —
 // assembled from src/lib/schemas; all machinery lives in
-// src/components/admin/record-editor.tsx.
+// src/components/admin/record-editor.tsx, which also mounts the E09
+// Provenance strip and RecordHistory (restore) panel for every domain here.
 
 import type { Lodging, Restaurant, Webcam } from "@/lib/types";
 import type { DomainDef, GenericRecord } from "@/lib/schemas/form";
