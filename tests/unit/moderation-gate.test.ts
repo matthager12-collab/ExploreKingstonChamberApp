@@ -21,7 +21,10 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { audit } from "@/lib/db/schema";
 import { readRecords, writeRecord } from "@/lib/db/records";
 import { charities as charitySeed } from "@/lib/data/charities";
+import { itineraries as itinerarySeed } from "@/lib/data/itineraries";
+import { lodging as lodgingSeed } from "@/lib/data/lodging";
 import { restaurants as restaurantSeed } from "@/lib/data/restaurants";
+import { webcams as webcamSeed } from "@/lib/data/webcams";
 import {
   approveModerationItem,
   rejectModerationItem,
@@ -182,10 +185,13 @@ describe("(a) default getters are live-only; *Admin variants surface everything"
       getAdmin: getVolunteerNeedsAdmin,
     },
     {
+      // Seed-derived docs: these three domains validate under the STRICT
+      // DOMAIN_SCHEMAS since the #30 swap, so minimal stubs won't pass the
+      // write-gate (which is the whole point of the gate).
       store: "lodging",
       docs: [
-        { id: "gate-pending-lodging", name: "Pending Inn" },
-        { id: "gate-draft-lodging", name: "Draft Inn" },
+        { ...lodgingSeed[0], id: "gate-pending-lodging", name: "Pending Inn" },
+        { ...lodgingSeed[0], id: "gate-draft-lodging", name: "Draft Inn" },
       ],
       getPublic: getLodging,
       getAdmin: getLodgingAdmin,
@@ -193,8 +199,8 @@ describe("(a) default getters are live-only; *Admin variants surface everything"
     {
       store: "webcams",
       docs: [
-        { id: "gate-pending-webcam", name: "Pending Cam" },
-        { id: "gate-draft-webcam", name: "Draft Cam" },
+        { ...webcamSeed[0], id: "gate-pending-webcam", name: "Pending Cam" },
+        { ...webcamSeed[0], id: "gate-draft-webcam", name: "Draft Cam" },
       ],
       getPublic: getWebcams,
       getAdmin: getWebcamsAdmin,
@@ -202,8 +208,18 @@ describe("(a) default getters are live-only; *Admin variants surface everything"
     {
       store: "itineraries",
       docs: [
-        { id: "gate-pending-itin", slug: "gate-pending-itin", title: "Pending Day" },
-        { id: "gate-draft-itin", slug: "gate-draft-itin", title: "Draft Day" },
+        {
+          ...itinerarySeed[0],
+          id: "gate-pending-itin",
+          slug: "gate-pending-itin",
+          title: "Pending Day",
+        },
+        {
+          ...itinerarySeed[0],
+          id: "gate-draft-itin",
+          slug: "gate-draft-itin",
+          title: "Draft Day",
+        },
       ],
       getPublic: getItineraries,
       getAdmin: getItinerariesAdmin,

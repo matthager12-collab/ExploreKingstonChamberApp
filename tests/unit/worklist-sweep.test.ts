@@ -10,8 +10,15 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 
 import { record } from "@/lib/db/schema";
 import { listVerifyDue, markRecordVerified, writeRecord } from "@/lib/db/records";
+import { restaurants as restaurantSeed } from "@/lib/data/restaurants";
 import { STALENESS_DEFAULTS, listWorklistItems, resolveItem } from "@/lib/stores/worklist-store";
 import { createTestDb, type TestDb } from "../setup/pglite-db";
+
+/** Seed-derived doc: restaurants validate under the STRICT domain schema
+ *  since the #30 swap, so minimal stubs no longer pass the write-gate. */
+function restaurantDoc(id: string, name: string) {
+  return { ...restaurantSeed[0], id, name };
+}
 
 const authState = vi.hoisted(() => ({
   user: null as null | { id: string; role: string; email: string },
@@ -50,10 +57,12 @@ beforeAll(async () => {
   // Two overdue live restaurants (interval 90d, last write 120d ago), one
   // fresh one, one overdue-but-pending, and one overdue event (a store with
   // no STALENESS_DEFAULTS entry — must never be swept).
-  await writeRecord("restaurants", { id: "stale-a", name: "Stale A" }, { status: "live" });
-  await writeRecord("restaurants", { id: "stale-b", name: "Stale B" }, { status: "live" });
-  await writeRecord("restaurants", { id: "fresh-c", name: "Fresh C" }, { status: "live" });
-  await writeRecord("restaurants", { id: "stale-pending", name: "Stale Pending" }, { status: "pending" });
+  await writeRecord("restaurants", restaurantDoc("stale-a", "Stale A"), { status: "live" });
+  await writeRecord("restaurants", restaurantDoc("stale-b", "Stale B"), { status: "live" });
+  await writeRecord("restaurants", restaurantDoc("fresh-c", "Fresh C"), { status: "live" });
+  await writeRecord("restaurants", restaurantDoc("stale-pending", "Stale Pending"), {
+    status: "pending",
+  });
   await writeRecord(
     "events",
     { id: "old-event", title: "Old Event", start: "2020-01-01T10:00:00-08:00" },
@@ -146,7 +155,9 @@ describe("sweep behavior", () => {
   });
 
   it("a record's own verify_interval_days overrides the store default", async () => {
-    await writeRecord("restaurants", { id: "quick-turn", name: "Quick Turn" }, { status: "live" });
+    await writeRecord("restaurants", restaurantDoc("quick-turn", "Quick Turn"), {
+      status: "live",
+    });
     await backdate("restaurants", "quick-turn", 10);
     await tdb.db
       .update(record)
