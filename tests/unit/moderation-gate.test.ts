@@ -387,7 +387,7 @@ describe("(b) member writes: no live-content change + exactly one open moderatio
     );
   });
 
-  it("needs POST create + slots stepper: live shift untouched; stepper proposal holds", async () => {
+  it("needs POST create holds; slots stepper on a LIVE shift writes directly (documented exception, 2026-07-20)", async () => {
     asAdmin();
     await writeRecord(
       "volunteer-needs",
@@ -416,18 +416,46 @@ describe("(b) member writes: no live-content change + exactly one open moderatio
     expect(createdJson.pending).toBe(true);
     expect((await getVolunteerNeeds()).map((n) => n.id)).not.toContain(createdJson.need.id);
 
+    // THE EXCEPTION: a member's ±1 on their own APPROVED shift is a clamped
+    // integer on a record the Chamber already reviewed — it publishes
+    // directly, no queue item, no pending flag (operator decision 2026-07-20).
     const stepped = await needsPOST(
       jsonReq("/api/portal/needs", "POST", { action: "slots", id: "live-shift", delta: 1 }),
     );
     const steppedJson = await stepped.json();
-    expect(steppedJson.pending).toBe(true);
+    expect(steppedJson.pending).toBeUndefined();
     expect(
       (await getVolunteerNeeds()).find((n) => n.id === "live-shift")?.slotsFilled,
-    ).toBe(1);
-    const item = (await openModeration("volunteer-needs")).find(
-      (i) => i.subjectId === "live-shift",
+    ).toBe(2);
+    expect(
+      (await openModeration("volunteer-needs")).filter((i) => i.subjectId === "live-shift"),
+    ).toHaveLength(0);
+
+    // The exception is LIVE-only: a tick on an admin-parked (hidden) shift
+    // must not resurface it — it holds for review like any member edit.
+    asAdmin();
+    await writeRecord(
+      "volunteer-needs",
+      {
+        id: "hidden-shift",
+        title: "Hidden Shift",
+        date: "2027-07-06T00:00:00-07:00",
+        charityId: "org-np",
+        timeRange: "9–1",
+        slotsTotal: 4,
+        slotsFilled: 0,
+      },
+      { status: "hidden" },
     );
-    expect((item?.payload.proposed as { slotsFilled: number }).slotsFilled).toBe(2);
+    asMember("org-np");
+    const hiddenTick = await needsPOST(
+      jsonReq("/api/portal/needs", "POST", { action: "slots", id: "hidden-shift", delta: 1 }),
+    );
+    expect((await hiddenTick.json()).pending).toBe(true);
+    expect((await getVolunteerNeeds()).map((n) => n.id)).not.toContain("hidden-shift");
+    expect(
+      (await getVolunteerNeedsAdmin()).find((n) => n.id === "hidden-shift")?.status,
+    ).toBe("hidden");
   });
 
   it("events DELETE: member removal of a live event holds; their own pending event withdraws", async () => {
