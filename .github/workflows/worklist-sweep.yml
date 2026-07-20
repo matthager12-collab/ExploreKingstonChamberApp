@@ -1,0 +1,57 @@
+name: Worklist staleness sweep
+
+# Files a Re-verify worklist item for every live record past its verify-by
+# window (E08; docs/OPERATIONS.md §5 "Worklist & moderation"). The endpoint is
+# idempotent — an already-open item is a no-op — so re-runs are harmless.
+#
+# ── Setup ─────────────────────────────────────────────────────────────────────
+#  1. Set WORKLIST_SWEEP_TOKEN as an env var on the Render service(s) AND as a
+#     repo *secret* of the same name. UNLIKE ferry-observe, the token is
+#     REQUIRED here: the route fails closed (401) without it, and this
+#     workflow fails fast with a clear message if the secret is missing.
+#  2. (Optional) Point at a different host with repo *variable*
+#     WORKLIST_SWEEP_URL. Defaults to the production Render URL.
+#
+# Weekly on Monday 14:00 UTC (~7 AM Pacific) — the queue is a human's Monday
+# morning list, not a real-time system. GitHub disables schedules after 60
+# days without commits; any push re-enables.
+
+on:
+  schedule:
+    - cron: "0 14 * * 1" # Mondays 14:00 UTC (~7 AM Pacific)
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Override app base URL for a one-off manual run"
+        required: false
+        type: string
+
+# Outbound HTTP only — no repository access needed.
+permissions: {}
+
+concurrency:
+  group: worklist-sweep
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Run staleness sweep
+        env:
+          BASE_URL: ${{ inputs.base_url || vars.WORKLIST_SWEEP_URL || 'https://explore-kingston.onrender.com' }}
+          WORKLIST_SWEEP_TOKEN: ${{ secrets.WORKLIST_SWEEP_TOKEN }}
+        run: |
+          set -eo pipefail
+          if [ -z "${WORKLIST_SWEEP_TOKEN:-}" ]; then
+            echo "::error::WORKLIST_SWEEP_TOKEN repo secret is not set — the sweep route fails closed without it (docs/OPERATIONS.md §5)."
+            exit 1
+          fi
+          url="${BASE_URL%/}/api/admin/worklist/sweep"
+          echo "POST $url"
+          # -f fails the step on HTTP >= 400 (bad token, undeployed route);
+          # --retry rides out transient network/5xx blips.
+          curl -fsS --max-time 30 --retry 3 --retry-delay 10 --retry-all-errors \
+            -X POST -H "Authorization: Bearer ${WORKLIST_SWEEP_TOKEN}" "$url"
+          echo

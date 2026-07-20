@@ -389,6 +389,14 @@ all: the full proposed revision rides inside the queue item until you approve
 it. Admin edits through the normal editors still publish instantly — admins
 are the moderators.
 
+**One documented exception** (operator decision, 2026-07-20): the nonprofit
+portal's **signup-count stepper** (±1 on a shift's "already signed up"
+number) writes live directly for members — it's a clamped integer on a shift
+the Chamber already approved, so holding every phone-signup tick for review
+was pure queue toil. Everything else about a shift (title, date,
+description, deletion) still holds for review, and a tick on a pending or
+admin-hidden shift never publishes anything.
+
 The queue holds five kinds of work (one item per record per kind — repeat
 reports merge into the open item):
 

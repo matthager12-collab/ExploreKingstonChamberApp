@@ -82,9 +82,12 @@ export async function POST(request: NextRequest) {
   }
 
   // Quick +/- stepper: track signups as they come in by email or phone.
-  // MODERATION (E08): for members this is still a write to a live public
-  // record (the slots-left count renders on /give), so it holds for review
-  // like any other member edit — the moderation floor has no fast lanes.
+  // DOCUMENTED EXCEPTION to the E08 moderation floor (operator decision,
+  // 2026-07-20): a member's ±1 on their OWN shift's signup count writes live
+  // directly. Rationale: it is a clamped integer (0..slotsTotal) on a record
+  // the Chamber already approved — no text, links, or PII to moderate — and
+  // holding every phone-signup tick for review is pure queue toil. Full
+  // shift EDITS (title/date/description/…) still hold for review below.
   if (body.action === "slots") {
     const id = typeof body.id === "string" ? body.id : "";
     const delta = body.delta;
@@ -105,9 +108,22 @@ export async function POST(request: NextRequest) {
     try {
       if (isAdmin) {
         await saveVolunteerNeed(updated, { actor: user.email, source: "admin" });
+      } else if (needStatus === "live") {
+        // The exception itself: count-tick on an approved shift, direct.
+        // status stays 'live' explicitly — never rely on the write default
+        // to re-publish anything.
+        await saveVolunteerNeed(updated, {
+          actor: user.email,
+          source: "portal",
+          status: "live",
+        });
       } else if (needStatus === "pending") {
+        // Their own not-yet-approved shift: keep the count on the pending
+        // record and let the open moderation item follow along.
         await updatePendingRecord("volunteer-needs", updated, updated.title, user);
       } else {
+        // draft / hidden / rejected — an admin parked this record; a member
+        // write must NOT resurface it. Holds for review like any edit.
         await holdEditProposal("volunteer-needs", updated, updated.title, user);
       }
     } catch (err) {
@@ -117,7 +133,7 @@ export async function POST(request: NextRequest) {
       throw err;
     }
     return NextResponse.json(
-      isAdmin || needStatus === "pending"
+      isAdmin || needStatus === "live" || needStatus === "pending"
         ? { ok: true, need: updated }
         : { ok: true, need: updated, pending: true },
     );
