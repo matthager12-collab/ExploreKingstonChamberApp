@@ -30,6 +30,7 @@ import {
   users,
 } from "@/lib/db/schema";
 import { __setDbForTests } from "@/lib/db/client";
+import { validRestaurant } from "../setup/domain-docs";
 import { createTestDb, type TestDb } from "../setup/pglite-db";
 
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
@@ -44,10 +45,10 @@ beforeAll(async () => {
 
   await writeRecord(
     "restaurants",
-    { id: "cafe", name: "Café Roundtrip" },
+    validRestaurant({ id: "cafe", name: "Café Roundtrip" }),
     { actor: "mat@example.test", source: "admin" },
   );
-  await writeRecord("restaurants", { id: "gone", name: "Short-Lived" });
+  await writeRecord("restaurants", validRestaurant({ id: "gone", name: "Short-Lived" }));
   await deleteRecord("restaurants", "gone", { actor: "mat@example.test" }); // tombstone
   await writeRecord("charities", { id: "helpers", name: "The Helpers" });
   await writeRecord(
@@ -294,7 +295,7 @@ describe("backup/restore roundtrip", () => {
 
   it("post-restore writes still work: the audit id sequence was bumped past the restored ids", async () => {
     // Without the setval in restoreDb, this insert would collide with id 1.
-    await writeRecord("restaurants", { id: "post-restore", name: "After the flood" });
+    await writeRecord("restaurants", validRestaurant({ id: "post-restore", name: "After the flood" }));
     const tgt = await tableCounts(target!);
     expect(tgt.audit).toBe(section.audit.length + 1);
   });

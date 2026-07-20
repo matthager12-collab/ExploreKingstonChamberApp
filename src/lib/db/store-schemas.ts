@@ -1,5 +1,13 @@
-// Baseline structural schemas — E07 replaces these with full per-domain
-// schemas feeding the editor engine; keep the export shape.
+// Store write-gate schemas. The four editable content domains (restaurants,
+// lodging, webcams, itineraries) use the strict E07 domain schemas from
+// src/lib/schemas; every other store keeps its baseline structural rule.
+//
+// The strict swap ran 2026-07-19, after the docs/SCHEMAS.md "Wiring the
+// importer" gate reported clean: every four-domain record in the git seeds
+// AND the current post-cutover production backup bundle parses under
+// DOMAIN_SCHEMAS (scripts/verify-bundle-domains.ts — production held zero
+// four-domain records outside the seeds). Re-run that script against a fresh
+// bundle before tightening any other entry.
 //
 // Baseline = structural, not exhaustive: the store's id shape plus the
 // universally-required core field(s), everything else passed through
@@ -17,6 +25,7 @@
 //    validateRecord's `tombstone` option, used by the writeRecord choke point.
 
 import { z } from "zod";
+import { DOMAIN_SCHEMAS } from "@/lib/schemas";
 
 /** Entity-store id rule — same regex src/app/api/admin/content-records/route.ts
  *  enforces. site-copy / site-pages override it below. */
@@ -59,13 +68,13 @@ const nonempty = z.string().min(1);
 
 /** One schema per store name (every store in the E05 table). */
 export const STORE_SCHEMAS: Record<string, z.ZodType> = {
-  restaurants: z.looseObject({ id: entityId, name: nonempty }),
+  restaurants: DOMAIN_SCHEMAS.restaurants,
   events: z.looseObject({ id: entityId, title: nonempty, start: nonempty }),
   charities: z.looseObject({ id: entityId, name: nonempty }),
   "volunteer-needs": z.looseObject({ id: entityId, title: nonempty, date: nonempty }),
-  lodging: z.looseObject({ id: entityId, name: nonempty }),
-  webcams: z.looseObject({ id: entityId, name: nonempty }),
-  itineraries: z.looseObject({ id: entityId, slug: nonempty, title: nonempty }),
+  lodging: DOMAIN_SCHEMAS.lodging,
+  webcams: DOMAIN_SCHEMAS.webcams,
+  itineraries: DOMAIN_SCHEMAS.itineraries,
   "parking-zones": z.looseObject({ id: entityId, name: nonempty }),
   "map-views": z.looseObject({ id: entityId, name: nonempty }),
   "map-features": z.looseObject({ id: entityId, title: nonempty }),

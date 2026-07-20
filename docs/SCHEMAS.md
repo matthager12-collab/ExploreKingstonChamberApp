@@ -103,20 +103,32 @@ Two, both documented in the E07 PR:
    silently dropped invalid optional URLs, which lost operator input without
    telling anyone.
 
-## Wiring the importer (deferred — ask-first)
+## Wiring the importer (done 2026-07-19)
 
 E05's importer (`scripts/import-core.ts`) validates through `validateRecord` /
-`STORE_SCHEMAS` in `src/lib/db/store-schemas.ts`, whose header anticipates E07
-swapping in the full domain schemas ("keep the export shape"). That swap is
-**deliberately not done in E07**, because `STORE_SCHEMAS` also gates the
-runtime write choke point used by backup **restore**: E05 chose its baseline
-rules so that a field is only required when 100% of real records (git seeds
-*and* the production backup bundle) carry it. Registering the strict schemas
-there could send legitimate pre-E07 production records to quarantine during a
-restore or re-import.
+`STORE_SCHEMAS` in `src/lib/db/store-schemas.ts`. E07 deliberately did **not**
+register the strict domain schemas there, because `STORE_SCHEMAS` also gates
+the runtime write choke point used by backup **restore** — strict rules could
+have quarantined legitimate pre-E07 production records.
 
-Safe path when an epic picks this up (likely E17): decrypt the current
-production backup bundle, run every record of the four domains through
-`DOMAIN_SCHEMAS`, and only after that reports clean, swap the four entries in
-`STORE_SCHEMAS` (the export shape already matches). `seeds.test.ts` covers the
-git side of that guarantee today.
+The documented gate ran 2026-07-19 and reported clean, so the four entries now
+point at `DOMAIN_SCHEMAS`:
+
+- `scripts/verify-bundle-domains.ts` (the gate, reusable) validated every
+  four-domain record in the git seeds and in **three** production bundles —
+  2026-07-10, cutover bundle A (2026-07-11), and a fresh post-cutover v2
+  bundle pulled 2026-07-19 — against the strict schemas.
+- Production held **zero** four-domain records outside the git seeds (no
+  overlay files pre-cutover, no `db.records` rows post-cutover), and all 37
+  seeds parse and round-trip (`seeds.test.ts` enforces this in CI).
+
+Before tightening any *other* store's entry, re-run the same gate against a
+freshly pulled bundle:
+
+```bash
+npx tsx scripts/verify-bundle-domains.ts --seeds --self-test <bundle.json>
+```
+
+E17's importer inherits the strict validation automatically — anything it
+feeds through the choke point for these four domains is now held to the same
+rules as an admin edit.

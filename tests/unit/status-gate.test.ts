@@ -5,6 +5,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { readMergedRecords, readRecords, writeRecord } from "@/lib/db/records";
+import { validLodging, validWebcam } from "../setup/domain-docs";
 import { createTestDb, type TestDb } from "../setup/pglite-db";
 
 type Row = { id: string; name: string };
@@ -20,14 +21,14 @@ afterAll(async () => {
 describe("status gate", () => {
   it("a pending record is invisible to readMergedRecords but visible to raw reads", async () => {
     const seed: Row[] = [{ id: "town-inn", name: "Town Inn (seed)" }];
-    await writeRecord<Row>(
+    await writeRecord(
       "lodging",
-      { id: "town-inn", name: "Town Inn (pending edit)" },
+      validLodging({ id: "town-inn", name: "Town Inn (pending edit)" }),
       { status: "pending", actor: "owner@example.test", source: "portal" },
     );
-    await writeRecord<Row>(
+    await writeRecord(
       "lodging",
-      { id: "new-camp", name: "New Camp (pending)" },
+      validLodging({ id: "new-camp", name: "New Camp (pending)", type: "camping" }),
       { status: "pending", source: "portal" },
     );
 
@@ -48,8 +49,9 @@ describe("status gate", () => {
   });
 
   it("live records merge exactly as before — the gate is behavior-preserving for this epic's all-live writes", async () => {
-    await writeRecord<Row>("webcams", { id: "harbor", name: "Harbor Cam" });
+    const harborCam = validWebcam({ id: "harbor", name: "Harbor Cam" });
+    await writeRecord("webcams", harborCam);
     const merged = await readMergedRecords<Row>("webcams", []);
-    expect(merged).toEqual([{ id: "harbor", name: "Harbor Cam" }]);
+    expect(merged).toEqual([harborCam]);
   });
 });
