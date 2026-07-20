@@ -51,7 +51,29 @@ export const config = {
   ],
 };
 
+/** The ONE machine-token path behind the proxy: the E08 staleness sweep,
+ *  called by a cron with `Authorization: Bearer $WORKLIST_SWEEP_TOKEN` (or
+ *  `?token=`) and no session cookie. The proxy compares the token itself —
+ *  it runs on the Node runtime, so the env var is right here — and stays
+ *  fail-closed: env unset or mismatch falls through to the cookie check and
+ *  its 401. The route re-checks the same token (authoritative, like every
+ *  other gate behind this proxy). Discovered the hard way: without this
+ *  carve-out the cron's Bearer request died here and never reached the
+ *  route's token check at all. */
+function sweepTokenOk(request: NextRequest): boolean {
+  if (request.nextUrl.pathname !== "/api/admin/worklist/sweep") return false;
+  const expected = process.env.WORKLIST_SWEEP_TOKEN;
+  if (!expected) return false;
+  const provided =
+    request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ??
+    request.nextUrl.searchParams.get("token") ??
+    "";
+  return provided === expected;
+}
+
 export function proxy(request: NextRequest): NextResponse {
+  if (sweepTokenOk(request)) return NextResponse.next();
+
   const token = request.cookies.get(SESSION_COOKIE)?.value;
 
   // Fail CLOSED when AUTH_SECRET is missing. Throwing would surface a 500 on
