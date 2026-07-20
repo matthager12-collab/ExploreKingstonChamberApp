@@ -487,16 +487,15 @@ hand to the board or an auditor. Every restore is itself an audit row
 A restore keeps the record's current lifecycle status: restoring an old
 version of a **pending** submission does not publish it.
 
-**Deploy posture (staging-first):** the E09 branch was pushed to the
-`staging` branch (auto-deploys the staging service) and the full restore
-flow was rehearsed end-to-end against the production build + a real
-Postgres locally (login → edit → history → restore → verify → 409 on a
-stale pin → CSV). The hands-on rehearsal **on the staging host** needs an
-admin sign-in there — do one restore via `/admin/audit` and record it below
-before the production deploy.
+**Deploy posture (staging-first):** the E09 branch deployed to staging via
+the `staging` branch, the full restore flow was rehearsed end-to-end
+against the production build + a real Postgres locally (login → edit →
+history → restore → verify → 409 on a stale pin → CSV), and Mat ran the
+hands-on restore on the staging host before the production merge.
+(Staging's admin accounts were reset and re-bootstrapped that day — the
+original E03-era staging login had been lost.)
 
-<!-- After rehearsing on staging, replace this comment with the line:
-Restore rehearsed on staging: YYYY-MM-DD -->
+Restore rehearsed on staging: 2026-07-20
 
 ### Off-board a volunteer the same day (E06)
 
