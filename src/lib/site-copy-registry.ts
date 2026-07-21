@@ -893,6 +893,16 @@ export const COPY_BLOCKS = [
     fallback: "The Chamber office is staffed part time. We aim to reply within five business days, and to tell you what we can fix and when.",
   },
   {
+    key: "accessibility.ada.deadline",
+    page: "Accessibility statement (/accessibility)",
+    // Editable on purpose: the DOJ has already moved this date once (extended a
+    // year, from 2027, by a rule effective 2026-04-20), so the Chamber must be
+    // able to correct it without waiting on a deploy. Verify against ada.gov
+    // before changing it — see docs/OPERATIONS.md "Accessibility & language".
+    label: "ADA Title II WCAG 2.1 AA compliance deadline (verify at ada.gov before editing)",
+    fallback: "April 26, 2028",
+  },
+  {
     key: "accessibility.lastReviewed",
     page: "Accessibility statement (/accessibility)",
     label: "Date this statement was last reviewed (update at least once a year)",

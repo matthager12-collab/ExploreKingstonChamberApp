@@ -233,9 +233,16 @@ export function AccessibilityStatement({
             reason as much as any other.
           </p>
           <p className="mt-3 text-base text-ink">
-            A compliance deadline set under ADA Title II may apply to small public entities. We are
-            confirming that date, and our own timeline against it, with the Chamber before stating
-            it here — we would rather leave it out than publish a date we have not verified.
+            Under ADA Title II, the U.S. Department of Justice requires public entities serving
+            fewer than 50,000 people, and special district governments, to meet WCAG 2.1 AA by{" "}
+            <strong>{copyText(copy, "accessibility.ada.deadline")}</strong>. The Chamber is a
+            private nonprofit rather than a public entity, so that deadline does not bind this site
+            directly. We hold ourselves to it anyway — the people it exists to protect use this
+            site too.
+          </p>
+          <p className="mt-3 text-base text-ink">
+            That date has moved before: the Department extended it by a year, from April 26, 2027,
+            in a rule effective April 20, 2026. We re-check it whenever we review this statement.
           </p>
         </Card>
       </Section>

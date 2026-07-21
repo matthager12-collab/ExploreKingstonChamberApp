@@ -14,7 +14,7 @@ statement at `/accessibility` is reviewed at least once a year (docs/OPERATIONS.
 
 | | Standard | Status |
 |---|---|---|
-| **The gate** | WCAG 2.1 AA | What we build to and what the public statement claims. This is the ADA Title II rule baseline. |
+| **The gate** | WCAG 2.1 AA | What we build to and what the public statement claims. This is the ADA Title II rule baseline — DOJ's deadline for the tier Kingston sits in (public entities under 50,000 people, and special district governments) is **April 26, 2028**, verified against [ada.gov](https://www.ada.gov/resources/2024-03-08-web-rule/) on 2026-07-21. The Chamber is a private nonprofit, so this is a voluntary target, not a legal obligation on the site. Re-verify at every annual review: DOJ extended this date a year (from April 26, 2027) effective 2026-04-20, so pre-2026 sources are stale. |
 | **Best effort** | WCAG 2.2 — Target Size (Minimum), Focus Not Obscured | Applied on everything new (44px targets on the new pages, a visible focus ring that is never covered), but **not** gate-blocking and **not** claimed publicly. |
 | **Out of scope** | WCAG 2.2 AAA, anything requiring a paid third-party audit | Commissioning an external audit is an operator/LTAC decision, recorded in the statement when it happens. |
 

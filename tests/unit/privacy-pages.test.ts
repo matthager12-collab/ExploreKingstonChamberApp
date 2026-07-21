@@ -68,17 +68,27 @@ describe("accessibility page", () => {
     expect(html.toLowerCase()).toContain("map");
   });
 
-  it("does NOT assert a specific ADA deadline date (left for human verification)", () => {
-    // The statement should speak of confirming the date, not cite one.
-    expect(html).not.toMatch(/April\s+26,?\s+2028/);
-    // Stronger than the date pattern above: docs/OPERATIONS.md §9 item 15 is an
-    // OPEN human gate, so no form of the year may appear at all.
-    expect(html).not.toContain("2028");
+  it("states the VERIFIED ADA deadline (docs/OPERATIONS.md §9 item 15, closed 2026-07-21)", () => {
+    // This assertion was previously inverted: the date was withheld while the
+    // human gate was open. It is now verified against ada.gov's own compliance
+    // table (0-49,999 persons and special district governments -> April 26,
+    // 2028), so the statement cites it.
+    expect(html).toContain("April 26, 2028");
   });
 
-  it("names the ADA Title II posture without claiming a deadline (E14)", () => {
+  it("scopes the deadline honestly instead of claiming the Chamber is covered", () => {
     expect(html).toContain("Title II");
-    expect(html.toLowerCase()).toContain("confirming that date");
+    // The Chamber is a private nonprofit; Title II binds public entities. The
+    // statement must say the deadline does not bind this site and that we adopt
+    // it voluntarily — overclaiming legal coverage would be its own inaccuracy.
+    expect(html.toLowerCase()).toContain("does not bind this site");
+    expect(html).toMatch(/fewer than 50,000|special district/i);
+  });
+
+  it("records that the deadline has moved, so a stale date is noticeable", () => {
+    // DOJ extended it a year (from April 26, 2027) effective 2026-04-20. Saying
+    // so is what stops the next reviewer from assuming the date is settled.
+    expect(html).toContain("April 26, 2027");
   });
 
   it("gives a feedback channel that is BOTH an email and a phone number (M-14-01/FR-47)", () => {

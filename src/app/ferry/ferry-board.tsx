@@ -45,14 +45,32 @@ function upcoming(sailings: Sailing[], direction: Sailing["direction"], now: num
 function TerminalNote({ status }: { status: TerminalStatus }) {
   if (!status.live || (status.driveUpSpaces === undefined && !status.waitEstimate)) return null;
   return (
+    // E14 contrast: this panel only renders when WSDOT terminal data is LIVE
+    // (see the guard above), so its two AA failures were invisible to any scan
+    // that happened to run outside service hours — the axe smoke passed all
+    // night and failed the next afternoon on identical code.
+    //
+    // Measured against the composited fill (seaglass/25 over shell = #eaf5fa):
+    //   text-fern     #4a7c59  4.39:1  FAIL
+    //   text-ink-soft #6b7683  4.17:1  FAIL
+    //   text-ink      #20262e 13.74:1  pass
+    // Lightening the tint instead would put fern at 4.53:1 — passing by 0.03,
+    // which is the same knife-edge that hid the original --color-ink-soft bug
+    // (4.4993:1) for months. Both go to text-ink; the tint is unchanged, and no
+    // --color-* token VALUE was touched.
+    //
+    // "Live:" loses its green, which was decoration only — the word itself
+    // carries the meaning, per the never-color-alone rule (M-14-04). Restoring
+    // a green here needs a --color-fern-deep following the existing
+    // tide-deep / coral-deep idiom, which is an ask-first palette change.
     <div className="mt-3 rounded-lg bg-seaglass/25 px-3 py-2 text-sm">
       {status.driveUpSpaces !== undefined && (
         <p className="text-ink">
-          <span className="font-semibold text-fern">Live:</span> {status.driveUpSpaces} drive-up
-          car spaces left on the next boat
+          <span className="font-semibold">Live:</span> {status.driveUpSpaces} drive-up car spaces
+          left on the next boat
         </p>
       )}
-      {status.waitEstimate && <p className="mt-0.5 text-ink-soft">{status.waitEstimate}</p>}
+      {status.waitEstimate && <p className="mt-0.5 text-ink">{status.waitEstimate}</p>}
     </div>
   );
 }

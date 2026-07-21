@@ -854,7 +854,7 @@ Things a **person** (mostly the Chamber) must do — no code involved.
 | 12 | **Constant Contact takeover (Mat)** — when the CC export work is set up: inventory which CC lists GrowthZone auto-fills (Contacts → Lists), gather whatever access is needed, export the GZ email/newsletter templates at the same time, and stand up the app→CC list-export runbook (docs/ROLLOFF-GROWTHZONE.md §3). | Mat, with Chamber CC login |
 | 13 | **Name the on-call secondary contact (the Chamber board designee)** — fill in name/phone/email in [`docs/runbooks/ALERTS.md`](runbooks/ALERTS.md), add them as an UptimeRobot alert contact, and grant Render dashboard access. Bus-factor: someone's phone must ring when Mat is unavailable (UE-20 / FR-A29). | Chamber board + Mat |
 | 14 | **Create the free MaxMind GeoLite2 account + license key** for visitor-origin geo on `/admin`, then set `MAXMIND_LICENSE_KEY` on Render — [`docs/runbooks/GEOIP.md`](runbooks/GEOIP.md). Optional: analytics geography shows "Unknown" without it, nothing else changes. | Mat |
-| 15 | **Chamber/legal review of the privacy notice and accessibility statement** (E11) — read through `/privacy` and `/accessibility` before treating them as settled; in particular **verify the ADA small-entity compliance deadline date before citing it** anywhere (the accessibility page deliberately does not state a date). This item stays OPEN until reviewed. | Mat + Chamber (+ counsel if available) |
+| 15 | **Chamber/legal review of the privacy notice and accessibility statement** (E11) — read through `/privacy` and `/accessibility` before treating them as settled. ~~verify the ADA small-entity compliance deadline date before citing it~~ **Date half RESOLVED 2026-07-21**: verified against [ada.gov's compliance table](https://www.ada.gov/resources/2024-03-08-web-rule/) — public entities under 50,000 people and special district governments must meet WCAG 2.1 AA by **April 26, 2028** (DOJ extended it a year from April 26, 2027 in an interim final rule effective 2026-04-20, so anything written before then says 2027 and is stale). `/accessibility` now states it, scoped honestly: the Chamber is a private nonprofit, so Title II does not bind the site and the date is adopted voluntarily. The date lives in the `accessibility.ada.deadline` copy block — editable without a deploy, because DOJ has moved it before. **The broader Chamber/counsel read-through of both pages stays OPEN.** | Mat + Chamber (+ counsel if available) |
 | 16 | **Confirm the E11 retention windows** are what the Chamber wants on the public page (k=5 distinct sessions; geo-ping 90 days→rollup; page/link 25 months; survey 36 months; hunt submissions+photos 12 months; request contacts scrubbed at resolution). Changing any is a notice-version bump. | Mat + Chamber |
 
 ---
@@ -1080,7 +1080,14 @@ something significant ships.
 - Re-check the **"How we check"** section. It currently describes the full per-route
   automated gate as *planned, not shipped*. When that gate lands, the wording changes; until
   then it must not claim it.
-- **The ADA compliance date is deliberately absent** and must stay absent until §9 item 15 is
-  closed. The statement's legal paragraph is written so a verified date drops into one
-  sentence without a rewrite. Do not add a date from memory, from a blog post, or from a
-  model — verify it, close item 15, then add it.
+- **The ADA compliance date is now stated: April 26, 2028** (verified 2026-07-21 against
+  [ada.gov](https://www.ada.gov/resources/2024-03-08-web-rule/) — the tier for public entities
+  under 50,000 people and special district governments). It lives in the
+  `accessibility.ada.deadline` copy block, so Admin → Site content can correct it without a
+  deploy.
+  **Re-verify it at every annual review, and never from memory or a model.** DOJ has already
+  moved this date once — an interim final rule effective 2026-04-20 pushed it a year, from
+  April 26, 2027. Any source written before then states 2027 and is now wrong, which is exactly
+  the failure this gate was built to prevent. Check ada.gov itself, not a summary.
+  The statement also names the earlier 2027 date and the extension, so a reader can tell the
+  figure is tracked rather than copied once and forgotten.

@@ -196,13 +196,14 @@ describe("/accessibility — the accessibility statement", () => {
     // …and it says when it was last looked at.
     expect(html).toContain("Last reviewed");
 
-    // REGRESSION GUARD for the open human gate (docs/OPERATIONS.md §9 item 15):
-    // the ADA small-entity compliance date is NOT verified, so this page must
-    // not state one. If someone adds it, this fails until the gate is closed.
+    // The human gate (docs/OPERATIONS.md §9 item 15) was CLOSED on 2026-07-21:
+    // the date was verified against ada.gov's compliance table, so this guard is
+    // now the inverse — the page must SERVE the verified date end to end, not
+    // merely contain it in source.
     expect(
-      html.includes("2028"),
-      "the accessibility page must not assert an unverified ADA compliance date (OPERATIONS §9 item 15)",
-    ).toBe(false);
+      html.includes("April 26, 2028"),
+      "the accessibility page must serve the verified ADA compliance date (OPERATIONS §9 item 15, closed)",
+    ).toBe(true);
   });
 
   it("is linked from the footer on the home page", async () => {
