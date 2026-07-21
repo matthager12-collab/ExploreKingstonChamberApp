@@ -11,6 +11,7 @@
 
 import { notFound } from "next/navigation";
 import { getSessionUser } from "./auth";
+import { HiddenPreviewEvict } from "./hidden-preview-evict";
 import { getHiddenPaths } from "./stores/site-store";
 
 export const HIDEABLE_PAGES: { path: string; label: string }[] = [
@@ -39,10 +40,18 @@ export async function assertPageVisible(path: string): Promise<boolean> {
   notFound();
 }
 
-/** Small notice admins see on a page that is hidden from the public. */
+/**
+ * Small notice admins see on a page that is hidden from the public.
+ *
+ * This banner is also the marker for "the bytes on screen are an admin-only
+ * render", so it carries <HiddenPreviewEvict/> — a render-nothing client child
+ * that pulls this pathname back out of the service worker's shell cache. See
+ * hidden-preview-evict.tsx for why the worker can't make that call itself.
+ */
 export function HiddenPageBanner() {
   return (
     <div className="mx-auto max-w-5xl px-4 pt-4">
+      <HiddenPreviewEvict />
       <p className="rounded-xl border border-coral/40 bg-coral/10 px-4 py-2 text-sm font-medium text-coral-deep">
         Hidden page — visitors get a 404. Only admins can see this preview.
         Unhide it in Admin → Site content.
