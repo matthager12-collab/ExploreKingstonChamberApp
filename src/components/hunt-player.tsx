@@ -219,7 +219,10 @@ function StopCard({
         <>
           <p className="mt-2 text-ink">{stop.clue}</p>
           {showHint ? (
-            <p className="mt-2 rounded-lg bg-sand/50 p-3 text-sm text-ink-soft">💡 {stop.hint}</p>
+            // text-ink, not text-ink-soft: on a sand/50 tint ink-soft lands at
+            // 4.12:1, under AA. This is a scavenger-hunt HINT read outdoors on
+            // a phone in daylight — the worst possible place for low contrast.
+            <p className="mt-2 rounded-lg bg-sand/50 p-3 text-sm text-ink">💡 {stop.hint}</p>
           ) : (
             <button
               onClick={() => setShowHint(true)}

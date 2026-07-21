@@ -30,7 +30,10 @@ export default async function SuggestEventPage() {
       />
       <Section>
         {access.adminPreview && (
-          <p className="mb-4 rounded-lg border border-sand-deep bg-sand/40 px-3 py-2 text-xs font-medium text-ink-soft">
+          // text-ink, not text-ink-soft: ink-soft is 4.62:1 on white but only
+          // 4.20:1 once a sand tint lifts the background toward it (E15
+          // follow-up — the palette-wide contrast guard now catches this).
+          <p className="mb-4 rounded-lg border border-sand-deep bg-sand/40 px-3 py-2 text-xs font-medium text-ink">
             Admin preview — the unified calendar flag is off, so visitors can&apos;t
             see this page yet.
           </p>
