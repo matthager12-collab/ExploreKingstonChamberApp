@@ -36,6 +36,91 @@ export type WorklistItemView = {
 
 export type WorklistCounts = Record<WorklistType, Record<WorklistState, number>>;
 
+/** E11 fulfillment controls for a privacy_request item. `access` exports the
+ *  requester's data (downloaded client-side); `delete` runs the PII-inventory
+ *  sweep behind a confirm and a legal-hold check; `records` is human-fulfilled
+ *  (retention/legal-hold reconciliation off-app) so it only offers resolve. */
+function PrivacyRequestTools({
+  item,
+  busy,
+  note,
+  actionBtn,
+  onFulfill,
+  onResolve,
+}: {
+  item: WorklistItemView;
+  busy: boolean;
+  note: string;
+  actionBtn: string;
+  onFulfill: (
+    itemId: string,
+    op: "access" | "delete" | "hold-set" | "hold-clear",
+    opts?: { reason?: string; confirmText?: string },
+  ) => void;
+  onResolve: (resolution: string) => void;
+}) {
+  const kind = String(item.payload.requestKind ?? "");
+  const resolved = item.state === "resolved" || item.state === "dismissed";
+  if (resolved) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {kind === "access" && (
+        <button
+          className={`${actionBtn} bg-sound text-white hover:bg-sound-deep`}
+          disabled={busy}
+          onClick={() => onFulfill(item.id, "access")}
+        >
+          Run access export
+        </button>
+      )}
+      {kind === "delete" && (
+        <>
+          <button
+            className={`${actionBtn} bg-coral text-white hover:opacity-90`}
+            disabled={busy}
+            onClick={() =>
+              onFulfill(item.id, "delete", {
+                confirmText:
+                  "Delete/anonymize this person's data across every store? This cannot be undone.",
+              })
+            }
+          >
+            Delete their data
+          </button>
+          <button
+            className={`${actionBtn} border border-sand text-ink hover:border-tide`}
+            disabled={busy || !note.trim()}
+            title={note.trim() ? "" : "Type the hold reason in the note field first"}
+            onClick={() => onFulfill(item.id, "hold-set", { reason: note })}
+          >
+            Place legal hold
+          </button>
+          <button
+            className={`${actionBtn} border border-sand text-ink-soft hover:border-tide`}
+            disabled={busy}
+            onClick={() => onFulfill(item.id, "hold-clear")}
+          >
+            Clear hold
+          </button>
+        </>
+      )}
+      {kind === "records" && (
+        <span className="text-xs text-ink-soft">
+          Public-records request — fulfilled by a person (retention + legal-hold reconciliation).
+          Resolve when handled.
+        </span>
+      )}
+      <button
+        className={`${actionBtn} border border-sand text-ink hover:border-tide`}
+        disabled={busy}
+        onClick={() => onResolve("fulfilled")}
+      >
+        Mark fulfilled
+      </button>
+    </div>
+  );
+}
+
 const TYPE_LABELS: Record<WorklistType, string> = {
   moderation: "Moderation",
   sync_conflict: "Sync conflicts",
@@ -322,6 +407,56 @@ export function WorklistManager({
     }
   }
 
+  // E11 privacy_request fulfillment — posts to the dedicated fulfill route
+  // (not /api/admin/worklist), because access returns a downloadable bundle
+  // and delete runs the PII-inventory sweep. Non-programmer-runnable: buttons
+  // + a browser confirm, no scripts.
+  async function privacyFulfill(
+    itemId: string,
+    op: "access" | "delete" | "hold-set" | "hold-clear",
+    opts?: { reason?: string; confirmText?: string },
+  ) {
+    if (opts?.confirmText && !window.confirm(opts.confirmText)) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/admin/privacy/fulfill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ op, itemId, reason: opts?.reason }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        ok?: boolean;
+        refused?: string;
+        message?: string;
+        export?: unknown;
+      };
+      if (!res.ok || data.ok === false) {
+        setMessage({ ok: false, text: data.message ?? data.error ?? "Action failed" });
+      } else if (op === "access" && data.export) {
+        // Hand the admin a file to send the requester — no outbound send here.
+        const blob = new Blob([JSON.stringify(data.export, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `privacy-access-${itemId.slice(0, 8)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setMessage({ ok: true, text: "Access export downloaded — send it to the requester." });
+      } else {
+        setMessage({ ok: true, text: op === "delete" ? "Data deleted." : "Done." });
+        setNote("");
+      }
+      await refresh();
+      router.refresh();
+    } catch {
+      setMessage({ ok: false, text: "Could not reach the server — try again." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function pick<T>(setter: (v: T) => void, key: "type" | "assignee" | "overdue" | "view") {
     return (value: T) => {
       setter(value);
@@ -536,11 +671,27 @@ export function WorklistManager({
                               Fixed it
                             </button>
                           )}
-                          {(item.type === "sync_conflict" || item.type === "privacy_request") && (
+                          {item.type === "sync_conflict" && (
                             <span className="text-xs text-ink-soft">
                               Tools for this queue arrive with its producer epic — resolve or
                               dismiss below if it&apos;s already handled.
                             </span>
+                          )}
+                          {item.type === "privacy_request" && (
+                            <PrivacyRequestTools
+                              item={item}
+                              busy={busy}
+                              note={note}
+                              actionBtn={actionBtn}
+                              onFulfill={privacyFulfill}
+                              onResolve={(resolution) =>
+                                void act(
+                                  { action: "resolve", id: item.id, resolution, note },
+                                  undefined,
+                                  "Resolved.",
+                                )
+                              }
+                            />
                           )}
 
                           {!item.assigneeUserId && (

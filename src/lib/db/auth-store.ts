@@ -48,7 +48,8 @@ export type AuthAuditAction =
   | "invite-revoke"
   | "invite-redeem"
   | "org-create"
-  | "org-update";
+  | "org-update"
+  | "privacy-anonymize";
 
 export interface AuthAuditEntry {
   actor: string;
@@ -220,6 +221,89 @@ export async function deleteUser(
       tx,
     );
   });
+}
+
+/**
+ * E11 MHMDA-delete (D-11): anonymize a user's PII in place instead of
+ * deleteUser. Two reasons deleteUser is wrong for a privacy erasure: (1) its
+ * audit `before` snapshots the email+name — a privacy delete must not RE-WRITE
+ * the very PII it removes into the immortal audit table; (2) the user's id is
+ * the stable opaque key `record.updated_by` and `audit.actor` reference, so we
+ * keep the ROW (scrubbed) rather than dangling those refs. Email/name/hash are
+ * overwritten with non-identifying sentinels, the session is revoked, and the
+ * audit row is METADATA-ONLY. Returns the user id (the opaque key callers
+ * re-key references to), or undefined if no such user. */
+export async function anonymizeUser(
+  id: string,
+  entry: Omit<AuthAuditEntry, "store" | "recordId" | "before" | "after" | "action">,
+): Promise<string | undefined> {
+  return getDb().transaction(async (tx) => {
+    const [before] = await tx.select().from(users).where(eq(users.id, id));
+    if (!before) return undefined;
+    await tx
+      .update(users)
+      .set({
+        email: `deleted-${id}@redacted.invalid`,
+        name: "Deleted user",
+        passwordHash: "disabled",
+        disabled: true,
+        sessionVersion: before.sessionVersion + 1,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, id));
+    await appendAuthAudit(
+      {
+        ...entry,
+        action: "privacy-anonymize",
+        store: "users",
+        recordId: id,
+        // Metadata-only: the erasure must not immortalize the erased email.
+        before: { anonymized: false },
+        after: { anonymized: true },
+      },
+      tx,
+    );
+    return id;
+  });
+}
+
+/** E11: null out email + note on every invite carrying `email` (case-
+ *  insensitive), for MHMDA-delete fulfillment. Metadata-only audit per row.
+ *  Returns the count scrubbed. */
+export async function anonymizeInvitesByEmail(
+  email: string,
+  entry: Omit<AuthAuditEntry, "store" | "recordId" | "before" | "after" | "action">,
+): Promise<number> {
+  return getDb().transaction(async (tx) => {
+    const rows = await tx
+      .select()
+      .from(invites)
+      .where(sql`lower(${invites.email}) = lower(${email})`);
+    for (const inv of rows) {
+      await tx.update(invites).set({ email: null, note: null }).where(eq(invites.code, inv.code));
+      await appendAuthAudit(
+        {
+          ...entry,
+          action: "privacy-anonymize",
+          store: "invites",
+          recordId: inv.code,
+          before: { anonymized: false },
+          after: { anonymized: true },
+        },
+        tx,
+      );
+    }
+    return rows.length;
+  });
+}
+
+/** Invites whose contact email matches (case-insensitive) — the access-request
+ *  lookup. */
+export async function findInvitesByEmail(email: string): Promise<InviteRow[]> {
+  return getDb()
+    .select()
+    .from(invites)
+    .where(sql`lower(${invites.email}) = lower(${email})`);
 }
 
 // ---------- orgs ----------

@@ -60,9 +60,39 @@ export type WorklistWriteMeta = {
   source?: "admin" | "portal" | "public" | "system";
 };
 
-/** The item fields allowed into an audit row. Payload rides along whole: it
- *  holds proposed records and report messages — content, not secrets — and
- *  the audit trail is exactly where a rejected proposal should survive. */
+/**
+ * E11 (D-12): strip the REQUESTER's contact PII from a worklist payload.
+ * Proposed-record and moderation payloads ride whole (that content IS the
+ * point of the audit trail), but the free-text contact a person gives to
+ * reach us about a privacy or accuracy request is their PII — it must never
+ * enter the immortal audit table, and it is scrubbed from the live row once
+ * the request is resolved (the "redact-at-resolution" retention rule). This
+ * one helper serves both: the audit-snapshot redaction and the resolution
+ * scrub, so the two can never diverge.
+ */
+export function stripRequestContact(
+  type: WorklistType,
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  if (type === "privacy_request") {
+    const { contact: _omit, ...rest } = payload as { contact?: unknown };
+    return rest;
+  }
+  if (type === "report_inaccurate" && Array.isArray(payload.messages)) {
+    return {
+      ...payload,
+      messages: (payload.messages as Record<string, unknown>[]).map((m) => {
+        const { contact: _omit, ...rest } = m;
+        return rest;
+      }),
+    };
+  }
+  return payload;
+}
+
+/** The item fields allowed into an audit row. Payload rides along whole EXCEPT
+ *  the requester's contact PII, which stripRequestContact removes (D-12) — the
+ *  audit table is never-purged, so a delete-request email must not land here. */
 export function auditableWorklistItem(row: WorklistItemRow): Record<string, unknown> {
   return {
     id: row.id,
@@ -73,7 +103,7 @@ export function auditableWorklistItem(row: WorklistItemRow): Record<string, unkn
     state: row.state,
     assigneeUserId: row.assigneeUserId,
     dueAt: row.dueAt?.toISOString() ?? null,
-    payload: row.payload,
+    payload: stripRequestContact(row.type, row.payload),
     resolution: row.resolution,
     resolutionNote: row.resolutionNote,
     createdBy: row.createdBy,
@@ -389,8 +419,12 @@ export async function resolveItem(
     id,
     ACTIVE_STATES,
     "worklist-resolve",
-    () => ({
+    (row) => ({
       state: "resolved" as WorklistState,
+      // Scrub the requester's contact on resolution (D-12 / redact-at-
+      // resolution) — the resolved item is fulfillment evidence, not a
+      // durable store of the email someone gave to reach us.
+      payload: stripRequestContact(row.type, row.payload),
       resolution: opts.resolution,
       resolutionNote: opts.note ?? null,
       resolvedAt: new Date(),
@@ -410,8 +444,12 @@ export async function dismissItem(
     id,
     ACTIVE_STATES,
     "worklist-dismiss",
-    () => ({
+    (existing) => ({
       state: "dismissed" as WorklistState,
+      // Scrub the requester's contact from the live row on resolution
+      // (D-12 / the "redact-at-resolution" retention rule) — the resolved
+      // item keeps kind/state/dates as fulfillment evidence, not the email.
+      payload: stripRequestContact(existing.type, existing.payload),
       resolutionNote: opts.note ?? null,
       resolvedAt: new Date(),
       resolvedBy: opts.resolvedBy,

@@ -105,10 +105,14 @@ export const reportInaccuratePayloadSchema = z.object({
   count: z.number().int().min(1),
 });
 
-/** privacy_request — access/delete request (shape agreed for E11; fixtures
- *  only in E08). Contact is required: there is no account to reply through. */
+/** privacy_request — access/delete/records request (E11). Contact is required:
+ *  there is no account to reply through. `records` is the FR-A92 public-records
+ *  intake — humans fulfill it (retention/legal-hold reconciliation), so it
+ *  shares the shape but not the automated access/delete tooling. The kind lives
+ *  in the jsonb payload, so adding it here needs NO migration (the DB CHECK
+ *  constraints cover type + state only). */
 export const privacyRequestPayloadSchema = z.object({
-  requestKind: z.enum(["access", "delete"], { message: "unknown request kind" }),
+  requestKind: z.enum(["access", "delete", "records"], { message: "unknown request kind" }),
   contact: z.string().min(1, "a way to reach you is required").max(200),
   scopeNote: z.string().max(2000).optional(),
 });

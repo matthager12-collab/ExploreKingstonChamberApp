@@ -110,6 +110,38 @@ describe("WorklistManager", () => {
     expect(privacyOpen).toContain("visitor@example.test");
   });
 
+  it("privacy_request fulfillment controls render per kind (E11)", () => {
+    // access → export button.
+    const accessItem = view({
+      type: "privacy_request",
+      subjectStore: "privacy",
+      payload: privacyRequestPayload({ requestKind: "access" }),
+    });
+    const accessHtml = render([accessItem], accessItem.id);
+    expect(accessHtml).toContain("Run access export");
+
+    // delete → delete + legal-hold controls, with the delete confirm gate.
+    const deleteItem = view({
+      type: "privacy_request",
+      subjectStore: "privacy",
+      payload: privacyRequestPayload({ requestKind: "delete" }),
+    });
+    const deleteHtml = render([deleteItem], deleteItem.id);
+    expect(deleteHtml).toContain("Delete their data");
+    expect(deleteHtml).toContain("Place legal hold");
+    expect(deleteHtml).toContain("Clear hold");
+
+    // records → human-fulfillment note, no automated delete button.
+    const recordsItem = view({
+      type: "privacy_request",
+      subjectStore: "privacy",
+      payload: privacyRequestPayload({ requestKind: "records" }),
+    });
+    const recordsHtml = render([recordsItem], recordsItem.id);
+    expect(recordsHtml).toContain("Public-records request");
+    expect(recordsHtml).not.toContain("Delete their data");
+  });
+
   it("destructive actions are confirm-gated (AC10): approve/reject/takedown/dismiss carry data-confirm", () => {
     const html = render(FIXTURES, FIXTURES[0].id);
     expect(html).toContain('data-confirm="Approve and publish');

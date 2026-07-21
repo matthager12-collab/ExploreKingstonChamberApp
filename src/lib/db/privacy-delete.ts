@@ -83,6 +83,24 @@ export async function isUnderLegalHold(store: string, recordId: string): Promise
   return (await heldRecordIds(store, [recordId])).has(recordId);
 }
 
+/**
+ * E11 MHMDA-delete (D-11): re-point every `record.updated_by` that holds a
+ * departing user's EMAIL to their opaque, non-identifying user id. These
+ * columns are mutable operational metadata (who last touched a record), not
+ * the audit trail — so the email leaves the queryable stores while referential
+ * integrity is preserved. (The append-only `audit.actor` keeps the email as a
+ * records-floor exception, documented in docs/PRIVACY.md.) Returns the count
+ * re-keyed. */
+export async function rekeyRecordActor(oldActor: string, newActor: string): Promise<number> {
+  if (!oldActor || oldActor === newActor) return 0;
+  const res = await getDb()
+    .update(record)
+    .set({ updatedBy: newActor })
+    .where(eq(record.updatedBy, oldActor));
+  const r = res as unknown as { rowCount?: number; affectedRows?: number };
+  return r.rowCount ?? r.affectedRows ?? 0;
+}
+
 export async function listLegalHolds(): Promise<LegalHoldRow[]> {
   return getDb().select().from(legalHold);
 }
