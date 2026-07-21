@@ -901,6 +901,48 @@ read the *effective* verdict, so they stay consistent.
 
 ---
 
+## 5b. Scheduled jobs — the complete inventory
+
+Every recurring job, and where it runs. **If a job is not in this table it does
+not run.**
+
+| Job | Where | Schedule (UTC) | Calls | Token |
+|---|---|---|---|---|
+| `events-ingest` | Render cron | `23 * * * *` hourly | `POST /api/events/ingest` | `EVENTS_INGEST_TOKEN` |
+| `ferry-observe` | Render cron | `*/15 * * * *` | `POST /api/ferry/observe` | `FERRY_OBSERVE_TOKEN` |
+| `ferry-accuracy` | Render cron | `0 8 * * *` (~1 AM Pacific) | `POST /api/ferry/accuracy` | `FERRY_OBSERVE_TOKEN` |
+| `worklist-sweep` | Render cron | `0 14 * * 1` Mondays (~7 AM Pacific) | `POST /api/admin/worklist/sweep` | `WORKLIST_SWEEP_TOKEN` |
+| `backup-offsite` | **GitHub Actions** | `23 9 * * *` daily | `GET /api/admin/backup` | `BACKUP_TOKEN` |
+| `privacy-retention` | GitHub Actions, **manual only** | *(no schedule — ships dark)* | `POST /api/admin/privacy/retention` | `RETENTION_TOKEN` |
+
+**Why the app crons live on Render (E15 slice 4).** GitHub disables scheduled
+workflows after 60 days with no repo commits. For an app maintained by one
+part-time person a quiet stretch is normal, and the failure is silent: ferry
+observations — the data the busyness forecast learns from — would just stop.
+
+**Why `backup-offsite` deliberately stays on Actions.** It installs `age` and
+encrypts the bundle **on the runner** before it is stored anywhere. Running it
+from a Render cron would mean putting the backup keypair inside the app's own
+image, which is the one thing a backup has to survive.
+
+**Why `privacy-retention` has no schedule.** Its apply flag is
+`inputs.apply || event_name == schedule`, so giving it *any* schedule makes it
+start really deleting. Enabling the purge is an owner decision (E11), not a
+side effect of a cron change. `tests/unit/cron-inventory.test.ts` fails if a
+schedule is ever added.
+
+**The trap that has bitten this repo.** A cron calling an `/api/admin/*` route
+is authorised by the `MACHINE_TOKEN_ROUTES` table in `src/proxy.ts`, which maps
+the **exact path** to the env var holding its token. A path missing from that
+table is rejected no matter how correct the token is, and the only symptom is a
+job that quietly stops. That is how nightly backups broke once. The same test
+file asserts every cron's admin path is present in the table.
+
+**Rotating a cron token** means updating it in **two** places — the web service
+and the cron service — because the cron authenticates against the web service.
+
+---
+
 ## 6. Seasonal & recurring maintenance calendar
 
 Dated, concrete, grounded in the seed files. Put these on a real calendar.

@@ -164,11 +164,94 @@ services:
       - key: EVENTS_INGEST_TOKEN
         sync: false
 
+  # ── App crons: moved off GitHub Actions in E15 slice 4 ────────────────────
+  #
+  # WHY THEY MOVED: GitHub disables scheduled workflows after 60 days with no
+  # repo commits. For an app maintained by one part-time person, a quiet
+  # stretch silently stops the ferry data collection that the busyness
+  # forecast learns from — and nothing announces it. Render crons have no such
+  # rule.
+  #
+  # SHAPE: a prebuilt curl image, not this repo's Docker image. Rebuilding the
+  # whole app just to issue one HTTP request would make every cron a several-
+  # minute build. The command lives inline here rather than in a script file
+  # because `runtime: image` mounts no repo — and the blueprint is in git, so
+  # it is just as reviewable.
+  #
+  # Each token must ALSO be set on the web service; the request is authorised
+  # by src/proxy.ts's MACHINE_TOKEN_ROUTES table, which maps the exact path to
+  # the env var holding its token. A cron hitting an /api/admin route that is
+  # missing from that table 404s no matter how good the token is — that is the
+  # bug that silently broke nightly backups once.
+
+  - type: cron
+    name: ferry-observe
+    runtime: image
+    image:
+      url: docker.io/curlimages/curl:8.10.1
+    schedule: "*/15 * * * *" # every 15 min (UTC)
+    region: oregon
+    # The endpoint dedupes server-side over ~10 min, so an overlapping or
+    # double firing is harmless — which is what made the Actions→Render
+    # handover safe to do with both running briefly.
+    dockerCommand: >-
+      curl --fail --silent --show-error --max-time 30
+      --retry 3 --retry-delay 10 --retry-all-errors -X POST
+      -H "Authorization: Bearer $FERRY_OBSERVE_TOKEN"
+      https://explore-kingston.onrender.com/api/ferry/observe
+    envVars:
+      - key: FERRY_OBSERVE_TOKEN
+        sync: false
+
+  - type: cron
+    name: ferry-accuracy
+    runtime: image
+    image:
+      url: docker.io/curlimages/curl:8.10.1
+    schedule: "0 8 * * *" # 08:00 UTC daily (~1 AM Pacific), after the day's data is in
+    region: oregon
+    dockerCommand: >-
+      curl --fail --silent --show-error --max-time 60
+      --retry 3 --retry-delay 10 --retry-all-errors -X POST
+      -H "Authorization: Bearer $FERRY_OBSERVE_TOKEN"
+      https://explore-kingston.onrender.com/api/ferry/accuracy
+    envVars:
+      - key: FERRY_OBSERVE_TOKEN
+        sync: false
+
+  - type: cron
+    name: worklist-sweep
+    runtime: image
+    image:
+      url: docker.io/curlimages/curl:8.10.1
+    schedule: "0 14 * * 1" # Mondays 14:00 UTC (~7 AM Pacific) — E08 staleness sweep
+    region: oregon
+    dockerCommand: >-
+      curl --fail --silent --show-error --max-time 30
+      --retry 3 --retry-delay 10 --retry-all-errors -X POST
+      -H "Authorization: Bearer $WORKLIST_SWEEP_TOKEN"
+      https://explore-kingston.onrender.com/api/admin/worklist/sweep
+    envVars:
+      - key: WORKLIST_SWEEP_TOKEN
+        sync: false
+
+  # NOT MOVED, deliberately:
+  #  - backup-offsite (.github/workflows/backup-offsite.yml) stays on Actions.
+  #    It installs `age` and encrypts the bundle ON THE RUNNER before anything
+  #    is stored. Moving it here would mean putting the backup keypair inside
+  #    the app's own image — the one thing a backup must survive.
+  #  - privacy-retention has NO schedule at all: it is workflow_dispatch-only
+  #    and SHIPS DARK by design (E11). Because its APPLY flag is
+  #    `inputs.apply || event_name == schedule`, giving it any schedule makes
+  #    it start really deleting. Enabling the purge is an owner decision, not
+  #    a cron migration.
+
   # Staging target for risky changes (E03). Builds the SAME Dockerfile/image
   # as production; deploy to it with `git push origin <branch>:staging`. It
-  # starts from an EMPTY disk (its own `data-staging` volume) — no production
-  # PII ever lands here by default (do not restore a production backup onto
-  # it). NOINDEX=1 keeps it out of search engines (src/app/robots.ts).
+  # holds no persistent state of its own (E15 removed the disks) — no
+  # production PII ever lands here by default (do not restore a production
+  # backup onto it). NOINDEX=1 keeps it out of search engines
+  # (src/app/robots.ts), which also suppresses its sitemap directive.
   - type: web
     name: explore-kingston-staging
     runtime: docker

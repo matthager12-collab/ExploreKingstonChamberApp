@@ -1,0 +1,66 @@
+{
+  "//": [
+    "E15 slice 5 — Lighthouse mobile performance budget, enforced in CI.",
+    "",
+    "The bar is the v2 requirement (NFR-1 / M-18-02): mobile LCP under 2.5s on",
+    "throttled 4G. Visitors reach this app standing in a ferry queue on a phone,",
+    "often on a weak signal, so the mobile-throttled number is the real one.",
+    "",
+    "Runs against a LOCAL production build, never the live site: a CI job that",
+    "measures production would fail on someone else's traffic spike and would",
+    "block a PR for a reason the author cannot act on.",
+    "",
+    "numberOfRuns 3 + median aggregation because Lighthouse is noisy in CI.",
+    "Flakiness is handled by taking the median, NOT by loosening the budget."
+  ],
+  "ci": {
+    "collect": {
+      "startServerCommand": "node .next/standalone/server.js",
+      "startServerReadyPattern": "Ready|started server|Local:",
+      "startServerReadyTimeout": 60000,
+      "url": [
+        "http://127.0.0.1:3000/",
+        "http://127.0.0.1:3000/ferry",
+        "http://127.0.0.1:3000/eat",
+        "http://127.0.0.1:3000/events"
+      ],
+      "numberOfRuns": 3,
+      "settings": {
+        "//": "NO desktop preset — it would override the mobile emulation and throttling below, and we would be measuring a laptop while calling it a phone budget.",
+        "formFactor": "mobile",
+        "screenEmulation": {
+          "mobile": true,
+          "width": 390,
+          "height": 844,
+          "deviceScaleFactor": 3,
+          "disabled": false
+        },
+        "throttlingMethod": "simulate",
+        "throttling": {
+          "rttMs": 150,
+          "throughputKbps": 1638.4,
+          "cpuSlowdownMultiplier": 4,
+          "requestLatencyMs": 562.5,
+          "downloadThroughputKbps": 1474.56,
+          "uploadThroughputKbps": 675
+        },
+        "skipAudits": ["uses-http2", "canonical"]
+      }
+    },
+    "assert": {
+      "aggregationMethod": "median",
+      "assertions": {
+        "categories:performance": ["error", { "minScore": 0.85 }],
+        "largest-contentful-paint": ["error", { "maxNumericValue": 2500 }],
+        "total-blocking-time": ["error", { "maxNumericValue": 300 }],
+        "cumulative-layout-shift": ["error", { "maxNumericValue": 0.1 }],
+        "resource-summary:script:size": ["error", { "maxNumericValue": 400000 }],
+        "resource-summary:image:size": ["warn", { "maxNumericValue": 1000000 }]
+      }
+    },
+    "upload": {
+      "target": "filesystem",
+      "outputDir": ".lighthouseci"
+    }
+  }
+}

@@ -54,3 +54,24 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:server
+
+      # E15 slice 5 — Lighthouse mobile performance budget (NFR-1 / M-18-02:
+      # LCP < 2.5s on throttled 4G). Runs in THIS job to reuse the build and
+      # the Postgres service container above rather than paying for a second
+      # build. Measures a local production build, never the live site: a gate
+      # that measured production would fail on someone else's traffic spike
+      # and block a PR for a reason its author cannot act on.
+      - name: Assemble the standalone bundle (what the Docker runner ships)
+        run: |
+          cp -r public .next/standalone/
+          mkdir -p .next/standalone/.next && cp -r .next/static .next/standalone/.next/
+          mkdir -p .next/standalone/db && cp -r db/migrations .next/standalone/db/
+      - name: Lighthouse budgets
+        env:
+          # The standalone server needs a real database — the pages being
+          # measured read from it. Reuses the service container; the boot
+          # migrator creates the schema on first start.
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
+          AUTH_SECRET: ci-lighthouse-secret-0123456789abcdef
+          PORT: "3000"
+        run: npx lhci autorun
