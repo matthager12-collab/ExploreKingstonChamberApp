@@ -21,7 +21,7 @@ import { getEvents } from "@/lib/stores/event-store";
 import { getEnabledSourceIds } from "@/lib/stores/calendar-sources-store";
 import { getExternalEvents } from "@/lib/stores/external-events-store";
 import { listDedupeOverrides } from "@/lib/stores/event-overrides-store";
-import { mergeCalendar } from "./dedupe";
+import { mergeCalendar, reviewClusters, type EventCluster } from "./dedupe";
 import { eventItemToNormalized } from "./normalize";
 import { expandEvents } from "./rrule-expand";
 import { pacificDateKey } from "./tz";
@@ -37,6 +37,25 @@ const WINDOW_FORWARD_MS = 180 * 86_400_000;
  * the thinking; this function only wires stores to it.
  */
 export async function getUnifiedEvents(now: Date = new Date()): Promise<NormalizedEvent[]> {
+  const { expanded, overrides } = await expandedCalendar(now);
+  return mergeCalendar(expanded, overrides);
+}
+
+/** The admin dedupe-review view (FR-EVT-02): every multi-member cluster in
+ *  the current merge, plus the merged list — the /admin/events-sources
+ *  preview surface (session-gated there; this function itself is not). */
+export async function getUnifiedReview(now: Date = new Date()): Promise<{
+  merged: NormalizedEvent[];
+  clusters: EventCluster[];
+}> {
+  const { expanded, overrides } = await expandedCalendar(now);
+  return {
+    merged: mergeCalendar(expanded, overrides),
+    clusters: reviewClusters(expanded, overrides),
+  };
+}
+
+async function expandedCalendar(now: Date) {
   const [inApp, enabledIds, overrides] = await Promise.all([
     getEvents(),
     getEnabledSourceIds(),
@@ -62,7 +81,7 @@ export async function getUnifiedEvents(now: Date = new Date()): Promise<Normaliz
     windowEnd: new Date(now.getTime() + WINDOW_FORWARD_MS),
   });
 
-  return mergeCalendar(expanded, overrides);
+  return { expanded, overrides };
 }
 
 /**

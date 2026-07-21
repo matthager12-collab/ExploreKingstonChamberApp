@@ -121,6 +121,15 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     capability: "moderate",
   },
   {
+    id: "events-sources",
+    href: "/admin/events-sources",
+    title: "Events sources",
+    navLabel: "Events",
+    blurb:
+      "Which community calendars feed the unified events list, duplicate review, and the go-live switch.",
+    capability: "manage-site",
+  },
+  {
     id: "audit",
     href: "/admin/audit",
     title: "Change history",

@@ -68,6 +68,7 @@ export {
   recordLogout,
   redeemInvite,
   revokeInvite,
+  setOrgTrustedAutoPublish,
   setUserDisabled,
   setUserRole,
   toPublicUser,
