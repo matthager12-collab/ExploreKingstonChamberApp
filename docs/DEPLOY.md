@@ -32,7 +32,7 @@ above the store modules (routes, components, domain types) ever branches:
 | Seam file | Detector | Backend when set | Fallback when unset |
 |---|---|---|---|
 | `src/lib/data-dir.ts` | `DATA_DIR` present | absolute path on a **persistent disk** — images/hunt photos only since E05 (until E15) | `<repo>/.data/` |
-| `src/lib/blob-store.ts` | `hasBlob()` = `BLOB_READ_WRITE_TOKEN` set | **Vercel Blob** (public CDN) for images | image bytes under `DATA_DIR`, served by the app's image routes |
+| `src/lib/blob-store.ts` | `hasR2()` = all four `R2_IMAGES_*` set | **Cloudflare R2** — a PRIVATE bucket; the app proxies reads through its own image routes (never `r2.dev`, no R2 custom domain) | falls back to `hasBlob()` = `BLOB_READ_WRITE_TOKEN` (legacy Vercel Blob), then to image bytes under `DATA_DIR` |
 | `src/lib/rate-limit.ts` | `UPSTASH_REDIS_REST_URL` set | **Upstash Redis** shared sliding window | in-process `Map` (single-instance only) |
 
 Two consequences:

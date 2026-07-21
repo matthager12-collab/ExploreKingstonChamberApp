@@ -19,6 +19,7 @@ import {
   photoStorageBytes,
   saveSubmission,
 } from "@/lib/hunt-store";
+import { UnstrippableImageError } from "@/lib/image-sanitize";
 import { checkRateLimit, clientKey } from "@/lib/rate-limit";
 import { createWorklistItem } from "@/lib/stores/worklist-store";
 
@@ -117,6 +118,15 @@ export async function POST(request: NextRequest) {
       distanceMeters: submission.distanceMeters ?? null,
     });
   } catch (err) {
+    // This is the player-facing path, so an unstrippable photo gets plain
+    // language rather than the parser's own message. Stripping is fail-closed
+    // (M-16-02): we reject a photo we cannot verify rather than store it.
+    if (err instanceof UnstrippableImageError) {
+      return Response.json(
+        { ok: false, error: "That photo could not be read. Try taking it again." },
+        { status: 400 },
+      );
+    }
     const message = err instanceof Error ? err.message : "could not save submission";
     const status = message.includes("not found") ? 404 : 400;
     return Response.json({ ok: false, error: message }, { status });

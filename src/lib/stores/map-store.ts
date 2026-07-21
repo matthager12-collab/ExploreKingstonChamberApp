@@ -10,7 +10,8 @@ import type { MapFeature, MapView } from "../map/types";
 import { mapViews as viewSeed } from "../data/map-views";
 import { mapFeatures as featureSeed } from "../data/map-features";
 import { readMerged, writeOverlayRecord, type WriteMeta } from "./json-store";
-import { hasBlob, putImage } from "../blob-store";
+import { getObject, hasBlob, hasR2, putImage, putObject } from "../blob-store";
+import { stripImageMetadata } from "../image-sanitize";
 
 const VIEW_STORE = "map-views";
 const FEATURE_STORE = "map-features";
@@ -76,17 +77,27 @@ export function isBlobUrl(value: unknown): boolean {
  * redirects the URL form and streams the fs form.
  */
 export async function saveFeatureImage(bytes: Buffer, ext: string): Promise<string> {
-  // Content hash: doubles as a stable, dedupe-friendly name/key.
-  const { createHash } = await import("crypto");
-  const hash = createHash("sha1").update(bytes).digest("hex").slice(0, 16);
   const safeExt = /^(jpg|jpeg|png|webp|gif)$/i.test(ext) ? ext.toLowerCase() : "jpg";
+  const contentType = EXT_CONTENT_TYPES[safeExt] ?? "image/jpeg";
+  // M-16-02: strip EXIF/GPS first, and hash the CLEANED bytes — the content
+  // hash is the stored file name, so hashing before stripping would name the
+  // object after content it does not contain and break dedupe on re-upload.
+  const clean = stripImageMetadata(bytes, contentType);
+  const { createHash } = await import("crypto");
+  const hash = createHash("sha1").update(clean).digest("hex").slice(0, 16);
   const name = `${hash}.${safeExt}`;
+  if (hasR2()) {
+    // Bare content-hashed name on the record, exactly as in filesystem mode;
+    // the key mirrors the disk layout. featureImagePath() still validates it.
+    await putObject(`map/images/${name}`, clean, contentType);
+    return name;
+  }
   if (hasBlob()) {
     // Keep the sha1 in the key so identical content lands on a stable path.
-    return putImage(`map/images/${name}`, bytes, EXT_CONTENT_TYPES[safeExt] ?? "image/jpeg");
+    return putImage(`map/images/${name}`, Buffer.from(clean), contentType);
   }
   await mkdir(IMAGE_DIR, { recursive: true });
-  await writeFile(path.join(IMAGE_DIR, name), bytes);
+  await writeFile(path.join(IMAGE_DIR, name), clean);
   return name;
 }
 
@@ -100,14 +111,23 @@ export function featureImagePath(name: string): string | null {
 }
 
 export async function readFeatureImage(name: string): Promise<{ bytes: Buffer; type: string } | null> {
+  // featureImagePath() is the strict validator (bare sha1-style name, known
+  // extension, no separators) and gates the R2 key just as it gates the path.
   const abs = featureImagePath(name);
   if (!abs) return null;
+  const ext = name.split(".").pop()!.toLowerCase();
+  const type = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : ext === "gif" ? "image/gif" : "image/jpeg";
   try {
     const bytes = await readFile(abs);
-    const ext = name.split(".").pop()!.toLowerCase();
-    const type = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : ext === "gif" ? "image/gif" : "image/jpeg";
     return { bytes, type };
   } catch {
-    return null;
+    // Disk first, R2 as the fallback — see the matching note in readPhoto().
+    if (!hasR2()) return null;
+    try {
+      const obj = await getObject(`map/images/${name}`);
+      return obj ? { bytes: Buffer.from(obj.bytes), type } : null;
+    } catch {
+      return null; // a store blip 404s one image, never 500s the page
+    }
   }
 }

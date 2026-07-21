@@ -77,6 +77,23 @@ services:
       - key: SENTRY_ENVIRONMENT
         value: production
 
+      # E15: the PRIVATE Cloudflare R2 bucket holding every uploaded image
+      # (hunt reference photos + player submissions, map-feature images, event
+      # attachments). All four must be set or hasR2() reads as unconfigured.
+      # The bucket is private; the app proxies reads through its own image
+      # routes. Nothing is served from r2.dev and no R2 custom domain is used
+      # (that needs the DNS zone on Cloudflare, which is rejected).
+      # Distinct from the backup job's R2_* GitHub secrets, which point at the
+      # separate encrypted-backup bucket — do not cross-wire them.
+      - key: R2_IMAGES_ENDPOINT
+        sync: false
+      - key: R2_IMAGES_BUCKET
+        sync: false
+      - key: R2_IMAGES_ACCESS_KEY_ID
+        sync: false
+      - key: R2_IMAGES_SECRET_ACCESS_KEY
+        sync: false
+
       # Read-only, single-purpose token for the scheduled off-site backup
       # workflow (.github/workflows/backup-offsite.yml) to call
       # GET /api/admin/backup without an admin session.
@@ -200,6 +217,17 @@ services:
         sync: false
       - key: SENTRY_ENVIRONMENT
         value: staging
+      # E15: point staging at a SCRATCH bucket, never the production one — the
+      # migration is rehearsed here first and a mis-set value would write test
+      # images into the live bucket.
+      - key: R2_IMAGES_ENDPOINT
+        sync: false
+      - key: R2_IMAGES_BUCKET
+        sync: false
+      - key: R2_IMAGES_ACCESS_KEY_ID
+        sync: false
+      - key: R2_IMAGES_SECRET_ACCESS_KEY
+        sync: false
       - key: BACKUP_TOKEN
         sync: false
       - key: FERRY_OBSERVE_TOKEN

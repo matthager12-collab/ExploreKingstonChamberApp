@@ -119,9 +119,64 @@ on Render; they belong only to a Vercel deployment (§7, `.env.production.exampl
 structured store shown as a `.json`/`.jsonl` entry lives in Postgres
 (`record` rows keyed `(store, id)`; `analytics_event` / `survey_response` /
 `ferry_observation` append tables). What's still live on disk: `map/images/`,
-`hunts/refs/`, `hunts/photos/` (until E15). The tree is kept as the map of the
-on-disk layout — pre-E05 disks still carry the legacy files, and the store
-names below are the `record.store` keys.
+`hunts/refs/`, `hunts/photos/`, `events/` (until the E15 disk cutover). The
+tree is kept as the map of the on-disk layout — pre-E05 disks still carry the
+legacy files, and the store names below are the `record.store` keys.
+
+### Uploaded images — Cloudflare R2 (E15)
+
+Uploaded image bytes now go to a **private** Cloudflare R2 bucket
+(`explore-kingston-images`) when all four `R2_IMAGES_*` env vars are set;
+otherwise writers fall back to the legacy Vercel Blob path, then to the disk.
+Reads still prefer the disk while it exists and fall back to R2, so during the
+migration window the disk stays authoritative and R2 is proven as the fallback
+before it becomes the only copy.
+
+**The bucket is private and the app proxies every read** through
+`/api/hunts/photo`, `/api/map/image` and `/api/events/attachment`. Nothing is
+served from `r2.dev`, and there is no R2 custom domain — that would require
+moving the DNS zone to Cloudflare, which is rejected (Chamber DNS and *email*
+live at NameHero). Proxying is also a privacy upgrade: hunt player submissions
+used to be stored as public URLs that bypassed the admin gate entirely, and are
+now genuinely admin-only on every read.
+
+**R2 keys mirror the disk layout exactly**, which is what makes the migration a
+pure byte copy with zero record rewrites:
+
+| On disk under `DATA_DIR` | R2 object key | Stored on the record |
+|---|---|---|
+| `hunts/refs/<hunt>-<stop>.<ext>` | `hunts/refs/<hunt>-<stop>.<ext>` | `refs/<hunt>-<stop>.<ext>` |
+| `hunts/photos/<hunt>/<stop>/<f>` | `hunts/photos/<hunt>/<stop>/<f>` | `photos/<hunt>/<stop>/<f>` |
+| `map/images/<sha1>.<ext>` | `map/images/<sha1>.<ext>` | `<sha1>.<ext>` |
+| `events/<eventId>/<file>` | `events/<eventId>/<file>` | `<eventId>/<file>` |
+
+`R2_IMAGES_*` is deliberately a different prefix from the `R2_*` GitHub Actions
+secrets used by the off-site backup job: those point at the separate encrypted
+**backup** bucket. Do not cross-wire them — the two buckets have opposite
+lifecycles (backups are write-once and retained; images are read-hot).
+
+### EXIF/GPS stripping on upload (M-16-02)
+
+Every uploaded image has **all** EXIF/XMP/IPTC metadata removed before it
+reaches any storage backend. This is a child-safety floor, not a nicety: a
+phone photo carries the coordinates of where it was taken, hunt players are
+often kids, and approved event flyers are public.
+
+Stripping happens in `src/lib/image-sanitize.ts`, called at the four save choke
+points (`saveReferencePhoto`, `saveSubmission`, `saveFeatureImage`,
+`saveAttachment`), so every backend and every future caller inherits it.
+JPEG, PNG, WebP, GIF and HEIC are handled. **It is fail-closed:** an image whose
+container cannot be parsed is REJECTED with a 4xx rather than stored
+unverified. If an operator reports "my image won't upload", that is this — ask
+them to re-save or export it.
+
+Two documented gaps, both deliberate:
+- **PDF** event attachments pass through untouched. PDFs carry document
+  metadata (author, producer) but are authored artwork rather than camera
+  output, so they are not a GPS vector.
+- **Images stored before the E15 cutover** were not re-processed: the migration
+  copies bytes verbatim so the parity check can compare by byte equality. A
+  one-off sweep of pre-existing images is a backlog item.
 
 Local dev: `<repo>/.data/`. Render: `/data`. Same tree either way. Files and
 subdirectories appear **lazily** — a missing file just means that subsystem

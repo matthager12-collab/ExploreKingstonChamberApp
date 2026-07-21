@@ -21,7 +21,16 @@ import path from "path";
 import { dataPath } from "./data-dir";
 import { hunts as seedHunts } from "@/lib/data/hunts";
 import type { Hunt, HuntStop } from "@/lib/types";
-import { deleteBlob, hasBlob, putImage } from "@/lib/blob-store";
+import {
+  deleteBlob,
+  deleteObject,
+  getObject,
+  hasBlob,
+  hasR2,
+  putImage,
+  putObject,
+} from "@/lib/blob-store";
+import { stripImageMetadata } from "@/lib/image-sanitize";
 import { hardDeleteRecords, isUnderLegalHold } from "@/lib/db/privacy-delete";
 import { readOverlay, writeOverlayRecord, readMerged, type WriteMeta } from "@/lib/stores/json-store";
 
@@ -238,6 +247,12 @@ async function destroySubmissionPhoto(photoPath: string): Promise<void> {
   if (!abs.startsWith(path.resolve(DATA_ROOT) + path.sep)) {
     throw new Error("destroySubmissionPhoto: path escapes the hunts data dir");
   }
+  // The same relative value may exist on disk, in R2, or both (the migration
+  // copies rather than moves). A privacy delete has to destroy EVERY copy, so
+  // both are attempted and either one still throwing keeps the row retryable.
+  if (hasR2()) {
+    await deleteObject(`hunts/${photoPath}`);
+  }
   try {
     await unlink(abs);
   } catch (err) {
@@ -341,6 +356,29 @@ export async function saveHunt(hunt: StoredHunt, meta?: WriteMeta): Promise<Stor
  * only exists as a seed, it is materialized into the "custom-hunts" store first (the
  * custom copy then overrides the seed).
  */
+/**
+ * Remove a reference photo left behind under a different extension (an old
+ * .png replaced by a .jpg), so neither the disk nor the bucket accumulates
+ * orphans no record points at.
+ *
+ * Best effort by design: the new photo is already stored and the record is
+ * about to point at it, so a failed cleanup must not fail the upload. Legacy
+ * blob URLs are skipped — putImage()'s addRandomSuffix already makes
+ * replacement safe there. getPhotoAbsolutePath() doubles as the validity gate:
+ * it rejects traversal and non-image extensions, so a doctored record value
+ * can never be turned into a delete outside the hunts subtree.
+ */
+async function dropStaleReference(previous: string | undefined, current: string): Promise<void> {
+  if (!previous || previous === current || isBlobUrl(previous)) return;
+  if (!getPhotoAbsolutePath(previous)) return;
+  if (hasR2()) {
+    await deleteObject(`hunts/${previous}`).catch(() => {});
+    return;
+  }
+  const stale = getPhotoAbsolutePath(previous);
+  if (stale) await unlink(stale).catch(() => {});
+}
+
 export async function saveReferencePhoto(
   huntId: string,
   stopId: string,
@@ -355,31 +393,37 @@ export async function saveReferencePhoto(
   const stop = hunt.stops.find((s) => s.id === stopId);
   if (!stop) throw new Error("stop not found");
 
-  // The value stored on the record: a full https blob URL (prod) or a
-  // .data/hunts-relative path (local dev). Both are consumed identically by
-  // photoUrl() → /api/hunts/photo, which redirects the former and streams the
-  // latter.
+  // M-16-02: strip EXIF/GPS BEFORE any backend sees the bytes. Doing it here,
+  // at the save choke point, means every storage backend and every future
+  // caller inherits the guarantee — there is no path that writes raw bytes.
+  // Throws (rejecting the upload) if the container cannot be parsed.
+  const clean = stripImageMetadata(data, EXT_CONTENT_TYPES[ext]);
+
+  // The value stored on the record: a full https blob URL (legacy Vercel Blob)
+  // or a .data/hunts-relative path (R2 and local dev alike). All are consumed
+  // identically by photoUrl() → /api/hunts/photo, which redirects the former
+  // and streams the latter.
+  const relPath = `refs/${huntId}-${stopId}.${ext}`;
   let stored: string;
-  if (hasBlob()) {
+  if (hasR2()) {
+    // R2 keys mirror the disk layout, and the value stored on the record stays
+    // byte-for-byte the fs-relative string — so no record is ever rewritten.
+    await putObject(`hunts/${relPath}`, clean, EXT_CONTENT_TYPES[ext]);
+    await dropStaleReference(stop.referencePhoto, relPath);
+    stored = relPath;
+  } else if (hasBlob()) {
     // sha-of-content is not needed here (ref photos are keyed by hunt+stop);
     // addRandomSuffix in putImage keeps replacements from serving a stale copy.
     stored = await putImage(
       `hunts/refs/${huntId}-${stopId}.${ext}`,
-      Buffer.from(data),
+      Buffer.from(clean),
       EXT_CONTENT_TYPES[ext],
     );
   } else {
-    const relPath = `refs/${huntId}-${stopId}.${ext}`;
     const absPath = path.join(DATA_ROOT, "refs", `${huntId}-${stopId}.${ext}`);
     await mkdir(path.dirname(absPath), { recursive: true });
-    await writeFile(absPath, data);
-
-    // Drop a stale reference in another format (e.g. old .png replaced by .jpg).
-    // Only meaningful for fs-relative values; blob URLs aren't unlinkable here.
-    if (stop.referencePhoto && stop.referencePhoto !== relPath && !isBlobUrl(stop.referencePhoto)) {
-      const stale = getPhotoAbsolutePath(stop.referencePhoto);
-      if (stale) await unlink(stale).catch(() => {});
-    }
+    await writeFile(absPath, clean);
+    await dropStaleReference(stop.referencePhoto, relPath);
     stored = relPath;
   }
 
@@ -430,19 +474,30 @@ export async function saveSubmission(
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const fileName = `${id}.${ext}`;
 
-  // Store the photo bytes: blob URL (prod) or .data/hunts-relative path (dev).
+  // M-16-02: strip EXIF/GPS before storage. This is the highest-risk upload in
+  // the app — a player, often a child, photographing a stop on a phone — so the
+  // embedded location goes even though the submission separately records the
+  // lat/lng it was verified against (that field is covered by E11 retention).
+  const clean = stripImageMetadata(photo, EXT_CONTENT_TYPES[ext]);
+
+  // Store the photo bytes: blob URL (legacy) or .data/hunts-relative path
+  // (R2 and dev). Under R2 the relative form is what makes the admin gate in
+  // /api/hunts/photo apply — a public blob URL used to bypass it entirely.
+  const relPath = `photos/${huntId}/${stopId}/${fileName}`;
   let photoPath: string;
-  if (hasBlob()) {
+  if (hasR2()) {
+    await putObject(`hunts/${relPath}`, clean, EXT_CONTENT_TYPES[ext]);
+    photoPath = relPath;
+  } else if (hasBlob()) {
     photoPath = await putImage(
       `hunts/photos/${huntId}/${stopId}/${fileName}`,
-      Buffer.from(photo),
+      Buffer.from(clean),
       EXT_CONTENT_TYPES[ext],
     );
   } else {
-    const relPath = `photos/${huntId}/${stopId}/${fileName}`;
     const absPath = path.join(DATA_ROOT, "photos", huntId, stopId, fileName);
     await mkdir(path.dirname(absPath), { recursive: true });
-    await writeFile(absPath, photo);
+    await writeFile(absPath, clean);
     photoPath = relPath;
   }
 
@@ -493,6 +548,8 @@ export function getPhotoAbsolutePath(relPath: string): string | null {
 export async function readPhoto(
   relPath: string,
 ): Promise<{ data: Uint8Array<ArrayBuffer>; contentType: string } | null> {
+  // Sanitisation first, unconditionally: the same check that keeps a doctored
+  // path inside the hunts subtree also gates what may become an R2 key.
   const abs = getPhotoAbsolutePath(relPath);
   if (!abs) return null;
   try {
@@ -502,6 +559,20 @@ export async function readPhoto(
     data.set(buf);
     return { data, contentType: contentTypeForPath(relPath) };
   } catch {
-    return null;
+    // Fall through to R2. Reads PREFER the filesystem while the disk still
+    // exists (E15 slice 3 removes it), so during the migration window the disk
+    // stays authoritative and R2 is proven as the fallback before it becomes
+    // the only copy.
+    if (!hasR2()) return null;
+    try {
+      const obj = await getObject(`hunts/${relPath}`);
+      if (!obj) return null;
+      const data = new Uint8Array(obj.bytes.byteLength);
+      data.set(obj.bytes);
+      return { data, contentType: contentTypeForPath(relPath) };
+    } catch {
+      // An R2 blip 404s this one image; it must never 500 the page.
+      return null;
+    }
   }
 }

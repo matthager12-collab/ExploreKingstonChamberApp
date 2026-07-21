@@ -30,6 +30,7 @@
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.38.0",
     "@vercel/blob": "^2.5.0",
+    "aws4fetch": "^1.0.20",
     "drizzle-orm": "^0.45.2",
     "leaflet": "^1.9.4",
     "maxmind": "^5.0.6",

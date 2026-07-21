@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
+import { UnstrippableImageError } from "@/lib/image-sanitize";
 import { saveFeatureImage } from "@/lib/stores/map-store";
 
 const MAX_BYTES = 8 * 1024 * 1024; // ~8MB
@@ -52,6 +53,19 @@ export async function POST(request: NextRequest) {
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const imageUrl = await saveFeatureImage(buffer, ext);
-  return NextResponse.json({ ok: true, imageUrl });
+  try {
+    const imageUrl = await saveFeatureImage(buffer, ext);
+    return NextResponse.json({ ok: true, imageUrl });
+  } catch (err) {
+    // Metadata stripping is fail-closed (M-16-02), so a file whose container
+    // cannot be parsed is rejected here. Without this catch it would surface
+    // as an unhandled 500, which reads as an outage rather than a bad file.
+    if (err instanceof UnstrippableImageError) {
+      return NextResponse.json(
+        { ok: false, error: "That image could not be read — try re-saving or exporting it." },
+        { status: 400 },
+      );
+    }
+    throw err;
+  }
 }

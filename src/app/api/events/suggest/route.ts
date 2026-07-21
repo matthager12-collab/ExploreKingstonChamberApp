@@ -37,6 +37,7 @@ import {
   MAX_ATTACHMENT_STORAGE_BYTES,
   saveAttachment,
 } from "@/lib/events/attachment-store";
+import { UnstrippableImageError } from "@/lib/image-sanitize";
 import { getUnifiedCalendarAccess } from "@/lib/stores/unified-calendar-store";
 import { WorklistValidationError } from "@/lib/schemas/worklist";
 import type { EventItem } from "@/lib/types";
@@ -168,7 +169,15 @@ export async function POST(request: NextRequest) {
     }
     try {
       refs.push(await saveAttachment(event.id, new Uint8Array(await file.arrayBuffer()), ext));
-    } catch {
+    } catch (err) {
+      // A file we cannot strip metadata from is the SUBMITTER's problem, not
+      // ours — say so with a 4xx instead of a 500, which would read as an
+      // outage and send them into a retry loop that can never succeed.
+      // Stripping is fail-closed on purpose (M-16-02): we would rather reject
+      // an unreadable image than store bytes we could not verify.
+      if (err instanceof UnstrippableImageError) {
+        return fail(400, `"${file.name}" could not be processed — please re-save or export it and try again`);
+      }
       return fail(500, "could not save an attachment — please try again");
     }
   }

@@ -5,6 +5,8 @@
 // non-trusted fixtures there prove the floor; this file proves the ONE
 // doorway through it and the queue path around it.
 
+import { readFileSync } from "fs";
+import path from "path";
 import { NextRequest } from "next/server";
 import { count, eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -17,6 +19,10 @@ import { getEventAdmin, getEvents } from "@/lib/stores/event-store";
 import { listWorklistItems } from "@/lib/stores/worklist-store";
 import { setUnifiedCalendarEnabled } from "@/lib/stores/unified-calendar-store";
 import { createTestDb, type TestDb } from "../../setup/pglite-db";
+
+const GPS_PNG = new Uint8Array(
+  readFileSync(path.resolve(__dirname, "../../fixtures/images/gps.png")),
+);
 
 // Switchable session + switchable ORG (the trusted flag lives on the org row;
 // the routes read it through getOrg).
@@ -313,9 +319,13 @@ describe("(a)-(c) anonymous suggest intake — always pending, no bypass", () =>
 
   it("accepts image + PDF attachments and attaches their refs to the pending event", async () => {
     authState.user = null;
+    // A REAL PNG, not three placeholder bytes: since E15 the save path strips
+    // EXIF/GPS (M-16-02) and is fail-closed, so an unparseable image is now
+    // correctly rejected with a 400. Using the tagged fixture keeps this test
+    // about attachment plumbing while exercising the real code path.
     const res = await suggestPOST(
       suggestReq({ ...SUGGESTION, title: "Gallery Opening" }, [
-        { name: "flyer.png", type: "image/png", bytes: new Uint8Array([1, 2, 3]) },
+        { name: "flyer.png", type: "image/png", bytes: GPS_PNG },
         { name: "program.pdf", type: "application/pdf", bytes: new Uint8Array([4, 5, 6]) },
       ]),
     );

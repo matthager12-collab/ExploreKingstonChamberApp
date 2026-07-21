@@ -16,7 +16,17 @@ import "server-only";
 import { mkdir, readdir, readFile, stat, unlink, writeFile } from "fs/promises";
 import path from "path";
 import { dataPath } from "@/lib/data-dir";
-import { deleteBlob, hasBlob, isTrustedBlobUrl, putImage } from "@/lib/blob-store";
+import {
+  deleteBlob,
+  deleteObject,
+  getObject,
+  hasBlob,
+  hasR2,
+  isTrustedBlobUrl,
+  putImage,
+  putObject,
+} from "@/lib/blob-store";
+import { canStrip, stripImageMetadata } from "@/lib/image-sanitize";
 import {
   ATTACHMENT_EXT_CONTENT_TYPES,
   attachmentContentType,
@@ -86,14 +96,30 @@ export async function saveAttachment(
   const contentType = ATTACHMENT_EXT_CONTENT_TYPES[ext];
   if (!contentType) throw new Error("unsupported attachment type");
 
+  // M-16-02: strip EXIF/GPS before storage. Flyers are member-submitted AND
+  // become PUBLIC once a moderator approves the event, which makes this the
+  // widest-audience upload path in the app — a phone photo of a poster carries
+  // the photographer's location to every visitor who loads the events page.
+  //
+  // PDFs are passed through deliberately: they are authored artwork rather than
+  // camera output, so they are not a GPS vector, and hand-rewriting a PDF to
+  // drop /Info risks producing a file some viewer rejects. canStrip() is the
+  // explicit allow-list — see the "NOT COVERED" note in image-sanitize.ts and
+  // the corresponding line in docs/LAUNCH.md.
+  const clean = canStrip(contentType) ? stripImageMetadata(bytes, contentType) : bytes;
+
   const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-  if (hasBlob()) {
-    return putImage(`events/${eventId}/${fileName}`, Buffer.from(bytes), contentType);
-  }
   const relPath = `${eventId}/${fileName}`;
+  if (hasR2()) {
+    await putObject(`events/${relPath}`, clean, contentType);
+    return relPath;
+  }
+  if (hasBlob()) {
+    return putImage(`events/${eventId}/${fileName}`, Buffer.from(clean), contentType);
+  }
   const absPath = path.join(DATA_ROOT, eventId, fileName);
   await mkdir(path.dirname(absPath), { recursive: true });
-  await writeFile(absPath, bytes);
+  await writeFile(absPath, clean);
   return relPath;
 }
 
@@ -123,7 +149,17 @@ export async function readAttachment(
     data.set(buf);
     return { data, contentType: attachmentContentType(relPath) };
   } catch {
-    return null;
+    // Disk first, R2 as the fallback — see the matching note in readPhoto().
+    if (!hasR2()) return null;
+    try {
+      const obj = await getObject(`events/${relPath}`);
+      if (!obj) return null;
+      const data = new Uint8Array(obj.bytes.byteLength);
+      data.set(obj.bytes);
+      return { data, contentType: attachmentContentType(relPath) };
+    } catch {
+      return null; // a store blip 404s one attachment, never 500s the page
+    }
   }
 }
 
@@ -140,7 +176,11 @@ export async function deleteAttachment(ref: string): Promise<void> {
       return;
     }
     const abs = getAttachmentAbsolutePath(ref);
-    if (abs) await unlink(abs).catch(() => undefined);
+    if (!abs) return;
+    // Both copies: the migration copies rather than moves, so a rejected or
+    // deleted submission can have bytes on disk AND in the bucket.
+    if (hasR2()) await deleteObject(`events/${ref}`).catch(() => undefined);
+    await unlink(abs).catch(() => undefined);
   } catch {
     // swallow — best effort
   }
