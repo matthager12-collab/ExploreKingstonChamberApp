@@ -117,8 +117,14 @@ export default async function RootLayout({
         <CopyProvider overrides={copyOverrides}>
           <Tracker />
           <SiteNav hiddenPaths={hiddenPaths} />
-          {/* id="main" is the skip link's target (E14). */}
-          <main id="main" className="flex-1">
+          {/* id="main" is the skip link's target (E14). tabIndex={-1} makes it
+              programmatically focusable, which is what actually MOVES focus on
+              activation: without it Safari (and iOS VoiceOver) scroll the page
+              but leave focus on the skip link, so the next Tab goes back to the
+              top of the header and the skip does nothing. Programmatic focus on
+              a tabindex=-1 container is not :focus-visible in any current
+              engine, so no ring appears. */}
+          <main id="main" tabIndex={-1} className="flex-1">
             {children}
           </main>
           <SiteFooter hiddenPaths={hiddenPaths} copy={copyOverrides} />

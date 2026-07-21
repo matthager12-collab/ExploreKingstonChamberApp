@@ -240,7 +240,7 @@ export default async function FerryPage() {
             </ul>
           </Card>
         </div>
-        <p className="mt-3 text-sm text-ink-soft">
+        <p className="mt-3 text-sm text-ink">
           Fares above are summer 2026 rates, checked July 2026 — WSF usually adjusts fares each
           October. Confirm at{" "}
           <ExternalLink href={WSF_FARES_URL}>WSDOT&rsquo;s Edmonds–Kingston fare page</ExternalLink>

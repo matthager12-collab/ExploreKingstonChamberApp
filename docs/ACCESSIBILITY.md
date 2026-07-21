@@ -143,7 +143,20 @@ a new violation is a fix, never a new baseline entry. Regenerate with
 
 Static invariants run in `npm test` (`tests/unit/a11y-static-invariants.test.ts`): no
 arbitrary px font sizes outside the frozen zones, no zoom blocking, no `next/headers` in the
-root layout, skip link present.
+root layout, skip link present, and the frozen-map contrast override still wired to its
+markup. `tests/server/keyboard-focus.test.ts` drives a real browser for the skip link, so a
+CSS regression that keeps the markup but breaks the mechanism fails CI.
+
+**Known gap in the smoke, on purpose.** After the `--color-ink-soft` sweep below, all seven
+`color-contrast` entries in `axe-baseline.json` report *"no longer firing"* — the routes are
+clean, but the entries are still there. They were deliberately **not** pruned in that change:
+pruning ratchets those seven routes to zero tolerance, and the sweep was verified against one
+render of data that varies (ferry live/scheduled, event counts, empty states), so a
+conditional block could fire overnight with nobody awake to triage it. Until then the smoke
+does **not** guard `color-contrast` on `/`, `/ferry`, `/eat`, `/events`, `/stay`, `/about` or
+`/admin/worklist`. The three pages E14 added — `/simple`, `/print`, `/accessibility` — are
+baselined **empty**, i.e. zero tolerance from the day they landed. Prune the rest when the
+hard gate below lands and replaces this file.
 
 **Planned — the hard gate.** Extending that to every route, at every severity, with a
 manifest-completeness test so a new page cannot be added without being scanned. It is
@@ -166,6 +179,31 @@ There is exactly one escape hatch and it is typed. Every entry needs:
 
 Never permitted: a blanket `axe.disableRules`, dropping a scan tag, removing a route from
 the manifest, or excluding a route to make a build green.
+
+### The `--color-ink-soft` sweep, and why it is written down
+
+The muted body grey `--color-ink-soft` (`#6b7683`) measures **4.4993:1** on the page fill
+`--color-shell` — under the AA 1.4.3 floor of 4.5:1 by a rounding error, and worse on the
+tinted panels (4.22:1 on the callout fill, 4.21:1 on the survey panel, **3.73:1** for the
+`text-ink-soft/90` variant on the home feature cards). The site's background texture made
+axe report those nodes as *incomplete* rather than *failing*, which is why they survived
+this long.
+
+They were measured by running axe with the contrast rule alone over every public route with
+`body,.bg-topo{background-image:none}` injected, then repaired **at each usage site** — the
+token's value is unchanged, per the E14 rule. Two consequences worth remembering:
+
+- **`text-ink-soft` on a white card passes (4.62:1); on the page background it does not.**
+  Before reaching for it on a new page, ask what is behind the text.
+- **One set of nodes could not be fixed at its source.** The map legend and the map's two
+  loading overlays live in `src/components/feature-map.tsx`, which is frozen, so
+  `src/app/globals.css` overrides the rendered elements by their utility classes.
+  `tests/unit/a11y-static-invariants.test.ts` asserts the selector and the component's
+  markup still match. **If that file is ever unfrozen, fix the classes there and delete the
+  override.**
+
+Re-run the measurement (not just the smoke) after any change to the page fill, the texture,
+or the muted-text token.
 
 ---
 

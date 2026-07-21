@@ -76,13 +76,25 @@ html {
   outline-offset: 2px;
 }
 
-/* Light variant for the deep-navy fills (footer, nav active pills, skip link):
-   tide-deep on sound-deep is too dark to see, so those surfaces get seaglass. */
+/* Light variant for controls sitting INSIDE a deep-navy fill (the footer's link
+   list, the mobile sheet on navy): tide-deep on sound-deep is too dark to see,
+   so those surfaces get seaglass — 6.5:1 on the navy behind them. */
 .bg-sound-deep :focus-visible,
+.bg-sound :focus-visible {
+  outline-color: var(--color-seaglass);
+}
+
+/* …but when the focused control IS the navy surface (an active nav pill, the
+   /simple and /es phone buttons), the 2px OUTWARD offset draws the ring on the
+   PAGE background instead — seaglass on white is 1.39:1, i.e. no visible focus
+   indicator at all (WCAG 1.4.11). Draw it inset, on the navy fill it was
+   designed for. Outlines follow border-radius, so the inset ring still traces
+   the pill. Keep these two selectors separate from the descendant rule above —
+   merging them is the bug. */
 .bg-sound-deep:focus-visible,
-.bg-sound :focus-visible,
 .bg-sound:focus-visible {
   outline-color: var(--color-seaglass);
+  outline-offset: -2px;
 }
 
 /* E14: honor the OS "reduce motion" preference (WCAG 2.3.3 / 2.2.2). Covers the
@@ -97,6 +109,26 @@ html {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* E14 contrast — the ONE usage site that cannot be fixed at its source.
+   --color-ink-soft (#6b7683) measures 4.4993:1 on the page fill and 4.22:1 on
+   the shell/60 map overlays: under AA 1.4.3 (measured with axe, texture
+   removed so the background is determinate). Every other failing node in the
+   app was repaired in its own JSX. These three live in
+   src/components/feature-map.tsx, which is FROZEN (.agent-frozen) — the map
+   legend on /eat, /map and /parking, and the map's loading/error overlays.
+   Overriding the rendered element from here is the only remedy left that does
+   not edit a frozen file and does not change a --color-* token VALUE.
+
+   The selectors are keyed to that component's exact utility classes, which is
+   safe only BECAUSE the file is frozen; tests/unit/a11y-static-invariants.test.ts
+   asserts both halves of that coupling. If feature-map.tsx is ever unfrozen,
+   fix the classes there and delete this block. */
+ul.max-h-28.overflow-y-auto.text-ink-soft,
+.bg-shell\/60.text-ink-soft,
+.bg-shell.text-ink-soft {
+  color: var(--color-ink);
 }
 
 /* E14 simple mode (vk/simple-mode, M-14-03 / NFR-95). Turned on by the "Easy
@@ -120,11 +152,13 @@ html[data-simple="1"] .bg-topo {
 }
 
 /* Muted body gray (--color-ink-soft, #6b7683) measures 4.4993:1 on the flat
-   shell — a hair under AA, and invisible to a scanner until the rule above
-   removes the texture that made the background indeterminate. Easy read is
-   precisely where secondary text should stop being secondary, so simple mode
-   promotes it to full ink: 14.8:1. Fixed at the usage sites and scoped to
-   simple mode — no --color-* token VALUE changes (E14 rule). The attribute
+   shell — a hair under AA. Every node where that pair actually FAILED is now
+   repaired in normal mode too, at its own usage site (see docs/ACCESSIBILITY.md
+   §4); what survives is the muted text on white cards, which passes at 4.62:1.
+   This rule is therefore no longer load-bearing for conformance — it is a
+   comfort setting. Easy read is precisely where secondary text should stop
+   being secondary, so simple mode promotes what is left to full ink: 14.8:1.
+   No --color-* token VALUE changes (E14 rule). The attribute
    selector catches the `text-ink-soft/90` opacity variant too, and being
    unlayered it outranks Tailwind's @layer utilities.
 

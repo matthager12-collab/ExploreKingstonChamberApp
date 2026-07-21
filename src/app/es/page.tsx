@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { DocumentLang } from "@/components/document-lang";
 import { SafetyEssentials } from "@/components/safety-essentials";
 import { PageHeader, Section } from "@/components/ui";
 import { getFerryStatusSnapshot } from "@/lib/ferry-status";
@@ -84,11 +85,22 @@ export default async function SpanishPage() {
 
   const phone = copyText(copy, "contact.phone.number");
   const noBoats = copyText(copy, "es.boats.none");
+  // Same honesty stamp /simple and /print carry — see the comment on
+  // src/app/simple/page.tsx. Time only, no date: formatPacificDate() renders an
+  // English weekday ("Thu, Jul 2"), which has no business inside lang="es".
+  const renderedAt = new Date().toISOString();
 
   return (
     <>
       {/* Outside the lang="es" wrapper: the banner is English admin chrome. */}
       {hiddenPreview && <HiddenPageBanner />}
+
+      {/* WCAG 3.1.1 (Language of Page, Level A): the PAGE's language is Spanish,
+          and the root <html lang> is set by the root layout, which a nested
+          route cannot re-emit in the App Router. The wrapper below fixes the
+          content; this sets the document itself, so the Spanish <title> and
+          <meta description> are not announced in an English voice. */}
+      <DocumentLang lang="es" />
 
       <div lang="es">
         <PageHeader
@@ -110,6 +122,9 @@ export default async function SpanishPage() {
         </Section>
 
         <Section title="Los próximos barcos">
+          <p className="mb-4 text-lg text-ink">
+            Estos horarios eran correctos a las {formatPacificTime(renderedAt)} de hoy.
+          </p>
           <div className="grid gap-4 sm:grid-cols-2">
             <BoatColumn
               title="Saliendo de Kingston"
@@ -128,14 +143,17 @@ export default async function SpanishPage() {
           )}
         </Section>
 
-        <SafetyEssentials strings={SAFETY_CONTENT.es} />
+        <SafetyEssentials strings={SAFETY_CONTENT.es} values={{ phone }} />
 
         <Section title="Hablar con una persona">
           <div className="rounded-2xl border border-sand bg-white p-5">
             <p className="text-lg text-ink">{copyText(copy, "es.help.body")}</p>
             <p className="mt-4">
+              {/* The accessible name says whose number it is, in Spanish — a
+                  links list full of bare digits is not usable (WCAG 2.4.4). */}
               <a
                 href={telHref(phone)}
+                aria-label={`Llamar a la Cámara de Comercio de Kingston, ${phone}`}
                 className="inline-flex min-h-11 items-center rounded-full bg-sound-deep px-6 py-3 text-2xl font-bold text-white no-underline"
               >
                 {phone}

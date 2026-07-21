@@ -36,6 +36,13 @@ describe("/simple — Kingston basics", () => {
     // The boat section always renders — the question is only which state it is in.
     expect(html).toContain("Leaving Kingston");
 
+    // /simple is statically rendered with ISR, so the HTML a visitor gets can be
+    // older than the times printed on it. Say when it was true — the readers
+    // this page exists for are the least able to spot a stale departure.
+    expect(html, "/simple must stamp when its ferry times were generated").toContain(
+      "These times were right at",
+    );
+
     // Departure times OR the explicit late-night line. After the last sailing of
     // the day zero times is CORRECT; what is never acceptable is an empty block,
     // so exactly one of these two must hold.

@@ -66,14 +66,27 @@ export function SiteNav({ hiddenPaths = [] }: { hiddenPaths?: string[] }) {
     };
   }, [moreOpen]);
 
-  // Mobile sheet: Escape closes it.
+  // Mobile sheet: Escape closes it, and so does a tap outside it. On a phone
+  // the outside tap IS the primary dismissal gesture, so the sheet needs the
+  // same handler the desktop menu has. The trigger is excluded from "outside"
+  // or this close and the toggle's own onClick cancel each other out.
   useEffect(() => {
     if (!sheetOpen) return;
+    const onPointerDown = (event: Event) => {
+      const target = event.target as Node;
+      if (sheetRef.current?.contains(target)) return;
+      if (sheetTriggerRef.current?.contains(target)) return;
+      setSheetOpen(false);
+    };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setSheetOpen(false);
     };
+    document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
   }, [sheetOpen]);
 
   // Focus follows the sheet: into its first link on open, back to the toggle
@@ -199,6 +212,12 @@ export function SiteNav({ hiddenPaths = [] }: { hiddenPaths?: string[] }) {
             // The tab highlight was colour-only (text-sound vs text-ink-soft at
             // one weight) — M-14-04. Weight plus the marker bar below now carry
             // it for anyone who can't separate the two hues.
+            //
+            // E14 contrast: the inactive label was text-ink-soft at 11px on this
+            // translucent bar and measured 4.23:1 — under AA 1.4.3, on chrome
+            // that is on every page at phone width. text-ink is 14.8:1 and the
+            // active/inactive distinction is carried by weight, hue (sound vs
+            // ink) and the marker bar, none of which is colour alone.
             const lit = current && !sheetOpen;
             return (
               <Link
@@ -207,7 +226,7 @@ export function SiteNav({ hiddenPaths = [] }: { hiddenPaths?: string[] }) {
                 onClick={() => setSheetOpen(false)}
                 aria-current={current ? "page" : undefined}
                 className={`flex flex-col items-center gap-0.5 py-2.5 text-[0.6875rem] ${
-                  lit ? "font-semibold text-sound" : "font-medium text-ink-soft"
+                  lit ? "font-semibold text-sound" : "font-medium text-ink"
                 }`}
               >
                 <span aria-hidden="true" className="text-lg leading-none">
@@ -226,7 +245,7 @@ export function SiteNav({ hiddenPaths = [] }: { hiddenPaths?: string[] }) {
             ref={sheetTriggerRef}
             onClick={() => setSheetOpen((v) => !v)}
             className={`flex flex-col items-center gap-0.5 py-2.5 text-[0.6875rem] ${
-              sheetOpen ? "font-semibold text-sound" : "font-medium text-ink-soft"
+              sheetOpen ? "font-semibold text-sound" : "font-medium text-ink"
             }`}
             aria-expanded={sheetOpen}
             aria-controls={MORE_SHEET_ID}

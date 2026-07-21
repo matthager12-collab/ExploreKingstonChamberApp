@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { getEffectiveHiddenPaths } from "@/lib/page-visibility";
 import { getCopyOverrides } from "@/lib/stores/site-store";
 import { AccessibilityStatement } from "./statement";
 
@@ -15,5 +16,8 @@ export const metadata: Metadata = {
 // comment there for why the statement is code-owned and why the ADA compliance
 // date is deliberately not stated.
 export default async function AccessibilityPage() {
-  return <AccessibilityStatement copy={await getCopyOverrides()} />;
+  // hiddenPaths so the text-alternative list never links to a page an operator
+  // has hidden — see the Alt helper in ./statement.tsx.
+  const [copy, hiddenPaths] = await Promise.all([getCopyOverrides(), getEffectiveHiddenPaths()]);
+  return <AccessibilityStatement copy={copy} hiddenPaths={hiddenPaths} />;
 }

@@ -239,7 +239,7 @@ export default async function Home() {
               <p className="font-display mt-3 text-lg font-semibold text-sound-deep group-hover:text-tide-deep">
                 {f.title}
               </p>
-              <p className="mt-1 text-sm text-ink-soft/90">{f.blurb}</p>
+              <p className="mt-1 text-sm text-ink">{f.blurb}</p>
             </Link>
           ))}
         </div>

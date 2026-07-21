@@ -6,6 +6,7 @@ import {
   Callout,
 } from "@/components/ui";
 import { FeatureMap } from "@/components/feature-map";
+import { parkingRuleLabel } from "@/lib/map/parking-labels";
 import { resolveMapView } from "@/lib/map/resolve";
 import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
 import { getFerryInfo } from "@/lib/stores/ferry-info-store";
@@ -52,7 +53,7 @@ export default async function ParkingPage() {
             <p className="text-sm text-ink-soft">Parking map coming soon.</p>
           </Card>
         )}
-        <p className="mt-2 text-xs text-ink-soft">
+        <p className="mt-2 text-xs text-ink">
           Colors follow the parking type shown in the legend. The sign on the pole is
           always the legal authority — where a lot and a posted sign disagree, believe the
           sign. Chamber admins keep this map current in the portal at /admin/maps.
@@ -64,15 +65,18 @@ export default async function ParkingPage() {
         {parkingMap?.builtins.parkingZones && parkingMap.builtins.parkingZones.length > 0 && (
           <div className="mt-4">
             <h3 className="text-lg font-semibold text-sound-deep">Every lot, in words</h3>
-            <p className="mt-1 text-sm text-ink-soft">
+            <p className="mt-1 text-sm text-ink">
               The same lots as the map above, with the parking type spelled out.
             </p>
             <ul className="mt-3 divide-y divide-sand rounded-2xl border border-sand bg-white">
               {parkingMap.builtins.parkingZones.map((z) => (
                 <li key={z.id} className="px-4 py-3">
                   <p className="text-sm font-semibold text-ink">{z.name}</p>
-                  <p className="text-sm text-ink-soft">
-                    {z.rule}
+                  {/* parkingRuleLabel(), not z.rule: the raw value is an
+                      internal slug ("free-2hr"), and printing it does not
+                      convey the type the marker colour was encoding. */}
+                  <p className="text-sm text-ink">
+                    {parkingRuleLabel(z.rule)}
                     {z.summary ? ` — ${z.summary}` : ""}
                   </p>
                 </li>
@@ -117,7 +121,7 @@ export default async function ParkingPage() {
         title="Overnight parking, honestly"
         subtitle="The short version: one lot clearly allows it, one probably does, and everything else is a day-use situation."
       >
-        <div className="max-w-2xl space-y-3 text-ink-soft">
+        <div className="max-w-2xl space-y-3 text-ink">
           <p>
             <span className="font-semibold text-ink">Diamond lot D515 — yes.</span> The only
             option that plainly allows overnight and multi-day parking: $12 covers 12–24 hours,

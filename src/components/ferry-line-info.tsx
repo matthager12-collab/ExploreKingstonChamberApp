@@ -41,12 +41,12 @@ export async function FerryLineInfo({
               <span aria-hidden>🚗</span>{" "}
               {copyText(copy, "ferryLine.edmonds.title")}
             </p>
-            <p className="mt-1 text-sm text-ink-soft">
+            <p className="mt-1 text-sm text-ink">
               <RichText
                 text={copyText(copy, "ferryLine.edmonds.body1")}
               />
             </p>
-            <p className="mt-1.5 text-sm text-ink-soft">
+            <p className="mt-1.5 text-sm text-ink">
               <RichText
                 text={copyText(copy, "ferryLine.edmonds.body2")}
               />
@@ -86,12 +86,12 @@ export async function FerryLineInfo({
             <span aria-hidden>🚗</span>{" "}
             {copyText(copy, "ferryLine.title")}
           </p>
-          <p className="mt-1 text-sm text-ink-soft">
+          <p className="mt-1 text-sm text-ink">
             <RichText
               text={copyText(copy, "ferryLine.body1")}
             />
           </p>
-          <p className="mt-1.5 text-sm text-ink-soft">
+          <p className="mt-1.5 text-sm text-ink">
             <RichText
               text={copyText(copy, "ferryLine.body2")}
             />

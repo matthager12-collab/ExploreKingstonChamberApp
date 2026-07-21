@@ -28,7 +28,7 @@ export default async function AboutPage() {
       />
 
       <Section title="Why your visit counts">
-        <div className="space-y-4 text-ink-soft">
+        <div className="space-y-4 text-ink">
           <p>
             Washington adds a small lodging tax to hotel and short-term-rental stays, and state
             law (chapter 67.28 RCW) sends that money back into tourism — festivals, trails,
@@ -128,10 +128,10 @@ export default async function AboutPage() {
       </Section>
 
       <Section title="Data sources &amp; thanks">
-        <p className="text-ink-soft">
+        <p className="text-ink">
           The live info on this site comes straight from the folks who run things. Thanks to:
         </p>
-        <ul className="mt-3 space-y-2 text-sm text-ink-soft">
+        <ul className="mt-3 space-y-2 text-sm text-ink">
           <li>
             <ExternalLink href="https://wsdot.wa.gov/traffic/api/">WSDOT Ferries API</ExternalLink>{" "}
             — real-time sailings, terminal alerts, and vessel data for the Edmonds–Kingston run.

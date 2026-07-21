@@ -27,7 +27,14 @@ export function PageHeader({
         </p>
       )}
       <h1 className="text-4xl font-semibold text-sound-deep sm:text-5xl">{title}</h1>
-      {intro && <p className="mt-4 max-w-2xl text-lg text-ink-soft">{intro}</p>}
+      {/* E14 contrast: muted gray (--color-ink-soft, #6b7683) measures 4.4993:1
+          on the page fill (--color-shell) — under AA 1.4.3, and it fails on
+          EVERY page because this is the shared page-intro primitive. It clears
+          AA on a white card (4.62:1) but this paragraph sits on the page
+          background, so it gets full ink (14.8:1). Hierarchy is carried by size
+          and by the heading colour, not by a failing contrast ratio. Fixed at
+          the usage site; no --color-* token value changed (E14 rule). */}
+      {intro && <p className="mt-4 max-w-2xl text-lg text-ink">{intro}</p>}
     </header>
   );
 }
@@ -46,7 +53,8 @@ export function Section({
   return (
     <section id={id} className="mx-auto max-w-5xl px-4 py-8 scroll-mt-24">
       {title && <h2 className="text-2xl font-semibold text-sound-deep sm:text-3xl">{title}</h2>}
-      {subtitle && <p className="mt-1 mb-2 text-ink-soft">{subtitle}</p>}
+      {/* Same page-background reasoning as PageHeader's intro above. */}
+      {subtitle && <p className="mt-1 mb-2 text-ink">{subtitle}</p>}
       <div className={title ? "mt-5" : undefined}>{children}</div>
     </section>
   );

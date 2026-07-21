@@ -90,13 +90,17 @@ export function VisitorSurvey() {
             <EditableText
               as="p"
               id="survey-distance-question"
-              className="text-sm text-ink-soft"
+              className="text-sm text-ink"
               copyKey="survey.intro.subtitle"/>
           </div>
+          {/* E14: an unpadded glyph is a ~14px tap target — under WCAG 2.2
+              SC 2.5.8's 24px floor and far under the 44px bar this epic sets
+              for its own controls. The min-h/min-w give it a real 44px box
+              without changing the glyph's size or the row's layout. */}
           <button
             type="button"
             onClick={dismiss}
-            className="text-sm text-ink-soft hover:text-ink"
+            className="-m-2 inline-flex min-h-11 min-w-11 items-center justify-center text-sm text-ink hover:text-sound"
             aria-label="Dismiss survey"
           >
             <span aria-hidden="true">✕</span>
@@ -178,7 +182,7 @@ export function VisitorSurvey() {
                 onChange={(e) => setLodgingNights(clampNumber(Number(e.target.value), 1, 60))}
                 className="mt-1 block w-24 rounded-lg border border-sand bg-white px-3 py-2"
               />
-              <p id="survey-nights-hint" className="mt-1 text-xs text-ink-soft">
+              <p id="survey-nights-hint" className="mt-1 text-xs text-ink">
                 1 to 60 nights.
               </p>
             </div>
@@ -212,7 +216,7 @@ export function VisitorSurvey() {
                 onChange={(e) => setPartySize(clampNumber(Number(e.target.value), 1, 50))}
                 className="mt-1 block w-24 rounded-lg border border-sand bg-white px-3 py-2"
               />
-              <p id="survey-party-hint" className="mt-1 text-xs text-ink-soft">
+              <p id="survey-party-hint" className="mt-1 text-xs text-ink">
                 1 to 50 people.
               </p>
             </div>

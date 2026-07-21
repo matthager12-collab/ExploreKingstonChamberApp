@@ -1,7 +1,32 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 import { PageHeader, Section, Card } from "@/components/ui";
 import { copyText } from "@/lib/stores/site-store";
+
+/**
+ * A link to one of the text alternatives — but only while that page is actually
+ * reachable. An operator can hide any of them from Admin → Site content, and
+ * /es is hidden by default; the page that promises a disabled reader a working
+ * alternative is the last place that may hand out a 404, so a hidden page
+ * degrades to its plain name instead of linking.
+ */
+function Alt({
+  href,
+  hiddenPaths,
+  children,
+}: {
+  href: string;
+  hiddenPaths: string[];
+  children: ReactNode;
+}) {
+  if (hiddenPaths.includes(href)) return <span>{children}</span>;
+  return (
+    <Link href={href} className="underline">
+      {children}
+    </Link>
+  );
+}
 
 /** `tel:` href for a printed-style number ("360-860-2239" → "tel:+13608602239"). */
 function telHref(phone: string): string {
@@ -30,7 +55,13 @@ function telHref(phone: string): string {
 // a server component. Passing `copy` in keeps that test rendering the real
 // markup — with the registry fallbacks, since an empty override map resolves to
 // them — instead of a stand-in.
-export function AccessibilityStatement({ copy }: { copy: Record<string, string> }) {
+export function AccessibilityStatement({
+  copy,
+  hiddenPaths = [],
+}: {
+  copy: Record<string, string>;
+  hiddenPaths?: string[];
+}) {
   const phone = copyText(copy, "contact.phone.number");
   const email = copyText(copy, "contact.email.address");
 
@@ -72,8 +103,11 @@ export function AccessibilityStatement({ copy }: { copy: Record<string, string> 
           <ul className="space-y-3 text-base text-ink">
             <li>
               <strong>Automated checks on every change.</strong> An accessibility scanner (axe)
-              runs against a real build of the site before any change can ship, and blocks changes
-              that introduce a new serious or critical problem on the pages it covers.
+              runs against a real build of the site before any change can ship, and blocks any new
+              <em> kind</em> of serious or critical problem on the pages it covers. A short list of
+              problems we already know about is recorded alongside it so they cannot be quietly
+              forgotten — which also means the check does not, today, catch a fresh instance of a
+              problem already on that list. The next point is how we are closing that gap.
             </li>
             <li>
               <strong>Coming next: every page, every rule.</strong> We are extending that check
@@ -92,6 +126,31 @@ export function AccessibilityStatement({ copy }: { copy: Record<string, string> 
         </Card>
       </Section>
 
+      <Section title="Things that may help">
+        <Card>
+          <ul className="space-y-3 text-base text-ink">
+            <li>
+              <strong>Easy read.</strong> A switch labelled{" "}
+              <em>{copyText(copy, "simple.toggle.label")}</em> makes the type bigger across the
+              whole site, drops the background texture behind the words, and darkens the lighter
+              grey text. It is in the <strong>More</strong> menu — the &ldquo;More&rdquo; button in
+              the bottom bar on a phone, or at the end of the menu bar on a computer — and also at
+              the top of <Alt hiddenPaths={hiddenPaths} href="/simple">Kingston basics</Alt>. The site remembers it on your
+              device.
+            </li>
+            <li>
+              <strong>A page you can print.</strong>{" "}
+              <Alt hiddenPaths={hiddenPaths} href="/print">The printable page</Alt> puts today&rsquo;s boats and the phone
+              numbers on one sheet of paper, with the site&rsquo;s menus and footer left off.
+            </li>
+            <li>
+              <strong>Reduced motion.</strong> If your device is set to reduce motion, we turn off
+              the small animations rather than ask you to.
+            </li>
+          </ul>
+        </Card>
+      </Section>
+
       <Section title="Known limitations">
         <Card>
           <ul className="space-y-3 text-base text-ink">
@@ -103,40 +162,23 @@ export function AccessibilityStatement({ copy }: { copy: Record<string, string> 
               text:
               <ul className="mt-2 ml-5 list-outside list-disc space-y-1">
                 <li>
-                  <Link href="/parking" className="underline">
-                    Parking
-                  </Link>{" "}
-                  — &ldquo;Every lot, in words&rdquo; below the map lists each lot with its parking
-                  type, owner, and time limit.
+                  <Alt hiddenPaths={hiddenPaths} href="/parking">Parking</Alt> — &ldquo;Every lot, in words&rdquo; below the
+                  map lists every lot by name, with its parking type spelled out and a
+                  plain-language summary of the rules that apply to it.
                 </li>
                 <li>
-                  <Link href="/ferry" className="underline">
-                    Ferry
-                  </Link>{" "}
-                  — the departure board and the written line guidance carry the ferry information
-                  without the vessel map.
+                  <Alt hiddenPaths={hiddenPaths} href="/ferry">Ferry</Alt> — the departure board and the written line guidance
+                  carry the ferry information without the vessel map.
                 </li>
                 <li>
-                  <Link href="/eat" className="underline">
-                    Eat &amp; Drink
-                  </Link>{" "}
-                  and{" "}
-                  <Link href="/stay" className="underline">
-                    Stay
-                  </Link>{" "}
-                  — every place on the town map is also a card in these lists, with address, phone,
-                  and hours.
+                  <Alt hiddenPaths={hiddenPaths} href="/eat">Eat &amp; Drink</Alt> and <Alt hiddenPaths={hiddenPaths} href="/stay">Stay</Alt> — every
+                  place on the town map is also a card in these lists, with address, phone, and
+                  hours.
                 </li>
                 <li>
-                  <Link href="/simple" className="underline">
-                    Kingston basics
-                  </Link>{" "}
-                  and{" "}
-                  <Link href="/print" className="underline">
-                    the printable page
-                  </Link>{" "}
-                  — the shortest text-only route to the boats, the phone numbers, and the parking
-                  and restroom basics.
+                  <Alt hiddenPaths={hiddenPaths} href="/simple">Kingston basics</Alt> and{" "}
+                  <Alt hiddenPaths={hiddenPaths} href="/print">the printable page</Alt> — the shortest text-only route to the
+                  boats, the phone numbers, and the parking and restroom basics.
                 </li>
               </ul>
             </li>

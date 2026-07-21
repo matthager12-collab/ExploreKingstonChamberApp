@@ -11,9 +11,12 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  fillSafetyText,
   SAFETY_CONTENT,
   SAFETY_LANG,
+  SAFETY_PLACEHOLDERS,
   SAFETY_SECTION_ORDER,
+  safetyPlaceholdersIn,
   type SafetySection,
   type SafetyStrings,
 } from "@/lib/i18n/safety-content";
@@ -31,17 +34,21 @@ interface Flat {
   kind: "title" | "prose";
 }
 
+/** Every string in ONE section, flattened with a path label. */
+function sectionStrings(key: string, section: SafetySection): Flat[] {
+  const out: Flat[] = [{ path: `${key}.title`, value: section.title, kind: "title" }];
+  section.steps.forEach((s, i) => out.push({ path: `${key}.steps[${i}]`, value: s, kind: "prose" }));
+  if (section.note !== undefined) {
+    out.push({ path: `${key}.note`, value: section.note, kind: "prose" });
+  }
+  return out;
+}
+
 /** Every string a reader would see in one half, flattened with a path label. */
 function everyString(strings: SafetyStrings): Flat[] {
   const out: Flat[] = [];
   for (const [key, section] of Object.entries(strings) as [string, SafetySection][]) {
-    out.push({ path: `${key}.title`, value: section.title, kind: "title" });
-    section.steps.forEach((s, i) =>
-      out.push({ path: `${key}.steps[${i}]`, value: s, kind: "prose" }),
-    );
-    if (section.note !== undefined) {
-      out.push({ path: `${key}.note`, value: section.note, kind: "prose" });
-    }
+    out.push(...sectionStrings(key, section));
   }
   return out;
 }
@@ -114,5 +121,50 @@ describe("EN/ES safety dictionary parity", () => {
   it("declares the BCP-47 tags the render sites put on lang= (WCAG 3.1.2)", () => {
     expect(SAFETY_LANG.en).toBe("en");
     expect(SAFETY_LANG.es).toBe("es");
+  });
+
+  it.each(LANGS)("%s uses only declared placeholders", (lang) => {
+    // An undeclared {token} would render as literal braces on a page a visitor
+    // is acting on. The declared set is also what the render sites must supply.
+    const unknown = everyString(SAFETY_CONTENT[lang])
+      .flatMap((s) => safetyPlaceholdersIn(s.value).map((t) => `${s.path}: {${t}}`))
+      .filter((entry) => !SAFETY_PLACEHOLDERS.some((t) => entry.endsWith(`{${t}}`)));
+    expect(unknown, `Undeclared placeholder tokens:\n${unknown.join("\n")}`).toEqual([]);
+  });
+
+  it("both halves carry the same placeholders in the same places", () => {
+    // A translator dropping `{phone}` is how /es ends up with no Chamber number
+    // at all, or — worse — with a stale one pasted back in as a literal.
+    const mismatches: string[] = [];
+    for (const key of SAFETY_SECTION_ORDER) {
+      const en = sectionStrings(key, SAFETY_CONTENT.en[key]);
+      const es = sectionStrings(key, SAFETY_CONTENT.es[key]);
+      en.forEach((s, i) => {
+        const a = safetyPlaceholdersIn(s.value).sort().join(",");
+        const b = safetyPlaceholdersIn(es[i]?.value ?? "").sort().join(",");
+        if (a !== b) mismatches.push(`${s.path}: en has [${a}], es has [${b}]`);
+      });
+    }
+    expect(mismatches, `Placeholder drift between languages:\n${mismatches.join("\n")}`).toEqual([]);
+  });
+
+  it("the Chamber phone is never a literal in the dictionary", () => {
+    // It is a copy-registry block so the office can change it without a deploy.
+    // A second copy frozen in here keeps publishing the old number forever.
+    const literals = LANGS.flatMap((lang) =>
+      everyString(SAFETY_CONTENT[lang])
+        .filter((s) => /\b\d{3}-\d{3}-\d{4}\b/.test(s.value))
+        .map((s) => `${lang}.${s.path}: ${s.value}`),
+    ).filter((entry) => !/\b(?:888-808-7977|800-501-7433)\b/.test(entry));
+    expect(
+      literals,
+      `Hardcoded local phone number(s) — use {phone} and let the render site fill it:\n${literals.join("\n")}`,
+    ).toEqual([]);
+  });
+
+  it("filling a string substitutes every declared token and leaves nothing behind", () => {
+    const filled = fillSafetyText(SAFETY_CONTENT.en.help.steps[0], { phone: "555-0100" });
+    expect(filled).toContain("555-0100");
+    expect(filled).not.toContain("{phone}");
   });
 });

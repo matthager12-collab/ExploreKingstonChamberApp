@@ -45,6 +45,33 @@ export interface SafetyStrings {
   help: SafetySection;
 }
 
+/**
+ * Tokens the RENDER SITE substitutes, written `{token}` in the strings below.
+ *
+ * The Chamber's own phone number must never be a literal here. It is a copy
+ * registry block (`contact.phone.number`) precisely so the office can change it
+ * from Admin → Site content without a deploy; a second copy frozen into this
+ * file would keep publishing the old number on /simple and /es after they did.
+ * Agency numbers are different — they are literals below, with sources, because
+ * the Chamber does not own them and must not be able to edit them.
+ */
+export const SAFETY_PLACEHOLDERS = ["phone"] as const;
+
+export type SafetyValues = Record<(typeof SAFETY_PLACEHOLDERS)[number], string>;
+
+/** Every `{token}` occurrence in `text`, as bare token names. */
+export function safetyPlaceholdersIn(text: string): string[] {
+  return [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
+}
+
+/** Substitute the render site's values. An unknown token is left as written —
+ *  visibly wrong in review beats silently blank on a page someone relies on. */
+export function fillSafetyText(text: string, values: SafetyValues): string {
+  return text.replace(/\{(\w+)\}/g, (whole, token: string) =>
+    token in values ? values[token as keyof SafetyValues] : whole,
+  );
+}
+
 /** Section render order — one list, so /simple and /es cannot drift apart. */
 export const SAFETY_SECTION_ORDER = [
   "walkOn",
@@ -113,10 +140,21 @@ const en: SafetyStrings = {
       "Cafes and restaurants keep their restrooms for customers.",
     ],
   },
+  // The numbers on this list, and where each comes from — the same citation
+  // block src/app/print/page.tsx carries for AGENCY_PHONES, repeated here
+  // because this is the file a reviewer reads when checking the Spanish:
+  //   - Chamber: NOT a literal. `{phone}` is filled from the copy registry
+  //     (contact.phone.number) at the render site — see SAFETY_PLACEHOLDERS.
+  //   - Washington State Ferries automated information line: 511 (within
+  //     Washington) and 1-888-808-7977, published on WSF's own contact page,
+  //     https://apps.wsdot.wa.gov/travel/washington-state-ferries/contact-us
+  //   - Kitsap Transit customer service (Kingston–Seattle fast ferry and the
+  //     local buses): 1-800-501-7433 (1-800-501-RIDE), published at
+  //     https://www.kitsaptransit.com/learn/contact
   help: {
     title: "Who to call",
     steps: [
-      "Greater Kingston Chamber of Commerce: 360-860-2239. A person answers during office hours.",
+      "Greater Kingston Chamber of Commerce: {phone}. A person answers during office hours.",
       "Washington State Ferries, for boat times: call 511 inside Washington, or 888-808-7977.",
       "Kitsap Transit, for buses and the fast boat to Seattle: 800-501-7433.",
       "In an emergency, call 911.",
@@ -130,7 +168,7 @@ const es: SafetyStrings = {
     title: "Viajar en el ferry sin carro",
     steps: [
       "Subir al ferry a pie es lo más sencillo. Siempre hay lugar para las personas que van a pie.",
-      "Si llegó en carro, primero estaciónelo. Use el estacionamiento de pago del Port, junto a la marina, o un lote de Diamond.",
+      "Si llegó en carro, primero estaciónelo. Use el estacionamiento de pago del Port, junto a la marina, o un estacionamiento de Diamond.",
       "No deje su carro en la fila gratis de 2 horas. El Port pide que los pasajeros del ferry no la usen.",
       "Baje caminando hasta el edificio del ferry, al final de la bajada.",
       "En Kingston no se paga. Suba al barco.",
@@ -141,7 +179,9 @@ const es: SafetyStrings = {
   driveOn: {
     title: "Subir su carro al ferry",
     steps: [
-      "Si va a subir el carro al barco, no estacione. En vez de eso, espera en una fila de carros.",
+      // "espere", not "espera": every other instruction in this file is the
+      // formal usted imperative, and a mid-list switch to tú reads as an error.
+      "Si va a subir el carro al barco, no estacione. En vez de eso, espere en una fila de carros.",
       "La fila empieza en la carretera 104, que también se llama SR 104. Siga los letreros hacia el ferry.",
       "En temporada alta la fila usa pases de abordaje, todos los días de 8 am a 8 pm.",
       "Fíjese en el letrero que parpadea en Barber Cutoff Rd. Si parpadea, el sistema de pases está funcionando.",
@@ -160,7 +200,13 @@ const es: SafetyStrings = {
       "Confirme el último viaje del día con Washington State Ferries antes de hacer planes.",
       "Llame al 511 dentro del estado de Washington, o al 888-808-7977 desde cualquier lugar.",
     ],
-    note: "El barco rápido a Seattle es otro barco. No navega los domingos y termina temprano por la tarde. Para regresar de noche, vaya por Edmonds.",
+    // Matches the English exactly on the two facts that strand people: the fast
+    // boat stops early in the EVENING (not the afternoon), and the alternative
+    // applies to a trip home at the END OF THE DAY (not specifically at night).
+    // The previous wording moved the last fast sailing earlier and the reader's
+    // trip home later than the English said — the one drift in this file with a
+    // real-world consequence.
+    note: "El barco rápido a Seattle es otro barco. No navega los domingos y termina temprano por la noche. Para regresar al final del día, vaya por Edmonds.",
   },
   parkingPay: {
     title: "Cómo pagar el estacionamiento",
@@ -186,7 +232,7 @@ const es: SafetyStrings = {
   help: {
     title: "A quién llamar",
     steps: [
-      "Greater Kingston Chamber of Commerce: 360-860-2239. Una persona contesta en horas de oficina.",
+      "Greater Kingston Chamber of Commerce: {phone}. Una persona contesta en horas de oficina.",
       "Washington State Ferries, para horarios de los barcos: llame al 511 dentro de Washington, o al 888-808-7977.",
       "Kitsap Transit, para los autobuses y el barco rápido a Seattle: 800-501-7433.",
       "En una emergencia, llame al 911.",

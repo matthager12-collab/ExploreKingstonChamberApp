@@ -17,6 +17,9 @@
   "/about": [
     "color-contrast"
   ],
+  "/simple": [],
+  "/print": [],
+  "/accessibility": [],
   "/admin/worklist": [
     "color-contrast"
   ]

@@ -124,6 +124,23 @@ describe("E14 static a11y invariants", () => {
     expect(layout).toContain('id="main"');
     // The skip link must precede the nav so it is the first thing Tab reaches.
     expect(layout.indexOf('href="#main"')).toBeLessThan(layout.indexOf("<SiteNav"));
+    // …and the target must be focusable, or Safari/iOS VoiceOver scroll to it
+    // without MOVING focus and the next Tab returns to the top of the header.
+    expect(layout).toMatch(/id="main"\s+tabIndex=\{-1\}/);
+  });
+
+  it("keeps the frozen map component's contrast override wired to its markup", () => {
+    // globals.css repairs --color-ink-soft contrast for three nodes inside
+    // src/components/feature-map.tsx (frozen — see .agent-frozen), keyed on that
+    // file's exact utility classes. If the markup and the selector ever drift,
+    // the rule silently stops applying and the legend goes back to 4.49:1 with
+    // nothing failing. Assert BOTH halves of the coupling.
+    const css = readFileSync(path.join(SRC_ROOT, "app", "globals.css"), "utf8");
+    const map = readFileSync(path.join(SRC_ROOT, "components", "feature-map.tsx"), "utf8");
+    expect(css).toContain("ul.max-h-28.overflow-y-auto.text-ink-soft");
+    expect(map).toContain("max-h-28 flex-wrap gap-x-4 gap-y-2 overflow-y-auto text-sm text-ink-soft");
+    expect(css).toContain(".bg-shell\\/60.text-ink-soft");
+    expect(map).toContain("bg-shell/60 text-sm text-ink-soft");
   });
 
   it("the simple-mode bootstrap is inline and localStorage-backed", () => {

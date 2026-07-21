@@ -12,7 +12,7 @@ import {
   HiddenPageBanner,
 } from "@/lib/page-visibility";
 import { copyText, getCopyOverrides } from "@/lib/stores/site-store";
-import { formatPacificTime } from "@/lib/time";
+import { formatPacificDate, formatPacificTime } from "@/lib/time";
 import type { Sailing } from "@/lib/types";
 
 // E14 — "Kingston basics" (M-14-03 / NFR-95 / NFR-04).
@@ -93,6 +93,17 @@ export default async function SimplePage() {
     getEffectiveHiddenPaths(),
   ]);
 
+  // When this HTML was generated. revalidate = 60 marks it stale after a
+  // minute, but stale-while-revalidate keeps serving the last render until
+  // someone asks again — on a quiet page that can be much longer. Without the
+  // stamp a cached copy can show boats that already left, or say "no more boats
+  // today" while boats are still running, to precisely the readers least able
+  // to notice. Same guarantee /print carries, for the same reason.
+  //
+  // Deliberately NOT a copy-registry block: this sentence is a machine-checked
+  // statement about the numbers beside it, and an operator rewording it could
+  // make the honesty stamp itself dishonest. Same call /print made.
+  const renderedAt = new Date().toISOString();
   const phone = copyText(copy, "contact.phone.number");
   const noBoats = copyText(copy, "simple.boats.none");
   const links = BIG_LINKS.filter((l) => !hiddenPaths.includes(l.href));
@@ -129,6 +140,10 @@ export default async function SimplePage() {
       )}
 
       <Section title="The next boats">
+        <p className="mb-4 text-lg text-ink">
+          These times were right at {formatPacificTime(renderedAt)} on{" "}
+          {formatPacificDate(renderedAt)}.
+        </p>
         <div className="grid gap-4 sm:grid-cols-2">
           <BoatColumn
             title="Leaving Kingston"
@@ -169,14 +184,19 @@ export default async function SimplePage() {
       {/* E14 (FR-92): the English half of the safety slice. /es renders the
           Spanish half of this exact dictionary through the same component, so
           the two pages cannot drift apart in structure or coverage. */}
-      <SafetyEssentials strings={SAFETY_CONTENT.en} />
+      <SafetyEssentials strings={SAFETY_CONTENT.en} values={{ phone }} />
 
       <Section title="Talk to a person">
         <div className="rounded-2xl border border-sand bg-white p-5">
           <p className="text-lg text-ink">{copyText(copy, "simple.help.body")}</p>
           <p className="mt-4">
+            {/* The visible label is the bare number so it is big and readable;
+                the accessible name says WHOSE number it is, because in a screen
+                reader's links list a row of digits with no context is not a
+                usable link (WCAG 2.4.4). */}
             <a
               href={telHref(phone)}
+              aria-label={`${copyText(copy, "contact.phone.label")}, ${phone}`}
               className="inline-flex min-h-11 items-center rounded-full bg-sound-deep px-6 py-3 text-2xl font-bold text-white no-underline"
             >
               {phone}

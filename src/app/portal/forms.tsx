@@ -112,7 +112,7 @@ export function LoginForm() {
       <button type="submit" disabled={busy} className={buttonClass}>
         {busy ? "Signing in…" : "Sign in"}
       </button>
-      <p className="text-sm text-ink-soft">
+      <p className="text-sm text-ink">
         Have an invite code from the Chamber?{" "}
         <a href="/portal/join" className="font-medium text-tide-deep underline underline-offset-2">
           Create your account

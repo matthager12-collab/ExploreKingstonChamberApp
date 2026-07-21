@@ -279,7 +279,7 @@ export default async function EventsPage() {
               </Link>{" "}
               and the Chamber will review it before it goes live.
             </Callout>
-            <p className="mt-4 text-sm text-ink-soft">
+            <p className="mt-4 text-sm text-ink">
               This calendar is maintained by the Kingston Chamber and merges
               community calendars around town automatically. Always confirm
               details with the organizer before making the trip.
@@ -297,7 +297,7 @@ export default async function EventsPage() {
               </a>{" "}
               with the date, time, venue, and a sentence or two about it.
             </Callout>
-            <p className="mt-4 text-sm text-ink-soft">
+            <p className="mt-4 text-sm text-ink">
               This calendar is curated by hand by the Kingston Chamber from its{" "}
               <ExternalLink href="https://business.kingstonchamber.com/events">
                 events calendar

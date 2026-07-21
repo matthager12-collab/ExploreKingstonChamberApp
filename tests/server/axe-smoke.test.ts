@@ -14,7 +14,23 @@ import { chromium, type Browser } from "playwright";
 import { AxeBuilder } from "@axe-core/playwright";
 import { BASE_URL } from "./config";
 
-const PAGES = ["/", "/ferry", "/eat", "/events", "/stay", "/about"];
+// E14 adds the three pages this epic ships: they are the non-app fallbacks and
+// the public accessibility commitment, so of everything on the site they are the
+// least acceptable place for an un-caught violation. Their baseline entries are
+// deliberately EMPTY — zero tolerance from the day they land, before anything
+// has a chance to accrete. /es is left out while it ships dark (it 404s to an
+// anonymous scanner); tests/server/es-accessibility.test.ts covers it instead.
+const PAGES = [
+  "/",
+  "/ferry",
+  "/eat",
+  "/events",
+  "/stay",
+  "/about",
+  "/simple",
+  "/print",
+  "/accessibility",
+];
 // Admin surfaces need a session; the global-setup seeds ci@example.test.
 // E08 adds the worklist queue. Its baseline entry carries only
 // `color-contrast`, which comes from the SHARED site-chrome link

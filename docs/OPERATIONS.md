@@ -683,7 +683,7 @@ Dated, concrete, grounded in the seed files. Put these on a real calendar.
 |---|---|---|
 | **2026-09-12** | Kitsap Transit GTFS feed **S1000066 expires** (valid 2026-06-14 → 2026-09-12). The bundled fast-ferry times are hardcoded from it — refresh when the fall schedule drops (`https://pride.kitsaptransit.com/gtfs/google_transit.zip`) or the app shows a stale summer schedule. Also re-check the Saturday seasonal window (currently months 5–9). | `src/lib/kitsap.ts` |
 | **~2026-09-14** | Friends & Neighbors Brewing resumes Monday 4–8 pm hours (closed Mondays until MNF returns). Update the hours string (or have them edit via the portal). | `src/lib/data/restaurants.ts` |
-| **October 2026** | WSF typically changes fares each October. The ferry page hardcodes **summer 2026** fares ($11.35 walk-on round trip, $27.00 car + driver) — update the numbers, or wire the Fares API. Kitsap Transit fares also historically take effect Oct 1. | `src/app/ferry/page.tsx` (per DATA_SOURCES §1) |
+| **October 2026** | WSF typically changes fares each October. The ferry page hardcodes **summer 2026** fares ($11.35 walk-on round trip, $27.00 car + driver) — update the numbers, or wire the Fares API. Kitsap Transit fares also historically take effect Oct 1. **The walk-on fare is also published on /simple and /es** — update `en.walkOn` AND `es.walkOn` in the safety dictionary in the same change, or the two pages with the least-sophisticated readers keep showing the old fare. | `src/app/ferry/page.tsx` (per DATA_SOURCES §1); `src/lib/i18n/safety-content.ts` (`en.walkOn`, `es.walkOn`) |
 | **Oct 1–30, 2026** (annually; watch kitsap.gov/das each summer — the window has moved) | Kitsap County **LTAC** grant RFP for 2027 funds. One-month window; late = rejected. Export the survey/analytics summaries from `/admin` for the application. | DATA_SOURCES §12 |
 | **Annually** (pick a fixed month once E03's migration date is known) | Rotate the **age backup keypair** (`BACKUP_AGE_RECIPIENT`) — see §12 Secret rotation. Keep every retired private key; old backups need them. | 1Password "ExploreKingston backup age key" |
 | **Monthly** (once the E11 retention cron is scheduled) | Check the last `retention-purge` audit row in `/admin/audit` — a silent cron failure is retention drift: the public privacy page keeps promising windows nothing is enforcing. No row since the last calendar month = investigate the workflow run. | `/admin/audit` (action `retention-purge`); `.github/workflows/privacy-retention.yml` |
@@ -1036,6 +1036,9 @@ The procedure, in order:
    the Spanish says the same thing; the Spanish is plain (grade 6–9, one idea per sentence);
    and no instruction promises something the app cannot guarantee — in particular there must
    be **no "last boat" time** anywhere.
+   Two lines have already drifted once and are worth reading twice: `returnTrip.note`, where a
+   wrong time of day strands somebody overnight, and any step that names a **fare** or a
+   **clock time** — those are the sentences where "close enough" has a consequence.
 4. **Preview it signed in.** Visit `/es` as an admin. It renders with a banner saying
    visitors get a 404. Read it on a phone.
 5. **Fix anything the reviewer flags** — edits to the dictionary are a code change and a

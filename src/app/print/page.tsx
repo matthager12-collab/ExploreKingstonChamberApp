@@ -70,12 +70,24 @@ function times(sailings: Sailing[], direction: Sailing["direction"]): string[] {
     .map((s) => formatPacificTime(s.departs));
 }
 
+// An <h4>, not an <h3>: the two ferry-TYPE headings on this page are <h3>, and
+// each owns two direction headings. As siblings they produced two identically
+// named "Leaving Kingston" headings at the same level, which a screen-reader
+// heading list renders as an ambiguous flat run. Nested one level down, each
+// direction reads under the boat it belongs to.
 function Departures({ label, list }: { label: string; list: string[] }) {
   return (
     <div className="mt-4">
-      <h3 className="text-lg font-semibold text-sound-deep">{label}</h3>
+      <h4 className="text-base font-semibold text-sound-deep">{label}</h4>
       {list.length > 0 ? (
-        <p className="mt-1 text-base leading-relaxed text-ink">{list.join(" · ")}</p>
+        // A list, not a middle-dot-joined paragraph: a run of times separated by
+        // "·" is announced as one undifferentiated sentence. As <li>s they are
+        // counted and steppable, and they still print as a compact row.
+        <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-base leading-relaxed text-ink">
+          {list.map((t) => (
+            <li key={t}>{t}</li>
+          ))}
+        </ul>
       ) : (
         <p className="mt-1 text-base text-ink">No departures today.</p>
       )}
@@ -87,9 +99,13 @@ export default async function PrintPage() {
   const hiddenPreview = await assertPageVisible("/print");
   const [ferry, copy] = await Promise.all([getFerryStatusSnapshot(), getCopyOverrides()]);
 
-  // "As of" is the moment this page was rendered — with revalidate = 60 that is
-  // never more than a minute old, and it is the honest stamp for a sheet of
-  // paper that will outlive the render by hours.
+  // "As of" is the moment this HTML was GENERATED — not the moment it was read.
+  // revalidate = 60 marks the page stale after a minute, but stale-while-
+  // revalidate means a low-traffic page keeps serving the last render until
+  // someone asks for it again, which can be far longer than a minute. That is
+  // exactly why the stamp is here: it makes the age of the numbers visible to
+  // the reader instead of implied. Any page that publishes departure times owes
+  // the reader the same stamp — /simple and /es carry it for this reason.
   const renderedAt = new Date().toISOString();
   const chamberPhone = copyText(copy, "contact.phone.number");
 
@@ -142,8 +158,16 @@ export default async function PrintPage() {
             <p className="text-base font-semibold text-ink">
               {copyText(copy, "contact.phone.label")}
             </p>
+            {/* The visible text stays the bare number (it has to be readable
+                and copyable on paper); the accessible name adds whose number it
+                is, so a screen reader's links list is not a column of anonymous
+                digits — WCAG 2.4.4. */}
             <p className="text-lg text-ink">
-              <a href={telHref(chamberPhone)} className="font-bold underline underline-offset-2">
+              <a
+                href={telHref(chamberPhone)}
+                aria-label={`${copyText(copy, "contact.phone.label")}, ${chamberPhone}`}
+                className="font-bold underline underline-offset-2"
+              >
                 {chamberPhone}
               </a>
             </p>
@@ -152,7 +176,11 @@ export default async function PrintPage() {
             <li key={p.number}>
               <p className="text-base font-semibold text-ink">{p.who}</p>
               <p className="text-lg text-ink">
-                <a href={telHref(p.number)} className="font-bold underline underline-offset-2">
+                <a
+                  href={telHref(p.number)}
+                  aria-label={`${p.who}, ${p.number}`}
+                  className="font-bold underline underline-offset-2"
+                >
                   {p.number}
                 </a>{" "}
                 <span className="text-base">— {p.note}</span>

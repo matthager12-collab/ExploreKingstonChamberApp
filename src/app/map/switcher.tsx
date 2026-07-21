@@ -50,7 +50,7 @@ export function MapSwitcher({ views }: { views: SwitcherView[] }) {
       <FeatureMap view={selected} height="min(70vh,560px)" />
 
       {active?.description && (
-        <p className="mt-3 max-w-2xl text-ink-soft">{active.description}</p>
+        <p className="mt-3 max-w-2xl text-ink">{active.description}</p>
       )}
     </div>
   );
