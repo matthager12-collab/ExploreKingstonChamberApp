@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import {
   PageHeader,
   Section,
@@ -57,6 +58,15 @@ export default async function ParkingPage() {
           Colors follow the parking type shown in the legend. The sign on the pole is
           always the legal authority — where a lot and a posted sign disagree, believe the
           sign. Chamber admins keep this map current in the portal at /admin/maps.
+        </p>
+        {/* E27: you just parked — the next question is almost always this one. */}
+        <p className="mt-3">
+          <Link
+            href="/map/restrooms"
+            className="inline-flex min-h-[44px] items-center text-sm font-semibold text-tide-deep underline"
+          >
+            Need a restroom? Find the nearest one →
+          </Link>
         </p>
         {/* E14 (M-14-04): on the map canvas a lot's type is carried by its
             marker colour alone, and the type name only appears inside a popup

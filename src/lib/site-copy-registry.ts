@@ -255,6 +255,34 @@ export const COPY_BLOCKS = [
       "Pick a layer — where to eat, where to park, what to explore — and see it all on one map of downtown Kingston.",
   },
 
+  // ---------------------------------------------------- /map/restrooms (E27)
+  {
+    key: "restrooms.header.eyebrow",
+    page: "Restrooms & water",
+    label: "Header eyebrow",
+    fallback: "Practical basics",
+  },
+  {
+    key: "restrooms.header.title",
+    page: "Restrooms & water",
+    label: "Page title",
+    fallback: "Restrooms & water",
+  },
+  {
+    key: "restrooms.header.intro",
+    page: "Restrooms & water",
+    label: "Header intro",
+    multiline: true,
+    fallback:
+      "Public restrooms and drinking water in downtown Kingston, with the walk from the ferry. Tap the button to sort by what's closest to you.",
+  },
+  {
+    key: "map.restrooms.link",
+    page: "Town Map",
+    label: "Link to the restroom & water finder",
+    fallback: "Need a restroom? Find the nearest one →",
+  },
+
   // -------------------------------------------------------------- /give
   {
     key: "give.header.eyebrow",
@@ -561,6 +589,51 @@ export const COPY_BLOCKS = [
     label: "Location-error fallback",
     multiline: true,
     fallback: "Couldn't get a location fix just now. Kingston is small — the walk times from the ferry on each card below are a good guide.",
+  },
+  // Restroom & water finder (client) — E27 practical basics
+  {
+    key: "restrooms.finder.button",
+    page: "Restrooms & water (client)",
+    label: "Finder button label",
+    fallback: "Find the nearest restroom",
+  },
+  {
+    key: "restrooms.finder.locating",
+    page: "Restrooms & water (client)",
+    label: "Finder button label while locating",
+    fallback: "Finding you…",
+  },
+  {
+    key: "restrooms.finder.disclosure",
+    page: "Restrooms & water (client)",
+    label: "Disclosure line under the finder button",
+    multiline: true,
+    // Stronger promise than nearme.disclosure on purpose: this finder makes no
+    // network call at all, so nothing is stored, not even a neighborhood.
+    fallback: "Sorts this list on your phone. Your location is never sent anywhere and never saved.",
+  },
+  {
+    key: "restrooms.finder.denied",
+    page: "Restrooms & water (client)",
+    label: "Location-declined fallback",
+    multiline: true,
+    fallback: "No problem — the list below is ordered by walk time from the ferry dock instead.",
+  },
+  {
+    key: "restrooms.finder.error",
+    page: "Restrooms & water (client)",
+    label: "Location-error fallback",
+    multiline: true,
+    fallback: "Couldn't get a location fix just now. The list below is ordered by walk time from the ferry dock.",
+  },
+  {
+    key: "restrooms.finder.nowater",
+    page: "Restrooms & water (client)",
+    label: "Note shown when no drinking water is mapped",
+    multiline: true,
+    // Honest empty state. Delete this block's call site only when water pins
+    // exist — see the sourcing note in src/lib/data/map-features.ts.
+    fallback: "No public drinking water is mapped in Kingston yet. We'd rather say so than send you to a fountain that might not be there — know one? Tell the Chamber and we'll add it.",
   },
   // Webcams (client)
   {
