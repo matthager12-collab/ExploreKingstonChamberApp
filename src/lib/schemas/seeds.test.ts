@@ -6,6 +6,7 @@
 // and say so in the PR.
 
 import { describe, expect, it } from "vitest";
+import { events } from "@/lib/data/events";
 import { itineraries } from "@/lib/data/itineraries";
 import { lodging } from "@/lib/data/lodging";
 import { restaurants } from "@/lib/data/restaurants";
@@ -17,6 +18,7 @@ const SUITES = [
   { domain: "lodging" as const, records: lodging },
   { domain: "webcams" as const, records: webcams },
   { domain: "itineraries" as const, records: itineraries },
+  { domain: "events" as const, records: events },
 ];
 
 describe("seed data parses under the domain schemas", () => {

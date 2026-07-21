@@ -77,7 +77,8 @@ async function checkSeeds(): Promise<boolean> {
   const { lodging } = await import("../src/lib/data/lodging");
   const { webcams } = await import("../src/lib/data/webcams");
   const { itineraries } = await import("../src/lib/data/itineraries");
-  const seedSets = { restaurants, lodging, webcams, itineraries } as const;
+  const { events } = await import("../src/lib/data/events");
+  const seedSets = { restaurants, lodging, webcams, itineraries, events } as const;
   const failures: Failure[] = [];
   console.log("\n=== git seeds (src/lib/data) ===");
   for (const domain of DOMAINS) {
