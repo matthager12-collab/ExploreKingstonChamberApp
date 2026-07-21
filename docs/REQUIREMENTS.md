@@ -545,7 +545,7 @@ presence, and nothing above the stores knows which backend is active.
   502 with no previous release still serving. Merging to `main` auto-deploys,
   so `DATABASE_URL` and the disk mount must be verified *before* the merge, not
   after. Full explanation in [RUNBOOK-CUTOVER.md](RUNBOOK-CUTOVER.md) under
-  "Migrations under auto-deploy" and "Every deploy is a brief outage".
+  "Migrations under auto-deploy" and "Deploys are zero-downtime".
 - **Backup/restore** must exist: an admin-gated JSON bundle of the whole data
   directory (`/api/admin/backup`, "⤓ Download backup" on `/admin`,
   restore via `scripts/restore-backup.mjs`), plus host-level snapshots.

@@ -61,12 +61,14 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # server.js reads these to bind the listener (verified in Next 16.2.10 docs).
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
-# FILESYSTEM runtime state (images, hunt photos) resolves through
-# src/lib/data-dir.ts -> DATA_DIR. Since E05 the structured state — records,
-# users/orgs/invites, analytics, ferry observations — lives in Postgres via
-# DATABASE_URL and never touches this disk.
-# On the persistent host this MUST point at the mounted volume (see /data below).
-ENV DATA_DIR=/data
+# NO DATA_DIR (E15 slice 3). Nothing durable is written to this container's
+# filesystem: structured state is in Postgres via DATABASE_URL (E05), uploaded
+# images are in the private R2 bucket via R2_IMAGES_* (E15 slice 1).
+#
+# src/lib/data-dir.ts still exists and falls back to <cwd>/.data when DATA_DIR
+# is unset — that fallback is for LOCAL DEV. In this image it resolves to an
+# ephemeral /app/.data that is discarded on every deploy, which is correct:
+# there is nothing left that needs to survive here.
 
 # Run as a dedicated non-root user (defence in depth; least privilege).
 RUN addgroup --system --gid 1001 nodejs \
@@ -84,10 +86,13 @@ COPY --from=build --chown=nextjs:nodejs /app/public ./public
 # (src/instrumentation.ts). Standalone's file tracer only follows static
 # imports, so runtime-read .sql files must be copied in explicitly.
 COPY --from=build --chown=nextjs:nodejs /app/db/migrations ./db/migrations
-# Operator scripts run INSIDE this container over `render ssh` — the E15 image
-# migration and its parity check in particular, because DATA_DIR is a disk
-# mounted only in the live instance: a local checkout cannot see it, and a
-# one-off job gets a fresh instance without it.
+# Operator scripts run INSIDE this container, via the Render dashboard Shell
+# (`render ssh` needs a registered key and is interactive-only). They are kept
+# in the image because they must run against the service's own environment —
+# its R2 credentials and, while the disk existed, its mount. The image
+# migration is finished (production had zero images on disk), but the script
+# stays: it is the tool for verifying image parity if a disk is ever restored
+# from a backup, and it costs a few KB.
 COPY --from=build --chown=nextjs:nodejs /app/scripts ./scripts
 # aws4fetch must be copied EXPLICITLY. The E15 epic assumed it would resolve
 # from the standalone bundle's traced node_modules because blob-store.ts
@@ -100,24 +105,24 @@ COPY --from=build --chown=nextjs:nodejs /app/scripts ./scripts
 # ~10 KB, and the migration cannot run without it.
 COPY --from=deps --chown=nextjs:nodejs /app/node_modules/aws4fetch ./node_modules/aws4fetch
 
-# Create the mount point for the persistent volume and hand it to the app user
-# so the health probe's write test and all disk-backed writes succeed. On Render/Fly
-# the disk is mounted here at runtime, shadowing this empty dir.
-RUN mkdir -p /data && chown nextjs:nodejs /data
-VOLUME ["/data"]
+# No /data mount point and no VOLUME (E15 slice 3) — the persistent disk is
+# gone. Declaring a VOLUME here would make any host that honours it re-create
+# per-container storage and quietly reintroduce the stop-start deploy window.
 
 USER nextjs
 
 EXPOSE 3000
 
-# Liveness+readiness: GET /api/health returns 200 only when /data is writable
-# AND Postgres answers (dbOk); 503 otherwise. Since E05 the DB is a hard gate —
-# a release started without DATABASE_URL never reports healthy. That does NOT
-# fall back to the previous release: both Render services mount a persistent
-# disk, a disk can be mounted by only ONE instance, so Render stops the old
-# instance before starting the new one. An unhealthy release takes the service
-# DOWN (502), and every deploy is a ~15s outage. See docs/RUNBOOK-CUTOVER.md,
-# "Migrations under auto-deploy" and "Every deploy is a brief outage".
+# Liveness+readiness: GET /api/health returns 200 only when Postgres answers;
+# 503 otherwise (E15 — it no longer touches the filesystem, which is what let
+# the disk be removed). The DB is a hard gate: a release started without a
+# reachable DATABASE_URL never reports healthy.
+#
+# Since the disk was removed that gate finally does what it should — with no
+# volume to hand over, the old instance keeps serving until the new one is
+# healthy, so a bad release is HELD BACK instead of taking the site down.
+# (While a disk was attached, only one instance could hold it, so Render had to
+# stop the old container first and an unhealthy release meant a 502.)
 # wget ships in alpine's busybox (no curl needed). -q silent,
 # -O- to stdout; non-zero exit on HTTP failure (via --spider-less body fetch).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

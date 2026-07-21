@@ -4,7 +4,8 @@ The authoritative deploy guide for Explore Kingston. **July 2026.**
 
 **Status:** Phase 1 is **LIVE on Render** at <https://explore-kingston.onrender.com>
 — since E05, Neon Postgres holds all structured data (`DATABASE_URL` is
-required) and the persistent disk holds images/hunt photos. Phase 2 (Vercel
+required) and a private Cloudflare R2 bucket holds uploaded images (E15 —
+the persistent disk was removed, so deploys are zero-downtime). Phase 2 (Vercel
 serverless) is fully built but **not yet the running home** — it's the
 documented alternative / future move, not a pending chore.
 
@@ -31,7 +32,7 @@ above the store modules (routes, components, domain types) ever branches:
 
 | Seam file | Detector | Backend when set | Fallback when unset |
 |---|---|---|---|
-| `src/lib/data-dir.ts` | `DATA_DIR` present | absolute path on a **persistent disk** — images/hunt photos only since E05 (until E15) | `<repo>/.data/` |
+| `src/lib/data-dir.ts` | `DATA_DIR` present | **unset in production since E15** — no disk; images live in R2. Local dev only | `<repo>/.data/` |
 | `src/lib/blob-store.ts` | `hasR2()` = all four `R2_IMAGES_*` set | **Cloudflare R2** — a PRIVATE bucket; the app proxies reads through its own image routes (never `r2.dev`, no R2 custom domain) | falls back to `hasBlob()` = `BLOB_READ_WRITE_TOKEN` (legacy Vercel Blob), then to image bytes under `DATA_DIR` |
 | `src/lib/rate-limit.ts` | `UPSTASH_REDIS_REST_URL` set | **Upstash Redis** shared sliding window | in-process `Map` (single-instance only) |
 
@@ -125,11 +126,11 @@ Blueprint that declares the Docker web service, a **1 GB Disk mounted at
      deploys never consult it (`hasAnyUsers()` is checked first).
    - `DATABASE_URL` — `sync: false` (E05); the Neon **pooled** connection
      string, entered in the dashboard, never in `render.yaml`. **Required**: a
-     release booted without it fails `/api/health` (`dbOk:false`) and Render
-     503s. **It does NOT keep the previous release serving.** The service
-     mounts a persistent disk, which only one instance can mount at a time, so
-     Render stops the old instance before starting the new one — an unhealthy
-     release means the service is DOWN, not held back. (Verified on staging
+     release booted without it fails `/api/health` (`db:false`) and Render
+     503s. **Since E15 removed the disk this now DOES keep the previous
+     release serving** — with no volume to hand over the instances overlap, so
+     an unhealthy release is held back instead of taking the site down. (While
+     a disk was attached the opposite was true, verified on staging
      2026-07-19.) Validate the URL from your laptop first — `psql` is **not**
      installed on the operator Mac, so use the repo's own `pg` driver, run from
      the repo root with the exact string you are about to paste on the
@@ -253,7 +254,7 @@ changes: push there first, smoke-test, then merge/push to `main`.
   meant to hold synthetic/seed data only — a production backup bundle
   contains real password hashes and real visitor/LTAC survey PII.
 
-**Cost:** ~$7.25/mo (Starter web instance) + ~$0.25/mo (1 GB disk) — approved
+**Cost:** ~$7/mo (Starter web instance; the 1 GB disk was removed in E15) — approved
 in the v2 budget; a human still clicks "Approve" on the Blueprint sync that
 creates it (Render dashboard), per the new-spend sign-off rule.
 
@@ -444,11 +445,11 @@ launch**; the app currently lives at the raw `explore-kingston.onrender.com`.
 
 | | **Render (Phase 1, LIVE)** | **Vercel (Phase 2, ready)** |
 |---|---|---|
-| Persistence | Neon Postgres (structured data, E05) + 1 GB disk at `/data` (images/photos) | Neon + Blob + Upstash |
+| Persistence | Neon Postgres (structured data, E05) + private R2 bucket for images (E15, no disk) | Neon + Blob + Upstash |
 | Env shape | `DATA_DIR=/data` + `DATABASE_URL`, no Blob/Upstash vars | all cloud vars set, `DATA_DIR` unset |
 | Schema/migration | Drizzle migrations (`db/migrations/`, applied at boot — E05) | same migrations; image move to Blob |
 | Rate limit | in-process `Map` (single instance, correct) | Upstash shared window (required) |
-| Cost | ~$7.25/mo (Starter + 1 GB disk) + Neon free tier | ~$20/mo Pro + free-tier stores |
+| Cost | ~$7/mo (Starter, no disk) + Neon free tier + R2 ~$0–1 | ~$20/mo Pro + free-tier stores |
 | Backups | Neon PITR + daily disk snapshots + off-site JSON bundle | Neon PITR + Blob versioning |
 | Scaling | single warm instance | serverless, multi-instance |
 | Ops burden | one box, one disk, snapshots | three managed services |

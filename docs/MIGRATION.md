@@ -33,7 +33,7 @@ retained as the procedural record of how the move was done.
    now deploys to production with no human trigger — and each deploy is a
    ~15s full outage, because both services mount a persistent disk, so Render
    must stop the old instance before starting the new one. See "Migrations
-   under auto-deploy" and "Every deploy is a brief outage" in
+   under auto-deploy" and "Deploys are zero-downtime" in
    `docs/RUNBOOK-CUTOVER.md`.
 5. **Done — Claude ran `scripts/verify-migration.sh`**, updated the local
    remote, and swept docs/memory for the old slug.
@@ -255,7 +255,7 @@ Record here once done:
    starting the new one. Every deploy is therefore a ~15s **full outage**, and
    a release that never goes healthy leaves production 502ing: it does not
    fail closed, and the old release does not keep serving. See "Migrations
-   under auto-deploy" and "Every deploy is a brief outage" in
+   under auto-deploy" and "Deploys are zero-downtime" in
    `docs/RUNBOOK-CUTOVER.md`.
 5. Fill in the completion log below, including a Sentry test-event id if one
    is available (a deliberate staging-only error, or "none yet — wiring

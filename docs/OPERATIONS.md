@@ -31,10 +31,12 @@ Phase-2 Vercel path, DNS, pre-launch checklist),
    parking overlay are all reproducible from git + `npm install`. Back up
    **both** Neon (PITR/branching) and `DATA_DIR`.
 2. **`DATABASE_URL` is required on every deploy** — `/api/health` reports
-   `db:false` and 503s without it. That gate is real, but it does NOT hold
-   back a bad release: both Render services mount a persistent disk, so the old
-   instance must stop before the new one starts. A release without a working
-   `DATABASE_URL` takes the service DOWN (verified on staging 2026-07-19).
+   `db:false` and 503s without it. **Since E15 removed the persistent disk that
+   gate finally holds a bad release back** instead of taking the site down:
+   with no volume to hand over, the old instance keeps serving until the new
+   one reports healthy. (While a disk was attached, only one instance could
+   mount it, so the old container had to stop first and a broken release meant
+   a full outage — observed on staging 2026-07-19.)
    Always validate the URL before setting it — see the pre-flight in
    [RUNBOOK-CUTOVER.md](RUNBOOK-CUTOVER.md), which has a node path because
    `psql` is not installed on the operator's Mac.
@@ -302,11 +304,11 @@ picture.
 |---|---|
 | Blueprint | `render.yaml` — a Docker web service (`runtime: docker`, `dockerfilePath: ./Dockerfile`), region `oregon`, plan **starter** (persistent disks require a paid plan) |
 | Image | Multi-stage `Dockerfile`: `node:22-alpine`, `npm ci`, `npm run build`, ships only the standalone runner (`.next/standalone` + copied `.next/static` + `public/`), runs as non-root `nextjs`, `CMD ["node","server.js"]` on port 3000 |
-| Persistence | **Neon Postgres** for all structured data (E05 — `DATABASE_URL` is `sync: false` in `render.yaml`, set in the dashboard) + a 1 GB disk named `data` mounted at **`/data`** (`DATA_DIR=/data`) for hunt photos / map images. The disk survives deploys and restarts |
+| Persistence | **Neon Postgres** for all structured data (E05 — `DATABASE_URL` is `sync: false` in `render.yaml`, set in the dashboard) + **private Cloudflare R2** for uploaded images (E15 — `R2_IMAGES_*`). **No persistent disk since E15 slice 3**: nothing durable is written to the container filesystem, which is what makes deploys zero-downtime |
 | Health gate | `healthCheckPath: /api/health` — Render routes traffic only after 200. `/api/health` returns `{ ok, db, storage, time }`, **200 only when Postgres answers, 503 otherwise** (E15: gates on the DB alone). It does NOT touch the filesystem — the earlier `/data` write-probe was removed so the disk can be dropped without bricking the health check. `storage` (`"r2"` \| `"fs"` \| `"unconfigured"`) reports where images are configured to live but **never gates** — an R2 outage must 404 an image, not 503 the site. This catches a release booted without a reachable `DATABASE_URL` before users do |
 | Secrets | `AUTH_SECRET` and `SETUP_TOKEN` = `generateValue: true` (Render mints them once; **do not rotate `AUTH_SECRET` casually**); `WSDOT_API_KEY` and `NEXT_PUBLIC_SITE_URL` are `sync: false`, entered in the dashboard. `NEXT_PUBLIC_*` is inlined at **build** time — Render bakes it during the Docker build |
 | Deploys | **Auto-deploy on push** to the tracked branch. The repo was made **public** to bypass a Render↔GitHub sync issue (no secrets live in git — `.env*`, `.data/` are gitignored; `.env.production.example` is documentation only) |
-| Cost | **≈ $7.25 / mo** (Starter web instance + 1 GB disk) |
+| Cost | **≈ $7 / mo** (Starter web instance; the 1 GB disk was removed in E15) + R2 at ~$0–1/mo |
 | State today | Admin account created and persisted; `WSDOT_API_KEY` set → ferry board is **LIVE**; disk snapshots on |
 
 **`fly.toml` is a maintained alternative** (Fly, Seattle region, volume `data`
@@ -322,13 +324,13 @@ that would break Chamber email) is **deferred until launch**. See
 ### Redeploy / rollback
 
 - **Redeploy:** merge to `main` → Render rebuilds the Docker image and starts
-  the new container. The `/data` disk persists across the swap, but the swap is
-  **not** hot: both services mount a persistent disk that only one instance can
-  hold, so Render **stops the old container before starting the new one**. Every
-  deploy — including the rollback below — is a **~15 s full outage**, and there
-  is no human step: every merge to `main` auto-deploys production. See
-  [RUNBOOK-CUTOVER.md](RUNBOOK-CUTOVER.md) "Every deploy is a brief outage" and
-  "Migrations under auto-deploy".
+  the new container. **Since E15 removed the disk the swap is hot**: with no
+  volume that only one instance can hold, the old container keeps serving until
+  the new one passes its health check, so deploys are zero-downtime and a
+  release that never goes healthy is held back rather than taking the site
+  down. There is still no human step — every merge to `main` auto-deploys
+  production. See [RUNBOOK-CUTOVER.md](RUNBOOK-CUTOVER.md) "Migrations under
+  auto-deploy"; migrations remain the reason to look before merging.
 - **Env change:** edit in the Render dashboard and trigger a deploy. Note a
   `NEXT_PUBLIC_*` change requires a **rebuild** (build-time inlining), not just a
   restart.
@@ -1078,16 +1080,13 @@ useful first triage step:
 Both are fail-closed — Render withholds traffic from any non-200 release — so
 the safety posture is the same; only the diagnosis differs. (Health no longer
 probes the disk; a storage problem is reported in `storage` but never 503s.)
-Render
-withholds traffic from the unhealthy release — but while a persistent disk is
-still attached **that does not keep the previous release serving**: the disk
-only one instance can hold means the old container was already stopped, so a
-release that never goes green is the site **DOWN (502)**, not held back
-(verified on staging 2026-07-19). Fix the env var / database and redeploy, or
-roll back to a known-good commit immediately — see
-[RUNBOOK-CUTOVER.md](RUNBOOK-CUTOVER.md) "Every deploy is a brief outage".
-(Once the disk is removed — E15 slice 3 — deploys overlap and a failed release
-is held back instead of taking the site down; this paragraph updates then.)
+Render withholds traffic from the unhealthy release, and **since E15 removed
+the disk that now keeps the previous release serving**: with no volume to hand
+over, the old container stays up until the new one is healthy, so a bad release
+is held back rather than taking the site down. (Before the disk was removed the
+old container had to stop first, and a release that never went green meant the
+site was **DOWN (502)** — observed on staging 2026-07-19.) Fix the env var /
+database and redeploy, or roll back to a known-good commit.
 
 ### Abuse response: anonymous-write flood / disk full
 
@@ -1111,9 +1110,10 @@ Render) for files that aren't legitimate player submissions, then redeploy or
 wait ~60 s for the cached storage-size check to pick up the change.
 
 **To tune the quota:** raise or lower `MAX_PHOTO_STORAGE_BYTES` in
-`src/lib/hunt-store.ts` (currently 400 MB, leaving headroom on the 1 GB disk
-for map images and hunt reference photos — the disk's remaining tenants
-since E05).
+`src/lib/hunt-store.ts` (currently 400 MB). The number was sized for headroom
+on the old 1 GB disk; since E15 images live in R2 and the cap is an ABUSE
+control rather than a capacity one — it bounds what a flood can cost, not what
+the box can hold. Re-tune it against the R2 spend you're willing to absorb.
 
 ### Edits not showing up on public pages (stale ISR)
 

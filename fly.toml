@@ -27,14 +27,11 @@ primary_region = "sea"   # Seattle; nearest Fly region to Kingston, WA
   dockerfile = "Dockerfile"
 
 [env]
-  # Point all mutable state at the mounted volume (see [mounts]).
-  DATA_DIR = "/data"
+  # No DATA_DIR and no [mounts] (E15 slice 3): nothing durable is written to
+  # the container filesystem. Structured state lives in Neon Postgres
+  # (DATABASE_URL) and uploaded images in the private R2 bucket (R2_IMAGES_*),
+  # so a Fly deployment needs no volume — and gets rolling deploys for free.
   PORT = "3000"
-
-# Persistent volume — created out-of-band with `fly volumes create data`.
-[mounts]
-  source = "data"
-  destination = "/data"
 
 [http_service]
   internal_port = 3000       # matches EXPOSE / PORT in the Dockerfile

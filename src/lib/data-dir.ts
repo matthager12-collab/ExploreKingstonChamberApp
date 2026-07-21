@@ -1,16 +1,21 @@
-// The single source of truth for where mutable state lives on disk.
+// Where filesystem state lives — LOCAL DEVELOPMENT ONLY since E15.
 //
-// Every store (auth, portal overlays, hunts + photos, analytics, survey,
-// maps) resolves its paths through dataPath(). In local dev this is the
-// repo's .data/ directory; in production set DATA_DIR to an absolute path on
-// a PERSISTENT volume (e.g. DATA_DIR=/data on a Render/Fly/Railway disk, or a
-// path outside the app root on a VPS) so redeploys and container restarts do
-// not wipe accounts, portal edits, and photos.
+// Production no longer sets DATA_DIR and no longer mounts a disk. Everything
+// durable moved off-box: structured state to Neon Postgres (E05) and uploaded
+// images to the private Cloudflare R2 bucket (E15 slice 1). In the deployed
+// container this resolves to an ephemeral <cwd>/.data that is discarded on
+// every deploy — which is fine, because nothing that must survive is written
+// there any more.
 //
-// Migration seam: this is also the boundary where the app moves off the
-// filesystem entirely. When the app later goes serverless (Vercel), the store
-// modules that call dataPath() are the exact set to reimplement against a
-// database + object storage — nothing above them changes. See docs/DEPLOY.md.
+// This module is deliberately KEPT: `next dev` still writes to the repo's
+// .data/ directory, and the store modules still resolve their paths through
+// dataPath() for that path. Treat a NEW dataPath() caller that must persist in
+// production as a bug — it would be writing to storage that evaporates on the
+// next deploy. Durable writes belong in Postgres or R2.
+//
+// The migration seam this once described is now finished: the stores that used
+// to be filesystem-backed read and write Postgres/R2 directly. See
+// docs/DEPLOY.md and docs/OPERATIONS.md.
 
 import path from "path";
 
