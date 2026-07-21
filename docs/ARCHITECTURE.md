@@ -196,9 +196,10 @@ All are seed+overlay via `json-store.ts` unless marked append.
 Structured data no longer branches on env: it lives in Neon Postgres,
 **every write goes through the audited zod choke point**
 `src/lib/db/records.ts` (`readRecords` / `readMergedRecords` / `writeRecord`),
-and `DATABASE_URL` is required — `/api/health` reports `dbOk:false` and 503s
-without it, so a release without `DATABASE_URL` never serves traffic. That is
-**not** a safe abort: both Render services mount a persistent disk, only one
+and `DATABASE_URL` is required — `/api/health` reports `db:false` and 503s
+without it, so a release without `DATABASE_URL` never serves traffic. Since
+E15 removed the disk that IS a safe abort: the previous release keeps serving.
+(Before E15 it was not — a disk can be held by only one
 instance can hold it, so Render stops the old instance *before* starting the
 new one. A release that never goes healthy therefore leaves the site down (502)
 until a good release lands — the previous release is already gone and does not
@@ -424,7 +425,7 @@ between them.
 | Mode | **Postgres + disk (E05)** — `DATABASE_URL` (Neon) for structured data, `DATA_DIR=/data` for images/photos | **Cloud** — Neon + Blob + Upstash; `DATA_DIR` unset |
 | Rate limit | in-process Map (one instance — correct) | Upstash Redis (shared) |
 | Images | under `/data`, served by app routes | Vercel Blob CDN URLs |
-| Health | `/api/health` → `{ok, dataDir, dataWritable, dbOk}`; **503 until the volume is writable AND Postgres answers** (E05). The service mounts a persistent disk, so Render **stops the old instance before starting the new one**: a release that never goes healthy leaves the site **down**, it does not fall back to the previous release. Every deploy is a ~15 s full outage for the same reason — see [RUNBOOK-CUTOVER.md](RUNBOOK-CUTOVER.md) | `/api/health` (same dual probe) |
+| Health | `/api/health` → `{ok, db, storage, time}`; **503 until Postgres answers** (E15 — it no longer touches the filesystem, which is what allowed the disk to be removed). `storage` is reported but never gates. With no disk the instances overlap, so a release that never goes healthy is **held back** and deploys are zero-downtime — see [RUNBOOK-CUTOVER.md](RUNBOOK-CUTOVER.md) | `/api/health` (same DB gate) |
 | Secrets | `AUTH_SECRET` (Render-generated, stable), `SETUP_TOKEN` (Render-generated, first-run bootstrap only), `WSDOT_API_KEY`, `NEXT_PUBLIC_SITE_URL` (**build-time**, baked into the client bundle), `DATABASE_URL` (Neon pooled url — E05) set in dashboard | + `BLOB_READ_WRITE_TOKEN`, `UPSTASH_REDIS_REST_URL/TOKEN` |
 
 Environment variables (authoritative — `.env.production.example`, `render.yaml`,

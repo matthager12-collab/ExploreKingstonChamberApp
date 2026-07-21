@@ -4,7 +4,8 @@ The authoritative deploy guide for Explore Kingston. **July 2026.**
 
 **Status:** Phase 1 is **LIVE on Render** at <https://explore-kingston.onrender.com>
 — since E05, Neon Postgres holds all structured data (`DATABASE_URL` is
-required) and the persistent disk holds images/hunt photos. Phase 2 (Vercel
+required) and a private Cloudflare R2 bucket holds uploaded images (E15 —
+the persistent disk was removed, so deploys are zero-downtime). Phase 2 (Vercel
 serverless) is fully built but **not yet the running home** — it's the
 documented alternative / future move, not a pending chore.
 
@@ -23,26 +24,25 @@ map views/features — outside the code tree. Since E05, **structured data has
 exactly one home: Neon Postgres** (`record` + append tables; every write goes
 through the audited zod choke point `src/lib/db/records.ts`), and
 `DATABASE_URL` is required on every deploy — `/api/health` reports
-`dbOk:false` and 503s without it. **This does not mean a bad deploy is
-harmless** — see the persistent-disk warning below: an unhealthy release takes
-the service down rather than being held back.
+`db:false` and 503s without it. Since E15 removed the persistent disk, an
+unhealthy release is **held back** and the previous release keeps serving.
 Only images and rate limiting still pick a backend by env presence; nothing
 above the store modules (routes, components, domain types) ever branches:
 
 | Seam file | Detector | Backend when set | Fallback when unset |
 |---|---|---|---|
-| `src/lib/data-dir.ts` | `DATA_DIR` present | absolute path on a **persistent disk** — images/hunt photos only since E05 (until E15) | `<repo>/.data/` |
+| `src/lib/data-dir.ts` | `DATA_DIR` present | **unset in production since E15** — no disk; images live in R2. Local dev only | `<repo>/.data/` |
 | `src/lib/blob-store.ts` | `hasR2()` = all four `R2_IMAGES_*` set | **Cloudflare R2** — a PRIVATE bucket; the app proxies reads through its own image routes (never `r2.dev`, no R2 custom domain) | falls back to `hasBlob()` = `BLOB_READ_WRITE_TOKEN` (legacy Vercel Blob), then to image bytes under `DATA_DIR` |
 | `src/lib/rate-limit.ts` | `UPSTASH_REDIS_REST_URL` set | **Upstash Redis** shared sliding window | in-process `Map` (single-instance only) |
 
 Two consequences:
 
-- **Phase 1** sets `DATA_DIR` **and `DATABASE_URL`**, none of the other cloud
-  vars → Neon holds structured data, the disk holds images. This is the
-  current live shape on Render.
-- **Phase 2** additionally sets Blob/Upstash and *leaves `DATA_DIR` unset* →
-  images go to Blob and rate limiting to Redis; the DB is the same Neon either
-  way. This is the Vercel shape.
+- **Phase 1** sets `DATABASE_URL` **and `R2_IMAGES_*`**, and since E15 leaves
+  `DATA_DIR` unset → Neon holds structured data, the private R2 bucket holds
+  images, and there is no disk. This is the current live shape on Render.
+- **Phase 2** additionally sets Blob/Upstash → images go to Blob and rate
+  limiting to Redis; the DB is the same Neon either way. This is the Vercel
+  shape.
 
 `npm run dev` needs a `DATABASE_URL` too (a throwaway local Postgres container
 or a personal Neon dev branch — see [OPERATIONS.md §1](OPERATIONS.md)); images
@@ -56,7 +56,7 @@ different `DATA_DIR`.
 | auth users, orgs + invites | dedicated `users` / `orgs` / `invites` tables (E06 — no longer `record` rows under `store='auth-users'`) | — |
 | portal overlays (restaurants, events, charities, needs, lodging, webcams, parking zones, itineraries, ferry-info, boarding-pass, ferry-prediction, site copy/pages, map views/features) | `record` rows keyed `(store, id)`, `deleted` column carries `_deleted` tombstones | — |
 | custom hunts + submissions | `record` (`custom-hunts`, `hunt-submissions`) | — |
-| hunt reference/player photos, map-feature images | files under `DATA_DIR` (until E15) | **Vercel Blob** (public URL stored on the record) |
+| hunt reference/player photos, map-feature images, event attachments | **private Cloudflare R2** since E15 (`R2_IMAGES_*`); the app proxies reads | **Vercel Blob** (public URL stored on the record) |
 | analytics events | `analytics_event` append table | — |
 | LTAC survey responses | `survey_response` append table | — |
 | ferry observations (busyness forecast learning log) | `ferry_observation` append table | — |
@@ -71,7 +71,7 @@ are the only schema mechanism.
 
 ---
 
-## 2. Phase 1 — persistent-disk host (the CURRENT live shape)
+## 2. Phase 1 — single container, no disk (the CURRENT live shape)
 
 Ship the code exactly as it is onto a host with a real disk. Two repo pieces
 make this turnkey:
@@ -81,13 +81,14 @@ make this turnkey:
 - **`Dockerfile`** (multi-stage `node:22-alpine`: `deps → build → runner`)
   produces the lean runtime image. The runner copies `.next/standalone`, then
   `.next/static` and `public/` (standalone omits both), runs as non-root user
-  `nextjs`, defaults `DATA_DIR=/data`, declares `VOLUME ["/data"]`, and its
-  `HEALTHCHECK` hits `/api/health`.
-- **`GET /api/health`** (`src/app/api/health/route.ts`) write-tests `DATA_DIR`
-  (mkdir + write + unlink a probe file) **and pings Postgres** (E05), returning
-  `200 {ok:true, dataDir, dataWritable:true, dbOk:true, time}` only when both
-  pass, `503` otherwise. This catches the exact failures (unmounted /
-  read-only volume; a boot without `DATABASE_URL`) that must be caught before
+  `nextjs`, and its `HEALTHCHECK` hits `/api/health`. Since E15 it sets **no**
+  `DATA_DIR` and declares **no** `VOLUME` — there is no disk.
+- **`GET /api/health`** (`src/app/api/health/route.ts`) pings Postgres and
+  nothing else — **no filesystem access at all** since E15, which is what let
+  the disk be removed. Returns `200 {ok:true, db:true, storage, time}`, `503`
+  otherwise. `storage` (`"r2"`/`"fs"`/`"unconfigured"`) is reported but never
+  gates. This catches the failure (a boot without a reachable `DATABASE_URL`)
+  that must be caught before
   real users hit the box. Wire it as the host's health check.
 
 The single-instance shape is fine for a one-admin Chamber — Phase 1 is a
@@ -96,14 +97,15 @@ real production deployment, not demo grade (see [ARCHITECTURE.md](ARCHITECTURE.m
 ### 2a. Render (the live host) — Blueprint
 
 Render is the running home. The repo ships [`render.yaml`](../render.yaml), a
-Blueprint that declares the Docker web service, a **1 GB Disk mounted at
-`/data`**, and `healthCheckPath: /api/health` in one reviewable file.
+Blueprint that declares the Docker web service and
+`healthCheckPath: /api/health` in one reviewable file. **No disk since E15** —
+that is what makes deploys zero-downtime.
 
 **Steps (as deployed):**
 
 1. **New → Blueprint**, point at the GitHub repo `matthager12-collab/ExploreKingstonChamberApp`.
    Render reads `render.yaml`, builds the `Dockerfile`, and provisions the web
-   service + Disk. (The repo is **public** — a Render↔GitHub sync issue was
+   service. (The repo is **public** — a Render↔GitHub sync issue was
    sidestepped by making it public; there are no secrets in git, so this is
    safe.)
 2. **Env vars.** The blueprint pre-wires them:
@@ -116,8 +118,10 @@ Blueprint that declares the Docker web service, a **1 GB Disk mounted at
      **Build-time var** — see the gotcha in [§2c](#2c-the-next_public-build-time-gotcha).
      The absolute production origin for share-card/canonical URLs, e.g.
      `https://explore-kingston.onrender.com`.
-   - `DATA_DIR=/data` — hardcoded `value: /data` in the blueprint; equals the
-     Disk mount path. This is what puts all mutable state on the volume.
+   - `R2_IMAGES_ENDPOINT` / `R2_IMAGES_BUCKET` / `R2_IMAGES_ACCESS_KEY_ID` /
+     `R2_IMAGES_SECRET_ACCESS_KEY` — `sync: false` (E15); the private R2 bucket
+     for uploaded images. All four or none: `hasR2()` treats partial config as
+     unconfigured. There is no `DATA_DIR` — the disk was removed.
    - `SETUP_TOKEN` — `generateValue: true`; Render mints a random value on a
      **fresh** blueprint deploy. Gates `POST /api/auth/setup` fail-closed —
      read the value from the dashboard to complete first-run bootstrap once
@@ -128,11 +132,11 @@ Blueprint that declares the Docker web service, a **1 GB Disk mounted at
      `?sslmode=verify-full` — see [§2e](#2e-tls-mode-sslmodeverify-full);
      Neon's copy button gives you `sslmode=require`, which is the wrong thing
      to paste. **Required**: a
-     release booted without it fails `/api/health` (`dbOk:false`) and Render
-     503s. **It does NOT keep the previous release serving.** The service
-     mounts a persistent disk, which only one instance can mount at a time, so
-     Render stops the old instance before starting the new one — an unhealthy
-     release means the service is DOWN, not held back. (Verified on staging
+     release booted without it fails `/api/health` (`db:false`) and Render
+     503s. **Since E15 removed the disk this now DOES keep the previous
+     release serving** — with no volume to hand over the instances overlap, so
+     an unhealthy release is held back instead of taking the site down. (While
+     a disk was attached the opposite was true, verified on staging
      2026-07-19.) Validate the URL from your laptop first — `psql` is **not**
      installed on the operator Mac, so use the repo's own `pg` driver, run from
      the repo root with the exact string you are about to paste on the
@@ -168,16 +172,19 @@ Blueprint that declares the Docker web service, a **1 GB Disk mounted at
      `/data` disk and the single instance uses the in-process rate limiter.
 3. **First deploy** runs automatically on blueprint create. Render builds the
    image and boots `server.js`.
-4. **Confirm the volume and the DB.** `GET https://explore-kingston.onrender.com/api/health`
-   returns `200 {"ok":true,"dataWritable":true,"dbOk":true,"dataDir":"/data",...}`.
-   A `503` means the Disk isn't mounted, `DATA_DIR` is wrong, or Postgres is
-   unreachable / `DATABASE_URL` missing — fix before anything writes state.
+4. **Confirm the DB.** `GET https://explore-kingston.onrender.com/api/health`
+   returns `200 {"ok":true,"db":true,"storage":"r2",...}`. A `503` means
+   Postgres is unreachable / `DATABASE_URL` missing; a `500` means it is set
+   but unreachable (the boot migrator fails first) — fix before anything
+   writes state. `storage` should read `"r2"` in production.
 5. **Bootstrap admin** — see [§4 First run](#4-first-run-in-production).
 
-**Running config today:** Starter web service + 1 GB Disk in the `oregon`
-region (~$7.25/mo total), auto-deploy on push **on**, admin account created and
-persisted, WSDOT key set (ferry live). Render also takes **daily disk snapshots**
-(7-day restore window) — one of two backup layers (see [§5](#5-backups)).
+**Running config today:** Starter web service in the `oregon` region, **no
+disk** since E15 (~$7/mo), auto-deploy on push **on**, admin account created
+and persisted, WSDOT key set (ferry live). Note the disk removal also retired
+Render's daily disk snapshots as a backup layer — that cost nothing, because
+the disk held no durable data by then; Neon PITR and the encrypted off-site
+bundle are the live layers (see [§5](#5-backups)).
 
 ### 2b. Fly.io (alternative)
 
@@ -256,7 +263,7 @@ changes: push there first, smoke-test, then merge/push to `main`.
   meant to hold synthetic/seed data only — a production backup bundle
   contains real password hashes and real visitor/LTAC survey PII.
 
-**Cost:** ~$7.25/mo (Starter web instance) + ~$0.25/mo (1 GB disk) — approved
+**Cost:** ~$7/mo (Starter web instance; the 1 GB disk was removed in E15) — approved
 in the v2 budget; a human still clicks "Approve" on the Blueprint sync that
 creates it (Render dashboard), per the new-spend sign-off rule.
 
@@ -489,11 +496,11 @@ launch**; the app currently lives at the raw `explore-kingston.onrender.com`.
 
 | | **Render (Phase 1, LIVE)** | **Vercel (Phase 2, ready)** |
 |---|---|---|
-| Persistence | Neon Postgres (structured data, E05) + 1 GB disk at `/data` (images/photos) | Neon + Blob + Upstash |
+| Persistence | Neon Postgres (structured data, E05) + private R2 bucket for images (E15, no disk) | Neon + Blob + Upstash |
 | Env shape | `DATA_DIR=/data` + `DATABASE_URL`, no Blob/Upstash vars | all cloud vars set, `DATA_DIR` unset |
 | Schema/migration | Drizzle migrations (`db/migrations/`, applied at boot — E05) | same migrations; image move to Blob |
 | Rate limit | in-process `Map` (single instance, correct) | Upstash shared window (required) |
-| Cost | ~$7.25/mo (Starter + 1 GB disk) + Neon free tier | ~$20/mo Pro + free-tier stores |
+| Cost | ~$7/mo (Starter, no disk) + Neon free tier + R2 ~$0–1 | ~$20/mo Pro + free-tier stores |
 | Backups | Neon PITR + daily disk snapshots + off-site JSON bundle | Neon PITR + Blob versioning |
 | Scaling | single warm instance | serverless, multi-instance |
 | Ops burden | one box, one disk, snapshots | three managed services |

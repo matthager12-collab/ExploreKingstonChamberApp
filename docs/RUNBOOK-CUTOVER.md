@@ -4,7 +4,7 @@
 >
 > The E05 move from the Render disk to Neon Postgres **has already happened**.
 > Production runs on Postgres today: `explore-kingston` has `DATABASE_URL` set,
-> `/api/health` reports `dbOk:true`, and the database holds the live record,
+> `/api/health` reports `db:true`, and the database holds the live record,
 > audit, analytics, survey, and ferry-observation data.
 >
 > **Do not run the Cutover section below as if it were pending.** It is kept as
@@ -60,19 +60,24 @@ If steps 2–4 cannot be sequenced that way, the alternative is a dual-read
 release that tolerates both the old and new state, and a follow-up PR that
 removes the old path once the migration has run.
 
-### Every deploy is a brief outage
+### Deploys are zero-downtime (since E15 slice 3)
 
-Both Render services mount a **persistent disk**. A disk can be mounted by only
-one instance, so Render stops the old instance before starting the new one.
-Consequences:
+**This section previously read "Every deploy is a brief outage."** That was
+true only because both Render services mounted a **persistent disk**, and a
+disk can be mounted by exactly one instance — so Render had to stop the old
+container before starting the new one. E15 removed the disk (structured state
+is in Neon Postgres, images are in private R2), and with no volume to hand over
+the instances can overlap. Consequences now:
 
-- Every merge to `main` takes production down for roughly **15 seconds**.
-  Observed three times on 2026-07-19. This is normal, not a fault.
-- A release that never becomes healthy leaves the service **502 on every
-  path** — it does NOT fall back to the previous release. See the warning in
-  the Cutover section.
-- A 502 immediately after a merge is almost always a deploy in progress. Check
-  `gh run list --branch main --limit 3` before treating it as an incident.
+- A merge to `main` no longer takes production down. The old container keeps
+  serving until the new one passes `/api/health`.
+- A release that never becomes healthy is **held back** — the previous release
+  keeps serving — instead of leaving the site 502 on every path.
+- Therefore a sustained 502 after a merge is **no longer "just a deploy"** and
+  should be treated as an incident. Check `gh run list --branch main --limit 3`
+  and the Render deploy log.
+- **Do not reintroduce a disk.** Attaching one anywhere in `render.yaml`
+  silently restores the stop-start window for the whole service.
 
 ### Incident: E06 auth lockout, 2026-07-19
 
@@ -223,13 +228,12 @@ because the operator bootstrapped one via `/portal/setup` during the lockout, at
 
 6. Watch `/api/health` go **200 with `"dbOk":true`**.
 
-   > ⚠️ **A bad URL here takes the site DOWN — it does not fail closed.**
-   > An earlier version of this runbook said Render keeps the old release
-   > serving until the new one is healthy. **That is false for this service.**
-   > `explore-kingston` mounts a persistent disk (`data`), and a disk can be
-   > mounted by only ONE instance, so Render must stop the old instance before
-   > starting the new one. There is no old release still serving to fall back
-   > to: an unhealthy release means 502 on every path.
+   > ⚠️ **Validate this URL before setting it.** Since E15 removed the disk,
+   > a bad URL is now held back rather than taking the site down: with no
+   > volume to hand over, the old instance keeps serving until the new one
+   > passes `/api/health`. That is a safety net, not a licence to guess — the
+   > release still fails, and while a disk WAS attached (before E15) the same
+   > mistake meant 502 on every path.
    >
    > Verified the hard way on 2026-07-19 — the E06 release was pushed to
    > `explore-kingston-staging`, whose `DATABASE_URL` had never been set, and

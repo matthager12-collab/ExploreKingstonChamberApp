@@ -536,16 +536,17 @@ presence, and nothing above the stores knows which backend is active.
 - **Disk (`DATA_DIR`, default `.data/`):** images/hunt photos only (until
   E15); Vercel Blob takes them when `BLOB_READ_WRITE_TOKEN` is set; Upstash
   Redis for serverless rate limiting.
-- A **health probe** (`/api/health`) reports `{ ok, dataDir, dataWritable,
-  dbOk }` and returns 503 until the data directory is writable **and**
-  Postgres answers. **This does not fail closed.** Both Render services mount a
-  persistent disk, and only one instance can hold that mount, so Render stops
+- A **health probe** (`/api/health`) reports `{ ok, db, storage, time }` and
+  returns 503 until Postgres answers; since E15 it does not touch the disk.
+  **This now fails closed** — with the disk removed the previous release keeps
+  serving. (Before E15 it did not: only one instance could hold the mount, so
+  Render stopped
   the old instance before starting the new one: every deploy is a ~15 s full
   outage, and a release that never goes healthy leaves the service returning
   502 with no previous release still serving. Merging to `main` auto-deploys,
   so `DATABASE_URL` and the disk mount must be verified *before* the merge, not
   after. Full explanation in [RUNBOOK-CUTOVER.md](RUNBOOK-CUTOVER.md) under
-  "Migrations under auto-deploy" and "Every deploy is a brief outage".
+  "Migrations under auto-deploy" and "Deploys are zero-downtime".
 - **Backup/restore** must exist: an admin-gated JSON bundle of the whole data
   directory (`/api/admin/backup`, "⤓ Download backup" on `/admin`,
   restore via `scripts/restore-backup.mjs`), plus host-level snapshots.

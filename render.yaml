@@ -17,16 +17,17 @@ services:
     # /api/health returns 503 until the /data volume is writable.
     healthCheckPath: /api/health
 
-    # Persistent disk mounted at /data — survives deploys and restarts. This is
-    # where DATA_DIR points, so portal edits / uploaded images / hunt photos
-    # persist. Accounts are NOT here: since E06 went live, users / orgs /
-    # invites are Postgres tables (db/migrations/0002_*.sql), so account
-    # durability depends on the Neon database and its backups — a disk
-    # snapshot does not preserve a single user.
-    disk:
-      name: data
-      mountPath: /data
-      sizeGB: 1
+    # NO PERSISTENT DISK (E15 slice 3). Everything durable lives off-box:
+    # structured state in Neon Postgres (E05) and uploaded images in the
+    # private Cloudflare R2 bucket (E15 slice 1, R2_IMAGES_* below).
+    #
+    # The disk was the last single-box coupling and the reason every deploy was
+    # an outage: Render must stop the old instance to detach the volume before
+    # the new one can attach it, so releases could never overlap. Without it
+    # deploys are zero-downtime.
+    #
+    # Do NOT reintroduce a disk to "just cache something" — it silently
+    # restores that stop-start deploy window for the whole service.
 
     envVars:
       # Session-signing secret for lib/auth.ts. Render generates a strong random
@@ -45,10 +46,6 @@ services:
       # changing the value requires a rebuild, not just a restart.
       - key: NEXT_PUBLIC_SITE_URL
         sync: false
-
-      # Point all mutable state at the mounted disk above.
-      - key: DATA_DIR
-        value: /data
 
       # E05 Postgres substrate: structured data lives in Neon. Value is set
       # ONLY in the dashboard (production at cutover, staging for rehearsal) —
@@ -181,10 +178,7 @@ services:
     region: oregon
     healthCheckPath: /api/health
 
-    disk:
-      name: data-staging
-      mountPath: /data
-      sizeGB: 1
+    # No persistent disk — see the note on the production service above.
 
     envVars:
       - key: AUTH_SECRET
@@ -195,8 +189,6 @@ services:
       # onrender.com URL in the dashboard once it's provisioned.
       - key: NEXT_PUBLIC_SITE_URL
         sync: false
-      - key: DATA_DIR
-        value: /data
       # E05 Postgres substrate: structured data lives in Neon. Value is set
       # ONLY in the dashboard (production at cutover, staging for rehearsal) —
       # never in this file. A release started without it fails /api/health
