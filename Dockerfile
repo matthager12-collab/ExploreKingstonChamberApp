@@ -84,6 +84,21 @@ COPY --from=build --chown=nextjs:nodejs /app/public ./public
 # (src/instrumentation.ts). Standalone's file tracer only follows static
 # imports, so runtime-read .sql files must be copied in explicitly.
 COPY --from=build --chown=nextjs:nodejs /app/db/migrations ./db/migrations
+# Operator scripts run INSIDE this container over `render ssh` — the E15 image
+# migration and its parity check in particular, because DATA_DIR is a disk
+# mounted only in the live instance: a local checkout cannot see it, and a
+# one-off job gets a fresh instance without it.
+COPY --from=build --chown=nextjs:nodejs /app/scripts ./scripts
+# aws4fetch must be copied EXPLICITLY. The E15 epic assumed it would resolve
+# from the standalone bundle's traced node_modules because blob-store.ts
+# imports it statically — it does not. Next BUNDLES pure-ESM packages straight
+# into the server chunks (verified: the AWS4-HMAC-SHA256 literal appears in
+# .next/server/chunks/, and .next/standalone/node_modules/aws4fetch does not
+# exist), so the app works while a standalone `import "aws4fetch"` would fail
+# at runtime. `pg` survives tracing because it is CommonJS, which is why the
+# migration script's optional record-value check needs no equivalent line.
+# ~10 KB, and the migration cannot run without it.
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules/aws4fetch ./node_modules/aws4fetch
 
 # Create the mount point for the persistent volume and hand it to the app user
 # so the health probe's write test and all disk-backed writes succeed. On Render/Fly

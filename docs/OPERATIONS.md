@@ -155,6 +155,58 @@ secrets used by the off-site backup job: those point at the separate encrypted
 **backup** bucket. Do not cross-wire them — the two buckets have opposite
 lifecycles (backups are write-once and retained; images are read-hot).
 
+### Migrating the disk's images into R2 (E15 slice 2)
+
+**Run this INSIDE the running Render container, over `render ssh`. Nowhere else.**
+
+`DATA_DIR` is a disk mounted only in the live web-service instance, so a local
+checkout cannot see it and a Render one-off job gets a fresh instance *without*
+it. The dangerous variant is running `--verify` against a **restored backup
+copy** of the disk: a stale copy passes a naive count check while silently
+missing every image uploaded after the backup was taken — immediately before an
+irreversible deletion. If `render ssh` is unavailable, STOP and ask; do not
+substitute a backup-based check.
+
+Rehearse the identical sequence on **staging** first (staging points at a
+scratch bucket), then production.
+
+```bash
+render ssh explore-kingston          # or the dashboard SSH panel
+cd /app
+env | grep R2_IMAGES_                # all four present?
+ls /data                             # the live mount, not an empty dir
+
+node scripts/migrate-images-to-r2.mjs --dry-run   # manifest + per-subtree counts
+node scripts/migrate-images-to-r2.mjs             # copy
+node scripts/migrate-images-to-r2.mjs             # AGAIN — must report uploaded=0
+node scripts/migrate-images-to-r2.mjs --verify    # must exit 0
+```
+
+Uploads can land mid-migration, so agree a short upload-freeze window with the
+operator (or pick low-traffic hours). The second pass reporting `uploaded=0` is
+what proves nothing arrived during the first. **Capture the whole SSH session's
+output** — it is the evidence for acceptance criterion 5 and for the
+pre-deletion gate.
+
+What `--verify` actually checks, and what each failure means:
+
+| Output | Meaning |
+|---|---|
+| `MISSING in R2` | A file on disk never uploaded — re-run the migration |
+| `SIZE MISMATCH` | Partial or clobbered upload — re-run |
+| `CHECKSUM MISMATCH` | Same size, different bytes (R2 returns the MD5 as the ETag for single-part PUTs, so this is a real content check, not a count) |
+| `note: N object(s) in R2 with no file on disk` | Not fatal — launch-forward uploads go to R2 only. But if N is large, check you are pointed at the right bucket |
+| `Record-value check` | Warns if any record already holds a Vercel Blob URL: those images are NOT on this disk, so copying bytes will not move them |
+
+`--verify` exits non-zero on any of the first three. **It must exit 0 before the
+disk is deleted** — that gate is the whole point of the script.
+
+Verified end-to-end before first use: the script was run inside the real
+production Docker image against a mounted disk and a live R2 bucket (scratch
+prefix, since deleted) — 5 files copied, second pass `uploaded=0`, `--verify`
+exit 0 with 5/5 checksums matched. All three failure modes above were induced
+deliberately and each exited 1.
+
 ### EXIF/GPS stripping on upload (M-16-02)
 
 Every uploaded image has **all** EXIF/XMP/IPTC metadata removed before it
