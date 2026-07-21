@@ -122,6 +122,21 @@ export function SiteNav({ hiddenPaths = [] }: { hiddenPaths?: string[] }) {
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3">
           <Link href="/" className="flex items-center gap-2.5" onClick={() => setSheetOpen(false)}>
             {/* Official Explore Kingston logo — black brush-script wordmark + #1E96C0 sailboat */}
+            {/* NO `sizes` here, deliberately — it looks like a bug and is not.
+                Without it Next derives the srcset from the width prop and emits
+                `w=828 1x, w=1920 2x`, which reads as "1920px asset for a ~122px
+                logo". But the source PNG is only 751px wide and Next NEVER
+                upscales: every w>=828 returns that original, optimized to 8962 B.
+                Measured alternatives, displayed at 122 CSS px on a DPR-3 phone
+                (366 device px), all lose:
+                  256px -> 5454 B but visibly soft (1.4x upscale of brush script)
+                  384px -> 9442 B — MORE than the original, because downscaling
+                           this sharp-edged logo adds resampling detail that WebP
+                           encodes worse than the clean original
+                  751px -> 8962 B and crisp  <-- what we ship
+                So the status quo is the best point on the curve. Adding `sizes`
+                makes the browser pick 256px: saves ~3 KB and softens the brand
+                mark on every page. Don't. (E15 perf follow-up, measured.) */}
             <Image
               src="/brand/logo-explore-kingston-primary.png"
               alt="Explore Kingston"
