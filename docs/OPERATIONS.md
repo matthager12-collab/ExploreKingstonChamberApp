@@ -492,6 +492,48 @@ the moderation queue — the anonymous path has no bypass. Trusted-org auto-publ
 one bypass, both portal event routes) is set per-org on `/admin/events-sources`; every
 bypassed write is still audit-rowed.
 
+### Service worker & offline (E13)
+
+The site is an installable PWA. A hand-written `public/sw.js` (no library, no
+build step) caches the six public pages people actually need in the ferry line
+— plus an offline fallback page and one ferry-status snapshot — in three
+entry-capped, version-keyed caches. Nothing under `/admin` or `/portal` is ever
+cached, and nothing under `/api` **except one exact path** — `GET
+/api/ferry/status`, the snapshot named above: one entry, stamped
+`X-SW-Fetched-At` so the boards can label it on screen as a saved copy. Shared
+devices are normal here, which is why that carve-out is exact-match and not a
+prefix. **Full detail, including the strategy table and the cache caps, is in
+[docs/PWA.md](PWA.md).**
+
+If a visitor reports ferry times that are hours old on a phone that has signal,
+`vk-data-*` and that `X-SW-Fetched-At` stamp are the first place to look — a
+flaky one-bar connection makes `fetch` throw, and the worker then answers with
+the saved snapshot, which resolves exactly like a live poll.
+
+**Nothing to operate day to day.** There is no admin toggle, no env var, and
+no dashboard button — the worker ships with the build, deliberately.
+
+**When something goes wrong with it** — visitors stuck on stale pages, or any
+"turn it off now" call — go to PWA.md §3: step 1 bumps `VERSION` in
+`public/sw.js` (the only supported cache invalidation); step 2 is the nuclear
+**kill switch**, a self-unregistering worker that wipes every cache and
+unregisters itself. Both need a **rebuild + redeploy**, never a Render restart
+— the `/sw.js` cache header resolves at build time into `routes-manifest.json`
+(same trap as "restart ≠ env inject", §3).
+
+**Two things that will otherwise waste your afternoon:** the worker does not
+register in development at all (`NODE_ENV === "production"` only), so offline
+behaviour can only be exercised against a production build; and a page hidden
+via `/admin/content` is never cached **as a 404**, because the worker caches
+only `200` responses — but an admin's own preview of that hidden page *is* a
+200, and the residual exposure there is written up in PWA.md §7 under "Known
+limitations / deferred".
+
+The offline survey path writes through an idempotency-keyed intake
+(`idempotency_keys`, swept after 30 days by an opportunistic prune — PWA.md §5,
+deliberately outside `RETENTION_POLICY`). The device walkthrough Mat runs on
+staging after a deploy is PWA.md §8.
+
 ### History & restore (E09)
 
 Nothing an admin does in the editors can be lost. Every save, delete, and
