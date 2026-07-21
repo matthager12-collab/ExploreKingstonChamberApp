@@ -101,7 +101,12 @@ export default async function AdminPage() {
 
   const topPages = analytics.pageviewsByPath.slice(0, TOP_N);
   const topLinks = analytics.outboundLinks.slice(0, TOP_N);
-  const topGeo = analytics.sessionsByGeo.slice(0, TOP_N);
+  // E11: the k-floor rollup row must ALWAYS render (it's the privacy story),
+  // so it never competes with named buckets for a TOP_N slot — and it gets
+  // its own React key (a real headerless-traffic bucket also keys |||unknown).
+  const namedGeo = analytics.sessionsByGeo.filter((g) => !g.collapsed);
+  const geoRollup = analytics.sessionsByGeo.find((g) => g.collapsed);
+  const topGeo = namedGeo.slice(0, TOP_N);
 
   return (
     <>
@@ -166,7 +171,7 @@ export default async function AdminPage() {
               Region and city are derived from connection headers — city-grained at best and
               often wrong at finer levels. Exact home zip codes come only from the survey.
             </p>
-            {topGeo.length > 0 ? (
+            {topGeo.length > 0 || geoRollup ? (
               <ul className="mt-3 divide-y divide-sand">
                 {topGeo.map((g) => (
                   <CountRow
@@ -175,15 +180,22 @@ export default async function AdminPage() {
                     count={g.sessions}
                   />
                 ))}
+                {geoRollup && (
+                  <CountRow
+                    key="__below-k-rollup__"
+                    primary={geoLabel(geoRollup)}
+                    count={geoRollup.sessions}
+                  />
+                )}
               </ul>
             ) : (
               <div className="mt-3">
                 <EmptyNote>No visits recorded yet.</EmptyNote>
               </div>
             )}
-            {analytics.sessionsByGeo.length > TOP_N && (
+            {namedGeo.length > TOP_N && (
               <p className="mt-2 text-xs text-ink-soft">
-                Showing top {TOP_N} of {analytics.sessionsByGeo.length} areas.
+                Showing top {TOP_N} of {namedGeo.length} named areas.
               </p>
             )}
           </Card>
