@@ -43,6 +43,13 @@ const DATA_CACHE = `vk-data-${VERSION}`; // exactly one ferry snapshot
 // notFound() for every visitor today. Caching it would cache a 404.
 // "/webcams" and "/map" are absent too — both are useless offline and both are
 // heavy enough to blow the shell budget.
+//
+// OWED FOLLOW-UP (E14): add "/simple" and "/print" here once E14's low-bandwidth
+// and print routes land. They do not exist yet, and an allowlist entry for a
+// route that 404s caches the 404 — but they will be the two most offline-worth
+// pages in the app, so this list is wrong the moment they ship. The SHELL_LIMIT
+// slack below already covers both. tests/unit/sw-contract.test.ts asserts every
+// entry here resolves to a real page.tsx, so adding them early fails the build.
 const NAV_ALLOWLIST = ["/", "/ferry", "/eat", "/events", "/parking", "/about", "/offline"];
 
 // The site's declared private surface — identical to src/app/robots.ts. Do NOT
