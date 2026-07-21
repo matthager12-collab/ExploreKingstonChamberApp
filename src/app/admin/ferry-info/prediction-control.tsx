@@ -129,7 +129,12 @@ export function FerryPredictionControl({ initial }: { initial: PredictionState }
           onClick={() => setEnabled(true)}
           disabled={busy !== null || enabled}
           className={`${btn} ${
-            enabled ? "bg-fern text-white ring-2 ring-fern ring-offset-1" : "bg-fern/90 text-white hover:bg-fern"
+            // Contrast: the inactive fill was bg-fern/90 → #5c896a, where white
+            // text is 4.00:1. Solid fern is 4.86:1 and the ring still marks
+            // which state is active.
+            enabled
+              ? "bg-fern text-white ring-2 ring-fern ring-offset-1"
+              : "bg-fern text-white hover:ring-2 hover:ring-fern hover:ring-offset-1"
           }`}
         >
           {busy === "on" ? "Saving…" : enabled ? "✓ Shown to visitors" : "Show to visitors"}

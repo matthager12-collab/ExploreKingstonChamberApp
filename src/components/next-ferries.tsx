@@ -78,17 +78,25 @@ const THEME: Record<
   light: {
     root: "rounded-2xl border border-sand bg-white p-5 shadow-[0_1px_3px_rgba(22,64,94,0.08)]",
     heading: "text-sound-deep",
-    live: "bg-fern/10 text-fern",
-    liveDot: "bg-fern",
+    // Contrast: the three green chips below sat on a white card as
+    // `bg-fern/10 text-fern`, which composites to #edf2ee and measures 4.29:1 —
+    // under AA 1.4.3 at this 12px size. Solid fern with white text is 4.86:1,
+    // the same repair E14 made in ui.tsx (Badge `green`) and open-badge.tsx.
+    // liveDot rides INSIDE the `live` chip, so on a solid fill it has to flip to
+    // white or it disappears into its own background. The dark theme keeps its
+    // fern tints: over navy they composite darker, so white text there is
+    // 7.5–10:1 and never had this problem.
+    live: "bg-fern text-white",
+    liveDot: "bg-white",
     link: "text-tide-deep hover:text-sound",
     boarding: "bg-coral/10 text-coral-deep",
     alert: "bg-amber-50 text-amber-900",
     dirLabel: "text-sound-deep",
     delayLate: "bg-coral/15 text-coral-deep",
-    delayOnTime: "bg-fern/10 text-fern",
+    delayOnTime: "bg-fern text-white",
     spotsFull: "bg-coral/15 text-coral-deep",
     spotsLow: "bg-amber-100 text-amber-800",
-    spotsPlenty: "bg-fern/10 text-fern",
+    spotsPlenty: "bg-fern text-white",
     time: "text-ink",
     countdown: "text-ink-soft",
     done: "text-ink-soft",

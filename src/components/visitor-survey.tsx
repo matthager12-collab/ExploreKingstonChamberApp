@@ -231,9 +231,15 @@ export function VisitorSurvey() {
         )}
 
         {step === "done" && (
+          // Contrast: this card's own fill is bg-seaglass/20 and it sits on the
+          // bare page (Section adds no background), so the text composites over
+          // #edf6fb — where text-fern is 4.39–4.45:1, under AA. text-ink is
+          // 13.96:1, the same repair E14 made on the ferry board for fern on a
+          // pale blue tint. Static axe never caught this because the node only
+          // exists after the survey is submitted.
           <EditableText
             as="p"
-            className="font-medium text-fern"
+            className="font-medium text-ink"
             copyKey="survey.thankyou"/>
         )}
       </div>

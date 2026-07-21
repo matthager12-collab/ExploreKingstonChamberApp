@@ -21,6 +21,7 @@ import {
   type EmpiricalTable,
   type TravelMode,
 } from "@/lib/ferry-forecast";
+import { chipClass } from "@/lib/ferry-chip";
 import { Card, ExternalLink } from "@/components/ui";
 import { fallbackSailings } from "@/lib/data/ferry-fallback";
 import { LevelLegend, Trendline, extremeLabel } from "@/components/ferry-trendline";
@@ -318,7 +319,7 @@ export function FerryPlanner({
             )}
           </div>
           <span
-            className={`shrink-0 rounded-full px-3 py-1 text-sm font-semibold ${meta.chip}`}
+            className={`shrink-0 rounded-full px-3 py-1 text-sm font-semibold ${chipClass(meta)}`}
             title={`Busyness score ${forecast.score}/100`}
           >
             {meta.label}

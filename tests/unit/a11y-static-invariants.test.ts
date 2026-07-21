@@ -45,6 +45,17 @@ const FROZEN_PX_HOLDOUTS = [
   "src/app/admin/map/editor.tsx",
 ];
 
+/**
+ * Frozen files that still pair `text-fern` with a fern tint. Both are in
+ * `.agent-frozen`, so repairing them in place is not an available move:
+ *   - src/app/admin/map/editor.tsx — an admin-only toggle button.
+ *   - src/lib/ferry-forecast.ts — LEVELS.light.chip, which IS repaired, at the
+ *     two non-frozen components that render it (see src/lib/ferry-chip.ts).
+ * The test below re-reads the manifest and fails if either is ever unfrozen
+ * without this list being revisited.
+ */
+const FERN_TINT_HOLDOUTS = ["src/app/admin/map/editor.tsx", "src/lib/ferry-forecast.ts"];
+
 /** Arbitrary Tailwind px font size, e.g. the ones swept to rem in E14 slice 1. */
 const ARBITRARY_PX_FONT_RE = /text-\[\d+px\]/;
 const ZOOM_BLOCK_RE = /user-scalable|maximumScale|maximum-scale/i;
@@ -141,6 +152,78 @@ describe("E14 static a11y invariants", () => {
     expect(map).toContain("max-h-28 flex-wrap gap-x-4 gap-y-2 overflow-y-auto text-sm text-ink-soft");
     expect(css).toContain(".bg-shell\\/60.text-ink-soft");
     expect(map).toContain("bg-shell/60 text-sm text-ink-soft");
+  });
+
+  it("never pairs text-fern with a fern tint (the E14 4.29:1 bug class)", () => {
+    // --color-fern (#4a7c59) is 4.86:1 on white — a pass, but only by 0.36. Put
+    // it on a tint of its OWN hue and the background moves toward the text while
+    // the text stays put: bg-fern/10 composites to #edf2ee and the pair lands at
+    // 4.29:1, /20 at 3.76:1. E14 repaired this in ui.tsx and open-badge.tsx; the
+    // authed portal/admin copies survived because axe-smoke scans 10 routes and
+    // only one of them requires a login.
+    //
+    // Comments are stripped before scanning: the repairs in src/ necessarily
+    // quote the pattern they removed, and a raw grep would flag those notes.
+    // Same self-trip hazard this file's header describes, handled inline.
+    // Both comment shapes have to go — `//` lines AND `/** */` blocks, whose
+    // continuation lines start with `*`. Missing the second is how the first
+    // draft of this guard flagged ferry-chip.ts's own docstring.
+    const violations: string[] = [];
+    for (const file of SRC_FILES) {
+      const relPath = rel(file);
+      if (FERN_TINT_HOLDOUTS.includes(relPath)) continue;
+      readFileSync(file, "utf8")
+        .split("\n")
+        .forEach((line, i) => {
+          const trimmed = line.trim();
+          if (trimmed.startsWith("*") || trimmed.startsWith("/*")) return;
+          const code = line.replace(/(^|\s)\/\/.*$/, "$1");
+          if (/bg-fern\/\d/.test(code) && /text-fern\b/.test(code)) {
+            violations.push(`${relPath}:${i + 1}: ${line.trim()}`);
+          }
+        });
+    }
+    expect(
+      violations,
+      `text-fern on a fern tint is under AA (bg-fern/10 = 4.29:1). Use ` +
+        `\`bg-fern text-white\` (4.86:1) for chips or \`text-ink\` for prose:\n${violations.join("\n")}`,
+    ).toEqual([]);
+  });
+
+  it("the fern-tint exclusions are exactly the frozen-manifest files", () => {
+    // Same no-silent-widening rule as the px sweep above: these two are skipped
+    // ONLY because no agent may edit them. If either is unfrozen, fix the
+    // classes there and drop it from the list.
+    const manifest = readFileSync(path.join(REPO_ROOT, ".agent-frozen"), "utf8")
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith("#"));
+    for (const holdout of FERN_TINT_HOLDOUTS) {
+      expect(manifest, `${holdout} is excluded from the fern-tint sweep but is no longer frozen`)
+        .toContain(holdout);
+    }
+  });
+
+  it("keeps the frozen forecast module's chip override wired to its consumers", () => {
+    // LEVELS.light.chip in the frozen src/lib/ferry-forecast.ts is the failing
+    // `bg-fern/10 text-fern`. src/lib/ferry-chip.ts replaces it at the two
+    // non-frozen components that render it. Assert BOTH halves, like the
+    // feature-map coupling above: if the frozen file is ever repaired upstream
+    // the override becomes dead code, and if a consumer goes back to
+    // interpolating meta.chip directly the failure returns silently.
+    const forecast = readFileSync(path.join(SRC_ROOT, "lib", "ferry-forecast.ts"), "utf8");
+    expect(forecast).toContain('chip: "bg-fern/10 text-fern"');
+
+    for (const consumer of [
+      path.join(SRC_ROOT, "app", "ferry", "plan", "ferry-planner.tsx"),
+      path.join(SRC_ROOT, "components", "ferry-busy-today.tsx"),
+    ]) {
+      const src = readFileSync(consumer, "utf8");
+      expect(src, `${rel(consumer)} must route the chip through chipClass()`).toMatch(
+        /\$\{chipClass\(meta\)\}/,
+      );
+      expect(src, `${rel(consumer)} still renders meta.chip raw`).not.toMatch(/\$\{meta\.chip\}/);
+    }
   });
 
   it("the simple-mode bootstrap is inline and localStorage-backed", () => {
