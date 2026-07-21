@@ -21,7 +21,7 @@ import {
 } from "@/lib/wsf";
 import { FAST_FERRY_FACTS, getFastFerrySailings } from "@/lib/kitsap";
 import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
-import { getFerryInfo } from "@/lib/stores/ferry-info-store";
+import { getFerryInfo, type FareRow } from "@/lib/stores/ferry-info-store";
 import { getWebcams } from "@/lib/stores/listing-stores";
 import {
   assertPageVisible,
@@ -50,6 +50,24 @@ const WSF_FARES_URL =
   "https://www.wsdot.wa.gov/ferries/fares/faresdetail.aspx?departingterm=8&arrivingterm=12";
 const WSF_TICKETS_URL =
   "https://wsdot.wa.gov/travel/washington-state-ferries/tickets/ticket-information";
+
+/** E27 — the structured fares block shared by all three /ferry fare sections.
+ *  The senior/disability (RRFP) discount is a labeled row here, not a
+ *  mid-sentence aside — that is the point of the M-01-06 remainder. Every
+ *  figure is driven by the admin-editable ferryInfo.fares record. */
+function FareList({ rows }: { rows: FareRow[] }) {
+  return (
+    <dl className="divide-y divide-sand">
+      {rows.map((row, i) => (
+        <div key={i} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 py-2">
+          <dt className="font-medium text-ink">{row.label}</dt>
+          <dd className="text-sm font-semibold tabular-nums text-sound-deep">{row.amount}</dd>
+          {row.note && <dd className="w-full text-xs text-ink-soft">{row.note}</dd>}
+        </div>
+      ))}
+    </dl>
+  );
+}
 
 /** mapDirectionsUrl only offers walking/driving, but Google's dir API also accepts transit. */
 function transitDirectionsUrl(destination: string): string {
@@ -194,55 +212,46 @@ export default async function FerryPage() {
               <h3 className="text-lg font-semibold text-sound-deep">Walk on</h3>
               <Badge tone="green">Free from Kingston</Badge>
             </div>
-            <ul className="mt-3 space-y-2 text-sm text-ink-soft">
-              <li>
-                <strong className="text-ink">A round trip on foot costs $11.35 in total.</strong>{" "}
-                {/* E14 plain-language pass: "WSF" was unexpanded on first use and
-                    "in either trip order" reads as a restriction, not a relief. */}
-                Washington State Ferries collects passenger fares only on the Edmonds side, so
-                boarding in Kingston is always free. That is true whether you start in Kingston or
-                in Edmonds. Seniors and riders with disabilities pay $5.65. Kids 18 and under ride
-                free.
-              </li>
-              <li>
-                <strong className="text-ink">Walk-ons always get on.</strong> Even when the car
-                line is hours long, foot passengers stroll aboard.
-              </li>
-              <li>
-                <strong className="text-ink">Bikes roll on with walk-ons</strong> — free leaving
-                Kingston, pay at Edmonds coming back. The fast ferry takes bikes too.
-              </li>
-            </ul>
+            {/* E27: fares are the structured, admin-editable ferryInfo.fares
+                record now — the senior/disability (RRFP) discount is its own
+                labeled row rather than a mid-sentence aside. */}
+            <div className="mt-3">
+              <FareList rows={ferryInfo.fares.walkOn} />
+              <ul className="mt-3 space-y-2 text-sm text-ink-soft">
+                <li>
+                  <strong className="text-ink">Walk-ons always get on.</strong> Even when the car
+                  line is hours long, foot passengers stroll aboard.
+                </li>
+              </ul>
+            </div>
           </Card>
           <Card>
             <div className="flex items-center justify-between gap-2">
               <h3 className="text-lg font-semibold text-sound-deep">Drive</h3>
               <Badge tone="navy">$27 each way</Badge>
             </div>
-            <ul className="mt-3 space-y-2 text-sm text-ink-soft">
-              <li>
-                <strong className="text-ink">Car and driver: $27.00</strong> (standard vehicle
-                under 22 ft), paid in both directions. Motorcycles $11.80. Each extra passenger
-                adds $11.35, collected at Edmonds only.
-              </li>
-              <li>
-                <strong className="text-ink">No reservations on this route.</strong> It&rsquo;s
-                first come, first served — the crossing itself is about 30 minutes.
-              </li>
-              <li>
-                {/* E14 plain-language pass: 45 words, four chained actions, and
-                    "tally" — staff vocabulary, not visitor vocabulary. Dropped. */}
-                <strong className="text-ink">Summer line rules:</strong> when it is busy, the line
-                of cars runs up SR 104. A boarding-pass system runs every day from 8 am to 8 pm.
-                Watch for the flashing sign at Barber Cutoff Rd. Take a pass from the machine near
-                Lindvog Rd. Stay in the line — if you leave it, your pass stops working.
-              </li>
-            </ul>
+            {/* E27: drive-on fares from the structured record. */}
+            <div className="mt-3">
+              <FareList rows={ferryInfo.fares.drive} />
+              <ul className="mt-3 space-y-2 text-sm text-ink-soft">
+                <li>
+                  <strong className="text-ink">No reservations on this route.</strong> It&rsquo;s
+                  first come, first served — the crossing itself is about 30 minutes.
+                </li>
+                <li>
+                  {/* E14 plain-language pass: 45 words, four chained actions, and
+                      "tally" — staff vocabulary, not visitor vocabulary. Dropped. */}
+                  <strong className="text-ink">Summer line rules:</strong> when it is busy, the line
+                  of cars runs up SR 104. A boarding-pass system runs every day from 8 am to 8 pm.
+                  Watch for the flashing sign at Barber Cutoff Rd. Take a pass from the machine near
+                  Lindvog Rd. Stay in the line — if you leave it, your pass stops working.
+                </li>
+              </ul>
+            </div>
           </Card>
         </div>
         <p className="mt-3 text-sm text-ink">
-          Fares above are summer 2026 rates, checked July 2026 — WSF usually adjusts fares each
-          October. Confirm at{" "}
+          {ferryInfo.fares.ratesAsOf} Confirm at{" "}
           <ExternalLink href={WSF_FARES_URL}>WSDOT&rsquo;s Edmonds–Kingston fare page</ExternalLink>
           .
         </p>
@@ -254,13 +263,15 @@ export default async function FerryPage() {
       >
         <Card>
           <div className="flex flex-wrap gap-2">
-            <Badge tone="coral">$2 to Seattle</Badge>
-            <Badge tone="navy">$13 coming back</Badge>
-            <Badge tone="green">Kids 18 and under free</Badge>
             <Badge tone="sand">No Sundays</Badge>
           </div>
-          <p className="mt-4 text-sm text-ink-soft">
-            The fare really is direction-based: {FAST_FERRY_FACTS.fares}
+          {/* E27: fast-ferry fares from the structured record. */}
+          <div className="mt-4">
+            <FareList rows={ferryInfo.fares.fastFerry} />
+          </div>
+          <p className="mt-3 text-sm text-ink-soft">
+            The fare really is direction-based — cheap heading to Seattle, more coming back. Pay
+            with ORCA, a contactless credit/debit tap, cash, or the Transit GO Ticket app.
           </p>
           <ul className="mt-3 space-y-2 text-sm text-ink-soft">
             <li>

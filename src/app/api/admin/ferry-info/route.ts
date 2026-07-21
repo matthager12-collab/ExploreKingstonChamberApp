@@ -16,6 +16,8 @@ import {
   getFerryInfoRecords,
   saveFerryInfoRecord,
   type BoardingPass,
+  type FareRow,
+  type FerryFares,
   type FerryInfoId,
   type FerryPayment,
   type Source,
@@ -112,6 +114,47 @@ function buildSources(doc: unknown): Source[] | string {
   return out;
 }
 
+/** A capped list of { label, amount, note? } fare rows. Blank rows are dropped
+ *  (the editor may leave a trailing empty one), matching buildSources. */
+function fareRows(v: unknown, group: string): FareRow[] | string {
+  if (!Array.isArray(v)) return `${group} fares must be a list`;
+  const out: FareRow[] = [];
+  for (let i = 0; i < v.length; i++) {
+    const raw = v[i];
+    if (!raw || typeof raw !== "object") return `${group} fare ${i + 1} is malformed`;
+    const s = raw as Record<string, unknown>;
+    const label = str(s.label);
+    const amount = str(s.amount);
+    const note = str(s.note);
+    if (!label && !amount && !note) continue;
+    if (!label) return `${group} fare ${i + 1} needs a label`;
+    if (!amount) return `${group} fare ${i + 1} needs an amount`;
+    out.push({ label, amount, ...(note ? { note } : {}) });
+  }
+  return out;
+}
+
+function buildFares(doc: Record<string, unknown>): FerryFares | string {
+  const walkOn = fareRows(doc.walkOn, "walk-on");
+  if (typeof walkOn === "string") return walkOn;
+  const drive = fareRows(doc.drive, "drive");
+  if (typeof drive === "string") return drive;
+  const fastFerry = fareRows(doc.fastFerry, "fast-ferry");
+  if (typeof fastFerry === "string") return fastFerry;
+  if (walkOn.length + drive.length + fastFerry.length === 0) {
+    return "fares needs at least one fare row";
+  }
+  const sources = buildSources(doc.sources);
+  if (typeof sources === "string") return sources;
+  return {
+    walkOn,
+    drive,
+    fastFerry,
+    ratesAsOf: text(doc.ratesAsOf),
+    sources,
+  };
+}
+
 /* --------------------------------- handlers -------------------------------- */
 
 export async function GET() {
@@ -149,6 +192,7 @@ export async function POST(request: NextRequest) {
   if (id === "payment") clean = buildPayment(asObj());
   else if (id === "boarding-pass") clean = buildBoardingPass(asObj());
   else if (id === "cash-tips") clean = buildCashTips(body.doc);
+  else if (id === "fares") clean = buildFares(asObj());
   else clean = buildSources(body.doc);
 
   if (typeof clean === "string") return bad(clean);

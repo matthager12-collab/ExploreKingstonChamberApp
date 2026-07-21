@@ -14,6 +14,8 @@ import {
 } from "@/components/ui";
 import { OpenBadge, OrderTimingNote } from "@/components/open-badge";
 import { NearMe } from "@/components/near-me";
+import { AccessFactsBlock } from "@/components/access-facts";
+import { readAccessFacts } from "@/lib/schemas/access";
 import { ReportInaccurate } from "@/components/report-inaccurate";
 import { LocalBusinessJsonLd } from "@/components/json-ld";
 import { FeatureMap } from "@/components/feature-map";
@@ -57,6 +59,7 @@ const buttonBase =
 
 function RestaurantCard({ r }: { r: Restaurant }) {
   const mapUrl = mapSearchUrl(`${r.name} Kingston WA`);
+  const accessFacts = readAccessFacts(r);
   const menuHref = r.menuUrl ?? r.website;
   // Don't render a separate Menu button when it would just repeat the
   // ordering link's destination.
@@ -130,6 +133,17 @@ function RestaurantCard({ r }: { r: Restaurant }) {
           <OrderTimingNote weeklyHours={r.weeklyHours} />
         )}
       </div>
+      {/* E27 (M-14-05): Chamber-verified access facts, when any exist. The card
+          already carries one report link below, which covers these too. */}
+      {accessFacts && (
+        <AccessFactsBlock
+          facts={accessFacts}
+          store="restaurants"
+          id={r.id}
+          subject={r.name}
+          showReport={false}
+        />
+      )}
       <ReportInaccurate store="restaurants" id={r.id} subject={r.name} />
     </Card>
   );

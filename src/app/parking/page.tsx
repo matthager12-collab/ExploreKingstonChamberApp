@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import {
   PageHeader,
   Section,
@@ -6,7 +7,8 @@ import {
   Callout,
 } from "@/components/ui";
 import { FeatureMap } from "@/components/feature-map";
-import { parkingRuleLabel } from "@/lib/map/parking-labels";
+import { freeOrPaidFromRule, parkingRuleLabel } from "@/lib/map/parking-labels";
+import { CostBadge } from "@/components/cost-badge";
 import { resolveMapView } from "@/lib/map/resolve";
 import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
 import { getFerryInfo } from "@/lib/stores/ferry-info-store";
@@ -58,6 +60,15 @@ export default async function ParkingPage() {
           always the legal authority — where a lot and a posted sign disagree, believe the
           sign. Chamber admins keep this map current in the portal at /admin/maps.
         </p>
+        {/* E27: you just parked — the next question is almost always this one. */}
+        <p className="mt-3">
+          <Link
+            href="/map/restrooms"
+            className="inline-flex min-h-[44px] items-center text-sm font-semibold text-tide-deep underline"
+          >
+            Need a restroom? Find the nearest one →
+          </Link>
+        </p>
         {/* E14 (M-14-04): on the map canvas a lot's type is carried by its
             marker colour alone, and the type name only appears inside a popup
             you have to tap. feature-map.tsx is frozen, so the text alternative
@@ -71,7 +82,16 @@ export default async function ParkingPage() {
             <ul className="mt-3 divide-y divide-sand rounded-2xl border border-sand bg-white">
               {parkingMap.builtins.parkingZones.map((z) => (
                 <li key={z.id} className="px-4 py-3">
-                  <p className="text-sm font-semibold text-ink">{z.name}</p>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <p className="text-sm font-semibold text-ink">{z.name}</p>
+                    {/* E27: the shared free-vs-paid badge, in text. Absent for
+                        permit / load-zone / no-parking rows, where a money
+                        answer would be wrong — see freeOrPaidFromRule. */}
+                    {(() => {
+                      const cost = freeOrPaidFromRule(z.rule);
+                      return cost ? <CostBadge cost={cost} /> : null;
+                    })()}
+                  </div>
                   {/* parkingRuleLabel(), not z.rule: the raw value is an
                       internal slug ("free-2hr"), and printing it does not
                       convey the type the marker colour was encoding. */}

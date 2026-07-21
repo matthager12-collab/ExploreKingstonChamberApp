@@ -46,4 +46,19 @@ export const mapViews: MapView[] = [
     sources: [],
     published: true,
   },
+  {
+    // E27 practical basics. Renders custom amenity MapFeatures only — no
+    // BuiltInSource is needed or wanted, because getFeaturesForView("amenities")
+    // already returns every feature listing this view id.
+    // Centered on the waterfront so both mapped restrooms (promenade + boat
+    // launch) and the downtown strip sit in frame at zoom 16.
+    id: "amenities",
+    name: "Restrooms & Amenities",
+    description:
+      "Public restrooms, drinking water, benches, shade, and trailheads around downtown Kingston.",
+    center: [47.7968, -122.498],
+    zoom: 16,
+    sources: [],
+    published: true,
+  },
 ];

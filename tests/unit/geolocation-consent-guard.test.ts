@@ -31,8 +31,20 @@ const CONSENT_RE = /privacy\/consent|shouldPromptGeoConsent|hasGeoConsent/;
  * (opt-out)"). FLAGGED FOR REVIEW: E11's own standard is to ask in plain
  * language BEFORE the browser prompt, and this surface does not. Removing it
  * from this list (i.e. gating it) is the fix if that decision is revisited.
+ *
+ * `nearest-amenity.tsx` (E27) is the strongest exemption case here: the restroom
+ * finder makes NO network call of any kind and persists nothing at all — not
+ * even a preference cookie, so it collects strictly less than side-switcher
+ * above. getCurrentPosition runs once per tap; the coordinate stays in a local
+ * variable, only derived walking distances reach component state, and both die
+ * with the page. There is nothing to consent to sharing, because nothing is
+ * shared — the browser's own permission prompt is the whole gate, and adding a
+ * second in-app prompt in front of an urgent "where is a restroom" tap would be
+ * friction without a privacy gain. Enforced positively, not just by this
+ * exemption: tests/unit/finder-privacy.test.ts fails if that file ever grows a
+ * fetch, a beacon, a storage write, or a continuous position watch.
  */
-const ALLOWED = new Set(["components/side-switcher.tsx"]);
+const ALLOWED = new Set(["components/side-switcher.tsx", "components/nearest-amenity.tsx"]);
 
 function sourceFiles(dir: string, acc: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {

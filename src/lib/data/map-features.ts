@@ -52,4 +52,47 @@ export const mapFeatures: MapFeature[] = [
       [47.7981, -122.5001],
     ],
   },
+
+  /* ---------------- Practical basics — the "amenities" view (E27) ----------------
+   *
+   * SOURCING RULE (M-19-03, and the reason this block is short): a pin sent to a
+   * restroom that isn't there is a real harm to someone who needs one. Every
+   * amenity below traces to a published source, and says so in `notes` — the
+   * same honesty posture src/lib/data/parking.ts uses, and `notes` (unlike a new
+   * typed field) stays editable in the existing admin map editor.
+   *
+   * Both restrooms below come from the Port of Kingston's official parking map
+   * dated 12-30-25 — the same document the Port parking geometry is georeferenced
+   * from — and are corroborated by the site's own published /print copy:
+   * "there are public restrooms on the waterfront promenade by the Port marina,
+   * near the boat launch."
+   *
+   * DELIBERATELY EMPTY: drinking water. No published source places a fountain or
+   * potable-water spigot in Kingston, so nothing is seeded rather than guessing.
+   * The `water` category, the map layer, and the finder all support it — the
+   * Chamber adds real ones at /admin/maps with no deploy, and the finder renders
+   * an honest "none mapped yet" state until then.
+   */
+  {
+    id: "restroom-waterfront-promenade",
+    kind: "marker",
+    title: "Public restrooms — waterfront promenade",
+    notes:
+      "Public restrooms on the waterfront promenade by the Port marina, inside the D-shaped loop pod. Approximate location, read off the Port of Kingston's official parking map dated 12-30-25 (portofkingston.org) — the map shows the restrooms, not their exact footprint, so treat the pin as within about a block. Not field-checked.",
+    category: "restroom",
+    cost: "free",
+    views: ["amenities"],
+    point: [47.7962, -122.498],
+  },
+  {
+    id: "restroom-boat-launch",
+    kind: "marker",
+    title: "Public restrooms — boat launch",
+    notes:
+      "Restrooms at the center of the boat-launch maneuvering apron, west of the marina. Approximate location, derived from the Port of Kingston's official parking map dated 12-30-25 (portofkingston.org), which places the launch restrooms mid-apron. Not field-checked.",
+    category: "restroom",
+    cost: "free",
+    views: ["amenities"],
+    point: [47.796418, -122.499288],
+  },
 ];

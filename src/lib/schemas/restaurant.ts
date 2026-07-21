@@ -3,6 +3,7 @@
 // Field list moved verbatim from the workbench's DOMAINS array.
 
 import { z } from "zod";
+import { accessFactsFields, accessFactsShape } from "./access";
 import type { FieldDef } from "./form";
 import {
   ISO_DATE_RE,
@@ -64,6 +65,9 @@ export const restaurantSchema = z.object({
   // Only `true` survives; false/absent parse to an omitted key — parity with
   // the old `...(body.hidden ? { hidden: true } : {})`.
   hidden: z.preprocess((v) => (v ? true : undefined), z.boolean().optional()),
+  // E27 (M-14-05 app slice). Note `cost` is deliberately NOT here: restaurants
+  // are paid by nature and keep priceLevel as their money signal.
+  ...accessFactsShape,
 });
 
 export const restaurantFields: FieldDef[] = [
@@ -182,4 +186,5 @@ export const restaurantFields: FieldDef[] = [
     wide: true,
     placeholder: "quick, takeout, kid-friendly",
   },
+  ...accessFactsFields,
 ];

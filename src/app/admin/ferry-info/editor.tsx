@@ -14,6 +14,8 @@
 import { useState } from "react";
 import type {
   BoardingPass,
+  FareRow,
+  FerryFares,
   FerryInfo,
   FerryPayment,
   Source,
@@ -35,7 +37,7 @@ const smallGhost =
 
 /* ------------------------------- API helper ------------------------------- */
 
-type RecordId = "payment" | "boarding-pass" | "cash-tips" | "sources";
+type RecordId = "payment" | "boarding-pass" | "cash-tips" | "sources" | "fares";
 
 async function saveRecord(id: RecordId, doc: unknown): Promise<string | null> {
   try {
@@ -217,6 +219,82 @@ function SourcesEditor({
   );
 }
 
+/** Editable list of {label, amount, note?} fare rows for one fare group. */
+function FareGroupEditor({
+  label,
+  hint,
+  items,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  items: FareRow[];
+  onChange: (next: FareRow[]) => void;
+}) {
+  const set = (i: number, patch: Partial<FareRow>) => {
+    const next = items.slice();
+    next[i] = { ...next[i], ...patch };
+    onChange(next);
+  };
+  const remove = (i: number) => onChange(items.filter((_, idx) => idx !== i));
+  const add = () => onChange([...items, { label: "", amount: "" }]);
+
+  return (
+    <div>
+      <p className="text-sm font-medium text-ink">{label}</p>
+      {hint && <p className="text-xs text-ink-soft">{hint}</p>}
+      <div className="mt-1 space-y-3">
+        {items.map((row, i) => (
+          <div key={i} className="rounded-lg border border-sand p-3">
+            <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+              <div>
+                <label className="text-xs font-medium text-ink">What</label>
+                <input
+                  value={row.label}
+                  onChange={(e) => set(i, { label: e.target.value })}
+                  maxLength={120}
+                  placeholder="e.g. Round trip on foot"
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-ink">Amount</label>
+                <input
+                  value={row.amount}
+                  onChange={(e) => set(i, { amount: e.target.value })}
+                  maxLength={60}
+                  placeholder="$11.35 or Free"
+                  className={inputClass}
+                />
+              </div>
+            </div>
+            <label className="mt-2 block text-xs font-medium text-ink">
+              Note (optional)
+            </label>
+            <input
+              value={row.note ?? ""}
+              onChange={(e) => set(i, { note: e.target.value })}
+              maxLength={400}
+              placeholder="Any caveat a rider should know"
+              className={inputClass}
+            />
+            <button
+              type="button"
+              onClick={() => remove(i)}
+              className="mt-2 rounded-full border border-coral/40 bg-coral/5 px-3 py-1 text-xs font-semibold text-coral-deep hover:bg-coral/10"
+            >
+              Remove fare
+            </button>
+          </div>
+        ))}
+      </div>
+      <button type="button" onClick={add} className={`mt-2 ${ghostButtonClass}`}>
+        + Add fare
+      </button>
+    </div>
+  );
+}
+
 /** Save/Reset row shared by every record group. */
 function SaveBar({
   busy,
@@ -254,6 +332,18 @@ function SaveBar({
   );
 }
 
+/** Deep-copy the fares record so drafts never alias the initial arrays. */
+function cloneFares(f: FerryFares): FerryFares {
+  const rows = (list: FareRow[]) => list.map((r) => ({ ...r }));
+  return {
+    walkOn: rows(f.walkOn),
+    drive: rows(f.drive),
+    fastFerry: rows(f.fastFerry),
+    ratesAsOf: f.ratesAsOf,
+    sources: f.sources.map((s) => ({ ...s })),
+  };
+}
+
 /* --------------------------------- editor --------------------------------- */
 
 export function FerryInfoEditor({ initial }: { initial: FerryInfo }) {
@@ -270,6 +360,7 @@ export function FerryInfoEditor({ initial }: { initial: FerryInfo }) {
   const [sources, setSources] = useState<Source[]>(() =>
     initial.sources.map((s) => ({ ...s })),
   );
+  const [fares, setFares] = useState<FerryFares>(() => cloneFares(initial.fares));
 
   // Per-record UI state.
   const [busy, setBusy] = useState<Record<RecordId, boolean>>({
@@ -277,18 +368,21 @@ export function FerryInfoEditor({ initial }: { initial: FerryInfo }) {
     "boarding-pass": false,
     "cash-tips": false,
     sources: false,
+    fares: false,
   });
   const [saved, setSaved] = useState<Record<RecordId, boolean>>({
     payment: false,
     "boarding-pass": false,
     "cash-tips": false,
     sources: false,
+    fares: false,
   });
   const [errors, setErrors] = useState<Record<RecordId, string | null>>({
     payment: null,
     "boarding-pass": null,
     "cash-tips": null,
     sources: null,
+    fares: null,
   });
 
   async function commit(id: RecordId, doc: unknown) {
@@ -310,7 +404,8 @@ export function FerryInfoEditor({ initial }: { initial: FerryInfo }) {
     else if (id === "boarding-pass")
       setBoarding({ ...initial.boardingPass, how: [...initial.boardingPass.how] });
     else if (id === "cash-tips") setCashTips([...initial.cashTips]);
-    else setSources(initial.sources.map((s) => ({ ...s })));
+    else if (id === "sources") setSources(initial.sources.map((s) => ({ ...s })));
+    else setFares(cloneFares(initial.fares));
     setErrors((p) => ({ ...p, [id]: null }));
   }
 
@@ -343,6 +438,57 @@ export function FerryInfoEditor({ initial }: { initial: FerryInfo }) {
           error={errors["boarding-pass"]}
           onSave={() => commit("boarding-pass", boarding)}
           onReset={() => reset("boarding-pass")}
+        />
+      </Card>
+
+      {/* Fares (E27) */}
+      <Card>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="font-display text-lg font-semibold text-sound-deep">Fares</p>
+          <Badge tone="coral">check each October</Badge>
+        </div>
+        <p className="mt-1 text-sm text-ink-soft">
+          The fare figures shown on /ferry. WSF usually adjusts fares each October —
+          when they do, update the amounts here and the &ldquo;rates as of&rdquo; line
+          below. No deploy needed.
+        </p>
+        <div className="mt-3 space-y-5">
+          <FareGroupEditor
+            label="Walk-on fares"
+            hint="Passenger fares. Put the senior / disability (RRFP) discount here so it stays a prominent line."
+            items={fares.walkOn}
+            onChange={(walkOn) => setFares((f) => ({ ...f, walkOn }))}
+          />
+          <FareGroupEditor
+            label="Drive-on fares"
+            hint="Vehicle fares (car + driver, motorcycle, extra passenger)."
+            items={fares.drive}
+            onChange={(drive) => setFares((f) => ({ ...f, drive }))}
+          />
+          <FareGroupEditor
+            label="Fast ferry fares"
+            hint="Kitsap Transit passenger-only fast ferry to Seattle."
+            items={fares.fastFerry}
+            onChange={(fastFerry) => setFares((f) => ({ ...f, fastFerry }))}
+          />
+          <TextField
+            label="Rates as of (freshness label)"
+            value={fares.ratesAsOf}
+            onChange={(ratesAsOf) => setFares((f) => ({ ...f, ratesAsOf }))}
+            rows={2}
+            hint="Shown under the fares so a visitor knows how current they are."
+          />
+          <SourcesEditor
+            items={fares.sources}
+            onChange={(fareSources) => setFares((f) => ({ ...f, sources: fareSources }))}
+          />
+        </div>
+        <SaveBar
+          busy={busy.fares}
+          saved={saved.fares}
+          error={errors.fares}
+          onSave={() => commit("fares", fares)}
+          onReset={() => reset("fares")}
         />
       </Card>
 
@@ -507,6 +653,7 @@ export function FerryInfoEditor({ initial }: { initial: FerryInfo }) {
               ["boarding-pass", "Boarding pass"],
               ["cash-tips", "Cash & tips"],
               ["sources", "Sources"],
+              ["fares", "Fares"],
             ] as const
           ).map(([id, label]) => (
             <div key={id} className="space-y-2">

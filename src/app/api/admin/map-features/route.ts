@@ -12,6 +12,7 @@
 // editor UI; these handlers re-check because API routes bypass layouts.
 
 import { NextRequest, NextResponse } from "next/server";
+import { isCostValue } from "@/lib/cost";
 import { getSessionUser, requireAdmin } from "@/lib/auth";
 import type {
   FeatureKind,
@@ -151,6 +152,11 @@ export async function POST(request: NextRequest) {
 
   const category =
     typeof body.category === "string" && body.category.trim() ? body.category.trim() : undefined;
+  // E27: preserve the free-vs-paid signal. Without this the field would be
+  // silently dropped the first time an admin saved an amenity, since this route
+  // rebuilds each feature from known fields only. The frozen /admin/maps editor
+  // has no control for it yet, so today it round-trips seed + API values.
+  const cost = isCostValue(body.cost) ? body.cost : undefined;
   const color =
     typeof body.color === "string" && /^#[0-9a-f]{6}$/i.test(body.color.trim())
       ? body.color.trim()
@@ -240,6 +246,7 @@ export async function POST(request: NextRequest) {
     ...(notes ? { notes } : {}),
     ...(label ? { label } : {}),
     ...(category ? { category } : {}),
+    ...(cost ? { cost } : {}),
     ...(color ? { color } : {}),
     ...(imageUrl ? { imageUrl } : {}),
     ...(images.length ? { images } : {}),

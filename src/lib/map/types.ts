@@ -9,6 +9,8 @@
 // Everything is portal-editable: seed views/features ship in src/lib/data,
 // admin edits overlay them in .data/stores (see map-store.ts).
 
+import type { CostValue } from "@/lib/cost";
+
 export type FeatureKind = "marker" | "line" | "trail" | "area";
 
 /** Built-in data layers a view can include without re-entering data. */
@@ -48,6 +50,10 @@ export interface MapFeature {
   notes?: string;
   /** Marker icon category (see MARKER_CATEGORIES). Ignored for non-markers. */
   category?: string;
+  /** E27 (M-04-06): does this cost a visitor money? Rendered as the shared
+   *  text CostBadge. Distinct from `parking` metadata's own free/paid taxonomy
+   *  below — see src/lib/cost.ts for why the two are kept apart. */
+  cost?: CostValue;
   /** Hex color for line/trail/area stroke+fill, or a marker tint override. */
   color?: string;
   /** Relative image path served by /api/map/image?p=… */
@@ -115,6 +121,15 @@ export const MARKER_CATEGORIES = [
   { key: "lodging", label: "Lodging", emoji: "🛏️", color: "#324a6d" },
   { key: "parking", label: "Parking", emoji: "🅿️", color: "#2a7f8a" },
   { key: "restroom", label: "Restroom", emoji: "🚻", color: "#4a7c59" },
+  // Practical visitor basics (E27). Kept BEFORE "info"/"star" on purpose:
+  // markerCategory() below resolves its default by key, but the public map's
+  // category dropdown reads this array in order, and the basics belong beside
+  // restroom rather than after the generic pins.
+  { key: "water", label: "Drinking water", emoji: "💧", color: "#16758f" },
+  { key: "bench", label: "Bench", emoji: "🪑", color: "#6b7683" },
+  { key: "picnic", label: "Picnic table", emoji: "🧺", color: "#a85c28" },
+  { key: "shade", label: "Shade", emoji: "🌳", color: "#4a7c59" },
+  { key: "bin", label: "Trash / recycling", emoji: "🗑️", color: "#6b7683" },
   { key: "viewpoint", label: "Viewpoint", emoji: "📸", color: "#1e96c0" },
   { key: "beach", label: "Beach", emoji: "🏖️", color: "#e8a13a" },
   { key: "trailhead", label: "Trailhead", emoji: "🥾", color: "#4a7c59" },
@@ -128,8 +143,15 @@ export const MARKER_CATEGORIES = [
 
 export type MarkerCategoryKey = (typeof MARKER_CATEGORIES)[number]["key"];
 
+const DEFAULT_MARKER_CATEGORY =
+  MARKER_CATEGORIES.find((c) => c.key === "info") ?? MARKER_CATEGORIES[0];
+
 export function markerCategory(key: string | undefined) {
-  return MARKER_CATEGORIES.find((c) => c.key === key) ?? MARKER_CATEGORIES[MARKER_CATEGORIES.length - 2]; // default "info"
+  // Resolve the fallback by key, not by position: this used to index
+  // MARKER_CATEGORIES[length - 2], which silently became a different icon the
+  // moment a category was appended (E27 added five). Behavior is unchanged —
+  // the default is still "info".
+  return MARKER_CATEGORIES.find((c) => c.key === key) ?? DEFAULT_MARKER_CATEGORY;
 }
 
 /* ------------------------------------------------------------------ */
@@ -143,6 +165,11 @@ export const CATEGORY_LABEL_RANK: Record<string, number> = {
   lodging: 60, event: 58, art: 55, info: 50,
   food: 50, coffee: 50, drink: 50, shop: 48,
   parking: 30, restroom: 25,
+  // Practical basics (E27) rank below restroom so they declutter behind
+  // landmarks. All sit under 45, so labelZoomThreshold() already holds them to
+  // zoom 16+; these ranks only decide who wins when two amenity labels overlap
+  // — and the restroom/water pair (the P0 finder) is meant to win.
+  water: 24, picnic: 15, shade: 14, bench: 12, bin: 10,
 };
 const DEFAULT_LABEL_RANK = 45;
 

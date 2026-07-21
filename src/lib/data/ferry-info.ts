@@ -40,11 +40,47 @@ export interface BoardingPass {
   currentNote: string;
 }
 
+/** One labeled fare line. `amount` is free text ("$11.35", "Free") rather than
+ *  a number so the Chamber can write "Free" or "$27.00 + $11.35/passenger"
+ *  without the display having to guess a currency format. */
+export interface FareRow {
+  label: string;
+  amount: string;
+  note?: string;
+}
+
+/**
+ * E27 (M-01-06 remainder) — ferry fares as STRUCTURE, not prose.
+ *
+ * Two reasons this stopped being hardcoded JSX on /ferry:
+ *   1. WSF adjusts fares most Octobers. A Chamber staffer has to be able to fix
+ *      a figure without a deploy, or the site is wrong every autumn.
+ *   2. The senior/disability discount was buried mid-sentence. It is one of the
+ *      highest-value facts on the page for the riders it applies to, so it is
+ *      now its own labeled row.
+ *
+ * Static content by design: WSF publishes no per-route fares API worth
+ * depending on, so the honest shape is sourced, editable content that links out
+ * to the authoritative page. The app never sells a ticket.
+ */
+export interface FerryFares {
+  /** Edmonds–Kingston passenger fares (WSF). */
+  walkOn: FareRow[];
+  /** Edmonds–Kingston vehicle fares (WSF). */
+  drive: FareRow[];
+  /** Kitsap Transit passenger-only fast ferry to Seattle. */
+  fastFerry: FareRow[];
+  /** Freshness label — WSF's October adjustment is the recurring chore. */
+  ratesAsOf: string;
+  sources: Source[];
+}
+
 export interface FerryInfo {
   payment: FerryPayment;
   boardingPass: BoardingPass;
   cashTips: string[];
   sources: Source[];
+  fares: FerryFares;
 }
 
 export const FERRY_PAYMENT = {
@@ -92,6 +128,65 @@ export const BOARDING_PASS = {
     "The system manages the vehicle line only, so foot passengers just walk on — walk-ons, cyclists, motorcycles, and medical-priority-pass holders never need a boarding pass.",
   currentNote:
     "Current note (as of early July 2026): the automated dispenser has been down, so a uniformed traffic-control officer is handing passes out by hand at the Lindvog Road staging area instead.",
+} as const;
+
+/**
+ * Seeded with the EXACT figures /ferry rendered as prose before E27 — this is a
+ * move, not a re-pricing. Any actual fare correction is a Chamber decision made
+ * at /admin/ferry-info, not a code edit.
+ */
+export const FERRY_FARES = {
+  walkOn: [
+    {
+      label: "Round trip on foot",
+      amount: "$11.35",
+      note: "Boarding in Kingston is always free — Washington State Ferries collects passenger fares only on the Edmonds side, whichever direction you start.",
+    },
+    {
+      label: "Senior or rider with a disability",
+      amount: "$5.65",
+      // Named explicitly because the discount is worthless if you don't know
+      // to ask for it. Eligibility is deliberately NOT asserted here — the WSF
+      // fare page below is the authority on what qualifies.
+      note: "Reduced fares run through the Regional Reduced Fare Permit (RRFP). Check the WSF fare page for what qualifies.",
+    },
+    { label: "Kids 18 and under", amount: "Free" },
+    {
+      label: "Bicycles",
+      amount: "Free leaving Kingston",
+      note: "Bikes roll on with walk-ons; you pay at Edmonds coming back.",
+    },
+  ] as FareRow[],
+  drive: [
+    {
+      label: "Car and driver, each way",
+      amount: "$27.00",
+      note: "Standard vehicle under 22 ft, paid in both directions.",
+    },
+    { label: "Motorcycle", amount: "$11.80" },
+    {
+      label: "Each extra passenger",
+      amount: "$11.35",
+      note: "Collected at Edmonds only.",
+    },
+  ] as FareRow[],
+  fastFerry: [
+    { label: "Kingston to Seattle", amount: "$2.00" },
+    { label: "Seattle back to Kingston", amount: "$13.00", note: "About $15 round trip." },
+    { label: "Youth 18 and under", amount: "Free" },
+  ] as FareRow[],
+  ratesAsOf:
+    "Summer 2026 rates, checked July 2026 — WSF usually adjusts fares each October.",
+  sources: [
+    {
+      label: "WSDOT — Edmonds–Kingston fare details",
+      url: "https://www.wsdot.wa.gov/ferries/fares/faresdetail.aspx?departingterm=8&arrivingterm=12",
+    },
+    {
+      label: "Kitsap Transit — Kingston fast ferry",
+      url: "https://www.kitsaptransit.com/service/fast-ferry/kingston-fast-ferry",
+    },
+  ] as Source[],
 } as const;
 
 export const SOURCES: Source[] = [

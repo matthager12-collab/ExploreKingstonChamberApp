@@ -4,7 +4,7 @@
 // Chamber edits field-by-field at /admin/ferry-info.
 //
 // Storage: one overlay store "ferry-info" with exactly four id'd records —
-// "payment", "boarding-pass", "cash-tips", "sources". Each record's `doc` is
+// "payment", "boarding-pass", "cash-tips", "sources", "fares". Each record's `doc` is
 // the whole object/array from src/lib/data/ferry-info.ts. An untouched record
 // costs nothing and always tracks the seed baked into the code; saving one
 // stores the edited object as the overlay, which wins.
@@ -17,9 +17,12 @@
 import {
   BOARDING_PASS,
   CASH_TIPS,
+  FERRY_FARES,
   FERRY_PAYMENT,
   SOURCES,
   type BoardingPass,
+  type FareRow,
+  type FerryFares,
   type FerryInfo,
   type FerryPayment,
   type Source,
@@ -31,10 +34,10 @@ const STORE = "ferry-info";
 // Field/record types live in the pure data module (../data/ferry-info) so the
 // client editor can import them without pulling in this server-only store.
 // Re-export here for the API route, which already imports from the store.
-export type { BoardingPass, FerryInfo, FerryPayment, Source };
+export type { BoardingPass, FareRow, FerryFares, FerryInfo, FerryPayment, Source };
 
-// The four record ids, in editor order.
-export const FERRY_INFO_IDS = ["payment", "boarding-pass", "cash-tips", "sources"] as const;
+// The record ids, in editor order.
+export const FERRY_INFO_IDS = ["payment", "boarding-pass", "cash-tips", "sources", "fares"] as const;
 export type FerryInfoId = (typeof FERRY_INFO_IDS)[number];
 
 // Each stored record is { id, doc }. `doc` is whatever object/array that id owns.
@@ -49,9 +52,10 @@ const SEED: FerryInfoRecord[] = [
   { id: "boarding-pass", doc: BOARDING_PASS as unknown as BoardingPass },
   { id: "cash-tips", doc: CASH_TIPS as string[] },
   { id: "sources", doc: SOURCES as Source[] },
+  { id: "fares", doc: FERRY_FARES as unknown as FerryFares },
 ];
 
-/** All four ferry-fact records (merged), for the admin editor + API GET. */
+/** All ferry-fact records (merged), for the admin editor + API GET. */
 export async function getFerryInfoRecords(): Promise<
   { id: FerryInfoId; doc: unknown }[]
 > {
@@ -62,7 +66,7 @@ export async function getFerryInfoRecords(): Promise<
 }
 
 /**
- * The four facts, merged (overlay wins, else the seed), shaped for the pages.
+ * The facts, merged (overlay wins, else the seed), shaped for the pages.
  * One store read per render — fine, same pattern as getCopyOverrides().
  */
 export async function getFerryInfo(): Promise<FerryInfo> {
@@ -72,6 +76,7 @@ export async function getFerryInfo(): Promise<FerryInfo> {
     boardingPass: (byId.get("boarding-pass") ?? BOARDING_PASS) as BoardingPass,
     cashTips: (byId.get("cash-tips") ?? CASH_TIPS) as string[],
     sources: (byId.get("sources") ?? SOURCES) as Source[],
+    fares: (byId.get("fares") ?? FERRY_FARES) as unknown as FerryFares,
   };
 }
 

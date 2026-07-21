@@ -16,7 +16,12 @@ import { readFileSync } from "fs";
 import path from "path";
 import { describe, expect, it } from "vitest";
 import { parkingZones } from "@/lib/data/parking";
-import { PARKING_RULE_LABELS, parkingRuleLabel } from "@/lib/map/parking-labels";
+import {
+  PARKING_RULE_LABELS,
+  freeOrPaidFromRule,
+  parkingRuleLabel,
+} from "@/lib/map/parking-labels";
+import { COST_VALUES } from "@/lib/cost";
 
 const FROZEN_MAP = path.join(process.cwd(), "src", "components", "feature-map.tsx");
 
@@ -54,5 +59,57 @@ describe("parking rule labels", () => {
   it("falls back to the slug rather than to nothing", () => {
     expect(parkingRuleLabel("free-2hr")).toBe("Free · 2-hour limit");
     expect(parkingRuleLabel("some-new-rule")).toBe("some-new-rule");
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* E27 — the free-vs-paid projection                                   */
+/* ------------------------------------------------------------------ */
+
+describe("freeOrPaidFromRule", () => {
+  it("calls the free rules free", () => {
+    expect(freeOrPaidFromRule("free-2hr")).toBe("free");
+    expect(freeOrPaidFromRule("free-unrestricted")).toBe("free");
+    // Kitsap park & rides cost nothing; the 24-hour cap is a time limit, not a price.
+    expect(freeOrPaidFromRule("park-and-ride-24h")).toBe("free");
+  });
+
+  it("calls the paid rule paid", () => {
+    expect(freeOrPaidFromRule("paid")).toBe("paid");
+  });
+
+  // The deliberate part. A visitor cannot park in any of these at any price, so
+  // a money badge is the wrong answer — and "Free" would be the harmful one,
+  // since a permit row is free only to somebody who already holds a permit.
+  it.each(["permit", "load-zone", "prohibited"])(
+    "renders no cost badge for '%s' — the money question does not apply",
+    (rule) => {
+      expect(freeOrPaidFromRule(rule)).toBeUndefined();
+    },
+  );
+
+  it("never labels a permit row 'free'", () => {
+    expect(freeOrPaidFromRule("permit")).not.toBe("free");
+  });
+
+  it("returns undefined for an unknown slug rather than guessing", () => {
+    // A new rule added to the seed data must show up as a MISSING badge, not a
+    // wrong one. The label test above is what catches the omission loudly.
+    expect(freeOrPaidFromRule("some-future-rule")).toBeUndefined();
+  });
+
+  it("emits only values the badge knows how to render", () => {
+    for (const rule of Object.keys(PARKING_RULE_LABELS)) {
+      const cost = freeOrPaidFromRule(rule);
+      if (cost !== undefined) expect(COST_VALUES).toContain(cost);
+    }
+  });
+
+  it("covers every rule the seed data actually uses", () => {
+    // Not an assertion that each maps to a badge — an assertion that each was
+    // CONSIDERED, i.e. the function returns without throwing for all of them.
+    for (const zone of parkingZones) {
+      expect(() => freeOrPaidFromRule(zone.rule)).not.toThrow();
+    }
   });
 });

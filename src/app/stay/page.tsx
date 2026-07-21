@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import type { Lodging } from "@/lib/types";
+import { AccessFactsBlock } from "@/components/access-facts";
+import { readAccessFacts } from "@/lib/schemas/access";
 import { getLodging } from "@/lib/stores/listing-stores";
 import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
 import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
@@ -43,6 +45,7 @@ const typeMeta: Record<
 
 function LodgingCard({ place }: { place: Lodging }) {
   const meta = typeMeta[place.type];
+  const accessFacts = readAccessFacts(place);
   return (
     <Card className="flex flex-col gap-3">
       <div className="flex items-start justify-between gap-3">
@@ -68,6 +71,16 @@ function LodgingCard({ place }: { place: Lodging }) {
           </ExternalLink>
         )}
       </div>
+      {/* E27 (M-14-05): unlike the /eat cards, /stay has no report link of its
+          own, so the access block carries E08's intake itself. */}
+      {accessFacts && (
+        <AccessFactsBlock
+          facts={accessFacts}
+          store="lodging"
+          id={place.id}
+          subject={place.name}
+        />
+      )}
     </Card>
   );
 }

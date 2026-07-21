@@ -3,6 +3,7 @@
 // workbench's DOMAINS array.
 
 import { z } from "zod";
+import { accessFactsFields, accessFactsShape } from "./access";
 import type { FieldDef } from "./form";
 import {
   httpUrlOptional,
@@ -28,6 +29,9 @@ export const lodgingSchema = z.object({
   website: httpUrlOptional("website"),
   bookingUrl: httpUrlOptional("bookingUrl"),
   tags: tagsSchema,
+  // E27 (M-14-05 app slice): declared once in ./access, inherited by both the
+  // admin form and this route's validation.
+  ...accessFactsShape,
 });
 
 export const lodgingFields: FieldDef[] = [
@@ -74,4 +78,5 @@ export const lodgingFields: FieldDef[] = [
     wide: true,
     placeholder: "Waterfront, Dining on site, About 10 min drive",
   },
+  ...accessFactsFields,
 ];

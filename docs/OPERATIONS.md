@@ -953,7 +953,7 @@ Dated, concrete, grounded in the seed files. Put these on a real calendar.
 |---|---|---|
 | **2026-09-12** | Kitsap Transit GTFS feed **S1000066 expires** (valid 2026-06-14 → 2026-09-12). The bundled fast-ferry times are hardcoded from it — refresh when the fall schedule drops (`https://pride.kitsaptransit.com/gtfs/google_transit.zip`) or the app shows a stale summer schedule. Also re-check the Saturday seasonal window (currently months 5–9). | `src/lib/kitsap.ts` |
 | **~2026-09-14** | Friends & Neighbors Brewing resumes Monday 4–8 pm hours (closed Mondays until MNF returns). Update the hours string (or have them edit via the portal). | `src/lib/data/restaurants.ts` |
-| **October 2026** | WSF typically changes fares each October. The ferry page hardcodes **summer 2026** fares ($11.35 walk-on round trip, $27.00 car + driver) — update the numbers, or wire the Fares API. Kitsap Transit fares also historically take effect Oct 1. **The walk-on fare is also published on /simple and /es** — update `en.walkOn` AND `es.walkOn` in the safety dictionary in the same change, or the two pages with the least-sophisticated readers keep showing the old fare. | `src/app/ferry/page.tsx` (per DATA_SOURCES §1); `src/lib/i18n/safety-content.ts` (`en.walkOn`, `es.walkOn`) |
+| **October 2026** | WSF typically changes fares each October; Kitsap Transit fares also historically take effect Oct 1. **Since E27 the /ferry fares are admin-editable — no deploy:** edit them at **`/admin/ferry-info` → Fares** (walk-on, drive-on, fast ferry), and update the "rates as of" line in the same save. **But two surfaces still hardcode the walk-on fare and DO need a code change:** `en.walkOn` AND `es.walkOn` in the E14 safety dictionary, which feed `/simple` and `/es` — the two pages with the least-sophisticated readers. Do both halves in the same week, or they will disagree. | `/admin/ferry-info` → Fares (seed: `src/lib/data/ferry-info.ts`); `src/lib/i18n/safety-content.ts` (`en.walkOn`, `es.walkOn`) |
 | **Oct 1–30, 2026** (annually; watch kitsap.gov/das each summer — the window has moved) | Kitsap County **LTAC** grant RFP for 2027 funds. One-month window; late = rejected. Export the survey/analytics summaries from `/admin` for the application. | DATA_SOURCES §12 |
 | **Annually** (pick a fixed month once E03's migration date is known) | Rotate the **age backup keypair** (`BACKUP_AGE_RECIPIENT`) — see §12 Secret rotation. Keep every retired private key; old backups need them. | 1Password "ExploreKingston backup age key" |
 | **Monthly** (once the E11 retention cron is scheduled) | Check the last `retention-purge` audit row in `/admin/audit` — a silent cron failure is retention drift: the public privacy page keeps promising windows nothing is enforcing. No row since the last calendar month = investigate the workflow run. | `/admin/audit` (action `retention-purge`); `.github/workflows/privacy-retention.yml` |
@@ -1367,3 +1367,87 @@ something significant ships.
   the failure this gate was built to prevent. Check ada.gov itself, not a summary.
   The statement also names the earlier 2027 date and the extension, so a reader can tell the
   figure is tracked rather than copied once and forgotten.
+
+---
+
+## 14. Practical visitor basics (E27)
+
+The four "on the ground" facts a ferry visitor needs: a restroom, a fare, whether
+a thing costs money, and whether they can get in the door. All four are
+Chamber-editable without a deploy.
+
+### 14.1 Ferry fares — the October chore
+
+**Where:** `/admin/ferry-info` → **Fares**.
+
+Three groups (walk-on, drive-on, fast ferry), each a list of `{ what, amount,
+note }` rows. Amount is free text, so "Free" and "$11.35" both work.
+
+- WSF adjusts fares most Octobers — see the fixed-date row in §6. Update the
+  amounts **and** the "rates as of" line together; that line is what tells a
+  visitor how much to trust the numbers.
+- The senior/disability row is deliberately its own line naming the **RRFP**
+  (Regional Reduced Fare Permit). Keep it that way — it was buried in a
+  sentence before E27 and the riders it applies to did not find it.
+- **`/simple` and `/es` still hardcode the walk-on fare** in the E14 safety
+  dictionary and need a code change. §6 spells this out. Do not let the two
+  halves drift.
+- The seed lives in `src/lib/data/ferry-info.ts` (`FERRY_FARES`). A test pins
+  the exact figures, so a code-side change to a fare fails CI on purpose —
+  that is a prompt to confirm the new number, not a bug.
+
+### 14.2 Restrooms, water & amenities
+
+**Where:** `/admin/maps` — ordinary map features on the **`amenities`** view.
+
+The public surfaces are `/map/restrooms` (a one-tap finder plus the map) and the
+"Restrooms & Amenities" layer in the `/map` switcher.
+
+To add or correct a pin:
+
+1. Open `/admin/maps`, pick the **Restrooms & Amenities** view.
+2. Add a marker and choose its category: restroom, drinking water, bench, picnic
+   table, shade, trash/recycling, or trailhead.
+3. **Put the source in the notes.** Where did this location come from — a Port
+   map, a Chamber walk-through, a phone call? Say so, and say plainly if it is
+   approximate. A test enforces this for restroom and water pins.
+4. Drag the pin to reality. Seeded Port-map positions are approximate by
+   admission; the ground always wins.
+
+**Drinking water is deliberately empty.** No published source places a fountain
+or potable spigot in Kingston, so nothing was invented. The finder tells visitors
+so honestly. **If you know of one, adding it is a two-minute job here** — that is
+the single highest-value amenity edit available.
+
+> Why the caution: a pin to a restroom that isn't there sends someone who
+> urgently needs one on a walk to nothing. Under-promising is the correct bias.
+
+**Privacy note for anyone answering visitor questions:** the "Find the nearest
+restroom" button does its distance maths on the visitor's phone and sends
+nothing anywhere — no server call, no stored location. It is safe to recommend
+without qualification.
+
+### 14.3 Free vs paid labels
+
+A shared badge renders **Free / Paid / Free & paid / By donation** as *text*
+(never colour alone). Parking rows derive theirs from the existing parking rule,
+so there is nothing extra to maintain there. Restaurants deliberately do **not**
+carry it — they keep their `$` price level.
+
+### 14.4 Access facts & the report loop
+
+**Where:** the listings workbench, on each restaurant and lodging record.
+
+Six fields: step-free entrance, accessible restroom, accessible parking (each
+Yes / No / Partly / Not checked), plus notes, a verified-on date, and a source.
+
+- **Leave "Not checked" unless someone actually checked.** A listing with
+  nothing recorded shows no access block at all, which is honest. A wrong "Yes"
+  strands someone at a door.
+- Set **verified on** only for an in-person check. With it, visitors see
+  "Checked <date>"; without it they see "Not verified in person yet — call
+  ahead", which is the truthful default.
+- Visitors report problems through the existing **Report an issue** link, which
+  files a moderation-queue item (§5). Nothing a visitor submits is published.
+- The venue-audit *programme* that would produce verified facts at scale is
+  deliberately deferred — see `BACKLOG.md`.
