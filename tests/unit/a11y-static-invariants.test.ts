@@ -58,6 +58,72 @@ const FERN_TINT_HOLDOUTS = ["src/app/admin/map/editor.tsx", "src/lib/ferry-forec
 
 /** Arbitrary Tailwind px font size, e.g. the ones swept to rem in E14 slice 1. */
 const ARBITRARY_PX_FONT_RE = /text-\[\d+px\]/;
+
+/* --------------------------------------------------------------------------
+ * Palette-wide tint contrast (E15 follow-up).
+ *
+ * The fern guard below this catches ONE colour. The arithmetic that makes fern
+ * dangerous is not special to fern — a tint lifts the background toward the
+ * text while the text stays put, so any brand colour whose solid-on-white
+ * ratio is close to 4.5:1 fails on a tint. Measured over white:
+ *
+ *   fern      4.86 solid -> 4.29 on its own /10
+ *   coral     4.97 solid -> 4.37 on its own /10
+ *   ink-soft  4.62 solid -> 4.09 on its own /10
+ *   tide-deep 5.28 solid -> 4.29 on its own /15
+ *
+ * and the failures are not even confined to same-hue pairs: `text-ink-soft` on
+ * `bg-sand/40` was 4.20:1 on the public event-suggestion page, invisible to a
+ * fern-shaped rule. So this computes the real ratio for every text/tint pair
+ * that lands on the SAME element instead of hard-coding a colour.
+ *
+ * Same-element is what makes it sound: one className string is one element, so
+ * the text genuinely sits on that background. The composite assumes the element
+ * is over the white/shell page — true for every card and callout in this app,
+ * and the same assumption the fern rule already made.
+ * ----------------------------------------------------------------------- */
+
+/** Brand palette, read from the single source of truth rather than restated. */
+function readPalette(): Record<string, string> {
+  const css = readFileSync(path.join(SRC_ROOT, "app", "globals.css"), "utf8");
+  const out: Record<string, string> = {};
+  for (const m of css.matchAll(/--color-([a-z-]+):\s*(#[0-9a-fA-F]{6})/g)) out[m[1]] = m[2];
+  return out;
+}
+
+function toRgb(hex: string): [number, number, number] {
+  return [
+    parseInt(hex.slice(1, 3), 16),
+    parseInt(hex.slice(3, 5), 16),
+    parseInt(hex.slice(5, 7), 16),
+  ];
+}
+
+/** WCAG relative luminance. */
+function luminance([r, g, b]: [number, number, number]): number {
+  const ch = (c: number) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b);
+}
+
+function contrast(a: [number, number, number], b: [number, number, number]): number {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/** Composite a colour at `alpha` over an opaque backdrop. */
+function composite(
+  fg: [number, number, number],
+  alpha: number,
+  bg: [number, number, number],
+): [number, number, number] {
+  return fg.map((c, i) => Math.round(c * alpha + bg[i] * (1 - alpha))) as [number, number, number];
+}
+
+const PAGE_BACKDROP: [number, number, number] = [255, 255, 255];
+const AA_NORMAL = 4.5;
 const ZOOM_BLOCK_RE = /user-scalable|maximumScale|maximum-scale/i;
 
 function sourceFilesUnder(dir: string): string[] {
@@ -152,6 +218,49 @@ describe("E14 static a11y invariants", () => {
     expect(map).toContain("max-h-28 flex-wrap gap-x-4 gap-y-2 overflow-y-auto text-sm text-ink-soft");
     expect(css).toContain(".bg-shell\\/60.text-ink-soft");
     expect(map).toContain("bg-shell/60 text-sm text-ink-soft");
+  });
+
+  it("no text colour lands under AA on a same-element brand tint (any colour)", () => {
+    // Generalises the fern rule below to the whole palette by MEASURING rather
+    // than naming a colour, so the next near-4.5:1 token added to globals.css
+    // is covered the day it lands instead of after someone ships a grey chip.
+    const palette = readPalette();
+    const names = Object.keys(palette);
+    const violations: string[] = [];
+
+    for (const file of SRC_FILES) {
+      const relPath = rel(file);
+      if (FERN_TINT_HOLDOUTS.includes(relPath)) continue;
+      readFileSync(file, "utf8")
+        .split("\n")
+        .forEach((line, i) => {
+          const trimmed = line.trim();
+          // Same self-trip hazard the fern rule documents: this file and the
+          // repairs in src/ both quote the patterns they forbid.
+          if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) {
+            return;
+          }
+          for (const bgName of names) {
+            const tint = line.match(new RegExp(`bg-${bgName}\\/(\\d{1,3})(?![\\w-])`));
+            if (!tint) continue;
+            const bg = composite(toRgb(palette[bgName]), Number(tint[1]) / 100, PAGE_BACKDROP);
+            for (const textName of names) {
+              if (!new RegExp(`text-${textName}(?![\\w-])`).test(line)) continue;
+              const ratio = contrast(toRgb(palette[textName]), bg);
+              if (ratio < AA_NORMAL) {
+                violations.push(
+                  `${relPath}:${i + 1}: text-${textName} on bg-${bgName}/${tint[1]} = ${ratio.toFixed(2)}:1\n    ${trimmed.slice(0, 100)}`,
+                );
+              }
+            }
+          }
+        });
+    }
+
+    expect(
+      violations,
+      `text/tint pair(s) under AA (4.5:1). A tint moves the background toward the text, so a colour that passes on white can fail on its own wash — darken the TEXT (text-ink for prose) or use a solid fill with white text:\n${violations.join("\n")}`,
+    ).toEqual([]);
   });
 
   it("never pairs text-fern with a fern tint (the E14 4.29:1 bug class)", () => {
