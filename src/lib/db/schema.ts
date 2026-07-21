@@ -23,6 +23,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  varchar,
 } from "drizzle-orm/pg-core";
 
 // E06 auth tables (users/orgs/invites) live in their own file. Re-exported
@@ -209,3 +210,26 @@ export const legalHold = pgTable(
   },
   (t) => [primaryKey({ columns: [t.store, t.recordId] })],
 );
+
+// ---------------------------------------------------------------------------
+// E13 offline/PWA tables.
+// ---------------------------------------------------------------------------
+
+/** Idempotency claims for the offline outbox (E13). Operational metadata in the
+ *  same posture as worklist_item and the append-only logs: writes bypass the
+ *  writeRecord choke point and emit NO audit rows — a dedupe claim is not a
+ *  record edit and an audit row per replayed POST would be pure noise.
+ *  Keys are random UUIDs minted client-side; they are never derived from or
+ *  joined to any user identifier (MHMDA floor), so this table holds no personal
+ *  data and needs no PII_STORES entry. Rows are swept after 30 days by an
+ *  opportunistic prune in src/lib/db/idempotency.ts (documented in docs/PWA.md,
+ *  deliberately NOT in RETENTION_POLICY — that manifest is an ask-first human
+ *  floor rendered on /privacy). Transient dedupe state with zero restore value:
+ *  not part of the backup bundle. */
+export const idempotencyKeys = pgTable("idempotency_keys", {
+  key: varchar("key", { length: 64 }).primaryKey(),
+  scope: text("scope").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});

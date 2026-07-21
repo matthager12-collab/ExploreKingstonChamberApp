@@ -50,6 +50,13 @@
       "when": 1784596593620,
       "tag": "0006_bored_kid_colt",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1784615994029,
+      "tag": "0007_idempotency-keys",
+      "breakpoints": true
     }
   ]
 }
