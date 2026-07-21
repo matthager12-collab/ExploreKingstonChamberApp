@@ -362,6 +362,61 @@ whole `DATA_DIR`. There are **three backup layers**, deliberately independent:
 > `npm run restore:db` (see [RUNBOOK-CUTOVER.md](RUNBOOK-CUTOVER.md) §Restore
 > drill — rehearsed quarterly).
 
+### Disk deletion record (E15 slice 3, criterion 8)
+
+| Field | Value |
+|---|---|
+| Production disk | `data` — `dsk-d941o1cvikkc73bbfr30`, 1 GB, mounted `/data` |
+| Staging disk | `data-staging` — `dsk-d98herdaeets73fvpmcg`, 1 GB, mounted `/data` |
+| Status | **PENDING** — gates below all green as of 2026-07-21; awaiting the operator's Delete Disk click (Render dashboard → service → Disk) |
+| Deleted | _(fill in: date + who, once done)_ |
+| Note | Deletion also destroys that disk's daily snapshots |
+
+**Until the disk is actually deleted, deploys still have their ~15 s 502
+window** — the app no longer uses the disk, but Render must still stop the old
+instance to hand the volume over. Removing `disk:` from `render.yaml` does NOT
+detach an existing disk; the dashboard click is required. Verify the real state
+with the API rather than the blueprint, and note the response shape:
+
+```bash
+curl -s -H "Authorization: Bearer $RENDER_KEY" \
+  https://api.render.com/v1/services/srv-d941o1cvikkc73bbfqp0 |
+  python3 -c "import json,sys; d=json.load(sys.stdin); \
+    s=d.get('service') if isinstance(d.get('service'),dict) else d; \
+    print(s['serviceDetails'].get('disk') or 'none')"
+```
+
+The service object is at the **top level** of that response, not nested under
+`service`. A naive `.get('service',{})` silently yields `{}` and reports the
+disk as absent when it is still attached — a false "all clear" on the exact
+question that gates a destructive step.
+
+Gates satisfied **before** deletion, in this order:
+
+1. **Health stopped depending on the disk** (PR #64) — deployed and verified
+   live returning `{"ok":true,"db":true,"storage":"r2"}` before any disk change.
+2. **Migration parity** — `scripts/migrate-images-to-r2.mjs --verify` exited 0
+   inside the production container against the live `/data` mount: **0 files**
+   across all four image subtrees, and a full-disk `find` for every image/PDF
+   type also returned 0. The disk held 456 KB of vestigial pre-E05 directories
+   (`analytics/ auth/ ferry/ stores/`), all already in Postgres.
+3. **Record-value check** — no record in the live database referenced an
+   off-disk image URL, so nothing pointed at bytes the disk didn't have.
+4. **Dated off-site backup** — `explore-kingston-backup-2026-07-21.json.age`
+   (2,023,894 B, encrypted, in the R2 backups bucket) taken while the running
+   container still had `DATA_DIR=/data`, so it captured the legacy files one
+   final time. Re-take one if the deletion happens on a later date.
+5. **Diskless image proven** — built and booted with no disk: no `VOLUME`, no
+   `/data`, `DATA_DIR` unset, Docker `HEALTHCHECK` healthy, `/api/health` 200,
+   and `/`, `/ferry`, `/events` all 200.
+
+`DATA_DIR` has already been removed from both Render services, so the app is
+running diskless regardless of whether the volume is still attached.
+
+If a future incident makes you wish the disk were back: it held nothing that
+is not in Neon Postgres or the R2 buckets. Restoring it would restore 456 KB of
+pre-E05 files that the app no longer reads.
+
 ### Layer 1 — Neon Postgres PITR (off-host, automatic)
 
 **Superseded E15.** This layer used to be Render's daily snapshots of the
