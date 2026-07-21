@@ -368,15 +368,29 @@ whole `DATA_DIR`. There are **three backup layers**, deliberately independent:
 |---|---|
 | Production disk | `data` — `dsk-d941o1cvikkc73bbfr30`, 1 GB, mounted `/data` |
 | Staging disk | `data-staging` — `dsk-d98herdaeets73fvpmcg`, 1 GB, mounted `/data` |
-| Status | **PENDING** — gates below all green as of 2026-07-21; awaiting the operator's Delete Disk click (Render dashboard → service → Disk) |
-| Deleted | _(fill in: date + who, once done)_ |
-| Note | Deletion also destroys that disk's daily snapshots |
+| Status | **DONE** |
+| Deleted | **2026-07-21**, by **Mat** (Render dashboard → service → Disk → Delete Disk), BOTH production and staging |
+| Note | Deletion also destroyed each disk's daily snapshots (prod had 7: 2026-07-14 … 2026-07-20) |
 
-**Until the disk is actually deleted, deploys still have their ~15 s 502
-window** — the app no longer uses the disk, but Render must still stop the old
-instance to hand the volume over. Removing `disk:` from `render.yaml` does NOT
-detach an existing disk; the dashboard click is required. Verify the real state
-with the API rather than the blueprint, and note the response shape:
+**Deploys are now zero-downtime — measured, not assumed.** Removing `disk:`
+from `render.yaml` does NOT detach an existing disk; the dashboard click is
+required, and until it happened deploys still had the stop-start window. The
+before/after across two consecutive production deploys, sampling
+`/api/health` every 2 s:
+
+| | Disk attached | Disk deleted |
+|---|---|---|
+| Non-200 responses during the deploy windows | **35 of 53** (sustained 502, ~97 s) | **0 of 29** |
+
+Bound the analysis to the deploy windows from Render's own API
+(`/v1/services/{id}/deploys` → `createdAt`/`finishedAt`). A blanket "any
+non-200 in the log" will trip on an unrelated network blip and tell you
+something false about your deploys — one `000` (curl connection failure, not an
+HTTP status) landed 30 s after the last deploy finished and is not a deploy
+event.
+
+Verify disk state with the API rather than the blueprint, and note the
+response shape:
 
 ```bash
 curl -s -H "Authorization: Bearer $RENDER_KEY" \
