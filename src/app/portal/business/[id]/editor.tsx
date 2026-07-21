@@ -549,14 +549,21 @@ export function BusinessEditor({
               </p>
               <div className="mt-2">
                 {liveStatus ? (
+                  // Contrast: this is a preview of <OpenBadge>, so it carries the
+                  // same tones. The tinted pairs it used to have failed AA at this
+                  // 12px size — text-fern on bg-fern/10 was 4.29:1 and text-ink-soft
+                  // on bg-sand 3.62:1. Solid fern with white text is 4.86:1 and sand
+                  // with text-ink is 11.95:1, matching src/components/open-badge.tsx.
+                  // A preview that renders differently from the badge it previews is
+                  // worse than useless, so these must stay in step.
                   <span
                     className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                      liveStatus.open ? "bg-fern/10 text-fern" : "bg-sand text-ink-soft"
+                      liveStatus.open ? "bg-fern text-white" : "bg-sand text-ink"
                     }`}
                   >
                     <span
                       className={`h-1.5 w-1.5 rounded-full ${
-                        liveStatus.open ? "bg-fern" : "bg-ink-soft/50"
+                        liveStatus.open ? "bg-white" : "bg-ink/40"
                       }`}
                       aria-hidden
                     />

@@ -122,10 +122,16 @@ function PagesSection({
                 onClick={() => toggle(p.path)}
                 disabled={busyPath !== null}
                 aria-pressed={!isHidden}
+                // Contrast: the visible state was `bg-fern/10 text-fern`, which
+                // composites to #edf2ee at 4.29:1 — and its hover made it worse,
+                // 3.76:1 on bg-fern/20. Solid fern with white text is 4.86:1 in
+                // both states. Hover now reads as a ring instead of a fill change,
+                // which is how the sibling branch already signals hover and how
+                // ferry-info's fern buttons mark their active state.
                 className={`w-24 rounded-full px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${
                   isHidden
                     ? "border border-sand bg-white text-ink-soft hover:border-tide"
-                    : "bg-fern/10 text-fern hover:bg-fern/20"
+                    : "bg-fern text-white hover:ring-2 hover:ring-fern hover:ring-offset-1"
                 }`}
               >
                 {busyPath === p.path ? "Saving…" : isHidden ? "Hidden" : "Visible"}

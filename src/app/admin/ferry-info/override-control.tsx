@@ -129,9 +129,12 @@ export function BoardingPassOverrideControl({ initial }: { initial: BoardingPass
           onClick={() => apply("off")}
           disabled={busy !== null || pinnedOff}
           className={`${buttonBase} ${
+            // Contrast: the inactive fill was bg-fern/90 → #5c896a, where white
+            // text is 4.00:1. The ring already carries the active/inactive
+            // distinction, so the /90 dimming was redundant as well as sub-AA.
             pinnedOff
               ? "bg-fern text-white ring-2 ring-fern ring-offset-1"
-              : "bg-fern/90 text-white hover:bg-fern"
+              : "bg-fern text-white hover:ring-2 hover:ring-fern hover:ring-offset-1"
           }`}
         >
           {busy === "off" ? "Saving…" : pinnedOff ? "✓ Pinned OFF" : "Turn OFF for today"}

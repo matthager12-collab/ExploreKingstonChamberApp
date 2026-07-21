@@ -144,7 +144,10 @@ export function EventsSourcesManager({ initial }: { initial: EventsSourcesState 
             type="button"
             disabled={busy !== null || flag.enabled}
             onClick={() => act({ action: "set-flag", enabled: true }, "flag")}
-            className={`${btn} bg-fern/90 text-white hover:bg-fern`}
+            // Contrast: bg-fern/90 composites to #5c896a, where white text is
+            // 4.00:1 — under AA. Solid fern is 4.86:1; hover keeps an affordance
+            // without reintroducing a sub-AA fill.
+            className={`${btn} bg-fern text-white hover:ring-2 hover:ring-fern hover:ring-offset-1`}
           >
             {busy === "flag" ? "Saving…" : "Show merged calendar"}
           </button>

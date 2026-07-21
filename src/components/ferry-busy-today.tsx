@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { Direction } from "@/lib/types";
 import { dayCurve, forecastAt, type EmpiricalTable } from "@/lib/ferry-forecast";
+import { chipClass } from "@/lib/ferry-chip";
 import { LevelLegend, Trendline, extremeLabel } from "./ferry-trendline";
 
 const TZ = "America/Los_Angeles";
@@ -93,7 +94,7 @@ export function FerryBusyToday({
 
       <p className="mt-3 text-sm text-ink">
         Right now, <span className="font-semibold">{dir.arrow}</span> is{" "}
-        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${meta.chip}`}>{meta.label}</span>.{" "}
+        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${chipClass(meta)}`}>{meta.label}</span>.{" "}
         <span className="text-ink-soft">{meta.blurb}</span>
       </p>
 
