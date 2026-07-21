@@ -437,7 +437,7 @@ Environment variables (authoritative — `.env.production.example`, `render.yaml
 | `NEXT_PUBLIC_SITE_URL` | **required in production**, **build-time** | absolute origin for share-card/canonical URLs (`layout.tsx` `metadataBase`); inlined at `npm run build`, not read at runtime |
 | `SETUP_TOKEN` | optional (first-run bootstrap only) | gates `POST /api/auth/setup` fail-closed; never consulted once an admin exists |
 | `DATA_DIR` | disk hosts | persistent volume path (e.g. `/data`) — images/hunt photos only since E05; **unset on Vercel** |
-| `DATABASE_URL` | **yes (E05)** | Neon Postgres (POOLED url, host has `-pooler`) — the structured-data home; `/api/health` 503s without it |
+| `DATABASE_URL` | **yes (E05)** | Neon Postgres (POOLED url, host has `-pooler`, `?sslmode=verify-full` — docs/DEPLOY.md §2e) — the structured-data home; `/api/health` 503s without it |
 | `BLOB_READ_WRITE_TOKEN` | Phase 2 | Vercel Blob for uploaded images |
 | `UPSTASH_REDIS_REST_URL` / `_TOKEN` | Phase 2 | shared rate limiter |
 
