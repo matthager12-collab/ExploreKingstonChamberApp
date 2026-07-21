@@ -76,6 +76,23 @@ export function trackingSessionId(): string {
   return getSessionId();
 }
 
+/**
+ * Record ONE consent grant (E11). Session id + notice version + which purpose
+ * — never a location. Lives here so BOTH consent surfaces emit identically:
+ * when only near-me emitted, a hunt-first visitor produced geo-tagged data
+ * with no matching grant in the audit story.
+ */
+export function trackConsent(purpose: string, noticeVersion: string) {
+  if (typeof window === "undefined") return;
+  send({
+    type: "consent",
+    path: window.location.pathname,
+    sessionId: getSessionId(),
+    noticeVersion,
+    purpose,
+  });
+}
+
 /** Record a tap on an outbound link (menu, ordering, map, booking, ...). */
 export function trackOutbound(href: string, label: string) {
   if (typeof window === "undefined") return;

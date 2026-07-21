@@ -18,7 +18,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { Hunt, HuntStop } from "@/lib/types";
 import { Badge, Card } from "@/components/ui";
-import { EditableText } from "@/lib/copy-context";
+import { EditableText, useCopy } from "@/lib/copy-context";
 import {
   browserConsentStorage,
   readGeoConsent,
@@ -26,17 +26,31 @@ import {
   writeGeoConsent,
 } from "@/lib/privacy/consent";
 import { PRIVACY_NOTICE_VERSION } from "@/lib/privacy/policy";
+import { trackConsent } from "@/components/tracker";
 
-/** True when we already hold consent for the CURRENT notice version. */
+// Per-pageload fallback so a storage-blocked browser doesn't re-ask at every
+// stop. Module-scoped because each stop renders its own StopCard.
+let huntConsentThisPageload = false;
+
+/** True when we hold consent for the CURRENT notice version FOR THE HUNT.
+ *  An analytics (near-me) grant does NOT authorize this: the hunt sends
+ *  precise coordinates to the organizers and keeps them 12 months, which is
+ *  a materially different ask. */
 function hasGeoConsent(): boolean {
+  if (huntConsentThisPageload) return true;
   return !shouldPromptGeoConsent(
     readGeoConsent(browserConsentStorage()),
     PRIVACY_NOTICE_VERSION,
+    "hunt",
   );
 }
 
 function grantGeoConsent(): void {
-  writeGeoConsent(browserConsentStorage(), PRIVACY_NOTICE_VERSION, new Date());
+  huntConsentThisPageload = true; // honored even if storage refuses
+  writeGeoConsent(browserConsentStorage(), PRIVACY_NOTICE_VERSION, new Date(), "hunt");
+  // Without this, a hunt-first visitor produced geo-tagged submissions with
+  // no matching grant anywhere in the aggregate record.
+  trackConsent("hunt", PRIVACY_NOTICE_VERSION);
 }
 
 /** Hunt shape the player receives: server pages attach reference photo URLs. */
@@ -80,6 +94,9 @@ function getPositionOnce(timeoutMs: number): Promise<GeolocationPosition | null>
 type CheckState =
   | "idle"
   | "needs-consent"
+  // "declined" is DISTINCT from "gps-unavailable": telling a visitor who
+  // deliberately said no that their GPS failed misreports their own choice.
+  | "declined"
   | "locating"
   | "too-far"
   | "confirmed"
@@ -107,6 +124,8 @@ function StopCard({
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [showHint, setShowHint] = useState(false);
   const [upload, setUpload] = useState<UploadState>("idle");
+  const consentAllowLabel = useCopy("nearme.consent.allow");
+  const consentDeclineLabel = useCopy("nearme.consent.decline");
   const done = status !== undefined;
 
   function locate() {
@@ -256,14 +275,14 @@ function StopCard({
                       onClick={acceptGeoConsent}
                       className="rounded-full bg-sound px-3 py-1.5 text-sm font-semibold text-white hover:bg-sound-deep"
                     >
-                      Use my location
+                      {consentAllowLabel}
                     </button>
                     <button
                       type="button"
-                      onClick={() => setCheck("gps-unavailable")}
+                      onClick={() => setCheck("declined")}
                       className="rounded-full border border-sand px-3 py-1.5 text-sm font-semibold text-ink hover:border-tide"
                     >
-                      No thanks
+                      {consentDeclineLabel}
                     </button>
                   </div>
                 </div>
@@ -273,6 +292,13 @@ function StopCard({
                   You&apos;re about {distance} m away — keep looking! (need to be within{" "}
                   {stop.radiusMeters} m)
                 </p>
+              )}
+              {check === "declined" && (
+                <EditableText
+                  as="p"
+                  className="mt-1 text-sm text-ink-soft"
+                  copyKey="hunt.consent.declined"
+                />
               )}
               {check === "gps-unavailable" && (
                 <p className="mt-1 text-sm text-ink-soft">

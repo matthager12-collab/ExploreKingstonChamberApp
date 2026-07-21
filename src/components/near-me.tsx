@@ -29,6 +29,7 @@ import {
   writeGeoConsent,
 } from "@/lib/privacy/consent";
 import { PRIVACY_NOTICE_VERSION } from "@/lib/privacy/policy";
+import { trackConsent } from "@/components/tracker";
 
 /** Serializable subset of Restaurant the server page maps into props. */
 export interface NearMePlace {
@@ -109,31 +110,6 @@ function sendGeoPing(lat: number, lng: number) {
   });
 }
 
-/** One "consent" analytics event on grant — proves in aggregate that the
- *  consent surface was live and used. Session id + notice version only:
- *  never a location. */
-function sendConsentEvent() {
-  const body = JSON.stringify({
-    type: "consent",
-    sessionId: getSessionId(),
-    noticeVersion: PRIVACY_NOTICE_VERSION,
-    path: window.location.pathname,
-  });
-  try {
-    if (navigator.sendBeacon?.("/api/track", body)) return;
-  } catch {
-    // fall through to fetch
-  }
-  fetch("/api/track", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body,
-    keepalive: true,
-  }).catch(() => {
-    // best-effort; never bother the visitor
-  });
-}
-
 // "consent" = the affirmative-consent card is showing, BEFORE the browser's
 // own permission prompt (FR-A21: we ask in plain language first, and
 // declining must lose nothing).
@@ -161,7 +137,7 @@ export function NearMe({ places }: { places: NearMePlace[] }) {
   function onLocateTap() {
     if (consentGranted.current) return startLocate();
     const stored = readGeoConsent(browserConsentStorage());
-    if (shouldPromptGeoConsent(stored, PRIVACY_NOTICE_VERSION)) {
+    if (shouldPromptGeoConsent(stored, PRIVACY_NOTICE_VERSION, "analytics")) {
       setStatus("consent");
       return;
     }
@@ -171,8 +147,8 @@ export function NearMe({ places }: { places: NearMePlace[] }) {
 
   function acceptConsent() {
     consentGranted.current = true; // honored for this pageload even if storage refuses
-    writeGeoConsent(browserConsentStorage(), PRIVACY_NOTICE_VERSION, new Date());
-    sendConsentEvent();
+    writeGeoConsent(browserConsentStorage(), PRIVACY_NOTICE_VERSION, new Date(), "analytics");
+    trackConsent("analytics", PRIVACY_NOTICE_VERSION);
     startLocate();
   }
 
@@ -232,9 +208,14 @@ export function NearMe({ places }: { places: NearMePlace[] }) {
       {/* Affirmative consent (FR-A21) — shown BEFORE the browser prompt, in
           plain language, with a real "no" that costs the visitor nothing. */}
       {status === "consent" && (
-        <div className="mt-3 rounded-xl border border-tide bg-seaglass/20 p-4">
+        <div
+          role="group"
+          aria-labelledby="nearme-consent-title"
+          className="mt-3 rounded-xl border border-tide bg-seaglass/20 p-4"
+        >
           <EditableText
             as="p"
+            id="nearme-consent-title"
             className="text-sm font-semibold text-sound-deep"
             copyKey="nearme.consent.title"
           />

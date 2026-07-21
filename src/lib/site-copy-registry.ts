@@ -510,6 +510,14 @@ export const COPY_BLOCKS = [
       "Posting sends your photo (and your location, if you allow it) to the hunt organizers to check you off, kept 12 months — don't include anything you wouldn't share.",
   },
   {
+    key: "hunt.consent.declined",
+    page: "Scavenger hunt (client)",
+    label: "Shown after declining the location check-in",
+    multiline: true,
+    fallback:
+      "No problem — location stays off. Post the photo and we'll check you off on the honor system.",
+  },
+  {
     key: "hunt.consent.body",
     page: "Scavenger hunt (client)",
     label: "Location-consent card text",

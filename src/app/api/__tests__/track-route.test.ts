@@ -61,7 +61,7 @@ const ALLOWED_KEYS: Record<string, string[]> = {
   pageview: ["ts", "type", "path", "sessionId", "geo"],
   outbound: ["ts", "type", "path", "sessionId", "geo", "href", "label"],
   "geo-ping": ["ts", "type", "path", "sessionId", "geo", "area"],
-  consent: ["ts", "type", "path", "sessionId", "geo", "noticeVersion"],
+  consent: ["ts", "type", "path", "sessionId", "geo", "noticeVersion", "consentPurpose"],
 };
 
 interface Case {
