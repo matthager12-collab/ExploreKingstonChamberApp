@@ -53,9 +53,30 @@ export function parkingRuleLabel(rule: string): string {
  *   load-zone           loading / dropoff only — not visitor parking
  *   prohibited          no parking
  *
- * TODO(mat): implement the mapping body. See the note in the E27 session for
- * the trade-offs — the interesting call is what the last three rules return.
+ * The last three return `undefined` ON PURPOSE. A visitor cannot park in a
+ * permit row, a load zone, or a no-parking area at any price, so "Free" and
+ * "Paid" are both wrong answers — and "Free" would be actively harmful, since
+ * a permit row is free only to people who already hold a permit. The rule
+ * label beside the badge already reads "Permit parking" / "Load zone" / "No
+ * parking", which is the accurate thing to say; a cost badge would either
+ * repeat it or contradict it. Stretching this into a "Restricted" value was
+ * considered and rejected: it turns a money question into a legal-status
+ * question, which is the exact conflation src/lib/cost.ts exists to prevent.
  */
 export function freeOrPaidFromRule(rule: string): CostValue | undefined {
-  throw new Error("freeOrPaidFromRule: not implemented");
+  switch (rule) {
+    case "free-2hr":
+    case "free-unrestricted":
+    case "park-and-ride-24h":
+      // "free-2hr" still reads plain "Free" even though its label says
+      // "Free · 2-hour limit". The badge is the scannable money signal and is
+      // meant to look identical everywhere; the label carries the nuance.
+      // Suppressing it here would make the badge's ABSENCE mean two different
+      // things — "costs nothing" and "you cannot park here".
+      return "free";
+    case "paid":
+      return "paid";
+    default:
+      return undefined;
+  }
 }
