@@ -67,6 +67,7 @@ export const config = {
 const MACHINE_TOKEN_ROUTES: Record<string, string> = {
   "/api/admin/worklist/sweep": "WORKLIST_SWEEP_TOKEN",
   "/api/admin/backup": "BACKUP_TOKEN",
+  "/api/admin/privacy/retention": "RETENTION_TOKEN", // E11 retention cron
 };
 
 function machineTokenOk(request: NextRequest): boolean {

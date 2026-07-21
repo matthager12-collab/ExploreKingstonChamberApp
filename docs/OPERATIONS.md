@@ -641,6 +641,7 @@ Dated, concrete, grounded in the seed files. Put these on a real calendar.
 | **October 2026** | WSF typically changes fares each October. The ferry page hardcodes **summer 2026** fares ($11.35 walk-on round trip, $27.00 car + driver) — update the numbers, or wire the Fares API. Kitsap Transit fares also historically take effect Oct 1. | `src/app/ferry/page.tsx` (per DATA_SOURCES §1) |
 | **Oct 1–30, 2026** (annually; watch kitsap.gov/das each summer — the window has moved) | Kitsap County **LTAC** grant RFP for 2027 funds. One-month window; late = rejected. Export the survey/analytics summaries from `/admin` for the application. | DATA_SOURCES §12 |
 | **Annually** (pick a fixed month once E03's migration date is known) | Rotate the **age backup keypair** (`BACKUP_AGE_RECIPIENT`) — see §12 Secret rotation. Keep every retired private key; old backups need them. | 1Password "ExploreKingston backup age key" |
+| **Monthly** (once the E11 retention cron is scheduled) | Check the last `retention-purge` audit row in `/admin/audit` — a silent cron failure is retention drift: the public privacy page keeps promising windows nothing is enforcing. No row since the last calendar month = investigate the workflow run. | `/admin/audit` (action `retention-purge`); `.github/workflows/privacy-retention.yml` |
 
 ### Quarterly re-verification
 

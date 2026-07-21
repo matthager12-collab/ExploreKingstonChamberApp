@@ -27,10 +27,12 @@ import { asc, count, sql } from "drizzle-orm";
 import { getDb } from "./client";
 import { readRecordRows } from "./records";
 import {
+  analyticsAreaRollup,
   analyticsEvent,
   audit,
   ferryObservation,
   invites,
+  legalHold,
   orgs,
   quarantine,
   surveyResponse,
@@ -78,6 +80,14 @@ export type QuarantineRow = {
 };
 
 export type AnalyticsEventRow = { ts: string; event: unknown };
+export type AreaRollupRow = { month: string; area: string; pings: number; sessions: number };
+export type LegalHoldBackupRow = {
+  store: string;
+  recordId: string;
+  reason: string;
+  setBy: string;
+  setAt: string;
+};
 export type SurveyResponseRow = { ts: string; response: unknown };
 export type FerryObservationRow = { ts: string; obs: unknown };
 
@@ -144,6 +154,9 @@ export type DbSection = {
   orgs?: OrgBackupRow[];
   users?: UserBackupRow[];
   invites?: InviteBackupRow[];
+  /** E11. Optional on READ so pre-E11 bundles still restore. */
+  analytics_area_rollup?: AreaRollupRow[];
+  legal_hold?: LegalHoldBackupRow[];
 };
 
 export type RestoreCounts = {
@@ -156,6 +169,8 @@ export type RestoreCounts = {
   orgs: number;
   users: number;
   invites: number;
+  analytics_area_rollup: number;
+  legal_hold: number;
 };
 
 function toIso(v: Date | string): string {
@@ -206,6 +221,14 @@ export async function serializeDb(): Promise<DbSection> {
     .select()
     .from(ferryObservation)
     .orderBy(asc(ferryObservation.ts));
+  const rollupRows = await db
+    .select()
+    .from(analyticsAreaRollup)
+    .orderBy(asc(analyticsAreaRollup.month), asc(analyticsAreaRollup.area));
+  const legalHoldRows = await db
+    .select()
+    .from(legalHold)
+    .orderBy(asc(legalHold.store), asc(legalHold.recordId));
   const orgRows = await db.select().from(orgs).orderBy(asc(orgs.id));
   const userRows = await db.select().from(users).orderBy(asc(users.id));
   const inviteRows = await db.select().from(invites).orderBy(asc(invites.code));
@@ -234,6 +257,19 @@ export async function serializeDb(): Promise<DbSection> {
     analytics_event: analyticsRows.map((r) => ({ ts: toIso(r.ts), event: r.event })),
     survey_response: surveyRows.map((r) => ({ ts: toIso(r.ts), response: r.response })),
     ferry_observation: ferryRows.map((r) => ({ ts: toIso(r.ts), obs: r.obs })),
+    analytics_area_rollup: rollupRows.map((r) => ({
+      month: r.month,
+      area: r.area,
+      pings: r.pings,
+      sessions: r.sessions,
+    })),
+    legal_hold: legalHoldRows.map((h) => ({
+      store: h.store,
+      recordId: h.recordId,
+      reason: h.reason,
+      setBy: h.setBy,
+      setAt: toIso(h.setAt),
+    })),
     orgs: orgRows.map((o) => ({
       id: o.id,
       name: o.name,
@@ -328,6 +364,9 @@ export async function restoreDb(
   const orgRows = section.orgs ?? [];
   const userRows = section.users ?? [];
   const inviteRows = section.invites ?? [];
+  // Pre-E11 bundles carry no privacy sections; empty = fine.
+  const rollupRows = section.analytics_area_rollup ?? [];
+  const legalHoldRows = section.legal_hold ?? [];
 
   await db.transaction(async (tx) => {
     // Orgs FIRST: users.org_id and invites.org_id reference them.
@@ -453,6 +492,27 @@ export async function restoreDb(
         .insert(ferryObservation)
         .values(batch.map((r) => ({ ts: new Date(r.ts), obs: r.obs })));
     }
+    for (const batch of chunks(rollupRows)) {
+      await tx.insert(analyticsAreaRollup).values(
+        batch.map((r) => ({
+          month: r.month,
+          area: r.area,
+          pings: r.pings,
+          sessions: r.sessions,
+        })),
+      );
+    }
+    for (const batch of chunks(legalHoldRows)) {
+      await tx.insert(legalHold).values(
+        batch.map((h) => ({
+          store: h.store,
+          recordId: h.recordId,
+          reason: h.reason,
+          setBy: h.setBy,
+          setAt: new Date(h.setAt),
+        })),
+      );
+    }
   });
 
   return {
@@ -465,5 +525,7 @@ export async function restoreDb(
     orgs: orgRows.length,
     users: userRows.length,
     invites: inviteRows.length,
+    analytics_area_rollup: rollupRows.length,
+    legal_hold: legalHoldRows.length,
   };
 }

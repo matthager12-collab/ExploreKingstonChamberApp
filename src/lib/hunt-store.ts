@@ -21,7 +21,8 @@ import path from "path";
 import { dataPath } from "./data-dir";
 import { hunts as seedHunts } from "@/lib/data/hunts";
 import type { Hunt, HuntStop } from "@/lib/types";
-import { hasBlob, putImage } from "@/lib/blob-store";
+import { deleteBlob, hasBlob, putImage } from "@/lib/blob-store";
+import { hardDeleteRecords, isUnderLegalHold } from "@/lib/db/privacy-delete";
 import { readOverlay, writeOverlayRecord, readMerged, type WriteMeta } from "@/lib/stores/json-store";
 
 // ---------------------------------------------------------------------------
@@ -217,6 +218,67 @@ export async function listSubmissions(huntId?: string): Promise<HuntSubmission[]
   // ts ascending in insertion order isn't guaranteed by the overlay query, so
   // sort by timestamp; newest first.
   return filtered.sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0));
+}
+
+/**
+ * Destroy a submission's photo bytes — blob store or filesystem, matching
+ * how saveSubmission stored them. Missing-file cases count as success (the
+ * artifact is gone either way); real failures THROW so the caller keeps the
+ * row and can retry — delete-photo-first is the orphan-safety contract.
+ */
+async function destroySubmissionPhoto(photoPath: string): Promise<void> {
+  if (isBlobUrl(photoPath)) {
+    await deleteBlob(photoPath);
+    return;
+  }
+  // fs-relative form: "photos/<huntId>/<stopId>/<file>" under DATA_ROOT.
+  // Resolve + containment check — a doctored path must never escape the
+  // hunts data dir.
+  const abs = path.resolve(DATA_ROOT, photoPath);
+  if (!abs.startsWith(path.resolve(DATA_ROOT) + path.sep)) {
+    throw new Error("destroySubmissionPhoto: path escapes the hunts data dir");
+  }
+  try {
+    await unlink(abs);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== "ENOENT") throw err; // already gone = fine; anything else = keep the row
+  }
+}
+
+export type SubmissionDeleteResult = "deleted" | "not-found" | "legal-hold";
+
+/**
+ * E11 privacy deletion: photo first, then the record row — HARD delete
+ * (physical, via the privacy carve-out), never a tombstone: a tombstoned
+ * submission would keep its GPS in record.doc forever, which is exactly what
+ * the 12-month retention promise forbids.
+ *
+ * The legal-hold check is re-run HERE, immediately before the photo is
+ * destroyed — the photo is the unrecoverable half, and callers snapshot
+ * holds once up front (a hold set mid-run would otherwise slip past). The
+ * SQL-level hold exclusion in hardDeleteRecords is the row's backstop; this
+ * is the photo's. Callers still own the audit row (retention job / MHMDA
+ * fulfillment both log).
+ */
+export async function deleteSubmission(id: string): Promise<SubmissionDeleteResult> {
+  const subs = await readMerged<HuntSubmission & { id: string }>(SUBMISSIONS_STORE, []);
+  const sub = subs.find((s) => s.id === id);
+  if (!sub) return "not-found";
+  // TOCTOU backstop: a hold may have been set after the caller's snapshot.
+  if (await isUnderLegalHold(SUBMISSIONS_STORE, id)) return "legal-hold";
+  await destroySubmissionPhoto(sub.photoPath);
+  invalidatePhotoStorageCache();
+  const { deleted, heldSkipped } = await hardDeleteRecords(SUBMISSIONS_STORE, [id]);
+  if (deleted > 0) return "deleted";
+  // deleted === 0 has TWO causes; distinguish them by heldSkipped (never
+  // infer a hold from the count alone). A hold that appeared between our
+  // pre-check and the SQL backstop → report "legal-hold" so the caller logs
+  // the reconciliation. A row that was already gone (a concurrent/overlapping
+  // delete) is NOT a hold — reporting it as one would write a false, immortal
+  // FR-A92 hold-skip audit entry. Content is destroyed either way, so count
+  // the already-gone case as deleted.
+  return heldSkipped.length > 0 ? "legal-hold" : "deleted";
 }
 
 // ---------------------------------------------------------------------------

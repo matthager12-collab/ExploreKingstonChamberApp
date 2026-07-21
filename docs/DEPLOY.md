@@ -154,6 +154,13 @@ Blueprint that declares the Docker web service, a **1 GB Disk mounted at
      without an admin session. Optional and **fail-closed**: unset disables
      only the token path, never opens the route. Set it when registering the
      sweep cron (docs/OPERATIONS.md §5 "Worklist & moderation").
+   - `RETENTION_TOKEN` — `sync: false` (E11); Bearer token for
+     `POST /api/admin/privacy/retention` (the retention purge). Same
+     fail-closed semantics. Set it on **both** services (the staging
+     rehearsal needs the staging one) + a GitHub repo secret of the same
+     name + 1Password. The workflow
+     (`.github/workflows/privacy-retention.yml`) is **workflow_dispatch-only
+     until the E11 §4-e go** — do not add its `schedule:` block early.
    - **`BLOB_*` / `UPSTASH_*` stay unset on Render** — images live on the
      `/data` disk and the single instance uses the in-process rate limiter.
 3. **First deploy** runs automatically on blueprint create. Render builds the

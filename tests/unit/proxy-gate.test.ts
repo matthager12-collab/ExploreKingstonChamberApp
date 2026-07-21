@@ -24,6 +24,7 @@ function passed(res: Response): boolean {
 afterEach(() => {
   delete process.env.WORKLIST_SWEEP_TOKEN;
   delete process.env.BACKUP_TOKEN;
+  delete process.env.RETENTION_TOKEN;
 });
 
 describe("proxy sweep-token carve-out", () => {
@@ -69,5 +70,24 @@ describe("proxy sweep-token carve-out", () => {
       proxy(req("http://localhost/api/admin/worklist/sweep", { authorization: "Bearer backup-secret" }))
         .status,
     ).toBe(401);
+  });
+
+  it("/api/admin/privacy/retention: the E11 RETENTION_TOKEN carve-out (dark-cron reachability)", () => {
+    const url = "http://localhost/api/admin/privacy/retention";
+    // Fail-closed with env unset; wrong token 401s.
+    expect(proxy(req(url, { authorization: "Bearer retention-secret" })).status).toBe(401);
+    process.env.RETENTION_TOKEN = "retention-secret";
+    expect(proxy(req(url, { authorization: "Bearer nope" })).status).toBe(401);
+    // Right token passes via header AND ?token= form…
+    expect(passed(proxy(req(url, { authorization: "Bearer retention-secret" })))).toBe(true);
+    expect(passed(proxy(req(`${url}?token=retention-secret`)))).toBe(true);
+    // …and opens ONLY its own route, path-exact.
+    for (const other of [
+      "http://localhost/api/admin/backup",
+      "http://localhost/api/admin/privacy/retention/extra",
+      "http://localhost/api/admin/privacy",
+    ]) {
+      expect(proxy(req(other, { authorization: "Bearer retention-secret" })).status, other).toBe(401);
+    }
   });
 });

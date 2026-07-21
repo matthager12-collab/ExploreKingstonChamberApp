@@ -11,7 +11,7 @@
 // routes serve (dev). Either way the value is stored on the record and handed
 // to <img src>, so callers don't branch.
 
-import { put } from "@vercel/blob";
+import { del, put } from "@vercel/blob";
 
 /** True when Vercel Blob is configured (prod). */
 export function hasBlob(): boolean {
@@ -55,4 +55,19 @@ export function isTrustedBlobUrl(value: unknown): boolean {
     return false;
   }
   return url.protocol === "https:" && url.hostname.endsWith(".public.blob.vercel-storage.com");
+}
+
+/**
+ * Permanently delete a stored blob (E11 privacy retention / MHMDA-delete
+ * fulfillment). Refuses anything that isn't a URL this store produced —
+ * a privacy purge must never become an arbitrary-URL delete primitive.
+ * Throws on failure: callers delete the artifact FIRST and only then remove
+ * the referencing row, so a failed delete leaves a retryable row, never an
+ * orphaned photo.
+ */
+export async function deleteBlob(url: string): Promise<void> {
+  if (!isTrustedBlobUrl(url)) {
+    throw new Error("deleteBlob: refusing to delete a non-blob-store URL");
+  }
+  await del(url);
 }

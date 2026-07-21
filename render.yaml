@@ -96,6 +96,11 @@ services:
       - key: WORKLIST_SWEEP_TOKEN
         sync: false
 
+      # E11: lets the privacy-retention workflow POST
+      # /api/admin/privacy/retention without an admin session (fail-closed).
+      - key: RETENTION_TOKEN
+        sync: false
+
       # MaxMind GeoLite2 license key — geo-IP for the Visitor Insights dashboard
       # + ops page (src/lib/geoip.ts). Free MaxMind account (docs/runbooks/
       # GEOIP.md). No-op when unset (analytics geo shows "Unknown", as before).
@@ -162,6 +167,8 @@ services:
       - key: FERRY_OBSERVE_TOKEN
         sync: false
       - key: WORKLIST_SWEEP_TOKEN
+        sync: false
+      - key: RETENTION_TOKEN
         sync: false
       # GeoLite2 geo-IP (staging mirrors prod so the ops page behaves the same).
       - key: MAXMIND_LICENSE_KEY

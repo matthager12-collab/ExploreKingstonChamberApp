@@ -86,7 +86,12 @@ export const RESTORE_REGISTRY: ReadonlyMap<string, RestoreEntry> = new Map([
   entry("site-pages", "page visibility setting"),
   entry("ferry-info", "ferry info card"),
   entry("custom-hunts", "scavenger hunt"),
-  entry("hunt-submissions", "hunt submission"),
+  // hunt-submissions DELISTED (E11, D-10): its audit snapshots are redacted
+  // at write time (no lat/lng/photoPath — records.ts SNAPSHOT_STRIP_KEYS), so
+  // a "restore" would resurrect a submission with no photo pointer and no
+  // location: a broken record. You cannot simultaneously promise 12-month
+  // destruction of GPS + photos and keep restorable full snapshots in the
+  // never-purge audit table — the privacy floor wins.
 ]);
 
 // Structural guard: an auth/user store in the registry is a role-escalation

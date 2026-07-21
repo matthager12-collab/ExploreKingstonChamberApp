@@ -61,6 +61,31 @@ function redactSecrets(value: unknown): unknown {
   return value;
 }
 
+/** E11 (D-10): per-store keys stripped from audit SNAPSHOTS at write time.
+ *  The audit table is never purged or edited, so anything written into a
+ *  snapshot lives forever — hunt submissions must not immortalize the
+ *  visitor's precise GPS fix or the (publicly fetchable) photo URL that the
+ *  12-month retention promise says get destroyed. Top-level strip, not
+ *  "[redacted]" markers: absence, not a breadcrumb. Consequence: these
+ *  stores cannot offer snapshot-restore (delisted in
+ *  src/lib/audit/restore-registry.ts). */
+const SNAPSHOT_STRIP_KEYS: Record<string, ReadonlySet<string>> = {
+  "hunt-submissions": new Set(["lat", "lng", "distanceMeters", "photoPath"]),
+};
+
+function stripSnapshotKeys(
+  store: string,
+  doc: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  const strip = SNAPSHOT_STRIP_KEYS[store];
+  if (!strip || !doc) return doc;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(doc)) {
+    if (!strip.has(k)) out[k] = v;
+  }
+  return out;
+}
+
 /** `next build` prerenders ISR pages in an environment that deliberately has
  *  no DATABASE_URL (Docker build stage, CI build step — builds must not need
  *  secrets). The old file backend read an empty scratch .data there and baked
@@ -175,8 +200,11 @@ export async function writeRecord<T extends WithId>(
       action: _deleted ? "delete" : (meta?.action ?? (before ? "update" : "create")),
       store,
       recordId: rec.id,
-      before: before ? (redactSecrets(before.doc) as Record<string, unknown>) : null,
-      after: redactSecrets(doc) as Record<string, unknown>,
+      before: stripSnapshotKeys(
+        store,
+        before ? (redactSecrets(before.doc) as Record<string, unknown>) : null,
+      ),
+      after: stripSnapshotKeys(store, redactSecrets(doc) as Record<string, unknown>),
       source,
     });
   });

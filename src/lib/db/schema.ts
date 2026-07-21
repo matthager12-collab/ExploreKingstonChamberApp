@@ -171,3 +171,41 @@ export const ferryObservation = pgTable("ferry_observation", {
   ts: timestamp("ts", { withTimezone: true }).notNull().defaultNow(),
   obs: jsonb("obs").notNull(),
 });
+
+// ---------------------------------------------------------------------------
+// E11 privacy tables.
+// ---------------------------------------------------------------------------
+
+/** Monthly area rollups the retention purge distills raw geo-pings into —
+ *  E18's LTAC read surface (the (month, area, pings, sessions) shape is a
+ *  contract). K-FLOORED AT WRITE TIME: a row with sessions < K_FLOOR is never
+ *  written; those merge into the month's below-threshold row — so a purged
+ *  month can never leak a small cell later. `month` is the Pacific-time
+ *  "YYYY-MM" (matches summarize()'s pacificDay bucketing). */
+export const analyticsAreaRollup = pgTable(
+  "analytics_area_rollup",
+  {
+    month: text("month").notNull(),
+    area: text("area").notNull(),
+    pings: integer("pings").notNull(),
+    sessions: integer("sessions").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.month, t.area] })],
+);
+
+/** Legal-hold markers (E11, FR-A92): a held (store, record_id) is excluded
+ *  from BOTH retention purges and consumer-deletion fulfillment; the refusal
+ *  is logged instead (the MHMDA-delete vs records-retention reconciliation).
+ *  Generic on purpose — E16 membership records and E30 applications inherit
+ *  this table rather than growing per-table columns (re-charter Delta 3). */
+export const legalHold = pgTable(
+  "legal_hold",
+  {
+    store: text("store").notNull(),
+    recordId: text("record_id").notNull(),
+    reason: text("reason").notNull(),
+    setBy: text("set_by").notNull(),
+    setAt: timestamp("set_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.store, t.recordId] })],
+);

@@ -19,10 +19,12 @@ import {
 import { restoreDb, serializeDb, type DbSection } from "@/lib/db/export";
 import { deleteRecord, insertQuarantineRow, writeRecord } from "@/lib/db/records";
 import {
+  analyticsAreaRollup,
   analyticsEvent,
   audit,
   ferryObservation,
   invites,
+  legalHold,
   orgs,
   quarantine,
   record,
@@ -128,7 +130,9 @@ async function tableCounts(tdb: TestDb) {
       | typeof ferryObservation
       | typeof orgs
       | typeof users
-      | typeof invites,
+      | typeof invites
+      | typeof analyticsAreaRollup
+      | typeof legalHold,
   ) => {
     const [{ n }] = await tdb.db.select({ n: count() }).from(t);
     return n;
@@ -143,6 +147,8 @@ async function tableCounts(tdb: TestDb) {
     orgs: await one(orgs),
     users: await one(users),
     invites: await one(invites),
+    analytics_area_rollup: await one(analyticsAreaRollup),
+    legal_hold: await one(legalHold),
   };
 }
 
@@ -151,11 +157,15 @@ describe("backup/restore roundtrip", () => {
     // Version-agnostic: exactly the table keys, no version field of its own.
     // E06 added orgs/users/invites — accounts left the `record` table, so
     // without these three a bundle restores to a site nobody can log in to.
+    // E11 added analytics_area_rollup/legal_hold — the retention rollups are
+    // E18's read surface and holds must survive a restore (FR-A92).
     expect(Object.keys(section).sort()).toEqual([
+      "analytics_area_rollup",
       "analytics_event",
       "audit",
       "ferry_observation",
       "invites",
+      "legal_hold",
       "orgs",
       "quarantine",
       "records",

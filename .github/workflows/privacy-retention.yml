@@ -1,0 +1,81 @@
+# E11 retention purge — SHIPS DARK (plan §4-b, Mat 2026-07-20): manual
+# workflow_dispatch ONLY. The daily `schedule:` block is added by a follow-up
+# PR after the §4-e staging evidence (staging --apply verified, click-through
+# done) and Mat's explicit prod go — never before.
+#
+# POSTs /api/admin/privacy/retention with Bearer RETENTION_TOKEN. Dry-run by
+# default; the `apply` input must be explicitly set true to delete anything.
+# The route itself re-checks the token (fail-closed: env unset = no token
+# path), and src/proxy.ts's MACHINE_TOKEN_ROUTES carries the carve-out that
+# lets the Bearer request past the session gate.
+#
+# ── Setup (docs/DEPLOY.md "Machine tokens") ────────────────────────────────
+#  1. Generate a long random RETENTION_TOKEN; set it as a runtime env var on
+#     BOTH Render services (render.yaml declares it sync:false on each), and
+#     store it in 1Password.
+#  2. Add a repo *secret* RETENTION_TOKEN with the same value.
+#  3. (Optional) Repo *variable* PRIVACY_RETENTION_URL to point at a
+#     different host — its own variable, NOT FERRY_OBSERVE_URL, so pointing
+#     this workflow at staging never repoints the ferry/backup crons.
+#
+# A red X on a (future) scheduled run means retention did NOT run — check the
+# last "retention-purge" audit row (docs/OPERATIONS.md §6).
+
+name: Privacy retention purge
+
+on:
+  # SHIPS DARK: workflow_dispatch only. The follow-up PR that enables the
+  # daily purge adds a `schedule:` block here — and because APPLY below is
+  # `inputs.apply || event_name == schedule`, a scheduled run APPLIES by
+  # construction (a scheduled dry-run would purge nothing, forever). Manual
+  # runs still default to dry-run.
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Target host (defaults to PRIVACY_RETENTION_URL var, else prod)"
+        required: false
+        type: string
+      apply:
+        description: "Actually delete (true) or dry-run (false)"
+        required: false
+        default: false
+        type: boolean
+
+permissions: {}
+
+concurrency:
+  group: privacy-retention
+  cancel-in-progress: false
+
+jobs:
+  retention:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BASE_URL: ${{ inputs.base_url || vars.PRIVACY_RETENTION_URL || 'https://explore-kingston.onrender.com' }}
+      RETENTION_TOKEN: ${{ secrets.RETENTION_TOKEN }}
+      # Scheduled runs apply by construction (see the `on:` note); manual runs
+      # honor the input (default false → dry-run).
+      APPLY: ${{ inputs.apply || github.event_name == 'schedule' }}
+    steps:
+      - name: Run retention (dry-run unless apply=true)
+        run: |
+          set -eo pipefail   # without this, the `tee` pipe masks a curl failure → green X
+          if [ -z "$RETENTION_TOKEN" ]; then
+            echo "RETENTION_TOKEN secret is not set — failing loudly by design." >&2
+            exit 1
+          fi
+          url="${BASE_URL%/}/api/admin/privacy/retention"   # strip any trailing slash (proxy path-exact)
+          body='{"apply": '"${APPLY:-false}"'}'
+          echo "POST $url  apply=${APPLY:-false}"
+          curl --fail-with-body -sS -X POST \
+            -H "Authorization: Bearer $RETENTION_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$body" \
+            "$url" | tee retention-report.json
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: retention-report
+          path: retention-report.json
+          retention-days: 30
