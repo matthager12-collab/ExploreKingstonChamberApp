@@ -43,12 +43,15 @@ export function EditableText({
   rich = false,
   as: Tag = "span",
   className,
+  id,
 }: {
   copyKey: CopyKey;
   rich?: boolean;
   as?: keyof React.JSX.IntrinsicElements;
   className?: string;
+  /** Lets a11y attributes elsewhere reference this text (aria-labelledby). */
+  id?: string;
 }) {
   const text = useCopy(copyKey);
-  return <Tag className={className}>{rich ? <RichText text={text} /> : text}</Tag>;
+  return <Tag className={className} id={id}>{rich ? <RichText text={text} /> : text}</Tag>;
 }

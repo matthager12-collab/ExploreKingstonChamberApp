@@ -200,7 +200,10 @@ export async function POST(request: NextRequest) {
       geo: deriveGeo(request),
       ...(type === "outbound" ? { href, label: trunc(body.label, MAX_LABEL) } : {}),
       ...(type === "consent"
-        ? { noticeVersion: trunc(body.noticeVersion, MAX_NOTICE_VERSION) }
+        ? {
+            noticeVersion: trunc(body.noticeVersion, MAX_NOTICE_VERSION),
+            consentPurpose: trunc(body.purpose, MAX_NOTICE_VERSION),
+          }
         : {}),
       ...(geoPing ?? {}),
     };

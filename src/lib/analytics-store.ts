@@ -67,6 +67,12 @@ export interface AnalyticsEvent {
    * aggregate that the consent surface was live and used — never a location.
    */
   noticeVersion?: string;
+  /**
+   * Consent only: WHICH purpose was granted ("analytics" | "hunt"). Consent is
+   * per-purpose (src/lib/privacy/consent.ts), so the aggregate record has to
+   * say which one — an analytics grant is not a hunt grant.
+   */
+  consentPurpose?: string;
 }
 
 // ---------------------------------------------------------------------------
