@@ -18,6 +18,13 @@ function telHref(phone: string): string {
   return `tel:+1${phone.replace(/\D/g, "")}`;
 }
 
+// E14 (FR-92): the Spanish page, labelled in Spanish and marked lang="es" so a
+// screen reader says it in Spanish. It goes through the SAME hiddenPaths filter
+// as everything else, and /es is default-hidden — so this link simply is not
+// rendered until an operator unhides the page after the bilingual review
+// (docs/OPERATIONS.md, "Accessibility & language").
+const languageLinks = [{ href: "/es", label: "Kingston en español", lang: "es" }];
+
 const communityLinks = [
   { href: "/events", label: "Events calendar" },
   { href: "/give", label: "Volunteer & give back" },
@@ -35,6 +42,7 @@ export function SiteFooter({
   // Admin-hidden pages drop out of the footer lists too.
   const plan = planLinks.filter((l) => !hiddenPaths.includes(l.href));
   const community = communityLinks.filter((l) => !hiddenPaths.includes(l.href));
+  const languages = languageLinks.filter((l) => !hiddenPaths.includes(l.href));
   const phone = copyText(copy, "contact.phone.number");
   return (
     // print:hidden (E14): chrome is noise on paper — /print is the curated
@@ -91,6 +99,13 @@ export function SiteFooter({
             {community.map((l) => (
               <li key={l.href}>
                 <Link href={l.href} className="hover:underline">{l.label}</Link>
+              </li>
+            ))}
+            {languages.map((l) => (
+              <li key={l.href}>
+                <Link href={l.href} lang={l.lang} className="hover:underline">
+                  {l.label}
+                </Link>
               </li>
             ))}
             <li><Link href="/portal" className="font-medium hover:underline">Chamber &amp; business portal →</Link></li>

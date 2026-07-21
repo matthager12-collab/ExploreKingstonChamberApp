@@ -3,7 +3,8 @@ import Link from "next/link";
 import { getForecast } from "@/lib/weather";
 import { getTodaysTides } from "@/lib/tides";
 import { getEvents } from "@/lib/stores/event-store";
-import { getCopyOverrides, copyText, getHiddenPaths } from "@/lib/stores/site-store";
+import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
+import { getEffectiveHiddenPaths } from "@/lib/page-visibility";
 import { getFerryStatusSnapshot } from "@/lib/ferry-status";
 import { formatPacificDate, formatPacificTime, todayPacific } from "@/lib/time";
 import { Badge, Card, ExternalLink, Section, mapDirectionsUrl } from "@/components/ui";
@@ -47,7 +48,7 @@ export default async function Home() {
       getTodaysTides(),
       getEvents(),
       getCopyOverrides(),
-      getHiddenPaths(),
+      getEffectiveHiddenPaths(),
       getSide(),
       getFerryPredictionEnabled(),
     ]);

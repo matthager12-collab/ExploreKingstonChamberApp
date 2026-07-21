@@ -1006,3 +1006,78 @@ Never echo a secret value in a terminal, script, or CI log — this repo is
 public, so a logged secret is an exposed secret. `gh secret set NAME` reads
 the value from stdin or a file, never a shell argument that could land in
 shell history or process listings.
+
+---
+
+## 13. Accessibility & language (E14)
+
+The engineering side of this — the style guide, the manual audit checklist, the WCAG
+posture, the exclusions policy — lives in [`docs/ACCESSIBILITY.md`](ACCESSIBILITY.md).
+What follows is the part a **person** has to do.
+
+### 13.1 Publish the Spanish page (`/es`)
+
+`/es` **ships dark and stays dark until a bilingual human signs off.** It is registered in
+`DEFAULT_HIDDEN_PAGES` (`src/lib/page-visibility.tsx`), which means the absence of a
+site-pages record is treated as HIDDEN — a fresh database, a restored backup, or a wiped
+store all leave it invisible rather than publishing unreviewed instructions about ferry
+lines and tow rules. Visitors get a clean 404; admins see it with the hidden-page banner.
+
+The procedure, in order:
+
+1. **Print the strings.** They are all in `src/lib/i18n/safety-content.ts`, the `es` half —
+   six sections, hand-authored, no machine translation anywhere in the path.
+2. **Find a reviewer.** A bilingual Spanish/English speaker, ideally one who has actually
+   stood in the SR 104 ferry line. A Chamber member or volunteer is fine; this does not need
+   a professional translator, it needs someone who will catch a sentence that is technically
+   correct and practically misleading.
+3. **Review against the English, side by side.** The two halves are key-for-key identical by
+   test, so every English step has exactly one Spanish counterpart. Check three things:
+   the Spanish says the same thing; the Spanish is plain (grade 6–9, one idea per sentence);
+   and no instruction promises something the app cannot guarantee — in particular there must
+   be **no "last boat" time** anywhere.
+4. **Preview it signed in.** Visit `/es` as an admin. It renders with a banner saying
+   visitors get a 404. Read it on a phone.
+5. **Fix anything the reviewer flags** — edits to the dictionary are a code change and a
+   deploy; the page headings and the intro are copy-registry blocks and can be edited live
+   in Admin → Site content.
+6. **Unhide it.** Admin → Site content → Pages → "Kingston en español" → press the toggle so
+   it reads **Visible**. That writes an explicit `{ id: "/es", hidden: false }` record, which
+   is what makes the page public. The `/es` link appears in the site footer and on
+   `/simple` within about a minute (ISR window).
+7. **Record who reviewed it and when** — in the PR, or in this runbook — so the next annual
+   review knows what it is re-checking.
+
+To take it back down, press the same toggle. There is no other switch.
+
+### 13.2 Confirm the phone number and email
+
+The Chamber's own contact details are copy-registry blocks (`contact.phone.number`,
+`contact.phone.label`, `contact.email.address` in `src/lib/site-copy-registry.ts`), editable
+from Admin → Site content without a deploy. They are the guaranteed non-app fallback — the
+number appears in the footer of every page, on `/simple`, on `/print`, and on
+`/accessibility`.
+
+- Current fallback: **360-860-2239** and **info@kingstonchamber.com**.
+- Confirm both **annually**, and immediately whenever the office line changes. A wrong number
+  in the footer is worse than no number: it is the last resort for someone who cannot use the
+  rest of the site.
+- §9 item 7 tracks confirming that `info@kingstonchamber.com` is actually monitored.
+
+### 13.3 Review the accessibility statement annually
+
+`/accessibility` is a public commitment, so it gets checked at least once a year and whenever
+something significant ships.
+
+- Update **"Last reviewed"** (copy-registry block `accessibility.lastReviewed`) from Admin →
+  Site content. Changing that date is a claim — only change it after actually re-reading the
+  page.
+- Re-check the **known limitations** section against reality: are the named list-based
+  alternatives to the maps still there, still complete, still linked?
+- Re-check the **"How we check"** section. It currently describes the full per-route
+  automated gate as *planned, not shipped*. When that gate lands, the wording changes; until
+  then it must not claim it.
+- **The ADA compliance date is deliberately absent** and must stay absent until §9 item 15 is
+  closed. The statement's legal paragraph is written so a verified date drops into one
+  sentence without a rewrite. Do not add a date from memory, from a blog post, or from a
+  model — verify it, close item 15, then add it.

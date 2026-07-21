@@ -4,7 +4,8 @@ import "./globals.css";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
 import { Tracker } from "@/components/tracker";
-import { getHiddenPaths, getCopyOverrides } from "@/lib/stores/site-store";
+import { getCopyOverrides } from "@/lib/stores/site-store";
+import { getEffectiveHiddenPaths } from "@/lib/page-visibility";
 import { CopyProvider } from "@/lib/copy-context";
 
 const inter = Inter({
@@ -75,8 +76,13 @@ export default async function RootLayout({
   // Admin-hidden pages drop out of the nav and footer site-wide; admin copy
   // overrides are provided to client components via CopyProvider (server
   // components read them directly with copyText()).
+  //
+  // E14: the EFFECTIVE list, so a default-hidden page (/es, dark until a
+  // bilingual reviewer signs off) never appears as a footer link to a 404. This
+  // is a plain store read — it touches no cookies, so the layout stays out of
+  // the ISR trap the skip-link comment below describes.
   const [hiddenPaths, copyOverrides] = await Promise.all([
-    getHiddenPaths(),
+    getEffectiveHiddenPaths(),
     getCopyOverrides(),
   ]);
   return (

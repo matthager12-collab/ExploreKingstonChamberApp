@@ -48,6 +48,14 @@ export async function getPageSettings(): Promise<PageSetting[]> {
   return readMerged<PageSetting>(PAGES_STORE, []);
 }
 
+/** The RAW store view: paths with an explicit `hidden: true` record.
+ *
+ *  E14: surfaces that render links or gate a page must call
+ *  `getEffectiveHiddenPaths()` in src/lib/page-visibility.tsx instead. This
+ *  function cannot distinguish "no record" from "record says visible", so it
+ *  reports a DEFAULT_HIDDEN_PAGES path (`/es`) as visible while it is still
+ *  dark. Kept as part of the store's public API (E05) for callers that really
+ *  do want the stored rows only. */
 export async function getHiddenPaths(): Promise<string[]> {
   return (await getPageSettings()).filter((p) => p.hidden).map((p) => p.id);
 }

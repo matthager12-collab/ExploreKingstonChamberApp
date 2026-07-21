@@ -1,11 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { SafetyEssentials } from "@/components/safety-essentials";
 import { SimpleModeToggle } from "@/components/simple-mode-toggle";
 import { PageHeader, Section } from "@/components/ui";
 import { getFerryStatusSnapshot } from "@/lib/ferry-status";
-import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
-import { copyText, getCopyOverrides, getHiddenPaths } from "@/lib/stores/site-store";
+import { SAFETY_CONTENT } from "@/lib/i18n/safety-content";
+import {
+  assertPageVisible,
+  getEffectiveHiddenPaths,
+  HiddenPageBanner,
+} from "@/lib/page-visibility";
+import { copyText, getCopyOverrides } from "@/lib/stores/site-store";
 import { formatPacificTime } from "@/lib/time";
 import type { Sailing } from "@/lib/types";
 
@@ -84,7 +90,7 @@ export default async function SimplePage() {
   const [ferry, copy, hiddenPaths] = await Promise.all([
     getFerryStatusSnapshot(),
     getCopyOverrides(),
-    getHiddenPaths(),
+    getEffectiveHiddenPaths(),
   ]);
 
   const phone = copyText(copy, "contact.phone.number");
@@ -103,6 +109,24 @@ export default async function SimplePage() {
       <Section>
         <SimpleModeToggle className="border border-sand bg-white" />
       </Section>
+
+      {/* E14 (FR-92 / WCAG 3.1.2): the cross-link to the Spanish page. It is
+          filtered by the SAME effective-hidden computation as every other link
+          here, so while /es ships dark a visitor never sees a link to a 404.
+          The label is Spanish, so it carries lang="es" — two words, and the
+          screen reader switches voice for exactly those two. */}
+      {!hiddenPaths.includes("/es") && (
+        <Section>
+          <p className="text-lg">
+            <Link
+              href="/es"
+              className="inline-flex min-h-11 items-center rounded-full border-2 border-sound bg-white px-5 py-2 font-semibold text-sound-deep no-underline"
+            >
+              <span lang="es">{copyText(copy, "simple.link.spanish")}</span>
+            </Link>
+          </p>
+        </Section>
+      )}
 
       <Section title="The next boats">
         <div className="grid gap-4 sm:grid-cols-2">
@@ -141,6 +165,11 @@ export default async function SimplePage() {
           ))}
         </ul>
       </Section>
+
+      {/* E14 (FR-92): the English half of the safety slice. /es renders the
+          Spanish half of this exact dictionary through the same component, so
+          the two pages cannot drift apart in structure or coverage. */}
+      <SafetyEssentials strings={SAFETY_CONTENT.en} />
 
       <Section title="Talk to a person">
         <div className="rounded-2xl border border-sand bg-white p-5">

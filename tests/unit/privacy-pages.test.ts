@@ -7,7 +7,14 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import PrivacyPage from "@/app/privacy/page";
-import AccessibilityPage from "@/app/accessibility/page";
+// E14 slice 4 made /accessibility an async data shell (it reads the copy
+// overlay so the Chamber can edit the header, the feedback promise, and the
+// "last reviewed" date without a deploy). renderToStaticMarkup cannot await a
+// server component, so the statement itself — every word a visitor reads — was
+// split into this synchronous component and is rendered here directly, with an
+// empty override map so copyText() resolves to the registry fallbacks. Same
+// markup, same assertions, plus the new slice-4 ones below.
+import { AccessibilityStatement } from "@/app/accessibility/statement";
 import { SiteFooter } from "@/components/site-footer";
 import { PRIVACY_NOTICE_VERSION, RETENTION_POLICY } from "@/lib/privacy/policy";
 
@@ -54,7 +61,7 @@ describe("privacy page", () => {
 });
 
 describe("accessibility page", () => {
-  const html = renderToStaticMarkup(createElement(AccessibilityPage));
+  const html = renderToStaticMarkup(createElement(AccessibilityStatement, { copy: {} }));
 
   it("names the WCAG 2.1 AA target and the honest map limitation", () => {
     expect(html).toContain("WCAG 2.1 AA");
@@ -64,6 +71,43 @@ describe("accessibility page", () => {
   it("does NOT assert a specific ADA deadline date (left for human verification)", () => {
     // The statement should speak of confirming the date, not cite one.
     expect(html).not.toMatch(/April\s+26,?\s+2028/);
+    // Stronger than the date pattern above: docs/OPERATIONS.md §9 item 15 is an
+    // OPEN human gate, so no form of the year may appear at all.
+    expect(html).not.toContain("2028");
+  });
+
+  it("names the ADA Title II posture without claiming a deadline (E14)", () => {
+    expect(html).toContain("Title II");
+    expect(html.toLowerCase()).toContain("confirming that date");
+  });
+
+  it("gives a feedback channel that is BOTH an email and a phone number (M-14-01/FR-47)", () => {
+    expect(html).toMatch(/href="mailto:[^"]+"/);
+    expect(html).toMatch(/href="tel:[^"]+"/);
+    // A response-time promise, not just an address.
+    expect(html.toLowerCase()).toContain("business days");
+  });
+
+  it("says how conformance is checked, and describes the full gate as PLANNED", () => {
+    expect(html.toLowerCase()).toContain("axe");
+    // The per-route gate is deferred to a later slice — the statement must not
+    // claim it as shipped.
+    expect(html.toLowerCase()).toContain("planned and not finished");
+    // The manual checklist and its cadence.
+    expect(html.toLowerCase()).toContain("every quarter");
+  });
+
+  it("names a list-based alternative for each frozen interactive map", () => {
+    // The maps are a frozen zone, so the honest answer is a text equivalent —
+    // and the statement has to say where it is.
+    expect(html).toContain("Every lot, in words");
+    expect(html).toContain('href="/parking"');
+    expect(html).toContain('href="/simple"');
+    expect(html).toContain('href="/print"');
+  });
+
+  it("carries a last-reviewed date so the annual review is visible", () => {
+    expect(html).toContain("Last reviewed");
   });
 });
 

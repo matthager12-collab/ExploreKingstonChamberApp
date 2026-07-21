@@ -67,8 +67,10 @@ export const COPY_BLOCKS = [
     page: "Ferry",
     label: "Intro sentence",
     multiline: true,
+    // E14 plain-language pass (NFR-04): was one 30-word sentence with a nested
+    // em-dash aside; "walk-ons" and "passengers-only" are now explained.
     fallback:
-      "Two boats serve Kingston: the Edmonds–Kingston car ferry — about 30 minutes, every day, walk-ons welcome — and a passengers-only fast ferry straight to downtown Seattle in 39 minutes.",
+      "Two boats serve Kingston. The Edmonds–Kingston car ferry runs every day and takes about 30 minutes. You can drive on, or walk on without a car. The second boat is a fast ferry for people only — no cars. It goes straight to downtown Seattle in 39 minutes.",
   },
 
   // --------------------------------------------------------------- /eat
@@ -191,16 +193,20 @@ export const COPY_BLOCKS = [
     page: "Parking",
     label: "Header intro",
     multiline: true,
+    // E14 plain-language pass (NFR-04): a 40-word sentence with a five-item
+    // embedded list, the idiom "gotchas", and "park & rides" unexplained.
     fallback:
-      "Kingston's parking universe is small but full of gotchas: a paid Port lot by the marina, a commuter lot one block up, a strictly enforced free 2-hour row, a couple of genuinely unrestricted streets, and two free park & rides. The Chamber's live parking map shows where to leave the car — color-coded by type, with owner, payment, and time-limit details.",
+      "Kingston has only a few places to park, and each one has its own rules. There is a paid Port lot by the marina. There is a commuter lot one block up the hill. There is a free row with a 2-hour limit, and it is strictly enforced. A few streets have no limit at all. And there are two free park-and-ride lots, where you leave the car and take a bus or the ferry. The map below shows all of them. Each spot is colored by its parking type, and tells you who owns it, how to pay, and how long you can stay.",
   },
   {
     key: "parking.map.subtitle",
     page: "Parking",
     label: "Map section subtitle",
     multiline: true,
+    // E14 plain-language pass: dropped "the portal" (internal admin vocabulary
+    // that means nothing to a visitor) and the passive "are set automatically".
     fallback:
-      "The Chamber's live parking map, built and kept current in the portal. Tap any lot for its type, owner, how to pay, and time limits. Colors are set automatically by parking type.",
+      "The Chamber keeps this parking map up to date. Tap any lot to see what kind it is, who owns it, how to pay, and how long you can stay. The color of each lot shows its parking type.",
   },
 
   // ----------------------------------------------------------- /webcams
@@ -221,8 +227,10 @@ export const COPY_BLOCKS = [
     page: "Webcams",
     label: "Header intro",
     multiline: true,
+    // E14 plain-language pass (NFR-04): "WSDOT" is now glossed on first use and
+    // the ferry-jargon "run" is gone; this page's whole job is a go/no-go call.
     fallback:
-      "Eleven WSDOT cameras watch the Edmonds–Kingston run. They're still images, not video — most update about once a minute — but they'll tell you how long the ferry line is before you commit to getting in it.",
+      "Eleven state highway cameras watch the Edmonds–Kingston ferry route. (WSDOT is the state transportation department.) They show still photos, not video. Most take a new photo about once a minute. Use them to see how long the ferry line is before you drive over and join it.",
   },
 
   // --------------------------------------------------------------- /map
@@ -350,7 +358,10 @@ export const COPY_BLOCKS = [
     label: "Body paragraph 1",
     multiline: true,
     rich: true,
-    fallback: "When the overhead signs at **SR 104 & Barber Cutoff Rd** are flashing, Kingston's boarding-pass system is on. Follow the signal into the ferry lane, **take a pass at the dispenser near Lindvog Rd**, then wait for a green light to pull up to the tollbooths — leave the line and your pass is void.",
+    // E14 plain-language pass (NFR-04): this is the most consequence-heavy
+    // instruction on the site. Was one 37-word sentence chaining four actions;
+    // now one idea per sentence, and "void" is said in plain words.
+    fallback: "The overhead signs at **SR 104 and Barber Cutoff Rd** flash when Kingston's boarding-pass system is on. If they are flashing, follow the signs into the ferry lane. **Take a pass from the machine near Lindvog Rd.** Then wait for a green light before you drive up to the toll booths. Stay in the line the whole time. If you leave the line, your pass stops working.",
   },
   {
     key: "ferryLine.body2",
@@ -358,7 +369,9 @@ export const COPY_BLOCKS = [
     label: "\"Active daily …\" line",
     multiline: true,
     rich: true,
-    fallback: "Active daily **8 a.m.–8 p.m.** in season, plus weekends and holidays. Walk-ons, cyclists, and motorcycles skip it.",
+    // E14 plain-language pass (NFR-04): sentence 1 had no verb, and "skip it"
+    // read two opposite ways to the exact audience most likely to walk on.
+    fallback: "The pass system runs every day from **8 am to 8 pm** in the busy summer season, and on weekends and holidays. You do not need a pass if you are walking on, riding a bike, or riding a motorcycle.",
   },
   {
     key: "ferryLine.navButton",
@@ -422,8 +435,10 @@ export const COPY_BLOCKS = [
     page: "Ferry page — Edmonds side",
     label: "Header intro",
     multiline: true,
+    // E14 plain-language pass (NFR-04): the instruction ("board at the Edmonds
+    // dock") was a trailing aside on a 26-word sentence. It leads now.
     fallback:
-      "From Edmonds, the car ferry reaches Kingston in about 30 minutes, every day, and walk-ons are always welcome — board at the Edmonds dock. There's also a passengers-only fast ferry from downtown Seattle's Pier 50 to Kingston in 39 minutes.",
+      "From Edmonds, the car ferry takes about 30 minutes to reach Kingston. It runs every day. You can walk on without a car. Board at the Edmonds dock. There is also a fast ferry for people only. It runs from Pier 50 in downtown Seattle to Kingston in 39 minutes.",
   },
   {
     key: "ferryLine.edmonds.title",
@@ -444,8 +459,10 @@ export const COPY_BLOCKS = [
     page: "Ferry line card — Edmonds side",
     label: "Body, paragraph 2",
     rich: true,
+    // E14 plain-language pass (NFR-04): "this run" is ferry jargon and the
+    // instruction was buried mid-sentence.
     fallback:
-      "There are **no vehicle reservations** on this run, so in summer arrive early — the Edmonds car line can fill hours ahead of the boat you want.",
+      "You **cannot reserve a spot for your car** on this route. In summer, come early. The car line in Edmonds can fill up hours before the boat you want.",
   },
   {
     key: "ferryLine.edmonds.navButton",
@@ -486,7 +503,11 @@ export const COPY_BLOCKS = [
     page: "Near-me (client)",
     label: "Consent card purpose text (what happens if you allow)",
     multiline: true,
-    fallback: "It sorts this list by distance, and adds one anonymous neighborhood-level count to Kingston's visitor stats. We never store a coordinate, and declining loses nothing.",
+    // E14 plain-language pass (NFR-04): this is a consent decision, so the
+    // abstract noun stack "one anonymous neighborhood-level count" and the
+    // compressed "declining loses nothing" both had to go. Same promise, said
+    // plainly — the behavior it describes is unchanged (E11).
+    fallback: "It sorts this list by how close each place is to you. It also adds one visit to Kingston's visitor count. That count has no name on it, and it records only your neighborhood, not your exact spot. We never save your exact location. If you say no, nothing on this page stops working.",
   },
   {
     key: "nearme.consent.allow",
@@ -506,8 +527,10 @@ export const COPY_BLOCKS = [
     page: "Scavenger hunt (client)",
     label: "Disclosure under the photo-post button",
     multiline: true,
+    // E14 plain-language pass (NFR-04): was one 27-word sentence with a dangling
+    // "kept 12 months", on a screen where the reader decides what to send.
     fallback:
-      "Posting sends your photo (and your location, if you allow it) to the hunt organizers to check you off, kept 12 months — don't include anything you wouldn't share.",
+      "When you post, your photo goes to the hunt organizers so they can check you off. Your location goes with it only if you allow that. They keep both for 12 months. Do not include anything you would not want shared.",
   },
   {
     key: "hunt.consent.declined",
@@ -756,7 +779,124 @@ export const COPY_BLOCKS = [
     label: "Bottom credit line",
     multiline: true,
     rich: true,
-    fallback: "Built with the Greater Kingston Chamber of Commerce, publisher of [explorekingstonwa.com](https://explorekingstonwa.com). Ferry data courtesy of WSDOT. Always confirm sailings with Washington State Ferries before traveling.",
+    // E14 plain-language pass (NFR-04): "sailings" is the ferry-industry term
+    // NFR-04 names, and this footer carries the site's one standing instruction
+    // on every single page.
+    fallback: "Built with the Greater Kingston Chamber of Commerce, which publishes [explorekingstonwa.com](https://explorekingstonwa.com). Ferry times come from WSDOT, the state transportation department. Always check boat times with Washington State Ferries before you travel.",
+  },
+
+  // ---- E14: the EN+ES safety slice (FR-92) and the accessibility statement ----
+  // The Spanish PAGE FURNITURE lives here so the Chamber can adjust a heading
+  // without a deploy; the safety INSTRUCTIONS live in
+  // src/lib/i18n/safety-content.ts, where they are hand-authored, key-parity
+  // tested, and reviewed as one block before /es is unhidden.
+  {
+    key: "es.header.eyebrow",
+    page: "Kingston en español (/es)",
+    label: "Header eyebrow (Spanish)",
+    fallback: "Lo esencial",
+  },
+  {
+    key: "es.header.title",
+    page: "Kingston en español (/es)",
+    label: "Page title (Spanish)",
+    fallback: "Kingston en español",
+  },
+  {
+    key: "es.header.intro",
+    page: "Kingston en español (/es)",
+    label: "Intro sentence (Spanish)",
+    multiline: true,
+    fallback: "Lo más importante para su visita, en palabras sencillas: los barcos, el estacionamiento, los baños y a quién llamar.",
+  },
+  {
+    key: "es.help.body",
+    page: "Kingston en español (/es)",
+    label: "Phone block: what the Chamber can help with (Spanish)",
+    multiline: true,
+    fallback: "Una persona contesta en horas de oficina. Puede preguntar sobre los ferris, el estacionamiento, dónde comer o cualquier otra cosa del pueblo.",
+  },
+  {
+    key: "es.boats.none",
+    page: "Kingston en español (/es)",
+    label: "Boats: nothing left today (Spanish)",
+    multiline: true,
+    fallback: "Hoy ya no hay más barcos. Los barcos empiezan otra vez mañana por la mañana.",
+  },
+  {
+    key: "es.schedule.notLive",
+    page: "Kingston en español (/es)",
+    label: "Caveat when live ferry data is unavailable (Spanish)",
+    multiline: true,
+    fallback: "Estos son horarios programados, no horarios en vivo. Llame para confirmar antes de salir.",
+  },
+  {
+    key: "es.link.english",
+    page: "Kingston en español (/es)",
+    label: "Cross-link back to the English page (this label stays in English)",
+    fallback: "In English",
+  },
+  {
+    key: "simple.link.spanish",
+    page: "Kingston basics (/simple)",
+    label: "Cross-link to the Spanish page (this label stays in Spanish)",
+    fallback: "En español",
+  },
+
+  // The public email, beside the phone number, so the office can change either
+  // without a deploy. docs/OPERATIONS.md §9 item 7 tracks confirming it is
+  // monitored.
+  {
+    key: "contact.email.address",
+    page: "Contact (phone fallback)",
+    label: "Chamber public email address",
+    fallback: "info@kingstonchamber.com",
+  },
+
+  // ---- /accessibility — the statement ----
+  // Only the parts an operator legitimately maintains are editable: the header,
+  // the feedback promise, and the review date (docs/OPERATIONS.md, "Accessibility
+  // & language", asks for an annual review). The conformance and legal-posture
+  // paragraphs stay code-owned in src/app/accessibility/page.tsx — see the
+  // comment there.
+  {
+    key: "accessibility.header.eyebrow",
+    page: "Accessibility statement (/accessibility)",
+    label: "Header eyebrow",
+    fallback: "Accessibility",
+  },
+  {
+    key: "accessibility.header.title",
+    page: "Accessibility statement (/accessibility)",
+    label: "Page title",
+    fallback: "Accessibility statement",
+  },
+  {
+    key: "accessibility.header.intro",
+    page: "Accessibility statement (/accessibility)",
+    label: "Intro sentence",
+    multiline: true,
+    fallback: "We want Explore Kingston to work for everyone, and we are actively improving it toward that goal.",
+  },
+  {
+    key: "accessibility.feedback.body",
+    page: "Accessibility statement (/accessibility)",
+    label: "Feedback invitation",
+    multiline: true,
+    fallback: "If something is hard to use, or you hit a barrier, please tell us. Say what page you were on and what happened. It genuinely helps us decide what to fix first.",
+  },
+  {
+    key: "accessibility.feedback.response",
+    page: "Accessibility statement (/accessibility)",
+    label: "Expected response time",
+    multiline: true,
+    fallback: "The Chamber office is staffed part time. We aim to reply within five business days, and to tell you what we can fix and when.",
+  },
+  {
+    key: "accessibility.lastReviewed",
+    page: "Accessibility statement (/accessibility)",
+    label: "Date this statement was last reviewed (update at least once a year)",
+    fallback: "July 2026",
   },
 ] as const satisfies readonly CopyBlock[];
 
