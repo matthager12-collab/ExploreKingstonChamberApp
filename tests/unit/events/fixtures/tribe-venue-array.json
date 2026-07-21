@@ -1,0 +1,60 @@
+{
+  "events": [
+    {
+      "id": 18775,
+      "global_id": "portofkingston.org?id=18775",
+      "global_id_lineage": ["portofkingston.org?id=18775"],
+      "status": "publish",
+      "title": "Kingston Public Market",
+      "description": "<p>Local produce, crafts &amp; food vendors &#8217;til 3&nbsp;PM.</p>",
+      "url": "https://portofkingston.org/event/kingston-public-market/",
+      "all_day": false,
+      "hide_from_listings": false,
+      "start_date": "2026-07-26 10:00:00",
+      "end_date": "2026-07-26 15:00:00",
+      "utc_start_date": "2026-07-26 17:00:00",
+      "utc_end_date": "2026-07-26 22:00:00",
+      "timezone": "America/Los_Angeles",
+      "venue": [
+        {
+          "id": 4321,
+          "venue": "Mike Wallace Marina Park",
+          "address": "25864 Washington Blvd NE",
+          "city": "Kingston",
+          "state": "WA",
+          "zip": "98346",
+          "global_id": "portofkingston.org?id=4321"
+        }
+      ],
+      "organizer": [{ "id": 99, "organizer": "Port of Kingston" }],
+      "categories": [{ "name": "Market", "slug": "market" }]
+    },
+    {
+      "id": 18800,
+      "global_id": "portofkingston.org?id=18800",
+      "status": "draft",
+      "title": "Unpublished Draft Event",
+      "start_date": "2026-08-01 10:00:00",
+      "utc_start_date": "2026-08-01 17:00:00",
+      "timezone": "America/Los_Angeles",
+      "venue": [],
+      "all_day": false,
+      "hide_from_listings": false
+    },
+    {
+      "id": 18801,
+      "global_id": "portofkingston.org?id=18801",
+      "status": "publish",
+      "title": "Hidden Staff Meeting",
+      "start_date": "2026-08-02 10:00:00",
+      "utc_start_date": "2026-08-02 17:00:00",
+      "timezone": "America/Los_Angeles",
+      "venue": [],
+      "all_day": false,
+      "hide_from_listings": true
+    }
+  ],
+  "rest_url": "https://portofkingston.org/wp-json/tribe/events/v1/events/?page=1&per_page=5",
+  "total": 3,
+  "total_pages": 1
+}

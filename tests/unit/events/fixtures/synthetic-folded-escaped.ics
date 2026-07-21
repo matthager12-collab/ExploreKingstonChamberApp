@@ -1,0 +1,14 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//E12 synthetic//folded long lines + escaped TEXT//EN
+BEGIN:VEVENT
+DTSTART;TZID=America/Los_Angeles:20260901T170000
+SUMMARY:Wine\, Cheese\; and Chocolate Café Evening
+DESCRIPTION:Crème brûlée\, smörgåsbord\; a backslash \\ then a newline:\nSe
+ cond line continues café énergie with enough length to exceed seventy-five
+  octets total.
+LOCATION:Café on the Cove\, Kingston
+UID:e.9999.folded-escaped
+DTSTAMP:20260720T000000Z
+END:VEVENT
+END:VCALENDAR
