@@ -60,6 +60,20 @@ function eventDateTimeOptional(label: string) {
   );
 }
 
+/** Cap on artwork/flyer attachments per event (matches the suggest route). */
+export const MAX_ATTACHMENTS = 5;
+
+/** Attachment refs: a bounded array of non-empty strings; an absent or empty
+ *  array becomes `undefined` so the key drops out after JSON.stringify (the
+ *  omitted-not-empty convention every optional field here follows). */
+const attachmentsSchema = z.preprocess(
+  (v) => (Array.isArray(v) && v.length > 0 ? v : undefined),
+  z
+    .array(z.string().min(1), { message: "attachments must be a list of file references" })
+    .max(MAX_ATTACHMENTS, `at most ${MAX_ATTACHMENTS} attachments`)
+    .optional(),
+);
+
 export const eventSchema = z.object({
   id: idSchema,
   title: requiredTrimmed("title"),
@@ -75,6 +89,14 @@ export const eventSchema = z.object({
   ),
   organizer: requiredTrimmed("organizer"),
   url: httpUrlOptional("url"),
+  /** Public event contact (name + email/phone). Optional in the schema —
+   *  seed/ingested events have none; the suggest route enforces presence for
+   *  public submissions. Empty → omitted so the key is absent once stored. */
+  eventContact: optionalTrimmed(),
+  /** Uploaded artwork/flyer refs. The route builds these (blob URLs or
+   *  .data/events paths), never free user text; the schema just bounds the
+   *  count and drops an empty array to `undefined`. */
+  attachments: attachmentsSchema,
   /** Nonprofit cross-listing reference; set by the org portal path only. */
   charityId: optionalTrimmed(),
   /** Portal ownership: the listing/org id whose account manages this event. */
@@ -116,5 +138,14 @@ export const eventFields: FieldDef[] = [
     optional: true,
     wide: true,
     placeholder: "https://…",
+  },
+  {
+    key: "eventContact",
+    label: "Public contact for this event",
+    kind: "text",
+    optional: true,
+    wide: true,
+    placeholder: "Jane Doe · jane@example.org",
+    help: "Shown publicly so attendees ask the organizer, not the Chamber.",
   },
 ];

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { EventCategory, EventItem } from "@/lib/types";
+import { attachmentKind, attachmentPublicUrl } from "@/lib/events/attachment-refs";
 import { normalizedToEventItem } from "@/lib/events/normalize";
 import { getUnifiedEvents } from "@/lib/events/unified";
 import { getEvents } from "@/lib/stores/event-store";
@@ -121,6 +122,33 @@ function EventCard({ event, external }: { event: EventItem; external?: boolean }
             )}
           </p>
           <p className="mt-2 text-sm text-ink-soft">{event.description}</p>
+          {event.attachments && event.attachments.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {event.attachments.map((ref) =>
+                attachmentKind(ref) === "pdf" ? (
+                  <a
+                    key={ref}
+                    href={attachmentPublicUrl(ref)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 rounded-lg border border-sand-deep px-2.5 py-1.5 text-xs font-medium text-tide-deep hover:border-tide"
+                  >
+                    📄 Flyer (PDF)
+                  </a>
+                ) : (
+                  <a key={ref} href={attachmentPublicUrl(ref)} target="_blank" rel="noreferrer">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={attachmentPublicUrl(ref)}
+                      alt={`${event.title} flyer`}
+                      loading="lazy"
+                      className="h-24 w-24 rounded-lg object-cover ring-1 ring-sand-deep"
+                    />
+                  </a>
+                ),
+              )}
+            </div>
+          )}
           <p className="mt-2 text-xs text-ink-soft">
             {event.organizer && <>By {event.organizer}</>}
             {event.url && (
@@ -136,6 +164,11 @@ function EventCard({ event, external }: { event: EventItem; external?: boolean }
               </>
             )}
           </p>
+          {event.eventContact && (
+            <p className="mt-1 text-xs text-ink-soft">
+              Questions about this event? {event.eventContact}
+            </p>
+          )}
           {/* External (ingested) events aren't records in the events store —
               corrections belong upstream, so no report intake for them. */}
           {!external && (

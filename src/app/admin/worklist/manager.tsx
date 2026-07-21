@@ -10,6 +10,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge, Card } from "@/components/ui";
+import { attachmentKind, attachmentPublicUrl } from "@/lib/events/attachment-refs";
 import type { WorklistState, WorklistType } from "@/lib/schemas/worklist";
 
 export type WorklistItemView = {
@@ -235,9 +236,17 @@ function PayloadDetail({ item }: { item: WorklistItemView }) {
     }
     if (kind === "new") {
       const subject = item.subject ?? {};
+      // `attachments` render as thumbnails below, not as a stringified array.
       const rows = Object.entries(subject)
-        .filter(([k]) => k !== "status")
+        .filter(([k]) => k !== "status" && k !== "attachments")
         .map(([k, v]) => ({ label: k, value: plain(v) }));
+      const attachments = Array.isArray(subject.attachments)
+        ? (subject.attachments as unknown[]).filter((r): r is string => typeof r === "string")
+        : [];
+      // Anonymous public suggestions (E12) carry the submitter's PRIVATE
+      // contact in the payload — shown here (admin-only) for follow-up, never
+      // on the public event.
+      const suggest = p.suggest as { submitterName?: string; contact?: string } | undefined;
       return (
         <div>
           <p className="mb-1 text-sm font-medium text-ink">New submission</p>
@@ -247,6 +256,39 @@ function PayloadDetail({ item }: { item: WorklistItemView }) {
             <p className="text-sm text-ink-soft">
               {plain(p.note) !== "—" ? plain(p.note) : "Held for review."}
             </p>
+          )}
+          {suggest?.submitterName && (
+            <p className="mt-2 text-xs text-ink-soft">
+              Submitted by {suggest.submitterName}
+              {suggest.contact ? ` · reply to: ${suggest.contact}` : ""} (private)
+            </p>
+          )}
+          {attachments.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {attachments.map((ref) =>
+                attachmentKind(ref) === "pdf" ? (
+                  <a
+                    key={ref}
+                    href={attachmentPublicUrl(ref)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 rounded-lg border border-sand-deep px-2.5 py-1.5 text-xs font-medium text-tide-deep hover:border-tide"
+                  >
+                    📄 PDF
+                  </a>
+                ) : (
+                  <a key={ref} href={attachmentPublicUrl(ref)} target="_blank" rel="noreferrer">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={attachmentPublicUrl(ref)}
+                      alt="submitted attachment"
+                      loading="lazy"
+                      className="h-20 w-20 rounded-lg object-cover ring-1 ring-sand-deep"
+                    />
+                  </a>
+                ),
+              )}
+            </div>
           )}
         </div>
       );

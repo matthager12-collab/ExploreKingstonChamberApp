@@ -51,7 +51,15 @@ export async function saveEvent(record: EventItem, meta?: WriteMeta): Promise<vo
 }
 
 export async function deleteEvent(id: string, meta?: WriteMeta): Promise<void> {
+  // Grab any uploaded artwork/flyers BEFORE tombstoning so the deleted event
+  // doesn't leave orphaned bytes behind (E12 follow-up). Best-effort: the
+  // tombstone is the source of truth; a failed blob delete is housekeeping.
+  const existing = await getEventAdmin(id);
   await writeOverlayRecord(STORE, { id, _deleted: true } as EventItem & { _deleted: true }, meta);
+  if (existing?.attachments?.length) {
+    const { deleteAttachment } = await import("@/lib/events/attachment-store");
+    await Promise.all(existing.attachments.map((r) => deleteAttachment(r)));
+  }
 }
 
 const pacificDay = new Intl.DateTimeFormat("en-CA", {

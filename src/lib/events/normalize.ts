@@ -218,6 +218,8 @@ export function eventItemToNormalized(e: EventItem): NormalizedEvent {
     occurrenceKey: `in-app:${e.id}:${toUtcBasic(e.start)}`,
     ownerId: e.ownerId,
     charityId: e.charityId,
+    eventContact: e.eventContact,
+    attachments: e.attachments,
   };
 }
 
@@ -248,5 +250,7 @@ export function normalizedToEventItem(n: NormalizedEvent): EventItem {
     category: n.category ?? "community",
     organizer: n.organizer ?? "",
     url: n.url,
+    eventContact: n.eventContact,
+    attachments: n.attachments,
   };
 }

@@ -227,15 +227,37 @@ describe("(a)-(c) anonymous suggest intake — always pending, no bypass", () =>
     start: "2026-09-20T19:00",
     venue: "Arness Park",
     description: "Stories by the fire.",
+    eventContact: "Firelight Arts · info@firelight.test",
     submitterName: "Pat Suggests",
     contact: "pat@example.test",
   };
 
+  /** Multipart suggest request. Each call defaults to a UNIQUE client IP so
+   *  the 5/hour bucket (keyed on IP) doesn't bleed across tests; the rate-limit
+   *  test pins one IP on purpose. */
+  let ipSeq = 0;
+  function suggestReq(
+    fields: Record<string, string>,
+    files: { name: string; type: string; bytes: Uint8Array }[] = [],
+    ip = `10.0.0.${++ipSeq}`,
+  ) {
+    const fd = new FormData();
+    for (const [k, v] of Object.entries(fields)) fd.set(k, v);
+    for (const f of files) {
+      fd.append("attachments", new File([f.bytes as BlobPart], f.name, { type: f.type }));
+    }
+    return new NextRequest("http://localhost/api/events/suggest", {
+      method: "POST",
+      body: fd,
+      headers: { "x-forwarded-for": ip },
+    });
+  }
+
   let suggestedId: string;
 
-  it("(a) POST creates a pending record with exactly one open moderation item carrying the suggest payload", async () => {
+  it("(a) POST creates a pending record; the PUBLIC event carries eventContact, the PRIVATE submitter contact rides only in the payload", async () => {
     authState.user = null; // truly anonymous
-    const res = await suggestPOST(jsonReq("/api/events/suggest", "POST", SUGGESTION));
+    const res = await suggestPOST(suggestReq(SUGGESTION));
     expect(res.status).toBe(200);
 
     const pending = (await listWorklistItems({ type: "moderation", state: "open" })).filter(
@@ -243,7 +265,11 @@ describe("(a)-(c) anonymous suggest intake — always pending, no bypass", () =>
     );
     expect(pending).toHaveLength(1);
     suggestedId = pending[0].subjectId;
-    expect((await getEventAdmin(suggestedId))?.status).toBe("pending");
+    const doc = await getEventAdmin(suggestedId);
+    expect(doc?.status).toBe("pending");
+    // Public field is on the event doc; private submitter contact is NOT.
+    expect(doc?.eventContact).toBe(SUGGESTION.eventContact);
+    expect(JSON.stringify(doc)).not.toContain(SUGGESTION.contact);
     const payload = pending[0].payload as {
       kind: string;
       suggest?: { submitterName: string; contact: string };
@@ -253,9 +279,14 @@ describe("(a)-(c) anonymous suggest intake — always pending, no bypass", () =>
       submitterName: SUGGESTION.submitterName,
       contact: SUGGESTION.contact,
     });
-    // Data minimization: the CONTENT record carries no submitter contact.
-    const doc = await getEventAdmin(suggestedId);
-    expect(JSON.stringify(doc)).not.toContain(SUGGESTION.contact);
+  });
+
+  it("the public event contact is REQUIRED (400 without it)", async () => {
+    authState.user = null;
+    const { eventContact: _omit, ...noContact } = SUGGESTION;
+    const res = await suggestPOST(suggestReq({ ...noContact, title: "No Contact Event" }));
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toMatch(/public contact/i);
   });
 
   it("(b) the public feed does NOT include the pending suggestion", async () => {
@@ -266,24 +297,65 @@ describe("(a)-(c) anonymous suggest intake — always pending, no bypass", () =>
     expect((await getEvents()).some((e) => e.id === suggestedId)).toBe(false);
   });
 
-  it("(c) after the approve handler runs, the feed DOES include it", async () => {
+  it("(c) after approval the feed includes it AND surfaces the public eventContact", async () => {
     const [item] = await openModerationFor(suggestedId);
     expect(item).toBeDefined();
     await approveModerationItem(item, ADMIN);
     expect((await getEventAdmin(suggestedId))?.status).toBe("live");
     const res = await feedsEventsGET(jsonReq("/api/feeds/events", "GET"));
-    const body = (await res.json()) as { events: { id: string }[] };
-    expect(body.events.some((e) => e.id === suggestedId)).toBe(true);
+    const body = (await res.json()) as {
+      events: { id: string; eventContact?: string }[];
+    };
+    const live = body.events.find((e) => e.id === suggestedId);
+    expect(live).toBeDefined();
+    expect(live!.eventContact).toBe(SUGGESTION.eventContact);
+  });
+
+  it("accepts image + PDF attachments and attaches their refs to the pending event", async () => {
+    authState.user = null;
+    const res = await suggestPOST(
+      suggestReq({ ...SUGGESTION, title: "Gallery Opening" }, [
+        { name: "flyer.png", type: "image/png", bytes: new Uint8Array([1, 2, 3]) },
+        { name: "program.pdf", type: "application/pdf", bytes: new Uint8Array([4, 5, 6]) },
+      ]),
+    );
+    expect(res.status).toBe(200);
+    const item = (await listWorklistItems({ type: "moderation", state: "open" })).find(
+      (i) => i.subjectLabel === "Gallery Opening",
+    );
+    const doc = await getEventAdmin(item!.subjectId);
+    expect(doc?.attachments).toHaveLength(2);
+    expect(doc?.attachments?.some((r) => r.endsWith(".png"))).toBe(true);
+    expect(doc?.attachments?.some((r) => r.endsWith(".pdf"))).toBe(true);
+  });
+
+  it("rejects a disallowed file type (415) and an oversize file (413), storing nothing", async () => {
+    authState.user = null;
+    const bad = await suggestPOST(
+      suggestReq({ ...SUGGESTION, title: "Zip Bomb" }, [
+        { name: "evil.zip", type: "application/zip", bytes: new Uint8Array([1]) },
+      ]),
+    );
+    expect(bad.status).toBe(415);
+
+    const huge = await suggestPOST(
+      suggestReq({ ...SUGGESTION, title: "Huge Poster" }, [
+        { name: "poster.png", type: "image/png", bytes: new Uint8Array(8 * 1024 * 1024 + 1) },
+      ]),
+    );
+    expect(huge.status).toBe(413);
+
+    expect(
+      (await listWorklistItems({ type: "moderation", state: "open" })).some(
+        (i) => i.subjectLabel === "Zip Bomb" || i.subjectLabel === "Huge Poster",
+      ),
+    ).toBe(false);
   });
 
   it("a filled honeypot is a quiet no-op (200, nothing stored)", async () => {
     const before = (await listWorklistItems({ type: "moderation", state: "open" })).length;
     const res = await suggestPOST(
-      jsonReq("/api/events/suggest", "POST", {
-        ...SUGGESTION,
-        title: "Bot Event",
-        website2: "https://spam.example",
-      }),
+      suggestReq({ ...SUGGESTION, title: "Bot Event", website2: "https://spam.example" }),
     );
     expect(res.status).toBe(200);
     expect((await listWorklistItems({ type: "moderation", state: "open" })).length).toBe(before);
@@ -294,9 +366,8 @@ describe("(a)-(c) anonymous suggest intake — always pending, no bypass", () =>
     let last: Response | null = null;
     const statuses: number[] = [];
     for (let i = 0; i < 7; i++) {
-      last = await suggestPOST(
-        jsonReq("/api/events/suggest", "POST", { ...SUGGESTION, title: `Flood ${i}` }),
-      );
+      // Same IP every iteration → the shared bucket fills and trips 429.
+      last = await suggestPOST(suggestReq({ ...SUGGESTION, title: `Flood ${i}` }, [], "10.9.9.9"));
       statuses.push(last.status);
     }
     expect(statuses).toContain(429);

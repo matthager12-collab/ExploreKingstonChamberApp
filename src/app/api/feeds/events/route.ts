@@ -25,6 +25,7 @@
 // depends on it.
 
 import type { NextRequest } from "next/server";
+import { attachmentPublicUrl } from "@/lib/events/attachment-refs";
 import { escapeText, toICalendar, type IcsEvent } from "@/lib/events/ics";
 import { externalEventId, normalizedToEventItem } from "@/lib/events/normalize";
 import { getUnifiedEvents } from "@/lib/events/unified";
@@ -103,6 +104,7 @@ export async function GET(request: NextRequest) {
       address: item.address,
       description: item.description,
       url: item.url,
+      contact: item.eventContact,
     }));
     return new Response(toICalendar(icsEvents), {
       headers: {
@@ -129,7 +131,13 @@ export async function GET(request: NextRequest) {
         category: e.category,
         organizer: e.organizer,
         url: e.url,
-        // Additive keys, unified mode only — flag OFF output is byte-frozen.
+        // Additive per-event keys — emitted only when the event actually
+        // carries them, so seed/in-app events without them stay byte-frozen.
+        ...(e.eventContact ? { eventContact: e.eventContact } : {}),
+        ...(e.attachments?.length
+          ? { attachments: e.attachments.map(attachmentPublicUrl) }
+          : {}),
+        // Merge-layer metadata — unified mode only.
         ...(unified && normalized
           ? { sourceCalendar: normalized.source, allDay: normalized.allDay }
           : {}),

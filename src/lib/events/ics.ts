@@ -22,6 +22,8 @@ export interface IcsEvent {
   address?: string;
   description: string;
   url?: string;
+  /** Public event contact (RFC 5545 CONTACT). Additive; absent on legacy events. */
+  contact?: string;
 }
 
 /** Escape a TEXT value: backslash, semicolon, comma, newlines (§3.3.11). */
@@ -110,6 +112,9 @@ export function toICalendar(events: IcsEvent[]): string {
     lines.push(`SUMMARY:${escapeText(e.title)}`);
     lines.push(`LOCATION:${escapeText(e.address ? `${e.venue}, ${e.address}` : e.venue)}`);
     lines.push(`DESCRIPTION:${escapeText(e.description)}`);
+    // CONTACT is a TEXT value type (§3.8.4.2) — escape it. Additive: absent on
+    // legacy events, so their bytes are unchanged.
+    if (e.contact) lines.push(`CONTACT:${escapeText(e.contact)}`);
     // URL is a URI value type, not TEXT — no comma/semicolon escaping.
     if (e.url) lines.push(`URL:${e.url}`);
     lines.push("END:VEVENT");

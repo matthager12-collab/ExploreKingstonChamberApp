@@ -95,6 +95,11 @@ export interface NormalizedEvent {
    *  reads them. External sources never carry ownership. */
   ownerId?: string;
   charityId?: string;
+  /** In-app public event contact + uploaded artwork, carried through the
+   *  merge so the card/feed keep them in unified mode. External sources have
+   *  none. */
+  eventContact?: string;
+  attachments?: string[];
 }
 
 /** Per-run adapter report — stored on the calendar-sources record and shown

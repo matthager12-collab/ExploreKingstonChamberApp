@@ -135,6 +135,15 @@ export interface EventItem {
   category: EventCategory;
   organizer: string;
   url?: string;
+  /** Public "who to contact about this event" (name + email/phone), shown on
+   *  the event so the public asks the organizer, not the Chamber. Distinct
+   *  from a submitter's private contact (which never leaves the worklist).
+   *  Optional on the type — ingested/seed events have none; the public
+   *  suggest form requires it (enforced at the route). */
+  eventContact?: string;
+  /** Uploaded artwork/flyer references — Vercel Blob URLs (prod) or
+   *  .data/events-relative paths (dev). Rendered on the event once live. */
+  attachments?: string[];
   /** set for nonprofit events that appear in the charity portal too */
   charityId?: string;
   /** portal ownership: the listing/org id whose account manages this event */
