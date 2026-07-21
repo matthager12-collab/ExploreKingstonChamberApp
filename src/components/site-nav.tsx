@@ -63,7 +63,7 @@ export function SiteNav({ hiddenPaths = [] }: { hiddenPaths?: string[] }) {
               <Link
                 key={l.href}
                 href={l.href}
-                className={`font-nav rounded-lg px-3 py-2 text-[13px] font-semibold tracking-wide uppercase transition-colors ${
+                className={`font-nav rounded-lg px-3 py-2 text-[0.8125rem] font-semibold tracking-wide uppercase transition-colors ${
                   isActive(l.href)
                     ? "bg-sound text-white"
                     : "text-ink hover:bg-seaglass/40 hover:text-sound"
@@ -76,7 +76,7 @@ export function SiteNav({ hiddenPaths = [] }: { hiddenPaths?: string[] }) {
               <button
                 onClick={() => setMoreOpen((v) => !v)}
                 onBlur={() => setTimeout(() => setMoreOpen(false), 150)}
-                className={`font-nav rounded-lg px-3 py-2 text-[13px] font-semibold tracking-wide uppercase transition-colors ${
+                className={`font-nav rounded-lg px-3 py-2 text-[0.8125rem] font-semibold tracking-wide uppercase transition-colors ${
                   more.some((l) => isActive(l.href))
                     ? "bg-sound text-white"
                     : "text-ink hover:bg-seaglass/40 hover:text-sound"
@@ -122,7 +122,7 @@ export function SiteNav({ hiddenPaths = [] }: { hiddenPaths?: string[] }) {
               key={l.href}
               href={l.href}
               onClick={() => setSheetOpen(false)}
-              className={`flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium ${
+              className={`flex flex-col items-center gap-0.5 py-2.5 text-[0.6875rem] font-medium ${
                 (l.href === "/" ? pathname === "/" : isActive(l.href)) && !sheetOpen
                   ? "text-sound"
                   : "text-ink-soft"
@@ -134,7 +134,7 @@ export function SiteNav({ hiddenPaths = [] }: { hiddenPaths?: string[] }) {
           ))}
           <button
             onClick={() => setSheetOpen((v) => !v)}
-            className={`flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium ${
+            className={`flex flex-col items-center gap-0.5 py-2.5 text-[0.6875rem] font-medium ${
               sheetOpen ? "text-sound" : "text-ink-soft"
             }`}
             aria-expanded={sheetOpen}

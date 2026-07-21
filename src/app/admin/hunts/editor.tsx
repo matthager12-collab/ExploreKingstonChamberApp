@@ -621,12 +621,12 @@ export function HuntEditor({
                                   <Badge tone="sand">unverified</Badge>
                                 )}
                                 {typeof sub.distanceMeters === "number" && (
-                                  <span className="text-[10px] text-ink-soft">
+                                  <span className="text-[0.625rem] text-ink-soft">
                                     {sub.distanceMeters} m
                                   </span>
                                 )}
                               </div>
-                              <p className="text-[10px] text-ink-soft">
+                              <p className="text-[0.625rem] text-ink-soft">
                                 {new Date(sub.ts).toLocaleString()}
                               </p>
                             </div>

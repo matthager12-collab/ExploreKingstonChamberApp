@@ -298,7 +298,7 @@ export function AuditBrowser({
                           <summary className="cursor-pointer text-xs font-medium text-tide-deep">
                             Raw JSON
                           </summary>
-                          <pre className="mt-1 max-h-64 overflow-auto rounded bg-shell p-2 text-[11px] leading-snug">
+                          <pre className="mt-1 max-h-64 overflow-auto rounded bg-shell p-2 text-[0.6875rem] leading-snug">
                             {JSON.stringify(
                               { before: entry.before, after: entry.after },
                               null,

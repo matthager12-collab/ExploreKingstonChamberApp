@@ -85,10 +85,36 @@ export default async function RootLayout({
       className={`${inter.variable} ${outfit.variable} ${satisfy.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
+        {/* E14: the skip link is deliberately the first element in <body> so it is
+            the first thing Tab reaches — keyboard and switch users clear the whole
+            header/nav in one keystroke. sr-only until focused, then a full-size
+            (>=44px) brand-token chip so sighted keyboard users can see it too. */}
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-sound-deep focus:px-4 focus:py-3 focus:text-base focus:font-semibold focus:text-white"
+        >
+          Skip to content
+        </a>
+        {/* E14 simple-mode bootstrap (vk/simple-mode). Runs before paint so the
+            larger "easy read" type never flashes at the default size. State is
+            localStorage + a data-simple attribute BY DESIGN: a cookies() read in
+            the root layout would make every page dynamic (the audited v1 ISR
+            trap), so this stays a raw inline <script>, not next/script and not a
+            server read. try/catch because Safari private mode throws on any
+            localStorage access. The toggle that writes the key lands in a later
+            E14 slice; reading an absent key is a no-op. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{if(localStorage.getItem("ek-simple")==="1"){document.documentElement.dataset.simple="1"}}catch(e){}`,
+          }}
+        />
         <CopyProvider overrides={copyOverrides}>
           <Tracker />
           <SiteNav hiddenPaths={hiddenPaths} />
-          <main className="flex-1">{children}</main>
+          {/* id="main" is the skip link's target (E14). */}
+          <main id="main" className="flex-1">
+            {children}
+          </main>
           <SiteFooter hiddenPaths={hiddenPaths} copy={copyOverrides} />
         </CopyProvider>
       </body>

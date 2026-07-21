@@ -66,3 +66,35 @@ h3,
 html {
   scroll-padding-top: 5.5rem;
 }
+
+/* E14: one visible focus indicator for the whole app. :focus-visible (not :focus)
+   so mouse/touch activation stays ring-free while keyboard and switch users always
+   see where they are. tide-deep is the accessible cyan variant already in the
+   palette — no token values change here, per the E14 fix-at-usage-sites rule. */
+:focus-visible {
+  outline: 2px solid var(--color-tide-deep);
+  outline-offset: 2px;
+}
+
+/* Light variant for the deep-navy fills (footer, nav active pills, skip link):
+   tide-deep on sound-deep is too dark to see, so those surfaces get seaglass. */
+.bg-sound-deep :focus-visible,
+.bg-sound-deep:focus-visible,
+.bg-sound :focus-visible,
+.bg-sound:focus-visible {
+  outline-color: var(--color-seaglass);
+}
+
+/* E14: honor the OS "reduce motion" preference (WCAG 2.3.3 / 2.2.2). Covers the
+   animate-pulse live dots on the ferry board and the hover-translate cards —
+   nothing here is informational, so neutralizing it loses no meaning. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

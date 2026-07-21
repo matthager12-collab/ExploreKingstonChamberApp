@@ -86,7 +86,7 @@ function DateBlock({ iso }: { iso: string }) {
   const [weekday, monthDay] = formatPacificDate(iso).split(", ");
   return (
     <div className="flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-xl bg-sound text-white">
-      <span className="text-[10px] font-bold tracking-widest uppercase opacity-80">
+      <span className="text-[0.625rem] font-bold tracking-widest uppercase opacity-80">
         {weekday}
       </span>
       <span className="text-sm font-bold tracking-wide uppercase">{monthDay}</span>
