@@ -83,6 +83,24 @@ export async function isUnderLegalHold(store: string, recordId: string): Promise
   return (await heldRecordIds(store, [recordId])).has(recordId);
 }
 
+/**
+ * E11 MHMDA-delete (D-11): re-point every `record.updated_by` that holds a
+ * departing user's EMAIL to their opaque, non-identifying user id. These
+ * columns are mutable operational metadata (who last touched a record), not
+ * the audit trail — so the email leaves the queryable stores while referential
+ * integrity is preserved. (The append-only `audit.actor` keeps the email as a
+ * records-floor exception, documented in docs/PRIVACY.md.) Returns the count
+ * re-keyed. */
+export async function rekeyRecordActor(oldActor: string, newActor: string): Promise<number> {
+  if (!oldActor || oldActor === newActor) return 0;
+  const res = await getDb()
+    .update(record)
+    .set({ updatedBy: newActor })
+    .where(eq(record.updatedBy, oldActor));
+  const r = res as unknown as { rowCount?: number; affectedRows?: number };
+  return r.rowCount ?? r.affectedRows ?? 0;
+}
+
 export async function listLegalHolds(): Promise<LegalHoldRow[]> {
   return getDb().select().from(legalHold);
 }
@@ -157,4 +175,48 @@ export async function appendPrivacyAudit(entry: {
     after: entry.detail,
     source: "privacy",
   });
+}
+
+/**
+ * E11 MHMDA-delete: remove specific top-level fields from a record-backed
+ * store's doc, writing a METADATA-ONLY audit row (the field NAMES, never the
+ * values). Bypasses writeRecord deliberately — the normal path snapshots the
+ * prior doc into the immortal audit table, which for a privacy erasure would
+ * re-immortalize the very value being erased (the charity contact-email case;
+ * charities are restore-registered, so a blanket snapshot strip is not an
+ * option). A documented privacy carve-out from the choke point, like
+ * hardDeleteRecords. Returns true if any field was present and removed. */
+export async function scrubRecordDocFields(
+  store: string,
+  id: string,
+  fields: string[],
+  actor: string,
+): Promise<boolean> {
+  const db = getDb();
+  const [row] = await db
+    .select({ doc: record.doc })
+    .from(record)
+    .where(and(eq(record.store, store), eq(record.id, id)));
+  if (!row) return false;
+  const doc = { ...(row.doc as Record<string, unknown>) };
+  let changed = false;
+  for (const f of fields) {
+    if (f in doc) {
+      delete doc[f];
+      changed = true;
+    }
+  }
+  if (!changed) return false;
+  await db
+    .update(record)
+    .set({ doc, updatedAt: new Date(), updatedBy: actor })
+    .where(and(eq(record.store, store), eq(record.id, id)));
+  await appendPrivacyAudit({
+    actor,
+    action: "privacy-field-scrub",
+    store,
+    recordId: id,
+    detail: { fields }, // names only — never the scrubbed values
+  });
+  return true;
 }
