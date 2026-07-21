@@ -14,9 +14,30 @@
 // Progress still lives in localStorage so a hunt survives reloads. Player copy
 // is honest: photos are sent to the hunt organizers, not kept on-device.
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { Hunt, HuntStop } from "@/lib/types";
 import { Badge, Card } from "@/components/ui";
+import { EditableText } from "@/lib/copy-context";
+import {
+  browserConsentStorage,
+  readGeoConsent,
+  shouldPromptGeoConsent,
+  writeGeoConsent,
+} from "@/lib/privacy/consent";
+import { PRIVACY_NOTICE_VERSION } from "@/lib/privacy/policy";
+
+/** True when we already hold consent for the CURRENT notice version. */
+function hasGeoConsent(): boolean {
+  return !shouldPromptGeoConsent(
+    readGeoConsent(browserConsentStorage()),
+    PRIVACY_NOTICE_VERSION,
+  );
+}
+
+function grantGeoConsent(): void {
+  writeGeoConsent(browserConsentStorage(), PRIVACY_NOTICE_VERSION, new Date());
+}
 
 /** Hunt shape the player receives: server pages attach reference photo URLs. */
 export type PlayerHuntStop = HuntStop & { referencePhotoUrl?: string };
@@ -53,7 +74,16 @@ function getPositionOnce(timeoutMs: number): Promise<GeolocationPosition | null>
   });
 }
 
-type CheckState = "idle" | "locating" | "too-far" | "confirmed" | "gps-unavailable";
+// "needs-consent" = the affirmative-consent card is showing, BEFORE the
+// browser's own permission prompt (FR-A21). Declining still lets the visitor
+// finish the stop — the honor/"mark done" paths are untouched.
+type CheckState =
+  | "idle"
+  | "needs-consent"
+  | "locating"
+  | "too-far"
+  | "confirmed"
+  | "gps-unavailable";
 type UploadState = "idle" | "uploading" | "failed";
 
 function StopCard({
@@ -84,6 +114,20 @@ function StopCard({
       setCheck("gps-unavailable");
       return;
     }
+    // Ask in plain language before the browser prompt, version-gated.
+    if (!hasGeoConsent()) {
+      setCheck("needs-consent");
+      return;
+    }
+    runLocate();
+  }
+
+  function acceptGeoConsent() {
+    grantGeoConsent();
+    runLocate();
+  }
+
+  function runLocate() {
     setCheck("locating");
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -101,8 +145,10 @@ function StopCard({
   async function submitPhoto(file: File) {
     setUpload("uploading");
     // Reuse the GPS check-in fix if we have one; otherwise grab a position now.
+    // Location rides along ONLY with consent. Without it the photo still
+    // posts — the hunt works, minus the location the visitor didn't agree to.
     let position = coords;
-    if (!position) {
+    if (!position && hasGeoConsent()) {
       const pos = await getPositionOnce(8000);
       if (pos) position = { lat: pos.coords.latitude, lng: pos.coords.longitude };
     }
@@ -190,6 +236,38 @@ function StopCard({
                   {check === "locating" ? "Checking GPS…" : "📍 I'm here — check my location"}
                 </button>
               )}
+              {/* Affirmative consent before the browser prompt (FR-A21).
+                  Declining keeps every other way to finish the stop. */}
+              {check === "needs-consent" && (
+                <div className="mt-2 rounded-xl border border-tide bg-seaglass/20 p-3">
+                  <EditableText
+                    as="p"
+                    className="text-sm text-ink-soft"
+                    copyKey="hunt.consent.body"
+                  />
+                  <p className="mt-1 text-xs text-ink-soft">
+                    <Link href="/privacy" className="underline">
+                      How we handle location
+                    </Link>
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={acceptGeoConsent}
+                      className="rounded-full bg-sound px-3 py-1.5 text-sm font-semibold text-white hover:bg-sound-deep"
+                    >
+                      Use my location
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCheck("gps-unavailable")}
+                      className="rounded-full border border-sand px-3 py-1.5 text-sm font-semibold text-ink hover:border-tide"
+                    >
+                      No thanks
+                    </button>
+                  </div>
+                </div>
+              )}
               {check === "too-far" && (
                 <p className="mt-1 text-sm text-coral-deep">
                   You&apos;re about {distance} m away — keep looking! (need to be within{" "}
@@ -231,8 +309,10 @@ function StopCard({
                 />
               </label>
               <p className="mt-1 text-xs text-ink-soft">
-                Posting sends your photo (and your location, if allowed) to the hunt organizers to
-                check you off — don&apos;t include anything you wouldn&apos;t share.
+                <EditableText as="span" copyKey="hunt.disclosure" />{" "}
+                <Link href="/privacy" className="underline">
+                  How we handle this
+                </Link>
               </p>
               {upload === "failed" && (
                 <p className="mt-1 text-sm text-coral-deep">

@@ -471,7 +471,51 @@ export const COPY_BLOCKS = [
     page: "Near-me (client)",
     label: "Disclosure line under the button",
     multiline: true,
-    fallback: "Uses your location once, rounded to about a block, to sort this list — helps Kingston's visitor stats too.",
+    // E11: storage is the neighborhood BUCKET only — the old "rounded to about
+    // a block" wording described the retired coordinate-storing behavior.
+    fallback: "Uses your location once to sort this list — we store only the neighborhood, never a coordinate.",
+  },
+  {
+    key: "nearme.consent.title",
+    page: "Near-me (client)",
+    label: "Consent card heading",
+    fallback: "Use your location?",
+  },
+  {
+    key: "nearme.consent.body",
+    page: "Near-me (client)",
+    label: "Consent card purpose text (what happens if you allow)",
+    multiline: true,
+    fallback: "It sorts this list by distance, and adds one anonymous neighborhood-level count to Kingston's visitor stats. We never store a coordinate, and declining loses nothing.",
+  },
+  {
+    key: "nearme.consent.allow",
+    page: "Near-me (client)",
+    label: "Consent card — allow button",
+    fallback: "Use my location",
+  },
+  {
+    key: "nearme.consent.decline",
+    page: "Near-me (client)",
+    label: "Consent card — decline button",
+    fallback: "No thanks",
+  },
+  // Scavenger hunt (client)
+  {
+    key: "hunt.disclosure",
+    page: "Scavenger hunt (client)",
+    label: "Disclosure under the photo-post button",
+    multiline: true,
+    fallback:
+      "Posting sends your photo (and your location, if you allow it) to the hunt organizers to check you off, kept 12 months — don't include anything you wouldn't share.",
+  },
+  {
+    key: "hunt.consent.body",
+    page: "Scavenger hunt (client)",
+    label: "Location-consent card text",
+    multiline: true,
+    fallback:
+      "Use your location to check you in at this stop? It's sent with your photo to the hunt organizers. You can skip it — you can still post the photo and finish the stop.",
   },
   {
     key: "nearme.denied",

@@ -17,10 +17,18 @@
 //     src/components/tracker.tsx for the canonical pattern mirrored below).
 //   - At most one ping is sent per page visit, even if the visitor re-taps.
 
+import Link from "next/link";
 import { useRef, useState } from "react";
 import type { WeeklyHours } from "@/lib/types";
 import { getOpenStatus } from "@/lib/hours";
 import { EditableText, useCopy } from "@/lib/copy-context";
+import {
+  browserConsentStorage,
+  readGeoConsent,
+  shouldPromptGeoConsent,
+  writeGeoConsent,
+} from "@/lib/privacy/consent";
+import { PRIVACY_NOTICE_VERSION } from "@/lib/privacy/policy";
 
 /** Serializable subset of Restaurant the server page maps into props. */
 export interface NearMePlace {
@@ -101,7 +109,35 @@ function sendGeoPing(lat: number, lng: number) {
   });
 }
 
-type Status = "idle" | "locating" | "ready" | "denied" | "error";
+/** One "consent" analytics event on grant — proves in aggregate that the
+ *  consent surface was live and used. Session id + notice version only:
+ *  never a location. */
+function sendConsentEvent() {
+  const body = JSON.stringify({
+    type: "consent",
+    sessionId: getSessionId(),
+    noticeVersion: PRIVACY_NOTICE_VERSION,
+    path: window.location.pathname,
+  });
+  try {
+    if (navigator.sendBeacon?.("/api/track", body)) return;
+  } catch {
+    // fall through to fetch
+  }
+  fetch("/api/track", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
+    keepalive: true,
+  }).catch(() => {
+    // best-effort; never bother the visitor
+  });
+}
+
+// "consent" = the affirmative-consent card is showing, BEFORE the browser's
+// own permission prompt (FR-A21: we ask in plain language first, and
+// declining must lose nothing).
+type Status = "idle" | "consent" | "locating" | "ready" | "denied" | "error";
 
 interface Result {
   place: NearMePlace;
@@ -113,10 +149,39 @@ export function NearMe({ places }: { places: NearMePlace[] }) {
   const [results, setResults] = useState<Result[]>([]);
   const idleLabel = useCopy("nearme.button.idle");
   const locatingLabel = useCopy("nearme.button.locating");
+  const consentAllowLabel = useCopy("nearme.consent.allow");
+  const consentDeclineLabel = useCopy("nearme.consent.decline");
   // ONE ping per page visit, even across re-taps.
   const pingSent = useRef(false);
+  // Consent held for this pageload (covers a storage-refusing browser).
+  const consentGranted = useRef(false);
 
-  function locate() {
+  /** Tap handler: ask for consent FIRST (unless we already hold consent for
+   *  the current notice version), then run the real location flow. */
+  function onLocateTap() {
+    if (consentGranted.current) return startLocate();
+    const stored = readGeoConsent(browserConsentStorage());
+    if (shouldPromptGeoConsent(stored, PRIVACY_NOTICE_VERSION)) {
+      setStatus("consent");
+      return;
+    }
+    consentGranted.current = true;
+    startLocate();
+  }
+
+  function acceptConsent() {
+    consentGranted.current = true; // honored for this pageload even if storage refuses
+    writeGeoConsent(browserConsentStorage(), PRIVACY_NOTICE_VERSION, new Date());
+    sendConsentEvent();
+    startLocate();
+  }
+
+  function declineConsent() {
+    // Nothing is lost: the cards below stay sorted by walk time from the dock.
+    setStatus("denied");
+  }
+
+  function startLocate() {
     if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
       setStatus("error");
       return;
@@ -151,7 +216,7 @@ export function NearMe({ places }: { places: NearMePlace[] }) {
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <button
           type="button"
-          onClick={locate}
+          onClick={onLocateTap}
           disabled={status === "locating"}
           className="inline-flex items-center gap-1.5 rounded-full bg-sound px-5 py-2.5 text-sm font-semibold text-white hover:bg-sound-deep disabled:opacity-50"
         >
@@ -163,6 +228,44 @@ export function NearMe({ places }: { places: NearMePlace[] }) {
           className="text-xs text-ink-soft"
           copyKey="nearme.disclosure"/>
       </div>
+
+      {/* Affirmative consent (FR-A21) — shown BEFORE the browser prompt, in
+          plain language, with a real "no" that costs the visitor nothing. */}
+      {status === "consent" && (
+        <div className="mt-3 rounded-xl border border-tide bg-seaglass/20 p-4">
+          <EditableText
+            as="p"
+            className="text-sm font-semibold text-sound-deep"
+            copyKey="nearme.consent.title"
+          />
+          <EditableText
+            as="p"
+            className="mt-1 text-sm text-ink-soft"
+            copyKey="nearme.consent.body"
+          />
+          <p className="mt-1 text-xs text-ink-soft">
+            <Link href="/privacy" className="underline">
+              How we handle location
+            </Link>
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={acceptConsent}
+              className="rounded-full bg-sound px-4 py-2 text-sm font-semibold text-white hover:bg-sound-deep"
+            >
+              {consentAllowLabel}
+            </button>
+            <button
+              type="button"
+              onClick={declineConsent}
+              className="rounded-full border border-sand px-4 py-2 text-sm font-semibold text-ink hover:border-tide"
+            >
+              {consentDeclineLabel}
+            </button>
+          </div>
+        </div>
+      )}
 
       {status === "denied" && (
         <EditableText
