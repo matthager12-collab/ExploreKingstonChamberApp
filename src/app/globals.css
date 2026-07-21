@@ -31,8 +31,18 @@
 
 body {
   background-color: var(--color-shell);
-  /* Subtle topographic contour texture from explorekingstonwa.com page backgrounds */
-  background-image: url("/brand/bg-topographical-texture.jpg");
+  /* Subtle topographic contour texture from explorekingstonwa.com page backgrounds.
+     WebP, NOT JPEG, and the format matters far more here than it looks. This rule is
+     on <body>, so EVERY route pays for it, and a CSS url() never passes through
+     next/image — it ships exactly as committed, unoptimized. The original 1635x2166
+     JPEG was 445 KiB: 54% of the home page's total transfer and ~2.2s of pure
+     download at the throttled-4G rate .lighthouserc.json simulates. That single
+     asset is what pinned LCP near 5.4s on all four measured pages regardless of
+     their content — the uniformity was the tell. Identical pixels at WebP q85 are
+     42 KiB (-91%) and visually indistinguishable, because this is flat low-contrast
+     linework, the content JPEG encodes worst and WebP encodes best.
+     If you re-export this texture: keep it WebP, and re-run the Lighthouse gate. */
+  background-image: url("/brand/bg-topographical-texture.webp");
   background-size: 1100px auto;
   background-repeat: repeat;
   color: var(--color-ink);
@@ -47,10 +57,11 @@ h3,
   font-family: var(--font-display);
 }
 
-/* Explore Kingston topo texture on a white fill — for standout sections */
+/* Explore Kingston topo texture on a white fill — for standout sections.
+   Same asset as <body> above; see that rule for why it must stay WebP. */
 .bg-topo {
   background-color: #ffffff;
-  background-image: url("/brand/bg-topographical-texture.jpg");
+  background-image: url("/brand/bg-topographical-texture.webp");
   background-size: 1100px auto;
   background-repeat: repeat;
 }
