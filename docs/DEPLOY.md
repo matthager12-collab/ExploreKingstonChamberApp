@@ -124,7 +124,10 @@ Blueprint that declares the Docker web service, a **1 GB Disk mounted at
      (see [§4 First run](#4-first-run-in-production)); already-bootstrapped
      deploys never consult it (`hasAnyUsers()` is checked first).
    - `DATABASE_URL` — `sync: false` (E05); the Neon **pooled** connection
-     string, entered in the dashboard, never in `render.yaml`. **Required**: a
+     string, entered in the dashboard, never in `render.yaml`. Must end
+     `?sslmode=verify-full` — see [§2e](#2e-tls-mode-sslmodeverify-full);
+     Neon's copy button gives you `sslmode=require`, which is the wrong thing
+     to paste. **Required**: a
      release booted without it fails `/api/health` (`dbOk:false`) and Render
      503s. **It does NOT keep the previous release serving.** The service
      mounts a persistent disk, which only one instance can mount at a time, so
@@ -259,6 +262,46 @@ creates it (Render dashboard), per the new-spend sign-off rule.
 
 ---
 
+### 2e. TLS mode (`sslmode=verify-full`)
+
+Every `DATABASE_URL` — production, staging, and any local pointed at Neon —
+ends `?sslmode=verify-full`. Neon's dashboard copy button hands you
+`sslmode=require` instead; that string is **not** safe to paste forward.
+
+The reason is a rename, not a behaviour change. node-postgres has always been
+stricter than libpq: `require`, `prefer`, and `verify-ca` were all treated as
+aliases for `verify-full`, so the CA chain *and* the hostname were verified.
+libpq's `require` means only "encrypt" — it authenticates nothing. pg v9 /
+pg-connection-string v3 drop the divergence and adopt the libpq meaning, at
+which point a URL still saying `require` silently becomes MITM-able. Until
+then, pg 8.22 nags about it on every boot (the `| grep -v Warning` in the
+pre-flight snippet above exists to mute exactly that line).
+
+The two ways out are not equivalent, and the parser makes the difference
+visible — `require('pg-connection-string').parse(url).ssl` returns:
+
+| URL | parsed `ssl` | meaning |
+| --- | --- | --- |
+| `sslmode=require` (today) | `{}` | Node TLS defaults → CA + hostname verified |
+| `sslmode=verify-full` | `{}` | **identical to today**, and stable across pg v9 |
+| `uselibpqcompat=true&sslmode=require` | `{"rejectUnauthorized":false}` | encrypted, **unauthenticated** |
+
+So `verify-full` is a pure rename of what already happens; the `uselibpqcompat`
+form is a real downgrade and is not used here. Neon's certificate chains to a
+root Node already ships, so no `sslrootcert` is required — verified against
+both endpoints on 2026-07-21.
+
+One inert leftover: the URLs also carry `channel_binding=require`, copied from
+Neon. That is a libpq parameter; node-postgres reads `enableChannelBinding`
+from *client config* and nothing maps the URL param onto it, so it has no
+effect. Harmless, but do not read it as an assurance that channel binding is on.
+
+Dropping `sslmode` entirely is not an option — Neon refuses the connection
+outright (`28000 connection is insecure`), which is a useful sanity check that
+TLS is genuinely being negotiated.
+
+---
+
 ## 3. Phase 2 — Vercel serverless (built, not yet used)
 
 Vercel has no persistent filesystem: writes land on an ephemeral instance and
@@ -281,7 +324,9 @@ left unset. This section is the one-time stand-up.
    - **Neon** → injects **`DATABASE_URL`**. Use the **pooled** string (host
      contains `-pooler`); the `@neondatabase/serverless` HTTP driver wants it.
      Backs the `record`/`audit`/`quarantine` tables + the three append tables
-     — the app's entire structured-data home (E05).
+     — the app's entire structured-data home (E05). The integration injects
+     `sslmode=require`; edit it to `sslmode=verify-full` after install, same as
+     Render ([§2e](#2e-tls-mode-sslmodeverify-full)).
    - **Vercel Blob** → create a **public** Blob store; injects
      **`BLOB_READ_WRITE_TOKEN`**. Public so image URLs serve straight from the
      CDN with no Function in the path.
