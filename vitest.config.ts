@@ -10,7 +10,10 @@ export default defineConfig({
     // Consolidated setup: unit-env.ts reuses E01's src/test/setup.ts (DATA_DIR +
     // AUTH_SECRET, captured before store modules import) and adds DB-backend hygiene.
     setupFiles: ["tests/setup/unit-env.ts"],
-    include: ["tests/unit/**/*.test.ts", "src/**/*.test.ts"],
+    // .tsx joins the glob for E14's component tests; those files opt into jsdom
+    // per-file with a `// @vitest-environment jsdom` pragma, so the default
+    // node environment above is unchanged for every existing suite.
+    include: ["tests/unit/**/*.test.{ts,tsx}", "src/**/*.test.ts"],
   },
   resolve: {
     alias: {

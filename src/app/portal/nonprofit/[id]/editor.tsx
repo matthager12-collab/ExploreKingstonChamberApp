@@ -173,12 +173,12 @@ function OrgProfileForm({ org, onSaved }: { org: Charity; onSaved: (o: Charity) 
             />
           </Field>
         </div>
-        {error && <p className="text-sm font-medium text-coral-deep">{error}</p>}
+        {error && <p role="alert" className="text-sm font-medium text-coral-deep">{error}</p>}
         <div className="flex items-center gap-3">
           <button type="submit" disabled={busy} className={buttonClass}>
             {busy ? "Saving…" : "Save profile"}
           </button>
-          {savedText && <span className="text-sm font-medium text-fern">{savedText}</span>}
+          {savedText && <span role="status" className="text-sm font-medium text-fern">{savedText}</span>}
         </div>
       </form>
     </Card>
@@ -260,8 +260,8 @@ function NeedsSection({
 
   return (
     <div className="space-y-4">
-      {error && <p className="text-sm font-medium text-coral-deep">{error}</p>}
-      {notice && <p className="text-sm font-medium text-fern">{notice}</p>}
+      {error && <p role="alert" className="text-sm font-medium text-coral-deep">{error}</p>}
+      {notice && <p role="status" className="text-sm font-medium text-fern">{notice}</p>}
 
       {upcoming.length === 0 && (
         <p className="text-sm text-ink-soft">No upcoming shifts — post one below.</p>
@@ -476,7 +476,7 @@ function NeedForm({
             className={inputClass}
           />
         </Field>
-        {error && <p className="text-sm font-medium text-coral-deep">{error}</p>}
+        {error && <p role="alert" className="text-sm font-medium text-coral-deep">{error}</p>}
         <div className="flex gap-3">
           <button type="submit" disabled={busy} className={buttonClass}>
             {busy ? "Saving…" : initial ? "Save shift" : "Post shift"}
@@ -536,8 +536,8 @@ function EventsSection({
 
   return (
     <div className="space-y-4">
-      {error && <p className="text-sm font-medium text-coral-deep">{error}</p>}
-      {notice && <p className="text-sm font-medium text-fern">{notice}</p>}
+      {error && <p role="alert" className="text-sm font-medium text-coral-deep">{error}</p>}
+      {notice && <p role="status" className="text-sm font-medium text-fern">{notice}</p>}
 
       {upcoming.length === 0 && (
         <p className="text-sm text-ink-soft">No upcoming events on the calendar.</p>
@@ -790,7 +790,7 @@ function EventForm({
             className={inputClass}
           />
         </Field>
-        {error && <p className="text-sm font-medium text-coral-deep">{error}</p>}
+        {error && <p role="alert" className="text-sm font-medium text-coral-deep">{error}</p>}
         <div className="flex gap-3">
           <button type="submit" disabled={busy} className={buttonClass}>
             {busy ? "Saving…" : initial ? "Save event" : "Add event"}

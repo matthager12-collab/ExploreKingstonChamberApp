@@ -30,7 +30,12 @@ export function LevelLegend() {
     <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1.5">
       {(Object.keys(LEVELS) as BusyLevel[]).map((k) => (
         <span key={k} className="inline-flex items-center gap-1.5 text-xs text-ink-soft">
-          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: LEVELS[k].hex }} />
+          {/* Decorative swatch — the label beside it carries the level. */}
+          <span
+            aria-hidden
+            className="h-2.5 w-2.5 rounded-full"
+            style={{ backgroundColor: LEVELS[k].hex }}
+          />
           {LEVELS[k].label}
         </span>
       ))}

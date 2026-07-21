@@ -217,7 +217,7 @@ export default async function GiveBackPage() {
           </Card>
         ) : (
           <>
-            <p className="mb-3 text-sm text-ink-soft">
+            <p className="mb-3 text-sm text-ink">
               {upcoming.length} upcoming {upcoming.length === 1 ? "event" : "events"}
               {busyCount > 0 && (
                 <>

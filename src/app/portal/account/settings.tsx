@@ -133,9 +133,9 @@ export function AccountSettings({
               />
             </label>
             {profileError && (
-              <p className="text-sm font-medium text-coral-deep">{profileError}</p>
+              <p role="alert" className="text-sm font-medium text-coral-deep">{profileError}</p>
             )}
-            {profileSaved && <p className="text-sm font-medium text-fern">Saved.</p>}
+            {profileSaved && <p role="status" className="text-sm font-medium text-fern">Saved.</p>}
             <button type="submit" disabled={profileBusy} className={buttonClass}>
               {profileBusy ? "Saving…" : "Save profile"}
             </button>
@@ -184,9 +184,9 @@ export function AccountSettings({
                 className={inputClass}
               />
             </label>
-            {pwError && <p className="text-sm font-medium text-coral-deep">{pwError}</p>}
+            {pwError && <p role="alert" className="text-sm font-medium text-coral-deep">{pwError}</p>}
             {pwSaved && (
-              <p className="text-sm font-medium text-fern">
+              <p role="status" className="text-sm font-medium text-fern">
                 Saved — use the new password next time you sign in.
               </p>
             )}

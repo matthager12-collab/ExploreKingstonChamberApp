@@ -35,7 +35,9 @@ const THEME: Record<
   light: {
     group: "border-sand bg-white",
     btnBase: "text-ink-soft",
-    btnOn: "bg-tide text-white shadow-sm",
+    // E14 contrast: white on --color-tide is 3.39:1 at this 12px size; the
+    // deeper cyan is 5.28:1. Usage-site fix — the token value is untouched.
+    btnOn: "bg-tide-deep text-white shadow-sm",
     btnOff: "hover:text-sound-deep",
     locate:
       "border-sand text-tide-deep hover:border-tide hover:text-sound",

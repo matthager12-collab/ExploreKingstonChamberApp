@@ -27,7 +27,14 @@ export function PageHeader({
         </p>
       )}
       <h1 className="text-4xl font-semibold text-sound-deep sm:text-5xl">{title}</h1>
-      {intro && <p className="mt-4 max-w-2xl text-lg text-ink-soft">{intro}</p>}
+      {/* E14 contrast: muted gray (--color-ink-soft, #6b7683) measures 4.4993:1
+          on the page fill (--color-shell) — under AA 1.4.3, and it fails on
+          EVERY page because this is the shared page-intro primitive. It clears
+          AA on a white card (4.62:1) but this paragraph sits on the page
+          background, so it gets full ink (14.8:1). Hierarchy is carried by size
+          and by the heading colour, not by a failing contrast ratio. Fixed at
+          the usage site; no --color-* token value changed (E14 rule). */}
+      {intro && <p className="mt-4 max-w-2xl text-lg text-ink">{intro}</p>}
     </header>
   );
 }
@@ -46,7 +53,8 @@ export function Section({
   return (
     <section id={id} className="mx-auto max-w-5xl px-4 py-8 scroll-mt-24">
       {title && <h2 className="text-2xl font-semibold text-sound-deep sm:text-3xl">{title}</h2>}
-      {subtitle && <p className="mt-1 mb-2 text-ink-soft">{subtitle}</p>}
+      {/* Same page-background reasoning as PageHeader's intro above. */}
+      {subtitle && <p className="mt-1 mb-2 text-ink">{subtitle}</p>}
       <div className={title ? "mt-5" : undefined}>{children}</div>
     </section>
   );
@@ -66,7 +74,10 @@ const badgeTones = {
   navy: "bg-sound text-white",
   teal: "bg-tide/10 text-tide-deep",
   coral: "bg-coral/10 text-coral-deep",
-  green: "bg-fern/10 text-fern",
+  // E14 contrast: text-fern on bg-fern/10 measured 4.29:1 at this 12px size —
+  // under AA. Solid fern with white text is 4.81:1 and matches the navy tone's
+  // shape. Fixed here, at the usage site; no --color-* token value changed.
+  green: "bg-fern text-white",
   sand: "bg-sand text-ink",
 } as const;
 
@@ -99,7 +110,9 @@ export function Callout({
   return (
     <div className={`rounded-xl border-l-4 p-4 ${border}`}>
       <p className="font-semibold text-sound-deep">{title}</p>
-      <div className="mt-1 text-sm text-ink-soft">{children}</div>
+      {/* E14 contrast: text-ink-soft on the tinted fill measured 4.38:1 (under
+          AA at 14px). text-ink on the same fill is 14.5:1. */}
+      <div className="mt-1 text-sm text-ink">{children}</div>
     </div>
   );
 }

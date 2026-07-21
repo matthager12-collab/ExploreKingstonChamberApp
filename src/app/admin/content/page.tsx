@@ -6,7 +6,7 @@
 import type { Metadata } from "next";
 import { getCopyOverrides, getPageSettings } from "@/lib/stores/site-store";
 import { COPY_BLOCKS } from "@/lib/site-copy-registry";
-import { HIDEABLE_PAGES } from "@/lib/page-visibility";
+import { effectiveHiddenPaths, HIDEABLE_PAGES } from "@/lib/page-visibility";
 import { PageHeader } from "@/components/ui";
 import { ContentManager } from "./manager";
 
@@ -22,7 +22,11 @@ export default async function AdminContentPage() {
     getCopyOverrides(),
     getPageSettings(),
   ]);
-  const hiddenPaths = pageSettings.filter((p) => p.hidden).map((p) => p.id);
+  // E14: the effective view, so a default-hidden page (/es) shows as HIDDEN
+  // here even before anyone has ever written a record for it — otherwise the
+  // toggle would read "Visible" for a page visitors are getting a 404 on, and
+  // pressing it would hide an already-hidden page.
+  const hiddenPaths = effectiveHiddenPaths(pageSettings);
 
   return (
     <>

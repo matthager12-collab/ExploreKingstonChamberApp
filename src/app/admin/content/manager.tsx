@@ -134,7 +134,7 @@ function PagesSection({
           );
         })}
       </Card>
-      {error && <p className="mt-3 text-sm font-medium text-coral-deep">{error}</p>}
+      {error && <p role="alert" className="mt-3 text-sm font-medium text-coral-deep">{error}</p>}
     </Section>
   );
 }

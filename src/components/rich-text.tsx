@@ -11,8 +11,27 @@ import { Fragment, type ReactNode } from "react";
 
 const SAFE_URL = /^(https?:\/\/|mailto:|tel:|\/)/i;
 
+/** E14 contrast fix. The default (light) styling is text-tide-deep #16758f,
+ *  which lands on the footer's --color-sound-deep #22334d at 2.41:1 — the
+ *  single shared-chrome failure axe baselined on every page. `tone="dark"`
+ *  swaps in the on-navy pair (12.7:1) and keeps the underline, so the link is
+ *  still identifiable without colour. Fixed at the usage site: no --color-*
+ *  token value changes. */
+export type RichTextTone = "light" | "dark";
+
+const TONES: Record<RichTextTone, { strong: string; link: string }> = {
+  light: {
+    strong: "font-medium text-ink",
+    link: "font-medium text-tide-deep underline decoration-seaglass underline-offset-2 hover:text-sound",
+  },
+  dark: {
+    strong: "font-medium text-white",
+    link: "font-medium text-white underline decoration-seaglass underline-offset-2 hover:text-seaglass",
+  },
+};
+
 /** Tokenize one line into bold / link / text React nodes. */
-function renderLine(line: string, keyPrefix: string): ReactNode[] {
+function renderLine(line: string, keyPrefix: string, tone: RichTextTone): ReactNode[] {
   const nodes: ReactNode[] = [];
   // Match **bold** or [label](url), whichever comes first, left to right.
   const pattern = /\*\*([^*]+)\*\*|\[([^\]]+)\]\(([^)\s]+)\)/g;
@@ -23,7 +42,7 @@ function renderLine(line: string, keyPrefix: string): ReactNode[] {
     if (m.index > last) nodes.push(line.slice(last, m.index));
     if (m[1] !== undefined) {
       nodes.push(
-        <strong key={`${keyPrefix}-b${i}`} className="font-medium text-ink">
+        <strong key={`${keyPrefix}-b${i}`} className={TONES[tone].strong}>
           {m[1]}
         </strong>,
       );
@@ -34,7 +53,7 @@ function renderLine(line: string, keyPrefix: string): ReactNode[] {
           key={`${keyPrefix}-a${i}`}
           href={m[3]}
           {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-          className="font-medium text-tide-deep underline decoration-seaglass underline-offset-2 hover:text-sound"
+          className={TONES[tone].link}
         >
           {m[2]}
         </a>,
@@ -50,12 +69,18 @@ function renderLine(line: string, keyPrefix: string): ReactNode[] {
   return nodes;
 }
 
-export function RichText({ text }: { text: string }): ReactNode {
+export function RichText({
+  text,
+  tone = "light",
+}: {
+  text: string;
+  tone?: RichTextTone;
+}): ReactNode {
   const lines = text.split("\n");
   return lines.map((line, idx) => (
     <Fragment key={idx}>
       {idx > 0 && <br />}
-      {renderLine(line, String(idx))}
+      {renderLine(line, String(idx), tone)}
     </Fragment>
   ));
 }

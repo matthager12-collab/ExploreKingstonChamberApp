@@ -182,7 +182,7 @@ export function FerryVesselMap({
         role="region"
         aria-label="Live map of the Edmonds–Kingston ferries"
       />
-      <p className="mt-2 text-xs text-ink-soft">
+      <p className="mt-2 text-xs text-ink">
         {data.live
           ? `Live vessel positions from WSDOT, refreshed every 20 seconds${
               noBoats ? " — no Edmonds–Kingston boats are reporting a position right now." : "."

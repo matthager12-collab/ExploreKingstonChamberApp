@@ -285,10 +285,12 @@ export function ItineraryEditor({
           </button>
         ))}
         <button
+          type="button"
           onClick={() => {
             setDraft(newDraft());
             setMessage(null);
           }}
+          aria-pressed={Boolean(draft?.isNew)}
           className={`rounded-full border px-4 py-2 text-sm font-semibold ${
             draft?.isNew
               ? "border-coral bg-coral text-white"
@@ -503,15 +505,19 @@ export function ItineraryEditor({
                 )}
               </>
             )}
-            {message && (
-              <p
-                className={`text-sm font-medium ${
-                  message.kind === "ok" ? "text-fern" : "text-coral-deep"
-                }`}
-              >
-                {message.text}
-              </p>
-            )}
+            {/* E14: always mounted so the outcome is announced when it
+                arrives; sr-only while empty so the row's gap is unchanged. */}
+            <p
+              role="status"
+              aria-live="polite"
+              className={
+                message
+                  ? `text-sm font-medium ${message.kind === "ok" ? "text-fern" : "text-coral-deep"}`
+                  : "sr-only"
+              }
+            >
+              {message?.text}
+            </p>
           </div>
         </>
       )}

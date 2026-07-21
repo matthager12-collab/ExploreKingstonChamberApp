@@ -187,12 +187,12 @@ export function Sr104TrafficMap({ height = "420px" }: { height?: string }) {
             </span>
             <span className="text-sm">
               <span className="font-semibold text-sound-deep">{s.title}.</span>{" "}
-              <span className="text-ink-soft">{s.detail}</span>
+              <span className="text-ink">{s.detail}</span>
             </span>
           </li>
         ))}
       </ol>
-      <p className="mt-2 text-xs text-ink-soft">
+      <p className="mt-2 text-xs text-ink">
         When the pass is on, join the line from the <span className="font-medium text-ink">west,
         coming down SR 104 via Barber Cutoff Rd</span> — don&apos;t U-turn into the line early. Only
         when the wait tops <span className="font-medium text-ink">2 hours</span> and the line backs

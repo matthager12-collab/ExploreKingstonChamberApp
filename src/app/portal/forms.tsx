@@ -5,18 +5,28 @@
 
 import { useState, type FormEvent, type ReactNode } from "react";
 
+// E14: explicit htmlFor/id rather than a wrapping label. Hints render as
+// siblings of the label so `aria-describedby` can point at them without the
+// same sentence also folding into the control's accessible name.
 function Field({
+  id,
   label,
+  hint,
   children,
 }: {
+  id: string;
   label: string;
+  hint?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <label className="block text-sm font-medium text-ink">
-      {label}
+    <div className="text-sm">
+      <label htmlFor={id} className="block font-medium text-ink">
+        {label}
+      </label>
       {children}
-    </label>
+      {hint}
+    </div>
   );
 }
 
@@ -64,25 +74,45 @@ function formValues(e: FormEvent<HTMLFormElement>): Record<string, string> {
 
 export function LoginForm() {
   const { busy, error, submit } = useSubmit("/api/auth/login");
+  // A failed sign-in is announced (role="alert") and both credentials are
+  // marked invalid — the server can't say which one was wrong, and neither can
+  // we. JoinForm below already did this; login and setup did not.
+  const invalid = error
+    ? ({ "aria-invalid": true, "aria-describedby": "login-error" } as const)
+    : {};
   return (
     <form onSubmit={(e) => submit(formValues(e))} className="max-w-sm space-y-4">
-      <Field label="Email">
-        <input name="email" type="email" required autoComplete="email" className={inputClass} />
-      </Field>
-      <Field label="Password">
+      <Field id="login-email" label="Email">
         <input
+          id="login-email"
+          name="email"
+          type="email"
+          required
+          autoComplete="email"
+          className={inputClass}
+          {...invalid}
+        />
+      </Field>
+      <Field id="login-password" label="Password">
+        <input
+          id="login-password"
           name="password"
           type="password"
           required
           autoComplete="current-password"
           className={inputClass}
+          {...invalid}
         />
       </Field>
-      {error && <p className="text-sm font-medium text-coral-deep">{error}</p>}
+      {error && (
+        <p id="login-error" role="alert" className="text-sm font-medium text-coral-deep">
+          {error}
+        </p>
+      )}
       <button type="submit" disabled={busy} className={buttonClass}>
         {busy ? "Signing in…" : "Sign in"}
       </button>
-      <p className="text-sm text-ink-soft">
+      <p className="text-sm text-ink">
         Have an invite code from the Chamber?{" "}
         <a href="/portal/join" className="font-medium text-tide-deep underline underline-offset-2">
           Create your account
@@ -96,14 +126,15 @@ export function SetupForm() {
   const { busy, error, submit } = useSubmit("/api/auth/setup");
   return (
     <form onSubmit={(e) => submit(formValues(e))} className="max-w-sm space-y-4">
-      <Field label="Your name">
-        <input name="name" required className={inputClass} />
+      <Field id="setup-name" label="Your name">
+        <input id="setup-name" name="name" required className={inputClass} />
       </Field>
-      <Field label="Email">
-        <input name="email" type="email" required className={inputClass} />
+      <Field id="setup-email" label="Email">
+        <input id="setup-email" name="email" type="email" required className={inputClass} />
       </Field>
-      <Field label="Password (8+ characters)">
+      <Field id="setup-password" label="Password (8+ characters)">
         <input
+          id="setup-password"
           name="password"
           type="password"
           required
@@ -112,13 +143,29 @@ export function SetupForm() {
           className={inputClass}
         />
       </Field>
-      <Field label="Setup token">
-        <input name="setupToken" required className={inputClass} />
+      <Field
+        id="setup-token"
+        label="Setup token"
+        hint={
+          <p id="setup-token-help" className="mt-1 text-xs text-ink-soft">
+            From the SETUP_TOKEN environment variable — see docs/DEPLOY.md.
+          </p>
+        }
+      >
+        <input
+          id="setup-token"
+          name="setupToken"
+          required
+          className={inputClass}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? "setup-token-help setup-error" : "setup-token-help"}
+        />
       </Field>
-      <p className="text-xs text-ink-soft">
-        From the SETUP_TOKEN environment variable — see docs/DEPLOY.md.
-      </p>
-      {error && <p className="text-sm font-medium text-coral-deep">{error}</p>}
+      {error && (
+        <p id="setup-error" role="alert" className="text-sm font-medium text-coral-deep">
+          {error}
+        </p>
+      )}
       <button type="submit" disabled={busy} className={buttonClass}>
         {busy ? "Creating…" : "Create admin account"}
       </button>
@@ -130,29 +177,44 @@ export function JoinForm() {
   const { busy, error, submit } = useSubmit("/api/auth/redeem");
   return (
     <form onSubmit={(e) => submit(formValues(e))} className="max-w-sm space-y-4">
-      <Field label="Invite code">
-        <input name="code" required className={inputClass} placeholder="from the Chamber" />
-      </Field>
-      <Field label="Your name">
-        <input name="name" required className={inputClass} />
-      </Field>
-      <Field label="Email">
+      <Field id="join-code" label="Invite code">
         <input
+          id="join-code"
+          name="code"
+          required
+          className={inputClass}
+          placeholder="from the Chamber"
+        />
+      </Field>
+      <Field id="join-name" label="Your name">
+        <input id="join-name" name="name" required className={inputClass} />
+      </Field>
+      <Field
+        id="join-email"
+        label="Email"
+        /* Invites can be bound to a specific address (E06), and admin invites
+           always are. Saying so here turns "This invite is bound to a
+           different email address" from a dead end into an obvious fix. It is
+           a sibling of the label, not a child, so it is read once — as the
+           input's description rather than part of its name. */
+        hint={
+          <p id="join-email-hint" className="mt-1 text-xs text-ink-soft">
+            If the Chamber sent your invite to a particular address, use that one.
+          </p>
+        }
+      >
+        <input
+          id="join-email"
           name="email"
           type="email"
           required
           aria-describedby="join-email-hint"
           className={inputClass}
         />
-        {/* Invites can be bound to a specific address (E06), and admin invites
-            always are. Saying so here turns "This invite is bound to a
-            different email address" from a dead end into an obvious fix. */}
-        <p id="join-email-hint" className="mt-1 text-xs text-ink-soft">
-          If the Chamber sent your invite to a particular address, use that one.
-        </p>
       </Field>
-      <Field label="Password (8+ characters)">
+      <Field id="join-password" label="Password (8+ characters)">
         <input
+          id="join-password"
           name="password"
           type="password"
           required

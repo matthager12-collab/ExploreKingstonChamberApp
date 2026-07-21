@@ -344,11 +344,13 @@ export function HuntEditor({
           </button>
         ))}
         <button
+          type="button"
           onClick={() => {
             setDraft(newDraft());
             setSubmissions([]);
             setMessage(null);
           }}
+          aria-pressed={draft?.source === "new"}
           className={`rounded-full border px-4 py-2 text-sm font-semibold ${
             draft?.source === "new"
               ? "border-coral bg-coral text-white"
@@ -621,12 +623,12 @@ export function HuntEditor({
                                   <Badge tone="sand">unverified</Badge>
                                 )}
                                 {typeof sub.distanceMeters === "number" && (
-                                  <span className="text-[10px] text-ink-soft">
+                                  <span className="text-[0.625rem] text-ink-soft">
                                     {sub.distanceMeters} m
                                   </span>
                                 )}
                               </div>
-                              <p className="text-[10px] text-ink-soft">
+                              <p className="text-[0.625rem] text-ink-soft">
                                 {new Date(sub.ts).toLocaleString()}
                               </p>
                             </div>
@@ -665,15 +667,19 @@ export function HuntEditor({
                 View live page ↗
               </a>
             )}
-            {message && (
-              <p
-                className={`text-sm font-medium ${
-                  message.kind === "ok" ? "text-fern" : "text-coral-deep"
-                }`}
-              >
-                {message.text}
-              </p>
-            )}
+            {/* E14: always mounted so the outcome is announced when it
+                arrives; sr-only while empty so the row's gap is unchanged. */}
+            <p
+              role="status"
+              aria-live="polite"
+              className={
+                message
+                  ? `text-sm font-medium ${message.kind === "ok" ? "text-fern" : "text-coral-deep"}`
+                  : "sr-only"
+              }
+            >
+              {message?.text}
+            </p>
           </div>
         </>
       )}

@@ -234,7 +234,7 @@ function SaveBar({
   return (
     <>
       {error && (
-        <p className="mt-3 text-sm font-medium text-coral-deep">{error}</p>
+        <p role="alert" className="mt-3 text-sm font-medium text-coral-deep">{error}</p>
       )}
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-sand pt-4">
         <button type="button" onClick={onSave} disabled={busy} className={buttonClass}>

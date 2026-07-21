@@ -244,9 +244,9 @@ export function RecordHistory({
 
       {open && (
         <div className="mt-2 space-y-2">
-          {error && <p className="text-sm font-medium text-coral-deep">{error}</p>}
+          {error && <p role="alert" className="text-sm font-medium text-coral-deep">{error}</p>}
           {restored && (
-            <p className="text-sm font-medium text-fern">
+            <p role="status" className="text-sm font-medium text-fern">
               Restored — saved as a new change.{" "}
               <button
                 onClick={() => window.location.reload()}
@@ -295,7 +295,7 @@ export function RecordHistory({
                             <summary className="cursor-pointer text-xs font-medium text-tide-deep">
                               Raw JSON
                             </summary>
-                            <pre className="mt-1 max-h-64 overflow-auto rounded bg-shell p-2 text-[11px] leading-snug">
+                            <pre className="mt-1 max-h-64 overflow-auto rounded bg-shell p-2 text-[0.6875rem] leading-snug">
                               {JSON.stringify(
                                 { before: entry.before, after: entry.after },
                                 null,

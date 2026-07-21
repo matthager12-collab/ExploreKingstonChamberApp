@@ -20,10 +20,14 @@ import {
   getVesselLocations,
 } from "@/lib/wsf";
 import { FAST_FERRY_FACTS, getFastFerrySailings } from "@/lib/kitsap";
-import { getCopyOverrides, copyText, getHiddenPaths } from "@/lib/stores/site-store";
+import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
 import { getFerryInfo } from "@/lib/stores/ferry-info-store";
 import { getWebcams } from "@/lib/stores/listing-stores";
-import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
+import {
+  assertPageVisible,
+  getEffectiveHiddenPaths,
+  HiddenPageBanner,
+} from "@/lib/page-visibility";
 import { FerryBoard } from "./ferry-board";
 import { FerryVesselMap } from "@/components/ferry-vessel-map";
 import { FerryLineInfo } from "@/components/ferry-line-info";
@@ -69,7 +73,7 @@ export default async function FerryPage() {
       getEmpiricalBusyness(),
       getFerryPredictionAccess(),
       getWebcams(),
-      getHiddenPaths(),
+      getEffectiveHiddenPaths(),
     ]);
   const fastFerry = getFastFerrySailings();
   const vessels = await getVesselLocations();
@@ -192,10 +196,13 @@ export default async function FerryPage() {
             </div>
             <ul className="mt-3 space-y-2 text-sm text-ink-soft">
               <li>
-                <strong className="text-ink">A walk-on round trip costs $11.35, total.</strong>{" "}
-                WSF collects passenger fares only at Edmonds — boarding in Kingston is free, in
-                either trip order. Seniors and riders with disabilities pay $5.65; kids 18 and
-                under ride free.
+                <strong className="text-ink">A round trip on foot costs $11.35 in total.</strong>{" "}
+                {/* E14 plain-language pass: "WSF" was unexpanded on first use and
+                    "in either trip order" reads as a restriction, not a relief. */}
+                Washington State Ferries collects passenger fares only on the Edmonds side, so
+                boarding in Kingston is always free. That is true whether you start in Kingston or
+                in Edmonds. Seniors and riders with disabilities pay $5.65. Kids 18 and under ride
+                free.
               </li>
               <li>
                 <strong className="text-ink">Walk-ons always get on.</strong> Even when the car
@@ -223,15 +230,17 @@ export default async function FerryPage() {
                 first come, first served — the crossing itself is about 30 minutes.
               </li>
               <li>
-                <strong className="text-ink">Summer line rules:</strong> when it&rsquo;s busy, the
-                holding line runs up SR 104 and a boarding-pass (&ldquo;tally&rdquo;) system runs
-                daily 8 am–8 pm. Watch for the flashing sign at Barber Cutoff Rd, then take a pass
-                at the dispenser near Lindvog Rd and stay in line — leaving voids it.
+                {/* E14 plain-language pass: 45 words, four chained actions, and
+                    "tally" — staff vocabulary, not visitor vocabulary. Dropped. */}
+                <strong className="text-ink">Summer line rules:</strong> when it is busy, the line
+                of cars runs up SR 104. A boarding-pass system runs every day from 8 am to 8 pm.
+                Watch for the flashing sign at Barber Cutoff Rd. Take a pass from the machine near
+                Lindvog Rd. Stay in the line — if you leave it, your pass stops working.
               </li>
             </ul>
           </Card>
         </div>
-        <p className="mt-3 text-sm text-ink-soft">
+        <p className="mt-3 text-sm text-ink">
           Fares above are summer 2026 rates, checked July 2026 — WSF usually adjusts fares each
           October. Confirm at{" "}
           <ExternalLink href={WSF_FARES_URL}>WSDOT&rsquo;s Edmonds–Kingston fare page</ExternalLink>
@@ -267,10 +276,14 @@ export default async function FerryPage() {
               <strong className="text-ink">Boarding:</strong> {FAST_FERRY_FACTS.boarding}
             </li>
             <li>
-              <strong className="text-ink">When it runs:</strong> weekdays year-round, Saturdays
-              in summer only (roughly May–September), never Sundays. The last weekday boat home
-              leaves Seattle at 6:45 PM — there are no late-night runs, even on big game nights,
-              so plan evening returns through Edmonds.
+              <strong className="text-ink">When it runs:</strong> weekdays year-round, and
+              Saturdays in summer only (roughly May to September). Never Sundays.
+              {/* E14 plain-language pass: this is the sentence that decides whether
+                  someone is stranded in Seattle. It ended on a nominalization
+                  ("plan evening returns through Edmonds"). */}{" "}
+              The last weekday fast ferry home leaves Seattle at 6:45 pm. There are no later
+              boats, not even on big game nights. If you are coming back in the evening, go
+              through Edmonds instead.
             </li>
           </ul>
           <p className="mt-4 text-sm text-ink-soft">
@@ -284,19 +297,23 @@ export default async function FerryPage() {
 
       <Section>
         <Callout title="Paying for the ferry">
+          {/* E14 plain-language pass: four unexplained abbreviations, the finance
+              term "surcharge", and an exception nested in parentheses inside the
+              instruction the reader has to act on at the toll booth. */}
           <p>
-            Cards (Visa, Mastercard, Amex, Discover) and ORCA work at the WSF tollbooths, but every
-            credit/debit purchase carries a 3% surcharge (since March 2026). To skip it, tap a
-            pre-loaded ORCA card (as long as you didn&rsquo;t load it at a WSF facility). Best of
-            all: walking on from Kingston is free — fares are collected at Edmonds — so most walk-on
-            visitors pay nothing at the dock. Good To Go! is highway tolling only — it will not pay
-            for a ferry.
+            You can pay at the Kingston toll booths with a card — Visa, Mastercard, American
+            Express, or Discover — or with an ORCA transit card. Card payments add a 3% fee, and
+            have since March 2026. To avoid that fee, tap an ORCA card you loaded with money
+            somewhere other than a ferry terminal. Best of all: walking onto the boat in Kingston
+            is free. Fares are only collected on the Edmonds side, so most walk-on visitors pay
+            nothing at the dock. A Good To Go! pass is for highway tolls only. It will not pay for
+            the ferry.
           </p>
           <p className="mt-2">
-            Driving on? During peak periods (daily 8 am–8 pm in season, plus weekends and holidays)
-            you&rsquo;ll need a vehicle boarding pass from the SR 104 holding line — take one at the
-            dispenser near Lindvog Rd, and don&rsquo;t leave the line or it&rsquo;s void. Walk-ons,
-            cyclists, and motorcycles are exempt.
+            Driving on? In the busy season — every day from 8 am to 8 pm, plus weekends and
+            holidays — you need a vehicle boarding pass from the SR 104 line. Take one from the
+            machine near Lindvog Rd, and stay in the line: if you leave it, the pass stops working.
+            You do not need a pass if you are walking on, riding a bike, or riding a motorcycle.
           </p>
           <p className="mt-2">
             Full payment details:{" "}

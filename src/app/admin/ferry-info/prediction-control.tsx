@@ -209,7 +209,7 @@ export function FerryPredictionControl({ initial }: { initial: PredictionState }
         )}
       </div>
 
-      {error && <p className="mt-3 text-sm text-coral-deep">{error}</p>}
+      {error && <p role="alert" className="mt-3 text-sm text-coral-deep">{error}</p>}
     </Card>
   );
 }

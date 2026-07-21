@@ -426,7 +426,12 @@ export function NextFerries({
             <span
               className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${t.live}`}
             >
-              <span className={`h-1.5 w-1.5 animate-pulse rounded-full ${t.liveDot}`} /> Live
+              {/* Decorative — "Live" beside it carries the state (open-badge.tsx). */}
+              <span
+                aria-hidden
+                className={`h-1.5 w-1.5 animate-pulse rounded-full ${t.liveDot}`}
+              />{" "}
+              Live
             </span>
           )}
         </div>

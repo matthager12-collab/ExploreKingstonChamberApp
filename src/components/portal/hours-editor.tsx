@@ -142,6 +142,17 @@ export function HoursEditor({
                     const bothSet = Boolean(open && close);
                     const sameTime = bothSet && open === close;
                     const pastMidnight = bothSet && close < open;
+                    // E14: the coral text below was visible-only. These ids tie
+                    // it to the two controls it is about, so a screen-reader
+                    // user tabbing the day rows learns which span is invalid.
+                    // (!bothSet and sameTime are mutually exclusive, so at most
+                    // one element ever carries `errorId`.)
+                    const prefix = `hours-${day.key}-${spanIdx}`;
+                    const invalid = !bothSet || sameTime;
+                    const errorId = invalid ? `${prefix}-error` : undefined;
+                    const closeDescribedBy =
+                      [errorId, pastMidnight ? `${prefix}-note` : null].filter(Boolean).join(" ") ||
+                      undefined;
                     return (
                       <div key={spanIdx} className="flex flex-wrap items-center gap-2">
                         <input
@@ -150,6 +161,8 @@ export function HoursEditor({
                           onChange={(e) => setTime(day.key, spanIdx, 0, e.target.value)}
                           className={timeInputClass}
                           aria-label={`${day.full} span ${spanIdx + 1} opens`}
+                          aria-invalid={invalid || undefined}
+                          aria-describedby={errorId}
                         />
                         <span className="text-sm text-ink-soft">to</span>
                         <input
@@ -158,6 +171,8 @@ export function HoursEditor({
                           onChange={(e) => setTime(day.key, spanIdx, 1, e.target.value)}
                           className={timeInputClass}
                           aria-label={`${day.full} span ${spanIdx + 1} closes`}
+                          aria-invalid={invalid || undefined}
+                          aria-describedby={closeDescribedBy}
                         />
                         {spans.length > 1 && (
                           <button
@@ -170,17 +185,20 @@ export function HoursEditor({
                           </button>
                         )}
                         {!bothSet && (
-                          <span className="text-xs font-medium text-coral-deep">
+                          <span id={errorId} className="text-xs font-medium text-coral-deep">
                             set both times
                           </span>
                         )}
                         {sameTime && (
-                          <span className="text-xs font-medium text-coral-deep">
+                          <span id={errorId} className="text-xs font-medium text-coral-deep">
                             open and close can&apos;t match
                           </span>
                         )}
                         {pastMidnight && (
-                          <span className="rounded-full bg-tide/10 px-2 py-0.5 text-xs font-medium text-tide-deep">
+                          <span
+                            id={`${prefix}-note`}
+                            className="rounded-full bg-tide/10 px-2 py-0.5 text-xs font-medium text-tide-deep"
+                          >
                             past midnight — closes the next morning
                           </span>
                         )}

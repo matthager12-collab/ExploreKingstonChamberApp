@@ -701,7 +701,7 @@ export function AccountsManager({
               </table>
             </div>
           )}
-          {actionError && <p className="mt-3 text-sm font-medium text-coral-deep">{actionError}</p>}
+          {actionError && <p role="alert" className="mt-3 text-sm font-medium text-coral-deep">{actionError}</p>}
           <p className="mt-3 text-xs text-ink-soft">
             Passwords are hashed — they can&apos;t be viewed, only reset. Disabling, deleting, or
             changing a role signs that person out everywhere on their next request.
@@ -714,7 +714,7 @@ export function AccountsManager({
         subtitle="Codes waiting to be redeemed at /portal/join. Spent codes stay here as a record."
       >
         {inviteError && (
-          <p className="mb-3 text-sm font-medium text-coral-deep">{inviteError}</p>
+          <p role="alert" className="mb-3 text-sm font-medium text-coral-deep">{inviteError}</p>
         )}
         {invites.length === 0 ? (
           <Card>
@@ -999,7 +999,7 @@ export function AccountsManager({
             </label>
 
             {blockedReason && <p className="text-sm text-ink-soft">{blockedReason}</p>}
-            {error && <p className="text-sm font-medium text-coral-deep">{error}</p>}
+            {error && <p role="alert" className="text-sm font-medium text-coral-deep">{error}</p>}
             <button
               type="submit"
               disabled={busy || blockedReason !== null}

@@ -182,7 +182,7 @@ export function EventsSourcesManager({ initial }: { initial: EventsSourcesState 
             {busy === "sync" ? "Syncing…" : "Sync now"}
           </button>
         </div>
-        {notice && <p className="mt-2 text-sm font-medium text-fern">{notice}</p>}
+        {notice && <p role="status" className="mt-2 text-sm font-medium text-fern">{notice}</p>}
         <ul className="mt-4 grid gap-4">
           {sources.map((s) => (
             <li key={s.id} className="rounded-xl border border-sand p-4">
@@ -365,7 +365,7 @@ export function EventsSourcesManager({ initial }: { initial: EventsSourcesState 
         )}
       </Card>
 
-      {error && <p className="text-sm font-medium text-coral-deep">{error}</p>}
+      {error && <p role="alert" className="text-sm font-medium text-coral-deep">{error}</p>}
     </div>
   );
 }

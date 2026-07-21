@@ -180,7 +180,7 @@ export default async function EatPage() {
       </Section>
 
       <Section title="The food map">
-        <p className="mb-4 text-ink-soft">
+        <p className="mb-4 text-ink">
           Every kitchen and bar in town, pinned — tap a marker for the walk time
           from the ferry.
         </p>

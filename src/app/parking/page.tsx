@@ -6,6 +6,7 @@ import {
   Callout,
 } from "@/components/ui";
 import { FeatureMap } from "@/components/feature-map";
+import { parkingRuleLabel } from "@/lib/map/parking-labels";
 import { resolveMapView } from "@/lib/map/resolve";
 import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
 import { getFerryInfo } from "@/lib/stores/ferry-info-store";
@@ -52,26 +53,61 @@ export default async function ParkingPage() {
             <p className="text-sm text-ink-soft">Parking map coming soon.</p>
           </Card>
         )}
-        <p className="mt-2 text-xs text-ink-soft">
+        <p className="mt-2 text-xs text-ink">
           Colors follow the parking type shown in the legend. The sign on the pole is
           always the legal authority — where a lot and a posted sign disagree, believe the
           sign. Chamber admins keep this map current in the portal at /admin/maps.
         </p>
+        {/* E14 (M-14-04): on the map canvas a lot's type is carried by its
+            marker colour alone, and the type name only appears inside a popup
+            you have to tap. feature-map.tsx is frozen, so the text alternative
+            lives here — same data, no colour required, and it prints. */}
+        {parkingMap?.builtins.parkingZones && parkingMap.builtins.parkingZones.length > 0 && (
+          <div className="mt-4">
+            <h3 className="text-lg font-semibold text-sound-deep">Every lot, in words</h3>
+            <p className="mt-1 text-sm text-ink">
+              The same lots as the map above, with the parking type spelled out.
+            </p>
+            <ul className="mt-3 divide-y divide-sand rounded-2xl border border-sand bg-white">
+              {parkingMap.builtins.parkingZones.map((z) => (
+                <li key={z.id} className="px-4 py-3">
+                  <p className="text-sm font-semibold text-ink">{z.name}</p>
+                  {/* parkingRuleLabel(), not z.rule: the raw value is an
+                      internal slug ("free-2hr"), and printing it does not
+                      convey the type the marker colour was encoding. */}
+                  <p className="text-sm text-ink">
+                    {parkingRuleLabel(z.rule)}
+                    {z.summary ? ` — ${z.summary}` : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </Section>
 
       <Section title="Before you park for the ferry">
         <Callout title="The line of cars on SR 104 is the ferry queue — not parking" tone="coral">
+          {/* E14 plain-language pass (NFR-04): this was one 130-word block whose
+              core instruction chained four actions in a single 44-word sentence.
+              Same facts, one idea per sentence, three decisions split apart. */}
           <p>
-            People mix these up all the time. If you&apos;re driving onto the boat, you don&apos;t
-            park anywhere — you join the holding line on SR 104. During peak periods (daily 8
-            am–8 pm in season), watch for the flashing-light advisory sign at Barber Cutoff Rd,
-            follow the lane, and take a boarding pass at the dispenser near Lindvog Rd before
-            waiting for green lights up to the tollbooths. Leave the line and your pass is void.
-            If you&apos;re just picking someone
-            up or dropping off, skip the line entirely: stay in the right lane and turn right at
-            Washington St before the tollbooths. And if you&apos;re leaving a car behind to walk
-            on, use the Port or Diamond lots — not the free 2-hour zone, which the Port
-            explicitly asks ferry travelers to avoid.
+            People mix these two things up all the time. If you are driving onto the boat, do
+            not park. You join the line of cars on SR 104 instead.
+          </p>
+          <p className="mt-2">
+            In the busy season, from 8 am to 8 pm, watch for the flashing sign at Barber Cutoff
+            Rd. Follow that lane. Take a boarding pass from the machine near Lindvog Rd. Then
+            wait for a green light before you drive up to the toll booths. Stay in the line — if
+            you leave it, your pass stops working.
+          </p>
+          <p className="mt-2">
+            Only dropping someone off or picking them up? Do not join the line. Stay in the right
+            lane and turn right at Washington St, before the toll booths.
+          </p>
+          <p className="mt-2">
+            Leaving your car and walking onto the boat? Use a Port lot or a Diamond lot. Do not
+            use the free 2-hour spaces — the Port asks ferry riders to stay out of those.
           </p>
           {ferryInfo.boardingPass.currentNote.trim() && (
             <p className="mt-3 font-medium text-ink">
@@ -85,7 +121,7 @@ export default async function ParkingPage() {
         title="Overnight parking, honestly"
         subtitle="The short version: one lot clearly allows it, one probably does, and everything else is a day-use situation."
       >
-        <div className="max-w-2xl space-y-3 text-ink-soft">
+        <div className="max-w-2xl space-y-3 text-ink">
           <p>
             <span className="font-semibold text-ink">Diamond lot D515 — yes.</span> The only
             option that plainly allows overnight and multi-day parking: $12 covers 12–24 hours,
@@ -93,9 +129,13 @@ export default async function ParkingPage() {
           </p>
           <p>
             <span className="font-semibold text-ink">Port numbered spaces — call first.</span>{" "}
-            The Port charges by the 12-hour block and never explicitly forbids cars overnight,
-            but it never explicitly allows it either. Before leaving a car overnight, call the
-            Port office: 360-297-3545. And to be clear:{" "}
+            {/* E14 plain-language pass: the rule was a double negative
+                ("never explicitly forbids … but never explicitly allows"), which
+                made the reader resolve two negations to reach "nobody knows". */}
+            The Port charges in 12-hour blocks. Its rules do not say you can leave a car
+            overnight, and they do not say you cannot. Nobody knows for sure. So call the Port
+            office first, at 360-297-3545, before you leave a car there overnight. Two things are
+            certain:{" "}
             <span className="font-medium text-ink">no RV parking on Port property</span>, and no
             camping.
           </p>
@@ -105,14 +145,18 @@ export default async function ParkingPage() {
             caps them at 24 hours. One night squeaks by; a weekend does not.
           </p>
           <p>
-            <span className="font-semibold text-ink">Streets — legal where unsigned, with a
-            catch.</span> Kingston is unincorporated, and Kitsap County has no blanket overnight
-            ban — restrictions exist only where posted. But under state law (RCW 46.55.085) a
-            vehicle left in the right-of-way can be tagged as apparently abandoned and impounded
-            24 hours after tagging. So an overnight on Georgia or Pennsylvania Ave is fine;
-            multi-day storage is not. The posted hours of the downtown 2-hour limits aren&apos;t
-            documented anywhere online, so don&apos;t assume a 2-hour street frees up at night —
-            read the sign.
+            <span className="font-semibold text-ink">Streets — legal where there is no sign,
+            with a catch.</span>{" "}
+            {/* E14 plain-language pass: the sentence whose consequence is a tow
+                was passive ("can be tagged … and impounded") and carried three
+                unexplained legal terms plus a bare statute number. */}
+            Kingston is not its own city, and Kitsap County has no county-wide overnight parking
+            ban. A street only has rules if a sign says so. But state law lets the county act on a
+            car left on a public street for a long time: it can put a tag on the car, call it
+            abandoned, and tow it 24 hours later. (The law is Washington state code RCW 46.55.085.)
+            So one night on Georgia Ave or Pennsylvania Ave is fine. Leaving a car for several days
+            is not. The downtown 2-hour signs do not list their hours anywhere online, so do not
+            assume a 2-hour space is free at night. Read the sign.
           </p>
         </div>
       </Section>

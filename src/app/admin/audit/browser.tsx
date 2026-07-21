@@ -255,8 +255,8 @@ export function AuditBrowser({
         </Card>
       )}
 
-      {error && <p className="text-sm font-medium text-coral-deep">{error}</p>}
-      {notice && <p className="text-sm font-medium text-fern">{notice}</p>}
+      {error && <p role="alert" className="text-sm font-medium text-coral-deep">{error}</p>}
+      {notice && <p role="status" className="text-sm font-medium text-fern">{notice}</p>}
 
       <Card>
         {page?.entries.length === 0 && !loading && (
@@ -298,7 +298,7 @@ export function AuditBrowser({
                           <summary className="cursor-pointer text-xs font-medium text-tide-deep">
                             Raw JSON
                           </summary>
-                          <pre className="mt-1 max-h-64 overflow-auto rounded bg-shell p-2 text-[11px] leading-snug">
+                          <pre className="mt-1 max-h-64 overflow-auto rounded bg-shell p-2 text-[0.6875rem] leading-snug">
                             {JSON.stringify(
                               { before: entry.before, after: entry.after },
                               null,

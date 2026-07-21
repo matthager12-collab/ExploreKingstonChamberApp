@@ -94,14 +94,14 @@ export default async function WebcamsPage() {
             </p>
           </Card>
         </div>
-        <p className="mt-5 text-sm text-ink-soft">
+        <p className="mt-5 text-sm text-ink">
           No camera points at downtown Kingston or the marina yet — the WSDOT
           terminal cams above are the closest thing.
         </p>
       </Section>
 
       <Section>
-        <p className="text-sm text-ink-soft">
+        <p className="text-sm text-ink">
           Camera images courtesy of{" "}
           <ExternalLink href="https://wsdot.wa.gov/travel/washington-state-ferries">
             WSDOT

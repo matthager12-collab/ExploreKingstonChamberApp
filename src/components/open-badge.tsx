@@ -47,12 +47,16 @@ export function OpenBadge({ weeklyHours }: { weeklyHours?: WeeklyHours }) {
 
   return (
     <span
+      // E14 contrast: the tinted pairs failed at this 12px size — text-fern on
+      // bg-fern/10 measured 4.29:1 and text-ink-soft on bg-sand 3.62:1. Solid
+      // fern with white text is 4.81:1 and sand with text-ink is 11.95:1. Fixed
+      // at the usage site; no --color-* token value changed.
       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-        status.open ? "bg-fern/10 text-fern" : "bg-sand text-ink-soft"
+        status.open ? "bg-fern text-white" : "bg-sand text-ink"
       }`}
     >
       <span
-        className={`h-1.5 w-1.5 rounded-full ${status.open ? "bg-fern" : "bg-ink-soft/50"}`}
+        className={`h-1.5 w-1.5 rounded-full ${status.open ? "bg-white" : "bg-ink/40"}`}
         aria-hidden
       />
       {status.label}

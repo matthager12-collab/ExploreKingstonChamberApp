@@ -1,23 +1,12 @@
 {
-  "/": [
-    "color-contrast"
-  ],
-  "/ferry": [
-    "color-contrast"
-  ],
-  "/eat": [
-    "color-contrast"
-  ],
-  "/events": [
-    "color-contrast"
-  ],
-  "/stay": [
-    "color-contrast"
-  ],
-  "/about": [
-    "color-contrast"
-  ],
-  "/admin/worklist": [
-    "color-contrast"
-  ]
+  "/": [],
+  "/ferry": [],
+  "/eat": [],
+  "/events": [],
+  "/stay": [],
+  "/about": [],
+  "/simple": [],
+  "/print": [],
+  "/accessibility": [],
+  "/admin/worklist": []
 }

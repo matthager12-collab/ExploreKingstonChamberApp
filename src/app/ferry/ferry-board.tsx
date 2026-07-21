@@ -320,7 +320,7 @@ export function FerryBoard({
         </div>
       </details>
 
-      <p className="text-xs text-ink-soft">
+      <p className="text-xs text-ink">
         {data.carFerry.live
           ? "Car-ferry times are live from WSDOT."
           : "Car-ferry times are from the printed seasonal schedule — the live feed is unreachable right now."}

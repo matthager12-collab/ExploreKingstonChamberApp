@@ -317,7 +317,16 @@ by account dimension (`login:<email>`, `redeem:<code>`) so IP rotation cannot
 fully escape. Profile/password changes limited too.
 
 ### 4.8 Page-level visibility gating (`src/lib/page-visibility.tsx`)
-Public pages call `await assertPageVisible("/hunt")` at the top of their server component. Hidden page + visitor → `notFound()`; hidden page + admin → renders with `<HiddenPageBanner/>` for preview. `HIDEABLE_PAGES` (11 paths) is the single source of truth shared by the admin UI and the nav filter.
+Public pages call `await assertPageVisible("/hunt")` at the top of their server component. Hidden page + visitor → `notFound()`; hidden page + admin → renders with `<HiddenPageBanner/>` for preview. `HIDEABLE_PAGES` is the single source of truth shared by the admin UI and the nav filter.
+
+**Default-hidden pages (E14).** Most hideable pages are visible until an admin hides them. `DEFAULT_HIDDEN_PAGES` inverts that for a named few: **absence of a site-pages record means HIDDEN**, and only an explicit `{ id, hidden: false }` record — written from the same Admin → Site content toggle — makes the page public. `/es` is the first and currently only entry, because unreviewed hand-authored Spanish safety copy must fail closed: a fresh database, a restored backup, or a wiped store all leave it dark.
+
+Two functions, and the distinction matters:
+
+- `getHiddenPaths()` (`stores/site-store.ts`) — the RAW store view: rows with `hidden: true`. It cannot tell "no record" from "record says visible".
+- `getEffectiveHiddenPaths()` (`page-visibility.tsx`) — raw hidden rows **plus** every `DEFAULT_HIDDEN_PAGES` path with no row. This is what `assertPageVisible()` gates on and what every link-rendering surface (root layout → nav + footer, home feature grid, `/ferry`, `/simple`, the admin toggle list) reads, so a visitor is never shown a link to a 404. The pure half, `effectiveHiddenPaths(settings)`, takes rows and returns paths.
+
+Rendering consequence: a default-hidden page is inherently dynamic while it is dark (`assertPageVisible` reaches `getSessionUser()` → `cookies()` on the hidden path), and becomes static-friendly once unhidden. That is expected. It is also why `/simple` — a static ISR page — picks up the new `/es` link only after its revalidation window, exactly like any other content edit (OPERATIONS §10).
 
 ### 4.9 Defense in depth — four layers
 1. **`src/proxy.ts`** (E06, Next 16 convention — *not* `middleware.ts`). Matches `/admin`, the signed-in `/portal` sub-pages, `/api/admin/*`, `/api/portal/*`. Verifies the cookie's signature + expiry only: **no database access**, per the Next docs' rule that a proxy must not rely on shared app state. It therefore cannot see `disabled`, `session_version`, or role — a valid signature is not a valid session. Unauthenticated: `/api/*` → 401 JSON, pages → redirect to `/portal`. Fails **closed** if `AUTH_SECRET` is missing.
@@ -616,6 +625,47 @@ Offline pipeline → `public/geo/street-parking.json` (segments classified free-
 
 ---
 
+## 15. Accessibility floor (E14)
+
+Operator-facing procedures are in [`docs/OPERATIONS.md`](OPERATIONS.md) §13; the style guide,
+manual checklist, and exclusions policy are in [`docs/ACCESSIBILITY.md`](ACCESSIBILITY.md).
+This section is the architecture.
+
+### 15.1 Simple mode — `localStorage` + `data-simple`, never a cookie
+
+"Easy read" is a display preference: bigger root type and no background texture. Three pieces:
+
+1. **The bootstrap** — a raw inline `<script>` as an early child of `<body>` in `src/app/layout.tsx`. It reads `localStorage["ek-simple"]` and sets `document.documentElement.dataset.simple` **before paint**, so the larger type never flashes at the default size. Raw inline, not `next/script`: it has to run before hydration.
+2. **The toggle** — `src/components/simple-mode-toggle.tsx`, a client component with `aria-pressed`, writing both the key and the attribute.
+3. **The CSS** — `html[data-simple="1"] { font-size: 118% }` plus a background-image reset in `globals.css`. One root bump scales the whole app because every size is rem after the E14 px→rem sweep.
+
+**Why not a cookie.** A cookie would be the obvious way to render the preference server-side. It is also the audited v1 ISR trap: a `cookies()` read in the ROOT layout opts **every page** out of static rendering, permanently. `localStorage` + a DOM attribute keeps the layout static and costs one pre-paint script. This is enforced, not just documented — `tests/unit/a11y-static-invariants.test.ts` fails if `src/app/layout.tsx` ever imports `next/headers`.
+
+(Note the contrast with §4.8: `assertPageVisible()`'s `cookies()` read on the *hidden* path is fine and required. The trap is the root layout and the simple-mode plumbing, not per-page visibility.)
+
+### 15.2 The safety-strings dictionary — `src/lib/i18n/safety-content.ts`
+
+The EN+ES safety slice is **a typed object and nothing else**: no i18n framework, no locale routing, no runtime machine translation, no third-party translation widget. Shape:
+
+```ts
+interface SafetySection { title: string; steps: string[]; note?: string }
+interface SafetyStrings  { walkOn; driveOn; returnTrip; parkingPay; restrooms; help }  // all SafetySection
+export const SAFETY_CONTENT: { en: SafetyStrings; es: SafetyStrings }
+export const SAFETY_SECTION_ORDER  // render order, one list for both languages
+```
+
+`steps` is ordered because the order *is* the instruction. Both halves render through one component, `src/components/safety-essentials.tsx` — English on `/simple`, Spanish on `/es` — so the two pages cannot drift apart in structure or coverage. `tests/unit/safety-content-parity.test.ts` asserts identical section sets, identical step counts, notes present in both languages or neither, and no empty or stub strings, so a half-finished translation cannot reach a reader.
+
+WCAG 3.1.2 is handled at the render site: `/es` wraps everything in `lang="es"`, and the one English string on the page (the "In English" cross-link label) carries its own `lang="en"`; `/simple`'s "En español" link label carries `lang="es"`.
+
+### 15.3 The automated a11y gate — shipped vs deferred
+
+**Shipped.** `tests/server/axe-smoke.test.ts` runs axe against a sample of pages on the standalone production build, serious/critical only, failing on any rule id absent from `tests/server/axe-baseline.json` (shrink-only). `tests/unit/a11y-static-invariants.test.ts` holds the static invariants: no arbitrary px font sizes outside the frozen zones, no zoom blocking, no `next/headers` in the root layout, skip link present.
+
+**Deferred to a later slice.** The hard gate — every route, every severity, a typed exclusions file, and a manifest-completeness test that fails when a new `page.tsx` has no manifest entry — is deliberately not landed yet. It would fail any in-flight branch that adds a page, so it lands after the concurrent PWA work merges. `/accessibility` describes it as *planned, not shipped*, and that wording must not change until it is true.
+
+---
+
 ## Appendix: file map (orientation)
 
 ```
@@ -626,7 +676,7 @@ src/lib/db/records.ts               E05 audited zod write choke point (all struc
 src/lib/stores/json-store.ts        seed+overlay core (§3.2; E05: thin delegate over db/records.ts)
 src/lib/stores/*                    12 store modules (§3.3)
 src/lib/auth/                       auth (§4; E06: tokens/authz/identity/session + roles)
-src/lib/page-visibility.tsx         page show/hide gate (§4.8)
+src/lib/page-visibility.tsx         page show/hide gate + default-hidden pages (§4.8)
 src/lib/wsf.ts | kitsap.ts | weather.ts | tides.ts   external adapters (§5)
 src/lib/ferry-status.ts             assembled snapshot (§5.5)
 src/lib/ferry-forecast.ts           pure busyness model (§6.1)
@@ -634,7 +684,8 @@ src/lib/ferry-line.ts               SR-104 staging routing (§6.4)
 src/lib/ferry-reminder.ts           .ics reminders (§6.5)
 src/lib/{side,side-server}.ts       side-of-water mode (§7)
 src/lib/{time,hours}.ts             Pacific time + open/closed engine (§5.6, §12.1)
-src/lib/site-copy-registry.ts       91 editable copy blocks (§8.1)
+src/lib/i18n/safety-content.ts      EN+ES safety dictionary (§15.2)
+src/lib/site-copy-registry.ts       editable copy blocks, the only home of default copy (§8.1)
 src/lib/copy-context.tsx            EditableText / useCopy for client comps (§8.1)
 src/lib/map/resolve.ts              ResolvedMapView builder (§8.3)
 src/lib/data/*                      seed data (parking.ts has MapZone + legacy ParkingArea)

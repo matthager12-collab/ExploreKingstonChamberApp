@@ -89,7 +89,19 @@ export default function PrivacyPage() {
             This schedule is enforced by an automated job that runs against the same list shown
             here. When a window passes, the data is deleted.
           </p>
-          <div className="overflow-x-auto">
+          {/* E14 (WCAG 2.1.1, axe scrollable-region-focusable): a scroll
+              container that nothing inside it can focus is unreachable by
+              keyboard — the table is wider than a phone, so a keyboard-only
+              reader could not see the right-hand column at all. tabIndex makes
+              the region itself scrollable with the arrow keys; role+label give
+              it a name so it is announced as something rather than an anonymous
+              stop in the tab order. */}
+          <div
+            className="overflow-x-auto"
+            tabIndex={0}
+            role="region"
+            aria-label="Data retention schedule (scrollable)"
+          >
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-sand text-ink">

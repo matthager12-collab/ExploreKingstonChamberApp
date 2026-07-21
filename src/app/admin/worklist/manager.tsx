@@ -517,11 +517,22 @@ export function WorklistManager({
     <div className="space-y-4">
       {/* type chips with active-count badges */}
       <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by type">
-        <button className={typeFilter === "all" ? chipOn : chipOff} onClick={() => pickType("all")}>
+        {/* E14: chipOn/chipOff differ only in colour, so `aria-pressed` is the
+            whole selected state for AT — matching the Overdue chip below. */}
+        <button
+          className={typeFilter === "all" ? chipOn : chipOff}
+          onClick={() => pickType("all")}
+          aria-pressed={typeFilter === "all"}
+        >
           All ({TYPE_ORDER.reduce((n, t) => n + activeCount(counts, t), 0)})
         </button>
         {TYPE_ORDER.map((t) => (
-          <button key={t} className={typeFilter === t ? chipOn : chipOff} onClick={() => pickType(t)}>
+          <button
+            key={t}
+            className={typeFilter === t ? chipOn : chipOff}
+            onClick={() => pickType(t)}
+            aria-pressed={typeFilter === t}
+          >
             {TYPE_LABELS[t]} ({activeCount(counts, t)})
           </button>
         ))}
@@ -529,7 +540,12 @@ export function WorklistManager({
 
       <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by assignment">
         {(["all", "me", "unassigned"] as const).map((a) => (
-          <button key={a} className={assignee === a ? chipOn : chipOff} onClick={() => pickAssignee(a)}>
+          <button
+            key={a}
+            className={assignee === a ? chipOn : chipOff}
+            onClick={() => pickAssignee(a)}
+            aria-pressed={assignee === a}
+          >
             {a === "all" ? "Anyone" : a === "me" ? "Mine" : "Unassigned"}
           </button>
         ))}
@@ -542,7 +558,12 @@ export function WorklistManager({
         </button>
         <span className="mx-1 hidden border-l border-sand sm:block" aria-hidden />
         {(["active", "resolved", "dismissed"] as const).map((v) => (
-          <button key={v} className={view === v ? chipOn : chipOff} onClick={() => pickView(v)}>
+          <button
+            key={v}
+            className={view === v ? chipOn : chipOff}
+            onClick={() => pickView(v)}
+            aria-pressed={view === v}
+          >
             {v[0].toUpperCase() + v.slice(1)}
           </button>
         ))}

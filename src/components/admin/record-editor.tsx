@@ -65,15 +65,32 @@ function newRecordDraft(domain: DomainDef): Draft {
   return { domain: domain.key, id: "", idTouched: false, isNew: true, values };
 }
 
+/** The id control is synthesised by the editor rather than declared by the
+ *  domain, so it needs a reserved key for the id/aria-describedby plumbing. */
+const ID_FIELD_KEY = "id";
+
+type BuildResult =
+  | { ok: true; record: GenericRecord }
+  /** `fieldKey` is "" when the failure can't be pinned to one control. */
+  | { ok: false; fieldKey: string; text: string };
+
 /** Draft → validated record via the domain schema. Returns the parsed record
  *  (canonical: trimmed strings, coerced numbers, empty optionals omitted) or
- *  an error message. The schema is the same object the API route parses with,
- *  so the form now surfaces every server rule — numeric ranges included —
- *  before the round-trip. */
-function buildRecord(domain: DomainDef, draft: Draft): GenericRecord | string {
+ *  the offending field plus its message. The schema is the same object the API
+ *  route parses with, so the form now surfaces every server rule — numeric
+ *  ranges included — before the round-trip.
+ *
+ *  E14: the failure keeps its `fieldKey` instead of collapsing to a flat
+ *  string, so the editor can mark that control `aria-invalid`, describe it with
+ *  the message, and move focus there. */
+function buildRecord(domain: DomainDef, draft: Draft): BuildResult {
   const id = draft.id.trim();
   if (!/^[a-z0-9][a-z0-9-]{0,63}$/i.test(id)) {
-    return "Id is required: letters, numbers, and dashes (e.g. point-casino-hotel).";
+    return {
+      ok: false,
+      fieldKey: ID_FIELD_KEY,
+      text: "Id is required: letters, numbers, and dashes (e.g. point-casino-hotel).",
+    };
   }
   const record: GenericRecord = { id };
   for (const f of domain.fields) {
@@ -102,18 +119,54 @@ function buildRecord(domain: DomainDef, draft: Draft): GenericRecord | string {
     const fieldKey = typeof issue?.path[0] === "string" ? issue.path[0] : "";
     const field = domain.fields.find((f) => f.key === fieldKey);
     const message = issue?.message ?? `Could not validate the ${domain.noun}.`;
-    return field ? `${field.label}: ${message}` : message;
+    return {
+      ok: false,
+      fieldKey: field ? fieldKey : "",
+      text: field ? `${field.label}: ${message}` : message,
+    };
   }
-  return parsed.data as GenericRecord;
+  return { ok: true, record: parsed.data as GenericRecord };
 }
 
-function Field({ label, help, children }: { label: string; help?: string; children: ReactNode }) {
+/** E14: explicit `htmlFor`/`id` association. Help and error text sit OUTSIDE
+ *  the `<label>` and reach the control through `aria-describedby` — nested in
+ *  the label they were concatenated into the control's accessible name, so the
+ *  Id field announced as "Id Auto-suggested from the name; lowercase…". */
+function Field({
+  id,
+  label,
+  help,
+  error,
+  required,
+  children,
+}: {
+  id: string;
+  label: string;
+  help?: string;
+  error?: string;
+  required?: boolean;
+  children: ReactNode;
+}) {
   return (
-    <label className="block text-sm">
-      <span className="font-medium text-ink">{label}</span>
-      <span className="mt-1 block">{children}</span>
-      {help && <span className="mt-1 block text-xs text-ink-soft">{help}</span>}
-    </label>
+    <div className="text-sm">
+      <label htmlFor={id} className="block font-medium text-ink">
+        {label}
+        {/* The required state is carried programmatically by `required` /
+            `aria-required` on the control; the marker is its visual echo. */}
+        {required && <span aria-hidden="true"> *</span>}
+      </label>
+      <div className="mt-1">{children}</div>
+      {help && (
+        <p id={`${id}-help`} className="mt-1 text-xs text-ink-soft">
+          {help}
+        </p>
+      )}
+      {error && (
+        <p id={`${id}-error`} className="mt-1 text-xs font-medium text-coral-deep">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -135,13 +188,20 @@ export function RecordEditor({
   const [activeKey, setActiveKey] = useState<string>(domains[0].key);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(
-    null,
-  );
+  const [message, setMessage] = useState<{
+    kind: "ok" | "error";
+    text: string;
+    /** set when the failure belongs to one control (E14) */
+    fieldKey?: string;
+  } | null>(null);
 
   const domain = domains.find((d) => d.key === activeKey)!;
   const list = records[activeKey];
   const isSeed = (id: string) => (seedIds[activeKey] ?? []).includes(id);
+  /** Stable DOM id per control — the anchor for htmlFor / aria-describedby. */
+  const fieldId = (key: string) => `record-editor-${domain.key}-${key}`;
+  const errorFor = (key: string) =>
+    message?.kind === "error" && message.fieldKey === key ? message.text : undefined;
 
   function switchDomain(key: string) {
     setActiveKey(key);
@@ -173,8 +233,14 @@ export function RecordEditor({
 
   async function save(current: Draft) {
     const built = buildRecord(domain, current);
-    if (typeof built === "string") {
-      setMessage({ kind: "error", text: built });
+    if (!built.ok) {
+      setMessage({ kind: "error", text: built.text, fieldKey: built.fieldKey });
+      // Announce and land: the message is a live region, and focus follows it
+      // to the control that failed rather than sitting on the Save button.
+      const failed = built.fieldKey;
+      if (failed) {
+        requestAnimationFrame(() => document.getElementById(fieldId(failed))?.focus());
+      }
       return;
     }
     setBusy(true);
@@ -183,7 +249,7 @@ export function RecordEditor({
       const res = await fetch("/api/admin/content-records", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ domain: domain.key, record: built }),
+        body: JSON.stringify({ domain: domain.key, record: built.record }),
       });
       const data = (await res.json()) as {
         ok?: boolean;
@@ -250,22 +316,51 @@ export function RecordEditor({
 
   function renderInput(f: FieldDef) {
     const raw = draft?.values[f.key];
+    const id = fieldId(f.key);
+    const invalid = Boolean(errorFor(f.key));
+    // One describedby chain per control: help first, then the error, so AT
+    // reads the guidance and the reason the save failed (E14).
+    const describedBy =
+      [f.help ? `${id}-help` : null, invalid ? `${id}-error` : null].filter(Boolean).join(" ") ||
+      undefined;
+    const aria = {
+      id,
+      required: f.required,
+      "aria-required": f.required || undefined,
+      "aria-invalid": invalid || undefined,
+      "aria-describedby": describedBy,
+    } as const;
+
     if (f.kind === "checkbox") {
       return (
-        <label className="flex items-center gap-2 text-sm text-ink">
-          <input
-            type="checkbox"
-            checked={Boolean(raw)}
-            onChange={(e) => patchValue(f.key, e.target.checked)}
-          />
-          {f.label}
-        </label>
+        <div className="text-sm">
+          <label htmlFor={id} className="flex items-center gap-2 text-ink">
+            <input
+              {...aria}
+              type="checkbox"
+              checked={Boolean(raw)}
+              onChange={(e) => patchValue(f.key, e.target.checked)}
+            />
+            {f.label}
+          </label>
+          {f.help && (
+            <p id={`${id}-help`} className="mt-1 text-xs text-ink-soft">
+              {f.help}
+            </p>
+          )}
+          {invalid && (
+            <p id={`${id}-error`} className="mt-1 text-xs font-medium text-coral-deep">
+              {errorFor(f.key)}
+            </p>
+          )}
+        </div>
       );
     }
     const value = typeof raw === "string" ? raw : "";
     if (f.kind === "textarea") {
       return (
         <textarea
+          {...aria}
           className={INPUT}
           rows={3}
           value={value}
@@ -277,6 +372,7 @@ export function RecordEditor({
     if (f.kind === "select") {
       return (
         <select
+          {...aria}
           className={INPUT}
           value={value}
           onChange={(e) => patchValue(f.key, e.target.value)}
@@ -291,6 +387,7 @@ export function RecordEditor({
     }
     return (
       <input
+        {...aria}
         className={INPUT}
         inputMode={f.kind === "number" ? "decimal" : undefined}
         value={value}
@@ -338,7 +435,9 @@ export function RecordEditor({
             </a>
           </p>
           <button
+            type="button"
             onClick={startNew}
+            aria-pressed={Boolean(draft?.isNew)}
             className={`shrink-0 rounded-full border px-4 py-2 text-sm font-semibold ${
               draft?.isNew
                 ? "border-coral bg-coral text-white"
@@ -352,7 +451,11 @@ export function RecordEditor({
           {list.map((r) => (
             <li key={r.id} className="flex flex-wrap items-center gap-2 py-2.5">
               <button
+                type="button"
                 onClick={() => edit(r)}
+                // Colour + underline marked the open record; `aria-current` is
+                // the half AT could not see (M-14-04).
+                aria-current={draft?.id === r.id && !draft.isNew ? "true" : undefined}
                 className={`text-left text-sm font-semibold ${
                   draft?.id === r.id && !draft.isNew
                     ? "text-tide-deep underline decoration-seaglass underline-offset-2"
@@ -406,77 +509,114 @@ export function RecordEditor({
             </div>
           )}
 
-          <div className="mt-3 grid gap-4 sm:grid-cols-2">
-            <Field
-              label="Id"
-              help={
-                draft.isNew
-                  ? "Auto-suggested from the name; lowercase letters, numbers, dashes. Fixed after the first save."
-                  : "Ids can't change — the overlay matches records by id."
-              }
-            >
-              <input
-                className={`${INPUT} ${draft.isNew ? "" : "bg-shell text-ink-soft"}`}
-                value={draft.id}
-                readOnly={!draft.isNew}
-                onChange={(e) =>
-                  setDraft((d) => (d ? { ...d, id: e.target.value, idTouched: true } : d))
+          {/* E14: a real <form>, so Enter submits from any text field and every
+              action button declares its type. */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void save(draft);
+            }}
+          >
+            <div className="mt-3 grid gap-4 sm:grid-cols-2">
+              {domain.fields.some((f) => f.required) && (
+                <p className="text-xs text-ink-soft sm:col-span-2">Fields marked * are required.</p>
+              )}
+              <Field
+                id={fieldId(ID_FIELD_KEY)}
+                label="Id"
+                required
+                error={errorFor(ID_FIELD_KEY)}
+                help={
+                  draft.isNew
+                    ? "Auto-suggested from the name; lowercase letters, numbers, dashes. Fixed after the first save."
+                    : "Ids can't change — the overlay matches records by id."
                 }
-              />
-            </Field>
-            {domain.fields.map((f) =>
-              f.kind === "checkbox" ? (
-                <div key={f.key} className={f.wide ? "sm:col-span-2" : ""}>
-                  {renderInput(f)}
-                  {f.help && <p className="mt-1 text-xs text-ink-soft">{f.help}</p>}
-                </div>
-              ) : (
-                <div key={f.key} className={f.wide ? "sm:col-span-2" : ""}>
-                  <Field label={f.label} help={f.help}>
+              >
+                <input
+                  id={fieldId(ID_FIELD_KEY)}
+                  required
+                  aria-required="true"
+                  aria-invalid={errorFor(ID_FIELD_KEY) ? true : undefined}
+                  aria-describedby={
+                    errorFor(ID_FIELD_KEY)
+                      ? `${fieldId(ID_FIELD_KEY)}-help ${fieldId(ID_FIELD_KEY)}-error`
+                      : `${fieldId(ID_FIELD_KEY)}-help`
+                  }
+                  className={`${INPUT} ${draft.isNew ? "" : "bg-shell text-ink-soft"}`}
+                  value={draft.id}
+                  readOnly={!draft.isNew}
+                  onChange={(e) =>
+                    setDraft((d) => (d ? { ...d, id: e.target.value, idTouched: true } : d))
+                  }
+                />
+              </Field>
+              {domain.fields.map((f) =>
+                f.kind === "checkbox" ? (
+                  // renderInput owns the checkbox's own label, help and error
+                  // wiring — the help <p> used to sit out here, unassociated.
+                  <div key={f.key} className={f.wide ? "sm:col-span-2" : ""}>
                     {renderInput(f)}
-                  </Field>
-                </div>
-              ),
-            )}
-          </div>
+                  </div>
+                ) : (
+                  <div key={f.key} className={f.wide ? "sm:col-span-2" : ""}>
+                    <Field
+                      id={fieldId(f.key)}
+                      label={f.label}
+                      help={f.help}
+                      required={f.required}
+                      error={errorFor(f.key)}
+                    >
+                      {renderInput(f)}
+                    </Field>
+                  </div>
+                ),
+              )}
+            </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <button
-              onClick={() => void save(draft)}
-              disabled={busy}
-              className="rounded-full bg-coral px-5 py-2 text-sm font-semibold text-white hover:bg-coral-deep disabled:opacity-60"
-            >
-              {busy ? "Working…" : `Save ${domain.noun}`}
-            </button>
-            {!draft.isNew && (
+            <div className="mt-4 flex flex-wrap items-center gap-3">
               <button
-                onClick={() => void remove(draft)}
+                type="submit"
                 disabled={busy}
-                className="rounded-full border border-coral/40 bg-white px-4 py-2 text-sm font-semibold text-coral-deep hover:bg-coral/10 disabled:opacity-60"
+                className="rounded-full bg-coral px-5 py-2 text-sm font-semibold text-white hover:bg-coral-deep disabled:opacity-60"
               >
-                {isSeed(draft.id) ? "Hide (delete seed)" : "Delete"}
+                {busy ? "Working…" : `Save ${domain.noun}`}
               </button>
-            )}
-            <button
-              onClick={() => {
-                setDraft(null);
-                setMessage(null);
-              }}
-              disabled={busy}
-              className="rounded-full border border-sand bg-white px-4 py-2 text-sm font-semibold text-ink hover:border-tide disabled:opacity-60"
-            >
-              Close
-            </button>
-            {message && (
-              <p
-                className={`text-sm font-medium ${
-                  message.kind === "ok" ? "text-fern" : "text-coral-deep"
-                }`}
+              {!draft.isNew && (
+                <button
+                  type="button"
+                  onClick={() => void remove(draft)}
+                  disabled={busy}
+                  className="rounded-full border border-coral/40 bg-white px-4 py-2 text-sm font-semibold text-coral-deep hover:bg-coral/10 disabled:opacity-60"
+                >
+                  {isSeed(draft.id) ? "Hide (delete seed)" : "Delete"}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setDraft(null);
+                  setMessage(null);
+                }}
+                disabled={busy}
+                className="rounded-full border border-sand bg-white px-4 py-2 text-sm font-semibold text-ink hover:border-tide disabled:opacity-60"
               >
-                {message.text}
+                Close
+              </button>
+              {/* Always mounted so the announcement fires when the text
+                  arrives; sr-only while empty keeps the row's gap honest. */}
+              <p
+                role="status"
+                aria-live="polite"
+                className={
+                  message
+                    ? `text-sm font-medium ${message.kind === "ok" ? "text-fern" : "text-coral-deep"}`
+                    : "sr-only"
+                }
+              >
+                {message?.text}
               </p>
-            )}
-          </div>
+            </div>
+          </form>
 
           {/* E09: fearless undo — every change to this record, restorable. */}
           {!draft.isNew && (
@@ -491,13 +631,17 @@ export function RecordEditor({
         </Card>
       )}
 
-      {!draft && message && (
+      {!draft && (
         <p
-          className={`text-sm font-medium ${
-            message.kind === "ok" ? "text-fern" : "text-coral-deep"
-          }`}
+          role="status"
+          aria-live="polite"
+          className={
+            message
+              ? `text-sm font-medium ${message.kind === "ok" ? "text-fern" : "text-coral-deep"}`
+              : "sr-only"
+          }
         >
-          {message.text}
+          {message?.text}
         </p>
       )}
     </div>
