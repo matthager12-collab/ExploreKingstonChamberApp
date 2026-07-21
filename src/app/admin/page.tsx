@@ -8,6 +8,7 @@
 
 import type { Metadata } from "next";
 import { areaLabel, summarize, type AnalyticsSummary } from "@/lib/analytics-store";
+import { BELOW_K_BUCKET_LABEL, K_FLOOR } from "@/lib/privacy/policy";
 import { surveyStore } from "@/lib/survey-store";
 import { Badge, Callout, Card, PageHeader, Section } from "@/components/ui";
 
@@ -32,6 +33,9 @@ const DISTANCE_BANDS: { key: string; label: string }[] = [
 ];
 
 function geoLabel(g: AnalyticsSummary["sessionsByGeo"][number]): string {
+  // E11 k-floor: buckets with too few sessions arrive pre-collapsed from
+  // summarize() — label them as the privacy rollup, never a place name.
+  if (g.collapsed) return BELOW_K_BUCKET_LABEL;
   if (g.source === "dev-local") return "Local development traffic";
   const parts = [g.city, g.region, g.country].filter(Boolean);
   return parts.length > 0 ? parts.join(", ") : "Unknown (no location headers)";
@@ -97,7 +101,12 @@ export default async function AdminPage() {
 
   const topPages = analytics.pageviewsByPath.slice(0, TOP_N);
   const topLinks = analytics.outboundLinks.slice(0, TOP_N);
-  const topGeo = analytics.sessionsByGeo.slice(0, TOP_N);
+  // E11: the k-floor rollup row must ALWAYS render (it's the privacy story),
+  // so it never competes with named buckets for a TOP_N slot — and it gets
+  // its own React key (a real headerless-traffic bucket also keys |||unknown).
+  const namedGeo = analytics.sessionsByGeo.filter((g) => !g.collapsed);
+  const geoRollup = analytics.sessionsByGeo.find((g) => g.collapsed);
+  const topGeo = namedGeo.slice(0, TOP_N);
 
   return (
     <>
@@ -162,7 +171,7 @@ export default async function AdminPage() {
               Region and city are derived from connection headers — city-grained at best and
               often wrong at finer levels. Exact home zip codes come only from the survey.
             </p>
-            {topGeo.length > 0 ? (
+            {topGeo.length > 0 || geoRollup ? (
               <ul className="mt-3 divide-y divide-sand">
                 {topGeo.map((g) => (
                   <CountRow
@@ -171,15 +180,22 @@ export default async function AdminPage() {
                     count={g.sessions}
                   />
                 ))}
+                {geoRollup && (
+                  <CountRow
+                    key="__below-k-rollup__"
+                    primary={geoLabel(geoRollup)}
+                    count={geoRollup.sessions}
+                  />
+                )}
               </ul>
             ) : (
               <div className="mt-3">
                 <EmptyNote>No visits recorded yet.</EmptyNote>
               </div>
             )}
-            {analytics.sessionsByGeo.length > TOP_N && (
+            {namedGeo.length > TOP_N && (
               <p className="mt-2 text-xs text-ink-soft">
-                Showing top {TOP_N} of {analytics.sessionsByGeo.length} areas.
+                Showing top {TOP_N} of {namedGeo.length} named areas.
               </p>
             )}
           </Card>
@@ -267,7 +283,9 @@ export default async function AdminPage() {
           {analytics.geoPingsByArea.length > 0 ? (
             <ul className="mt-4 space-y-3">
               {analytics.geoPingsByArea.map((row) => {
-                const max = analytics.geoPingsByArea[0].count;
+                // True max, not [0]: the k-floor rollup row sorts last but can
+                // out-count the largest named area (many small areas summed).
+                const max = Math.max(...analytics.geoPingsByArea.map((r) => r.count));
                 const pct = max > 0 ? Math.max(4, Math.round((row.count / max) * 100)) : 0;
                 return (
                   <li key={row.area}>
@@ -293,8 +311,9 @@ export default async function AdminPage() {
             </div>
           )}
           <p className="mt-4 text-xs italic text-ink-soft">
-            Pings are opt-in and coarse (rounded to about a block before storage), so treat
-            these counts as a sample of visitor movement — not a census.
+            Pings are opt-in and stored only as named-area buckets (never coordinates). Areas
+            with fewer than {K_FLOOR} distinct sessions are grouped for privacy. Treat these
+            counts as a sample of visitor movement — not a census.
           </p>
         </Card>
       </Section>

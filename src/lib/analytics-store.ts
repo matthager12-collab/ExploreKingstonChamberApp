@@ -26,6 +26,8 @@
 // this store answers "roughly where from" and "where did they go".
 
 import { appendAnalyticsEvent, readAnalyticsEvents } from "./db/append";
+import { applyKFloor } from "./privacy/k-floor";
+import { BELOW_K_BUCKET, BELOW_K_BUCKET_LABEL, K_FLOOR } from "./privacy/policy";
 
 // "geolite2" (E10): coarse geography from the self-hosted MaxMind GeoLite2 file
 // — the source on Render, where no platform geo headers exist. The IP is looked
@@ -167,6 +169,7 @@ export function classifyArea(lat: number, lng: number): string {
 /** Reader-friendly label for an area id (admin dashboard). */
 export function areaLabel(area: string): string {
   if (area === OUTSIDE_AREA) return OUTSIDE_AREA_LABEL;
+  if (area === BELOW_K_BUCKET) return BELOW_K_BUCKET_LABEL;
   return AREAS.find((a) => a.id === area)?.label ?? area;
 }
 
@@ -183,15 +186,24 @@ export interface AnalyticsSummary {
   pageviewsByPath: { path: string; count: number }[];
   /** Outbound clicks grouped by href+label, sorted by count, descending. */
   outboundLinks: { href: string; label: string; count: number }[];
-  /** Geo-pings per named Kingston area (see AREAS), sorted by count, descending. */
+  /**
+   * Geo-pings per named Kingston area (see AREAS), sorted by count,
+   * descending — k-floored (E11): areas with fewer than K_FLOOR distinct
+   * sessions are collapsed into one BELOW_K_BUCKET row, sorted last.
+   */
   geoPingsByArea: { area: string; count: number }[];
-  /** Unique sessions per coarse geo bucket, sorted by sessions, descending. */
+  /**
+   * Unique sessions per coarse geo bucket, sorted by sessions, descending —
+   * k-floored (E11): buckets under the floor collapse into one row flagged
+   * `collapsed` (render it with the below-threshold label, never a place name).
+   */
   sessionsByGeo: {
     country: string;
     region: string;
     city: string;
     source: GeoSource;
     sessions: number;
+    collapsed?: boolean;
   }[];
   /** Pacific-time days, ascending. */
   byDay: { day: string; pageviews: number; outboundClicks: number; sessions: number }[];
@@ -218,7 +230,9 @@ export async function summarize(): Promise<AnalyticsSummary> {
   const sessions = new Set<string>();
   const byPath = new Map<string, number>();
   const byLink = new Map<string, { href: string; label: string; count: number }>();
-  const byArea = new Map<string, number>();
+  // Per-area DISTINCT SESSIONS ride along with the count — the k-floor keys
+  // on sessions, not pings (one person pinging 10 times is still one person).
+  const byArea = new Map<string, { count: number; sessions: Set<string> }>();
   const byGeo = new Map<
     string,
     { country: string; region: string; city: string; source: GeoSource; sessions: Set<string> }
@@ -250,7 +264,10 @@ export async function summarize(): Promise<AnalyticsSummary> {
     } else if (e.type === "geo-ping") {
       geoPings++;
       const area = e.area ?? OUTSIDE_AREA;
-      byArea.set(area, (byArea.get(area) ?? 0) + 1);
+      const areaEntry = byArea.get(area) ?? { count: 0, sessions: new Set<string>() };
+      areaEntry.count++;
+      areaEntry.sessions.add(e.sessionId);
+      byArea.set(area, areaEntry);
     } else if (e.type === "consent") {
       consents++;
     }
@@ -278,6 +295,50 @@ export async function summarize(): Promise<AnalyticsSummary> {
     byDay.set(day, dayEntry);
   }
 
+  // K-floor (E11): applied HERE, inside summarize, so every consumer — the
+  // admin dashboard, exports, E18 reporting — inherits it. Buckets under
+  // K_FLOOR distinct sessions collapse into one below-threshold row, totals
+  // preserved, collapsed row sorted last.
+  const areaRows = [...byArea.entries()]
+    .map(([area, v]) => ({ area, count: v.count, sessionCount: v.sessions.size }))
+    .sort((a, b) => b.count - a.count);
+  const flooredAreas = applyKFloor(
+    areaRows,
+    K_FLOOR,
+    (r) => r.sessionCount,
+    (below) => ({
+      area: BELOW_K_BUCKET,
+      count: below.reduce((s, r) => s + r.count, 0),
+      sessionCount: below.reduce((s, r) => s + r.sessionCount, 0),
+    }),
+  );
+
+  const geoRows: {
+    country: string;
+    region: string;
+    city: string;
+    source: GeoSource;
+    sessions: Set<string>;
+    collapsed?: boolean;
+  }[] = [...byGeo.values()].sort((a, b) => b.sessions.size - a.sessions.size);
+  const flooredGeo = applyKFloor(
+    geoRows,
+    K_FLOOR,
+    (r) => r.sessions.size,
+    (below) => ({
+      country: "",
+      region: "",
+      city: "",
+      source: "unknown" as const,
+      // Union, not sum: a session that moved between geo buckets counts once.
+      sessions: below.reduce((set, r) => {
+        r.sessions.forEach((s) => set.add(s));
+        return set;
+      }, new Set<string>()),
+      collapsed: true,
+    }),
+  );
+
   return {
     totalEvents: events.length,
     pageviews,
@@ -289,12 +350,11 @@ export async function summarize(): Promise<AnalyticsSummary> {
       .map(([p, count]) => ({ path: p, count }))
       .sort((a, b) => b.count - a.count),
     outboundLinks: [...byLink.values()].sort((a, b) => b.count - a.count),
-    geoPingsByArea: [...byArea.entries()]
-      .map(([area, count]) => ({ area, count }))
-      .sort((a, b) => b.count - a.count),
-    sessionsByGeo: [...byGeo.values()]
-      .map(({ sessions: s, ...rest }) => ({ ...rest, sessions: s.size }))
-      .sort((a, b) => b.sessions - a.sessions),
+    geoPingsByArea: flooredAreas.map(({ area, count }) => ({ area, count })),
+    sessionsByGeo: flooredGeo.map(({ sessions: s, ...rest }) => ({
+      ...rest,
+      sessions: s.size,
+    })),
     byDay: [...byDay.entries()]
       .map(([day, d]) => ({
         day,
