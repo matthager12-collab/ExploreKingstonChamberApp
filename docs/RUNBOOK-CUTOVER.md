@@ -4,7 +4,7 @@
 >
 > The E05 move from the Render disk to Neon Postgres **has already happened**.
 > Production runs on Postgres today: `explore-kingston` has `DATABASE_URL` set,
-> `/api/health` reports `dbOk:true`, and the database holds the live record,
+> `/api/health` reports `db:true`, and the database holds the live record,
 > audit, analytics, survey, and ferry-observation data.
 >
 > **Do not run the Cutover section below as if it were pending.** It is kept as

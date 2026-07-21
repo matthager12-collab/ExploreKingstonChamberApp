@@ -196,9 +196,10 @@ All are seed+overlay via `json-store.ts` unless marked append.
 Structured data no longer branches on env: it lives in Neon Postgres,
 **every write goes through the audited zod choke point**
 `src/lib/db/records.ts` (`readRecords` / `readMergedRecords` / `writeRecord`),
-and `DATABASE_URL` is required — `/api/health` reports `dbOk:false` and 503s
-without it, so a release without `DATABASE_URL` never serves traffic. That is
-**not** a safe abort: both Render services mount a persistent disk, only one
+and `DATABASE_URL` is required — `/api/health` reports `db:false` and 503s
+without it, so a release without `DATABASE_URL` never serves traffic. Since
+E15 removed the disk that IS a safe abort: the previous release keeps serving.
+(Before E15 it was not — a disk can be held by only one
 instance can hold it, so Render stops the old instance *before* starting the
 new one. A release that never goes healthy therefore leaves the site down (502)
 until a good release lands — the previous release is already gone and does not
@@ -437,7 +438,7 @@ Environment variables (authoritative — `.env.production.example`, `render.yaml
 | `NEXT_PUBLIC_SITE_URL` | **required in production**, **build-time** | absolute origin for share-card/canonical URLs (`layout.tsx` `metadataBase`); inlined at `npm run build`, not read at runtime |
 | `SETUP_TOKEN` | optional (first-run bootstrap only) | gates `POST /api/auth/setup` fail-closed; never consulted once an admin exists |
 | `DATA_DIR` | disk hosts | persistent volume path (e.g. `/data`) — images/hunt photos only since E05; **unset on Vercel** |
-| `DATABASE_URL` | **yes (E05)** | Neon Postgres (POOLED url, host has `-pooler`) — the structured-data home; `/api/health` 503s without it |
+| `DATABASE_URL` | **yes (E05)** | Neon Postgres (POOLED url, host has `-pooler`, `?sslmode=verify-full` — docs/DEPLOY.md §2e) — the structured-data home; `/api/health` 503s without it |
 | `BLOB_READ_WRITE_TOKEN` | Phase 2 | Vercel Blob for uploaded images |
 | `UPSTASH_REDIS_REST_URL` / `_TOKEN` | Phase 2 | shared rate limiter |
 

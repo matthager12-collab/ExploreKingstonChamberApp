@@ -362,11 +362,18 @@ whole `DATA_DIR`. There are **three backup layers**, deliberately independent:
 > `npm run restore:db` (see [RUNBOOK-CUTOVER.md](RUNBOOK-CUTOVER.md) §Restore
 > drill — rehearsed quarterly).
 
-### Layer 1 — Render daily disk snapshots (on-host, automatic)
+### Layer 1 — Neon Postgres PITR (off-host, automatic)
 
-Render snapshots the `/data` disk **daily** with a **7-day** restore window.
-Restore from **Dashboard → the service → Disk → Snapshots**. This is the
-zero-effort baseline and covers accidental deletion or corruption within a week.
+**Superseded E15.** This layer used to be Render's daily snapshots of the
+`/data` disk (7-day restore window). **The disk was removed**, so that layer is
+gone — and it lost nothing: by the time it was deleted the disk held 456 KB of
+vestigial pre-E05 directories and **zero** images (verified in the container,
+2026-07-21). Everything durable had already moved off it.
+
+The zero-effort automatic baseline is now **Neon's own point-in-time recovery /
+branching** on the Postgres database, which is where all structured data lives.
+Uploaded images live in the private R2 bucket, which is separately covered by
+Layer 3. Nothing depends on a host-local disk any more.
 
 ### Layer 2 — off-site admin backup bundle (portable, on demand)
 
