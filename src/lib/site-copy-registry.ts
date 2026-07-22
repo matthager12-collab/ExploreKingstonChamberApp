@@ -754,6 +754,20 @@ export const COPY_BLOCKS = [
     fallback: "Call the Kingston Chamber",
   },
 
+  // ---- Install the app (nav "More" surfaces, client) ----
+  {
+    key: "install.menu.label",
+    page: "Install app (client)",
+    label: "Add-to-home-screen menu entry",
+    fallback: "Add to home screen",
+  },
+  {
+    key: "install.menu.ios",
+    page: "Install app (client)",
+    label: "iOS instructions (no install button exists on iPhone/iPad)",
+    fallback: "Tap the Share button, then “Add to Home Screen”.",
+  },
+
   // ---- /simple — "Kingston basics" (M-14-03 plain-language page) ----
   {
     key: "simple.toggle.label",

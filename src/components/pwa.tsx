@@ -10,17 +10,27 @@
 // - <OfflineBanner/> — a fixed strip while the device is offline, carrying an
 //   honest "as of" time for the copy of the page being read.
 // - <InstallNudge/> — a quiet "add to home screen" card that asks at most once
-//   in a visitor's life.
+//   in a visitor's life. Dismissing it is permanent; <InstallAppButton/> in the
+//   nav's "More" surfaces is the deliberate way back in, so "never ask again"
+//   never means "never installable again".
 //
 // Every browser capability used here is feature-detected and every failure
 // path is a silent no-op: a visitor in private mode, on an insecure origin, or
 // on a browser without service workers gets the plain online app, never an
 // error. Nothing here ever blocks or delays the visitor.
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
 import { flushOutbox } from "@/lib/outbox";
 import { formatPacificTime } from "@/lib/time";
+import {
+  isInstalled,
+  isIosSafari,
+  promptInstall,
+  readCanInstall,
+  serverCanInstall,
+  subscribeToInstallPrompt,
+} from "@/lib/install-prompt";
 
 /* ── network state ──────────────────────────────────────────────────────── */
 
@@ -243,24 +253,56 @@ const IOS_NUDGE_DELAY_MS = 1500;
  *  StrictMode's double-invoked effects, so one arrival never counts twice. */
 let visitCounted = false;
 
-/** The Chromium-only event. Not in lib.dom, so the minimum shape we call. */
-type InstallPromptEvent = Event & { prompt: () => Promise<unknown> };
+/**
+ * Dismissed at some point during THIS page load.
+ *
+ * Module-scoped rather than a ref because it has to outlive the component:
+ * PwaClient is mounted from the ROOT layout, so a remount is possible while the
+ * document stays put, and the answer must survive it. It is also the only tier
+ * that works when localStorage is readable but not writable, and it costs no
+ * storage round-trip on the hot path (beforeinstallprompt can fire repeatedly).
+ */
+let dismissedThisLoad = false;
 
 type NudgeMode = "prompt" | "ios";
 
-function isInstalled(): boolean {
-  try {
-    if (typeof matchMedia === "function" && matchMedia("(display-mode: standalone)").matches) {
-      return true;
-    }
-  } catch {
-    // matchMedia missing or the query is unsupported — fall through to iOS.
-  }
-  // iOS Safari reports installed state here instead of via display-mode.
-  return (navigator as Navigator & { standalone?: boolean }).standalone === true;
+/* The card's own gate, as a store rather than component state.
+ *
+ * Deciding it costs a localStorage WRITE (countVisit), so it cannot be computed
+ * during render and has to be settled from an effect. Keeping the answer at
+ * module scope — the same choice as dismissedThisLoad above, and read through
+ * useSyncExternalStore like the three stores earlier in this file — means a
+ * remount inside the same document re-reads the decision instead of reopening a
+ * card the visitor already closed. */
+let nudgeGateOpen = false;
+const nudgeGateListeners = new Set<() => void>();
+
+function subscribeToNudgeGate(onChange: () => void): () => void {
+  nudgeGateListeners.add(onChange);
+  return () => {
+    nudgeGateListeners.delete(onChange);
+  };
+}
+
+function readNudgeGate(): boolean {
+  return nudgeGateOpen;
+}
+
+/** Closed on the server, so the first client render matches it exactly. */
+function serverNudgeGate(): boolean {
+  return false;
+}
+
+function setNudgeGate(open: boolean): void {
+  if (nudgeGateOpen === open) return;
+  nudgeGateOpen = open;
+  for (const notify of nudgeGateListeners) notify();
 }
 
 function isDismissed(): boolean {
+  // This-load flag first: it is authoritative the moment "Not now" is clicked,
+  // with no dependency on the write below having succeeded.
+  if (dismissedThisLoad) return true;
   try {
     return localStorage.getItem(DISMISSED_KEY) === "dismissed";
   } catch {
@@ -270,10 +312,12 @@ function isDismissed(): boolean {
 }
 
 function markDismissed() {
+  dismissedThisLoad = true;
   try {
     localStorage.setItem(DISMISSED_KEY, "dismissed");
   } catch {
-    // Nothing to do — the nudge is already gone for this page load.
+    // Nothing to do — the flag above still holds for the rest of this page
+    // load, which is all we can honestly promise without storage.
   }
 }
 
@@ -292,66 +336,62 @@ function countVisit(): number {
   }
 }
 
-function isIosSafari(): boolean {
-  // navigator.standalone exists ONLY on iOS Safari and is present whether or
-  // not the app is installed — a capability check, not a user-agent sniff.
-  // It is also the one engine that never fires beforeinstallprompt, which is
-  // the entire reason this branch exists.
-  return typeof navigator !== "undefined" && "standalone" in navigator;
-}
-
 function InstallNudge() {
   const pathname = usePathname();
-  const [mode, setMode] = useState<NudgeMode | null>(null);
-  const promptEvent = useRef<InstallPromptEvent | null>(null);
+  // The browser capability lives in the shared store, NOT here: it is captured
+  // whether or not this card is allowed to appear, so <InstallAppButton/> in the
+  // nav still works for a visitor who dismissed this card long ago.
+  const canInstall = useSyncExternalStore(
+    subscribeToInstallPrompt,
+    readCanInstall,
+    serverCanInstall,
+  );
+  // Closed until the effect below settles it — see the store's own note.
+  const allowed = useSyncExternalStore(subscribeToNudgeGate, readNudgeGate, serverNudgeGate);
+  const [iosDelayPassed, setIosDelayPassed] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (isInstalled() || isDismissed() || countVisit() < MIN_VISITS) return;
-
-    const onBeforeInstallPrompt = (event: Event) => {
-      // preventDefault() suppresses Chromium's own mini-infobar so OUR quiet
-      // card is the only ask, and keeps the event usable: prompt() must be
-      // called later on the saved event, from inside a user gesture.
-      event.preventDefault();
-      promptEvent.current = event as InstallPromptEvent;
-      setMode("prompt");
-    };
-    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+    setNudgeGate(true);
 
     // iOS Safari has no install event at all — the Share sheet is the only
-    // route, so the card carries instructions instead of a button.
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    if (isIosSafari()) {
-      timer = setTimeout(() => setMode("ios"), IOS_NUDGE_DELAY_MS);
-    }
-
-    return () => {
-      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
-      if (timer) clearTimeout(timer);
-    };
+    // route, so the card carries instructions instead of a button. The delay
+    // keeps it from landing during first paint.
+    if (!isIosSafari()) return;
+    const timer = setTimeout(() => setIosDelayPassed(true), IOS_NUDGE_DELAY_MS);
+    return () => clearTimeout(timer);
   }, []);
 
   function dismiss() {
-    // Never-nag doctrine: one dismissal is permanent, exactly like the
-    // side-of-water location ask. There is no re-ask path anywhere.
+    // Never-nag doctrine: one dismissal is permanent. Note this suppresses the
+    // CARD only — the nav's "Add to home screen" entry is the deliberate way
+    // back in for someone who said "Not now" and later changed their mind.
+    //
+    // Closing the gate (rather than re-reading storage on each render) is what
+    // makes the re-fires harmless: Chromium fires beforeinstallprompt again as
+    // the visitor moves around the app, and every one of those re-renders has
+    // to find this card closed.
     markDismissed();
-    setMode(null);
+    setNudgeGate(false);
   }
 
   function install() {
-    const event = promptEvent.current;
-    promptEvent.current = null;
     // prompt() first, still inside the click's gesture. Whatever the visitor
     // then chooses in the browser's own dialog, we never ask again.
-    void event?.prompt().catch(() => {});
+    void promptInstall();
     dismiss();
   }
 
-  if (!mode) return null;
+  if (!allowed) return null;
   // The root layout is the only layout, so it wraps /admin and /portal too.
   // Chamber staff and member businesses are not the audience for this card.
   if (pathname?.startsWith("/admin") || pathname?.startsWith("/portal")) return null;
+
+  // A real prompt beats the iOS instructions whenever the browser offers one;
+  // null means this engine can do neither, so the card never appears.
+  const mode: NudgeMode | null = canInstall ? "prompt" : iosDelayPassed ? "ios" : null;
+  if (!mode) return null;
 
   return (
     // Bottom-anchored, clear of the fixed mobile nav (4.5rem + the iOS home

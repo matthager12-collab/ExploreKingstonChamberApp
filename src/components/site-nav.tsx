@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { InstallAppButton } from "@/components/install-app-button";
 import { SimpleModeToggle } from "@/components/simple-mode-toggle";
 
 // E14: both "More" surfaces are DISCLOSURES, not dialogs — no focus trap, no
@@ -201,6 +202,11 @@ export function SiteNav({ hiddenPaths = [] }: { hiddenPaths?: string[] }) {
                       in one predictable place on both. */}
                   <div className="mt-1 border-t border-sand px-1 pt-1">
                     <SimpleModeToggle className="w-full justify-start" />
+                    {/* The way back in for anyone who dismissed the install card
+                        (components/pwa.tsx). Renders nothing unless this browser
+                        can actually install, so the menu does not grow a dead
+                        entry on Firefox or inside a webview. */}
+                    <InstallAppButton onInstalled={() => setMoreOpen(false)} />
                   </div>
                 </div>
               )}
@@ -305,6 +311,10 @@ export function SiteNav({ hiddenPaths = [] }: { hiddenPaths?: string[] }) {
               grid cell — it changes the whole page, it does not navigate. */}
           <div className="mt-3 border-t border-sand pt-2">
             <SimpleModeToggle className="w-full justify-start" />
+            {/* Same control, same place, on the mobile surface — see the desktop
+                dropdown above. This is the surface that matters most: the card
+                it re-opens is a phone card. */}
+            <InstallAppButton onInstalled={() => setSheetOpen(false)} />
           </div>
         </div>
       )}
