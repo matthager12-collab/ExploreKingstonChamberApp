@@ -14,7 +14,7 @@ export const lodging: Lodging[] = [
     name: "The Point Casino & Hotel",
     type: "hotel",
     description:
-      "The Port Gamble S'Klallam Tribe's hotel, about a 10-minute drive north of the ferry dock — the closest full-service hotel rooms to downtown Kingston. Restaurants on site; the gaming floor is 21+, but the hotel itself makes an easy base for exploring the north end of the peninsula.",
+      "The Port Gamble S'Klallam Tribe's hotel, about a 10-minute drive north of the ferry — a comfortable base for the north end of the peninsula, with dining on site (gaming floor 21+).",
     address: "Kingston, WA",
     tags: ["Closest hotel to the ferry", "Dining on site", "About 10 min drive"],
   },
@@ -23,7 +23,7 @@ export const lodging: Lodging[] = [
     name: "Clearwater Casino Resort",
     type: "hotel",
     description:
-      "The Suquamish Tribe's waterfront resort on Agate Passage, roughly a 15-minute drive south of Kingston. Resort-style rooms and several restaurants, with the Agate Pass bridge to Bainbridge Island right next door.",
+      "The Suquamish Tribe's resort on Agate Passage — resort rooms and dining, with the Agate Pass bridge to Bainbridge right next door.",
     address: "Suquamish, WA",
     tags: ["Resort", "Waterfront", "About 15 min drive"],
   },
@@ -32,7 +32,7 @@ export const lodging: Lodging[] = [
     name: "Kingston-area vacation rentals",
     type: "vacation-rental",
     description:
-      "Around 30 whole homes and cabins in Kingston, Indianola, Port Gamble, and Suquamish — beach cabins, waterfront houses, in-town cottages. The Chamber keeps a hand-checked list with links to each owner's own listing. Read the fine print: a few ask for 30-day minimum stays or only rent seasonally.",
+      "Whole homes and cabins across Kingston, Indianola, Port Gamble, and Suquamish. The Chamber keeps a hand-checked list linking each owner's own listing. Read the fine print — a few want 30-day minimums or rent only seasonally.",
     website: "https://explorekingstonwa.com/accommodations/",
     tags: ["Beach cabins", "Whole homes", "Book with owners"],
   },
@@ -41,7 +41,7 @@ export const lodging: Lodging[] = [
     name: "Kitsap Memorial State Park",
     type: "camping",
     description:
-      "State-park camping on Hood Canal, about a 15-minute drive west of the ferry. Fall asleep to saltwater on one side and tall firs on the other, then be back in Kingston in time for breakfast. Summer weekends book out early — reserve through Washington State Parks.",
+      "State-park camping on Hood Canal, about a 15-minute drive west — saltwater on one side, tall firs on the other. Summer weekends book out early; reserve through Washington State Parks.",
     address: "Poulsbo, WA",
     website: "https://parks.wa.gov",
     tags: ["Campsites", "Hood Canal shoreline", "Reserve ahead"],

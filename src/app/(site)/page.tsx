@@ -185,8 +185,8 @@ export default async function Home() {
                   : "Planning a ferry trip? See how busy it will be."}
               </p>
               <p className="text-sm text-ink-soft">
-                Pick any date and time for a busyness estimate, when to arrive, and a trendline for
-                the whole day.
+                Pick any date and time for a busyness estimate, when to arrive, and a full-day
+                trendline.
               </p>
             </div>
             <span className="shrink-0 text-lg font-semibold text-tide-deep" aria-hidden>

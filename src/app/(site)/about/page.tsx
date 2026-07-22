@@ -8,7 +8,7 @@ import { Callout, Card, ExternalLink, PageHeader, Section } from "@/components/u
 export const metadata: Metadata = {
   title: "About",
   description:
-    "Visit Kingston is a free, ad-free community project built with the Greater Kingston Chamber of Commerce — and an honest look at what we track and why.",
+    "Explore Kingston is a free, ad-free community project built with the Greater Kingston Chamber of Commerce — and an honest look at what we track and why.",
 };
 
 // Copy and visibility are admin-editable — refresh within a minute like the
@@ -32,10 +32,9 @@ export default async function AboutPage() {
           <p>
             Washington adds a small lodging tax to hotel and short-term-rental stays, and state
             law (chapter 67.28 RCW) sends that money back into tourism — festivals, trails,
-            marketing, visitor facilities. Here&apos;s the fair catch: any group that receives
-            those dollars must report real visitor numbers to the state legislature&apos;s
-            auditors, JLARC — how many people came, how many traveled 50+ miles, how many stayed
-            overnight in paid lodging.
+            marketing, visitor facilities. Any group that receives those dollars must report
+            real visitor numbers to the state&apos;s auditors (JLARC): how many came, how many
+            traveled 50+ miles, how many stayed overnight in paid lodging.
           </p>
           <p>
             Kingston is unincorporated, so our share flows through Kitsap County&apos;s Lodging
@@ -195,9 +194,8 @@ export default async function AboutPage() {
         </div>
         <div className="mt-5">
           <Callout title="Lodging-tax grants" tone="coral">
-            Kitsap County&apos;s next lodging-tax grant round (for 2027 funds) is expected to run
-            October 1–30, 2026, and the county prioritizes unincorporated communities like
-            Kingston. Dates shift year to year — confirm on the{" "}
+            Kitsap County runs a lodging-tax grant round each year (typically in the fall) and
+            prioritizes unincorporated communities like Kingston — confirm dates on the{" "}
             <ExternalLink href="https://www.kitsap.gov/das/Pages/LTAC.aspx">
               Kitsap County LTAC page
             </ExternalLink>

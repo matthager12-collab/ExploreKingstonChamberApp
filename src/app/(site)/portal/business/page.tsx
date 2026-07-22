@@ -26,7 +26,7 @@ export default async function BusinessPortalPage() {
       <PageHeader
         eyebrow={user.role === "admin" ? "Chamber admin · all listings" : "Business portal"}
         title="My business"
-        intro="Update once, it's everywhere: your hours, menu links, and events flow straight to the food pages, the live open-now badge, the town calendar, and the feeds your own site can pull."
+        intro="Update once, and it's everywhere — your hours, menus, and events flow straight to the public pages, the open-now badge, and the town calendar."
       />
       <Section>
         {listings.length === 0 ? (

@@ -163,7 +163,7 @@ export const BOARDING_PASS = {
   summary:
     "A WSDOT/Washington State Ferries queue system for the SR 104 vehicle line at Kingston. Drivers pull a timestamped pass — like a parking-garage ticket — to hold their place, which stops line-cutting and keeps the queue from backing up through downtown.",
   whenRequired:
-    "Vehicles only, and only during peak hours 8 a.m.–8 p.m.: daily through the season (Mother's Day through Indigenous Peoples' Day, Oct. 12, 2026), plus every Saturday and Sunday year-round, plus daily during the weeks of Thanksgiving, Christmas, and New Year's. Outside those windows no pass is needed.",
+    "Vehicles only, and only during peak hours 8 a.m.–8 p.m.: daily in season (roughly Mother's Day through mid-October), plus every Saturday and Sunday year-round, plus daily during the weeks of Thanksgiving, Christmas, and New Year's. Outside those windows no pass is needed.",
   where:
     "The automated dispenser is on the ferry-bound side of SR 104 just west of Lindvog Road NE, about a mile before the tollbooths. Farther out, an overhead advisory sign with flashing lights at Barber Cutoff Road (~1 mile west) tells you when the system is active — flashing lights mean get in the ferry lane.",
   how: [
@@ -177,8 +177,12 @@ export const BOARDING_PASS = {
     "If you leave the line after taking a pass, the pass is void — you have to re-enter and pull a new one. Showing up at the tollbooth without a valid pass during system hours sends you back to the end of the line. So don't duck out for coffee once you're in line.",
   exempt:
     "The system manages the vehicle line only, so foot passengers just walk on — walk-ons, cyclists, motorcycles, and medical-priority-pass holders never need a boarding pass.",
-  currentNote:
-    "Current note (as of early July 2026): the automated dispenser has been down, so a uniformed traffic-control officer is handing passes out by hand at the Lindvog Road staging area instead.",
+  // Transient operational notice — ships EMPTY on purpose. Both render sites
+  // guard on `.trim()`, so an empty string hides the banner entirely; the
+  // Chamber adds a note in /admin/ferry-info when something is actually wrong
+  // and clears it afterwards. Never seed a default here: a "right now" fact
+  // baked into the defaults is guaranteed to be wrong eventually.
+  currentNote: "",
 } as const;
 
 /**

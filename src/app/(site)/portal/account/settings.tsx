@@ -194,8 +194,8 @@ export function AccountSettings({
               {pwBusy ? "Saving…" : "Change password"}
             </button>
             <p className="text-xs text-ink-soft">
-              Passwords are stored as one-way hashes, so they can never be displayed — not even
-              by the Chamber. If you forget yours, an admin can reset it for you.
+              We can&apos;t display your password — not even the Chamber can see it. Forget it?
+              An admin can reset it for you.
             </p>
           </form>
         </Card>

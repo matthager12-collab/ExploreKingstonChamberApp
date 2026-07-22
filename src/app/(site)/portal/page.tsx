@@ -79,9 +79,8 @@ export default async function PortalPage() {
       <Section>
         {awaitingTools && (
           <Callout title={`${ROLE_LABELS[user.role]} access is set up`}>
-            Your account and permissions are active. The tools for this role arrive
-            in a later phase — until then you can manage your own account details
-            here.
+            Your account and permissions are active. Manage your account details
+            here anytime.
           </Callout>
         )}
         <div className="grid gap-4 sm:grid-cols-2">

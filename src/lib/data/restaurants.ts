@@ -65,7 +65,7 @@ export const restaurants: Restaurant[] = [
     name: "Sourdough Willy's Pizzeria",
     cuisine: "Pizza",
     description:
-      "Pizza raised on a 130-year-old sourdough starter — crust with real tang, two minutes from the dock. Order online and it's boxed when you land.",
+      "Pizza raised on a century-old sourdough starter — real tang in the crust. Order online and it's boxed when you land.",
     address: "11265 NE State Hwy 104, Kingston, WA 98346",
     phone: "(360) 860-3933",
     website: "https://sourdoughwillys.com",
@@ -177,7 +177,7 @@ export const restaurants: Restaurant[] = [
     name: "Cellar Cat",
     cuisine: "Wine bar & jazz club",
     description:
-      "A 21+ wine bar and jazz club in the middle of the strip — piano bar Fridays, live music Saturdays and Sunday evenings.",
+      "A 21+ spot in the middle of the strip — piano and live jazz on the weekend.",
     address: "11253 NE State Hwy 104, Kingston, WA 98346",
     phone: "(360) 979-7925",
     hours: "Thu & Sun 3–8 pm, Fri–Sat 3–10 pm",
@@ -202,7 +202,7 @@ export const restaurants: Restaurant[] = [
     name: "Filling Station",
     cuisine: "Bar & grill",
     description:
-      "No-frills local bar and grill on the main drag. The menu lives on their site as a PDF; call if you want food to go. Happy hour 3–5 pm.",
+      "No-frills bar and grill on the main drag. Call if you want food to go.",
     address: "11200 NE State Hwy 104, Kingston, WA 98346",
     phone: "(360) 297-7732",
     website: "https://fillingstationkingston.com",
@@ -230,7 +230,7 @@ export const restaurants: Restaurant[] = [
     name: "The Grub Hut",
     cuisine: "Burgers & shakes",
     description:
-      "Burger-and-shake shack partway up the hill. Call in your order — they cap phone orders at 15 items, so have the group's picks ready.",
+      "Burger-and-shake shack partway up the hill. Call your order in — big groups, have your picks ready.",
     address: "11130 NE State Hwy 104, Kingston, WA 98346",
     phone: "(360) 881-0147",
     orderingPlatform: "phone-only",
@@ -256,7 +256,7 @@ export const restaurants: Restaurant[] = [
     name: "Nirvana Indian & Nepali Cuisine",
     cuisine: "Indian & Nepali",
     description:
-      "A full Indian and Nepali menu a short walk up the highway. Order online ahead, or get it delivered via DoorDash or Uber Eats.",
+      "A full menu a short walk up the highway — order ahead for pickup or delivery.",
     address: "11171 NE State Hwy 104, Kingston, WA 98346",
     phone: "(360) 881-0174",
     website: "https://nirvanakingston.com",
@@ -285,10 +285,10 @@ export const restaurants: Restaurant[] = [
     name: "Friends and Neighbors Brewing",
     cuisine: "Brewery taproom",
     description:
-      "Kingston's taproom: 18 taps, dogs and kids welcome, rotating food trucks midweek. Opened October 2025 in the old Downpour Brewing spot — ignore map apps that still say Downpour.",
+      "Kingston's taproom — a wall of rotating taps, dogs and kids welcome, food trucks midweek.",
     address: "10991 NE State Hwy 104, Kingston, WA 98346",
     website: "https://friendsandneighborsbrewing.com",
-    hours: "Tue 4–8 pm, Wed–Fri 4–9 pm, Sat 2–9 pm, Sun 2–8 pm · Mon closed until mid-Sept",
+    hours: "Tue 4–8 pm, Wed–Fri 4–9 pm, Sat 2–9 pm, Sun 2–8 pm · closed Mon",
     weeklyHours: {
       mon: [],
       tue: [["16:00", "20:00"]],
@@ -389,7 +389,7 @@ export const restaurants: Restaurant[] = [
     name: "Argensol Kitchen",
     cuisine: "Argentinian",
     description:
-      "Argentinian cooking just off the main strip on Washington Boulevard, on a four-day week — every day closes at a different time, so glance at the hours before you make the walk.",
+      "Argentinian cooking just off the main strip on Washington Boulevard. Days and closing times vary — check the hours before you walk over.",
     address: "25923 Washington Blvd NE, Suite 101, Kingston, WA 98346",
     phone: "(360) 930-9094",
     hours: "Thu 11 am–5 pm, Fri 11 am–6 pm, Sat 10 am–6 pm, Sun 10 am–4 pm",
@@ -414,7 +414,7 @@ export const restaurants: Restaurant[] = [
     name: "Da Poke Shop",
     cuisine: "Hawaiian",
     description:
-      "Poke bowls a block off the main strip — some map apps still show its old name, Ono Poke Too. Call in an order for the walk back.",
+      "Poke bowls a block off the main strip. Call ahead and grab it on the walk back.",
     address: "25960 Central Ave NE, Suite 102, Kingston, WA 98346",
     phone: "(360) 638-6130",
     orderingPlatform: "phone-only",
@@ -468,11 +468,11 @@ export const restaurants: Restaurant[] = [
     name: "The Kingston Coffee Company",
     cuisine: "Coffee & cafe",
     description:
-      "Kingston's newest coffee shop, right on the downtown strip — espresso, matcha, paninis on house focaccia, and stuffed waffles.",
+      "A coffee shop on the downtown strip — espresso, matcha, and paninis on house-made focaccia.",
     address: "11201 NE State Hwy 104, Kingston, WA 98346",
     phone: "(360) 204-8090",
     website: "https://www.thekingstoncoffeecompany.com/",
-    hours: "Daily 9:30 am–4:30 pm (new spot — confirm)",
+    hours: "Daily 9:30 am–4:30 pm (call to confirm)",
     priceLevel: 1,
     tags: ["coffee", "quick", "new"],
     lat: 47.798289,

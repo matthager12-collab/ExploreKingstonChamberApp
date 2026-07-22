@@ -64,7 +64,7 @@ export const volunteerNeeds: VolunteerNeed[] = [
     slotsTotal: 6,
     slotsFilled: 2,
     description:
-      "Unload, sort, and restock shelves, then help neighbors shop. Some lifting, no experience needed. To claim a spot, reach out through ShareNet's website — this page doesn't take signups yet.",
+      "Unload, sort, and restock shelves, then help neighbors shop. Some lifting, no experience needed. To claim a spot, reach out through ShareNet's website.",
   },
   {
     id: "kfm-setup-jul12",

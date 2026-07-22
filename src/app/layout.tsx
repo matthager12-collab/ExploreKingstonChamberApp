@@ -54,7 +54,7 @@ const satisfy = Satisfy({
 const SITE_URL = siteUrl();
 
 const DESCRIPTION =
-  "Ferry times, restaurants, events, parking, and itineraries for Kingston, Washington — the gateway to the Kitsap Peninsula and Olympic National Park. The interactive companion to explorekingstonwa.com.";
+  "Ferry times, restaurants, events, parking, and itineraries for Kingston, Washington — gateway to the Kitsap Peninsula and Olympic National Park.";
 
 export const viewport: Viewport = {
   // Extend under the iOS home indicator so the bottom nav can use its inset.

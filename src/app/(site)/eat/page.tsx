@@ -45,7 +45,7 @@ const bands: { title: string; subtitle: string; maxWalk: number }[] = [
   {
     title: "Up the hill",
     subtitle:
-      "Seven to twelve minutes up Highway 104 — toward Kola Kole Park, the Firehouse Theater, and the Grocery Outlet shops. Worth the walk.",
+      "Seven to twelve minutes up Highway 104 — toward Kola Kole Park and the Firehouse Theater. Worth the walk.",
     maxWalk: Infinity,
   },
 ];

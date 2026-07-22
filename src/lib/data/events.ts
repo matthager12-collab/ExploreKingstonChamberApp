@@ -21,7 +21,7 @@ export const events: EventItem[] = [
     venue: "Downtown Kingston",
     address: "10900 NE State Hwy 104, Kingston, WA 98346",
     description:
-      "Cars, trucks, motorcycles and more — classic, modern, and everything in between on wheels, right in the middle of town. Free to wander, and a good warm-up before the fireworks.",
+      "Classic and modern cars, trucks, and motorcycles right in the middle of town. Free to wander — a good warm-up before the fireworks.",
     category: "community",
     organizer: "Greater Kingston Chamber of Commerce",
     url: `${CHAMBER}/the-kingston-4th-of-july-car-show-1759097?sourceTypeId=Website`,
@@ -114,7 +114,7 @@ export const events: EventItem[] = [
     venue: "White Horse Golf Club",
     address: "22795 Three Lions Pl NE, Kingston, WA 98346",
     description:
-      "Third annual tournament supporting the Kingston Youth Sports Association. 18+, teams and sponsorships both welcome — spots fill fast. Register at kysagolf.com.",
+      "Annual tournament supporting the Kingston Youth Sports Association. 18+, teams and sponsorships both welcome — spots fill fast. Register at kysagolf.com.",
     category: "sports",
     organizer: "Kingston Youth Sports Association",
     url: "https://www.kysagolf.com",
@@ -167,7 +167,7 @@ export const events: EventItem[] = [
     venue: "Kingston Village Green Park",
     address: "26159 Dulay Rd NE, Kingston, WA 98346",
     description:
-      "Free slices of pie for everyone, plus pie-eating contests, face painting, and lawn games for the kids. A free annual community fundraiser for the Village Green Foundation, the volunteer-run nonprofit that keeps the Village Green affordable and thriving.",
+      "Free pie for everyone, plus pie-eating contests, face painting, and lawn games. An annual fundraiser for the Village Green Foundation, the volunteers who keep the Green going.",
     category: "charity",
     organizer: "Village Green Foundation",
     url: `${CHAMBER}/pie-in-the-park-1776053?sourceTypeId=Website`,

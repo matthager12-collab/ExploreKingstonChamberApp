@@ -127,7 +127,7 @@ export default async function StayPage() {
           </ul>
           <p className="mt-3 text-xs text-ink-soft">
             These links simply open a search on an outside site. They aren&apos;t
-            endorsements, we don&apos;t vet the listings, and Visit Kingston earns
+            endorsements, we don&apos;t vet the listings, and Explore Kingston earns
             nothing if you book.
           </p>
         </Card>

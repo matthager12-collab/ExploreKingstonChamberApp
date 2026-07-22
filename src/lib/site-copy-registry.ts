@@ -92,7 +92,7 @@ export const COPY_BLOCKS = [
     label: "Header intro",
     multiline: true,
     fallback:
-      "Everything here is a walk from the ferry dock — two minutes to a crêpe, ten up the hill to the shops by Grocery Outlet. Heads up: plenty of Kingston kitchens take orders by phone, not app. That's normal here.",
+      "Everything here is a walk from the ferry dock — a couple minutes downtown, ten up the hill. Many Kingston kitchens still take orders by phone, not an app.",
   },
   {
     key: "eat.callout.title",
@@ -106,7 +106,7 @@ export const COPY_BLOCKS = [
     label: "Closing callout body (the “update your listing” link is appended after)",
     multiline: true,
     fallback:
-      "We verify this list against the real world, but small-town kitchens move fast. When it matters, call ahead or check the restaurant's own site. Run a food spot in Kingston?",
+      "We keep this list current, but small-town kitchens move fast. When it matters, call ahead or check the restaurant's own site. Run a food spot in Kingston?",
   },
 
   // ------------------------------------------------------------ /events
@@ -128,7 +128,7 @@ export const COPY_BLOCKS = [
     label: "Header intro",
     multiline: true,
     fallback:
-      "Markets on the marina lawn, free concerts two nights a week in high summer, and the whole town out for the 4th. Most of it is a short walk from the ferry.",
+      "Markets on the marina lawn, free concerts on summer evenings, and the festivals that turn the whole town out. Most of it is a short walk from the ferry.",
   },
 
   // ------------------------------------------------------- /itineraries
@@ -150,7 +150,7 @@ export const COPY_BLOCKS = [
     label: "Header intro",
     multiline: true,
     fallback:
-      "Four ready-made Kingston days, built around real ferry arrivals and real local spots. Steal one whole or mix and match — everything downtown is within a few blocks of the dock.",
+      "Ready-made Kingston days built around ferry arrivals and local spots. Steal one whole or mix and match — everything downtown is a few blocks from the dock.",
   },
 
   // -------------------------------------------------------------- /stay
@@ -302,7 +302,7 @@ export const COPY_BLOCKS = [
     label: "Header intro",
     multiline: true,
     fallback:
-      "The fireworks, the market, the food bank, the Village Green — none of it happens without neighbors raising their hands. Here's who does the work, where help is needed this summer, and a shared calendar so two good causes don't book the same day.",
+      "The fireworks, the market, the food bank, the Village Green — none of it happens without neighbors raising their hands. Here's who does the work, where help is needed, and a shared calendar so two good causes don't book the same day.",
   },
   {
     key: "give.directory.subtitle",
@@ -318,7 +318,7 @@ export const COPY_BLOCKS = [
     label: "Volunteer right now — section intro",
     multiline: true,
     fallback:
-      "Real shifts this summer, a couple hours each. No account needed — v1 keeps it simple: you contact the org, they put you to work.",
+      "Real shifts, a couple hours each. No account needed — you contact the org, they put you to work.",
   },
   {
     key: "give.deconflict.subtitle",
@@ -362,7 +362,7 @@ export const COPY_BLOCKS = [
     key: "about.header.title",
     page: "About",
     label: "Page title",
-    fallback: "About Visit Kingston",
+    fallback: "About Explore Kingston",
   },
   {
     key: "about.header.intro",

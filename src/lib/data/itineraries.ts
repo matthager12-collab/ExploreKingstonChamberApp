@@ -39,7 +39,7 @@ export const itineraries: Itinerary[] = [
         time: "12:15 PM",
         title: "Lunch at Sourdough Willy's Pizzeria",
         description:
-          "Pizza built on a 130-year-old sourdough starter — the crust is the point. Opens at noon daily, a short walk up Highway 104. If pizza's not the mood, The Saucy Sailor next block over does gourmet fast-casual with vegan and gluten-free options.",
+          "Pizza built on a century-old sourdough starter — the crust is the point. Opens at noon daily, a short walk up Highway 104. If pizza's not the mood, The Saucy Sailor next block over does gourmet fast-casual with vegan and gluten-free options.",
         mapQuery: "Sourdough Willy's Pizzeria, 11265 NE State Hwy 104, Kingston, WA",
       },
       {
@@ -86,7 +86,7 @@ export const itineraries: Itinerary[] = [
         time: "10:40 AM",
         title: "Picnic pickup at The Grub Hut",
         description:
-          "Burgers, fries, and shakes travel well to a beach log. Call ahead — (360) 881-0147 — and note they cap call-in orders at 15 items, which sounds like a lot until you bring three kids.",
+          "Burgers, fries, and shakes travel well to a beach log. Call ahead — (360) 881-0147 — and plan ahead: big call-in orders add up fast with three kids.",
         mapQuery: "The Grub Hut, 11130 NE State Hwy 104, Kingston, WA",
       },
       {
@@ -114,7 +114,7 @@ export const itineraries: Itinerary[] = [
         time: "4:30 PM",
         title: "Early pizza at Sourdough Willy's",
         description:
-          "Back in town, split pizzas made on a 130-year-old sourdough starter. Open until 8, but going early means you beat the dinner rush and keep your ferry options open.",
+          "Back in town, split pizzas made on a century-old sourdough starter. Open until 8, but going early means you beat the dinner rush and keep your ferry options open.",
         mapQuery: "Sourdough Willy's Pizzeria, 11265 NE State Hwy 104, Kingston, WA",
       },
       {
@@ -168,7 +168,7 @@ export const itineraries: Itinerary[] = [
         time: "3:30 PM",
         title: "Dry out at Friends and Neighbors Brewing",
         description:
-          "Kingston's taproom (it took over the old Downpour Brewing spot in fall 2025) pours 18 taps and welcomes dogs and kids. Prefer a pub? The Kingston Ale House across the way does American and seafood classics.",
+          "Kingston's taproom pours a wall of rotating taps and welcomes dogs and kids. Prefer a pub? The Kingston Ale House across the way does American and seafood classics.",
         mapQuery: "Friends and Neighbors Brewing, 10991 NE State Hwy 104, Kingston, WA",
       },
       {

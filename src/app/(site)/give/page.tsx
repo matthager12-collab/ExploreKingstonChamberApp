@@ -18,7 +18,7 @@ import { formatPacificDate, formatPacificTime, todayPacific } from "@/lib/time";
 export const metadata: Metadata = {
   title: "Give Back",
   description:
-    "Kingston-area nonprofits, volunteer shifts you can join this summer, and a shared calendar so fundraisers don't land on the same day.",
+    "Kingston-area nonprofits, volunteer shifts you can sign up for, and a shared calendar so fundraisers don't land on the same day.",
 };
 
 const VOLUNTEER_KITSAP_URL = "https://unitedwaykitsap.galaxydigital.com/";
@@ -118,7 +118,7 @@ export default async function GiveBackPage() {
       </Section>
 
       <Section
-        title="Volunteer right now"
+        title="Volunteer"
         subtitle={copyText(copy, "give.volunteer.subtitle")}
       >
         {sortedNeeds.length === 0 && (
@@ -265,15 +265,12 @@ export default async function GiveBackPage() {
         )}
 
         <div className="mt-6">
-          <Callout tone="coral" title="How this gets better">
-            Today this is a read-only view of the town calendar. On the roadmap:
-            nonprofits log in, post tentative dates, and get an automatic
-            conflict warning — a heads-up, never a hard block — before they
-            book. Until then, also cross-check the{" "}
+          <Callout tone="coral" title="Double-check before you book">
+            This is a read-only view of the town calendar — cross-check the{" "}
             <ExternalLink href={CHAMBER_EVENTS_URL}>
               Greater Kingston Chamber calendar
-            </ExternalLink>
-            , which lists events this page may not have yet.
+            </ExternalLink>{" "}
+            too, since it may list events this page doesn&rsquo;t have yet.
           </Callout>
         </div>
       </Section>

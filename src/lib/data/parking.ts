@@ -106,7 +106,7 @@ export const parkingZones: MapZone[] = [
     name: "Free 2-hour row (Mike Wallace Park)",
     rule: "free-2hr",
     summary:
-      "Free, 2 hours strictly enforced (~30 stalls) — the Port says do NOT use it for ferry travel. $40 overstay ticket.",
+      "Free, 2 hours strictly enforced — the Port says do NOT use it for ferry travel. Overstaying means a ticket.",
     details:
       "The stadium-shaped island of back-to-back stalls between paid row 214–233 and Mike Wallace Park's NW corner, clearly visible on aerial imagery as an oval double row (~50 m long). Overstays are a $40 ticket (doubles after 15 days; tow possible). If a ferry delay traps you, call the Port office (360-297-3545) BEFORE the two hours expire.",
     confidence: "probable",
@@ -175,7 +175,7 @@ export const parkingZones: MapZone[] = [
     name: "POKPARK row 89–103",
     rule: "paid",
     summary:
-      "$12/12 hr car · $6 motorcycle · $3.49/hr short-term — text POKPARK to 25023. Single row of 15 stalls along the drive NW of the yacht club.",
+      "$12/12 hr car · $6 motorcycle · $3.49/hr short-term — text POKPARK to 25023. A single row along the drive NW of the yacht club.",
     details:
       "Short numbered row (89–103) lining the loop drive northwest of the Kingston Cove Yacht Club, immediately west of the KCYC-permit-only row. Same rates, payment and overnight rules as the rest of POKPARK (call 360-297-3545 before overnight).",
     confidence: "probable",
@@ -337,7 +337,7 @@ export const parkingZones: MapZone[] = [
     name: "Diamond lot D515 (WSDOT commuter lot)",
     rule: "paid",
     summary:
-      "$8 for 0–12 hr, $12 for 12–24 hr — overnight OK. 73 stalls at NE 1st St & Ohio Ave, one block from the ferry. Free with a disabled placard.",
+      "$8 for 0–12 hr, $12 for 12–24 hr — overnight OK. At NE 1st St & Ohio Ave, one block from the ferry. Free with a disabled placard.",
     details:
       "The WSDOT-owned, Diamond-operated lot at 26613 Ohio Ave NE — the angled strip on NE 1st St between Ohio and Iowa, a 5-minute walk to the tollbooths. Overnight and multi-day parking allowed (WSF publishes rates from 2 days $24 up to 7 days $38). Monthly permit $125.70 all-in via Diamond PermitPoint, valid 24/7. Pay at the kiosk (card) or with PayByPhone / ParkMobile. Vehicles with a valid disabled placard or plate park free — this lot only. Questions: Diamond Parking, 206-729-0590.",
     confidence: "verified",
@@ -361,7 +361,7 @@ export const parkingZones: MapZone[] = [
     name: "George's Corner Park & Ride",
     rule: "park-and-ride-24h",
     summary:
-      "Free, 225 stalls, max 24 hours. SR 104 × Hansville Rd, ~2.5 mi from the dock; buses 307 & 391 run to the ferry.",
+      "Free, large lot, max 24 hours. SR 104 × Hansville Rd, ~2.5 mi from the dock; buses 307 & 391 run to the ferry.",
     details:
       "Kitsap Transit lot at 27618 Hansville Rd NE: free, paved, lit, with a shelter, bike racks/lockers and 4 free EV chargers. Kitsap Transit's posted rule: park & rides are intended for day use and parking is limited to no more than 24 hours — so it works for a day trip, but not for multi-day ferry parking. Routes 307 (Kingston/North Viking Fast Ferry Express) and 391 (Kingston/Bainbridge) connect to the dock.",
     confidence: "verified",
@@ -374,7 +374,7 @@ export const parkingZones: MapZone[] = [
     name: "Bayside Community Church Park & Ride",
     rule: "park-and-ride-24h",
     summary:
-      "Free, 210 stalls, max 24 hours. Barber Cut Off Rd, ~0.8 mi west of downtown; buses 302 & 391.",
+      "Free, max 24 hours. Barber Cut Off Rd, ~0.8 mi west of downtown; buses 302 & 391.",
     details:
       "Church lot at 25992 Barber Cut Off Rd NE shared as an official Kitsap Transit park & ride — the only church lot in Kingston with a documented ferry-commuter arrangement. Free, paved, lit; same Kitsap Transit rule: day use, no more than 24 hours. Served by Routes 302 and 391.",
     confidence: "verified",

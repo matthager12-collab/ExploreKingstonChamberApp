@@ -355,12 +355,11 @@ export default async function FerryPage() {
       <Section title="Watch out for">
         <div className="grid gap-4 md:grid-cols-3">
           <Card>
-            <h3 className="text-lg font-semibold text-sound-deep">July 4th crowds</h3>
+            <h3 className="text-lg font-semibold text-sound-deep">Holiday weekends</h3>
             <p className="mt-2 text-sm text-ink-soft">
-              Independence Day is the car ferry&rsquo;s worst day of the year, and Kingston&rsquo;s
-              fireworks put the town at the center of it. Expect multi-hour vehicle lines both
-              directions. Walk on if you possibly can — and this year the 4th lands on a Saturday,
-              so the fast ferry runs its summer Saturday schedule too.
+              Summer holiday weekends are the car ferry&rsquo;s worst stretch, and Kingston sits
+              at the center of it. Expect multi-hour vehicle lines in both directions. Walk on if
+              you possibly can.
             </p>
           </Card>
           <Card>
@@ -377,9 +376,8 @@ export default async function FerryPage() {
             <h3 className="text-lg font-semibold text-sound-deep">Seasonal schedules</h3>
             <p className="mt-2 text-sm text-ink-soft">
               Both boats change timetables with the seasons. The fast ferry&rsquo;s Saturday
-              service ends in mid-September, and its current published schedule runs through
-              September 12, 2026. WSF shifts to its fall schedule around then too. Planning past
-              Labor Day? Re-check times first.
+              service ends in mid-September, and WSF shifts to its fall schedule around then
+              too. Planning past Labor Day? Re-check times first.
             </p>
           </Card>
         </div>

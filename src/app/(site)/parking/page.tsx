@@ -22,7 +22,7 @@ export const revalidate = 60;
 export const metadata: Metadata = {
   title: "Parking",
   description:
-    "Interactive map of every place to park in Kingston, WA — the Port lots, the free 2-hour zone, street parking, and overnight options near the ferry dock.",
+    "Where to park in Kingston, WA — Port lots, the free 2-hour zone, street parking, and overnight options near the ferry dock, on one live map.",
 };
 
 /* ------------------------------------------------------------------ */
@@ -52,13 +52,13 @@ export default async function ParkingPage() {
           <FeatureMap resolved={parkingMap} height="500px" />
         ) : (
           <Card>
-            <p className="text-sm text-ink-soft">Parking map coming soon.</p>
+            <p className="text-sm text-ink-soft">Parking map unavailable right now.</p>
           </Card>
         )}
         <p className="mt-2 text-xs text-ink">
           Colors follow the parking type shown in the legend. The sign on the pole is
           always the legal authority — where a lot and a posted sign disagree, believe the
-          sign. Chamber admins keep this map current in the portal at /admin/maps.
+          sign. The Chamber keeps this map current.
         </p>
         {/* E27: you just parked — the next question is almost always this one. */}
         <p className="mt-3">

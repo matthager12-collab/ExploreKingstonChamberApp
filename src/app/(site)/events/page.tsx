@@ -314,8 +314,7 @@ export default async function EventsPage() {
               <ExternalLink href="https://portofkingston.org/events/list/">
                 Port of Kingston calendar
               </ExternalLink>
-              . Automatic feed sync is on the roadmap — until then, always confirm
-              details with the organizer before making the trip.
+              . Always confirm details with the organizer before making the trip.
             </p>
           </>
         )}

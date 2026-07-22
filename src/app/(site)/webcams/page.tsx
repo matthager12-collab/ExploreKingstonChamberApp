@@ -37,9 +37,9 @@ export default async function WebcamsPage() {
           up at Lindvog Road — or worse, back at Barber Cutoff — the holding
           lanes are full and you should expect a real wait. Walk-ons board
           nearly every sailing, so when the line looks grim, consider parking
-          in town and walking on instead. Also good to know: since June 1,
-          2026, WSDOT runs a traffic management system on SR 104, with crews
-          handing out boarding passes 8 a.m.–8 p.m. — details on{" "}
+          in town and walking on instead. Also good to know: WSDOT runs a
+          traffic-management system on SR 104 in season, with crews handing out
+          boarding passes 8 a.m.–8 p.m. — details on{" "}
           <ExternalLink href="https://wsdot.wa.gov/travel/washington-state-ferries">
             the WSF site
           </ExternalLink>
@@ -63,7 +63,7 @@ export default async function WebcamsPage() {
 
       <Section
         title="Around town"
-        subtitle="A couple of nearby non-WSDOT cams worth a look. We link out rather than embed — they're privately run."
+        subtitle="Nearby non-WSDOT cams worth a look. We link out rather than embed — they're privately run."
       >
         <div className="grid gap-5 sm:grid-cols-2">
           <Card>
@@ -83,7 +83,7 @@ export default async function WebcamsPage() {
           <Card>
             <h3 className="text-lg font-semibold text-sound-deep">Port of Edmonds cams</h3>
             <p className="mt-1 text-sm text-ink-soft">
-              Two views on the far side of the run: the marina entrance and the
+              A look at the far side of the run: the marina entrance and the
               Edmonds Marsh. Handy for a look at conditions on the water before
               you sail.
             </p>
@@ -95,7 +95,7 @@ export default async function WebcamsPage() {
           </Card>
         </div>
         <p className="mt-5 text-sm text-ink">
-          No camera points at downtown Kingston or the marina yet — the WSDOT
+          No camera points at downtown Kingston or the marina — the WSDOT
           terminal cams above are the closest thing.
         </p>
       </Section>

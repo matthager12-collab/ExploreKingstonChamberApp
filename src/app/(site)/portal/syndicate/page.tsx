@@ -217,7 +217,7 @@ export default async function SyndicatePage() {
       {/* a. live feeds ---------------------------------------------------- */}
       <Section
         title="Your live feeds"
-        subtitle="These URLs always serve whatever is currently in the portal — update once here, and everything reading them follows."
+        subtitle="These URLs always serve your latest portal data — update once here and everything reading them follows."
       >
         <div className="space-y-4">
           {isAdmin && (
@@ -290,10 +290,9 @@ export default async function SyndicatePage() {
           subtitle="Where visitors actually look you up — keep these matching the portal."
         >
           <div className="space-y-4">
-            <Callout title="Honest status: no auto-sync yet" tone="teal">
-              Direct API sync to Google is on the roadmap — until then this page makes the
-              manual update a 5-minute copy-paste round: copy your current hours below, then
-              walk through the four links and paste.
+            <Callout title="Update these by hand" tone="teal">
+              Copy your current hours below, then open each platform and paste — the
+              fastest way to keep every listing matching the portal.
             </Callout>
 
             {listings.map((l) => (

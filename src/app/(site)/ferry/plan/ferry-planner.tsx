@@ -419,7 +419,7 @@ export function FerryPlanner({
                 : "Showing typical seasonal sailing times."}
           {observed && observed.sampleCount > 0
             ? ` It also learns from ${observed.sampleCount.toLocaleString()} live sailing observation${observed.sampleCount === 1 ? "" : "s"} we've logged over ${observed.days} day${observed.days === 1 ? "" : "s"}, and sharpens as more come in.`
-            : " As we log live sailing data over the coming weeks, the estimate will sharpen."}
+            : " The estimate sharpens as we log more live sailing data."}
         </p>
       </div>
     </div>
