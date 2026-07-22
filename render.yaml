@@ -2,19 +2,39 @@
 # Docs: https://render.com/docs/blueprint-spec
 #
 # Deploy: push this repo to GitHub, then in Render create a new Blueprint
-# instance pointed at it. Render builds the Dockerfile, attaches the disk, and
-# wires the env vars below. Set the sync:false secrets in the dashboard on the
-# first deploy (they are intentionally NOT stored in git).
+# instance pointed at it. Render builds the Dockerfile and wires the env vars
+# below (there is no disk to attach — see E15 slice 3 note further down). Set
+# the sync:false secrets in the dashboard on the first deploy (they are
+# intentionally NOT stored in git).
+#
+# This Blueprint is LIVE-SYNCED: autoSync is on and tracks `main`. Changing
+# `plan` or a managed env var in the Render dashboard is therefore TEMPORARY —
+# the next sync reverts it to whatever this file says. Change it HERE.
 services:
   - type: web
     name: explore-kingston
     runtime: docker # build from Dockerfile rather than a native buildpack
     branch: main # explicit — Blueprint sync must never silently retarget this
     dockerfilePath: ./Dockerfile
-    plan: starter # persistent disks require a paid instance type (not free)
+    # standard = 2 GB / 1 CPU. Was `starter` (512 MB) until 2026-07-22, when
+    # the service was oomKilled 9 times in ~22 hours — Render's own events
+    # report `oomKilled {memoryLimit: "512Mi"}`, and because this service runs
+    # ONE instance behind healthCheckPath, every kill 502s the WHOLE site for
+    # 20-40s, not just the page being loaded. Idle baseline alone sits at
+    # 90-175 MB depending on the boot, so 512 MB left almost no burst headroom
+    # for Next 16 + React 19 + sharp (which allocates NATIVE memory outside the
+    # V8 heap and is therefore invisible to V8's own GC pressure heuristics).
+    #
+    # Ratchet rule: if this ever needs `pro`, find the allocation first. The
+    # 2026-07-22 kills were never traced to a specific call site — the process
+    # was SIGKILLed by the cgroup with no V8 stack trace, which is exactly what
+    # NODE_OPTIONS below now prevents. Do not buy headroom twice in a row.
+    plan: standard
     region: oregon # closest Render region to Kingston, WA; change if desired
     # Render polls this path and only routes traffic once it returns 200.
-    # /api/health returns 503 until the /data volume is writable.
+    # Since E15 slice 3 (disk removed) /api/health gates on POSTGRES ONLY — it
+    # returns 503 when DATABASE_URL is unreachable and never touches the
+    # filesystem. See src/app/api/health/route.ts for why storage must not gate.
     healthCheckPath: /api/health
 
     # NO PERSISTENT DISK (E15 slice 3). Everything durable lives off-box:
@@ -30,6 +50,25 @@ services:
     # restores that stop-start deploy window for the whole service.
 
     envVars:
+      # Cap V8's old space BELOW the container limit (1536 MB inside the 2 GB
+      # `standard` instance), leaving ~512 MB for native allocations —
+      # sharp/libvips, Buffers, pg — which live OUTSIDE the JS heap but still
+      # count against the cgroup.
+      #
+      # This is as much a DIAGNOSTIC as a limit. Node does not size its heap
+      # from the cgroup limit, so without this V8 keeps growing until the kernel
+      # SIGKILLs the process — silently. Every one of the 2026-07-22 kills left
+      # NO stack trace anywhere in the logs, which is why the allocation was
+      # never identified. With a ceiling, V8 hits ITS limit first and dies loudly
+      # with "FATAL ERROR: ... JavaScript heap out of memory" naming the call
+      # stack. If this service OOMs again, that trace is the thing to read.
+      #
+      # KEEP IN SYNC WITH `plan` ABOVE: this must stay ~75% of the instance's
+      # RAM. Raising the plan without raising this wastes the new headroom;
+      # lowering the plan without lowering this re-arms the silent-kill bug.
+      - key: NODE_OPTIONS
+        value: --max-old-space-size=1536
+
       # Session-signing secret for lib/auth.ts. Render generates a strong random
       # value once and keeps it stable across deploys (do not rotate casually —
       # rotating invalidates all existing sessions).
