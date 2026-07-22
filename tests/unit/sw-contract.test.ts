@@ -20,6 +20,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { candidatePageFiles, resolvesToPage } from "../helpers/app-routes";
+import { KIOSK_SCREEN_IDS } from "@/lib/kiosk/screens";
 
 const ROOT = process.cwd();
 const SRC = readFileSync(path.join(ROOT, "public/sw.js"), "utf8");
@@ -187,6 +188,30 @@ describe.skipIf(IS_KILL_SWITCH)("public/sw.js allowlists", () => {
       resolvesToPage(route),
       `${route} matched no page.tsx — looked in:\n  ${candidatePageFiles(route).join("\n  ")}`,
     ).toBe(true);
+  });
+
+  it("covers every screen in the kiosk catalogue", () => {
+    // The coupling that would otherwise rot in silence. Adding a screen means
+    // touching TWO places — src/lib/kiosk/screens.ts and this allowlist — and
+    // forgetting the second costs that screen its offline support with nothing
+    // failing: it works perfectly on a good network and goes blank on the
+    // panel exactly when the venue Wi-Fi drops, which is the one moment nobody
+    // is there to notice. Asserted from the catalogue itself, so a new screen
+    // fails this the day it lands.
+    const missing = KIOSK_SCREEN_IDS.map((id) => `/kiosk/${id}`).filter(
+      (route) => !KIOSK_NAV_ALLOWLIST.includes(route),
+    );
+    expect(
+      missing,
+      `kiosk screens missing from the service worker allowlist: ${missing.join(", ")}`,
+    ).toEqual([]);
+    // …and the reverse: an allowlist entry for a screen that no longer exists
+    // caches a 404 on a wall nobody can correct.
+    const known = new Set<string>(KIOSK_SCREEN_IDS);
+    const orphans = KIOSK_NAV_ALLOWLIST.filter(
+      (route) => route !== "/kiosk" && !known.has(route.replace("/kiosk/", "")),
+    );
+    expect(orphans, `allowlisted kiosk routes with no screen: ${orphans.join(", ")}`).toEqual([]);
   });
 
   it("keeps the kiosk out of the visitor shell cache, and vice versa", () => {

@@ -82,6 +82,7 @@ const KIOSK_NAV_ALLOWLIST = [
   "/kiosk/events",
   "/kiosk/map",
   "/kiosk/parking",
+  "/kiosk/bus",
   "/kiosk/stay",
   "/kiosk/do",
 ];

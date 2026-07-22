@@ -1,42 +1,55 @@
+import { KioskMap, FERRY_DOCK, type KioskMapPoint } from "@/components/kiosk-map";
 import { KioskQr } from "@/components/kiosk-qr";
 import { KioskCard, KioskEmpty, KioskScreen } from "@/components/kiosk-ui";
 import { resolveMapView } from "@/lib/map/resolve";
 import { kioskHandoffUrl } from "@/lib/qr";
 import { getRestaurants } from "@/lib/stores/business-store";
+import { getParkingZones } from "@/lib/stores/parking-store";
 import { copyText, getCopyOverrides } from "@/lib/stores/site-store";
 
-// "Where things are", kiosk-scaled — and deliberately NOT an interactive map.
+// "Where things are", kiosk-scaled: a real, visible map — drawn by us.
 //
-// DEVIATION FROM THE E22 CHARTER, recorded here rather than buried in a commit.
-// The charter says this screen should reuse <FeatureMap/> read-only. Three
-// things argue against putting a live tile map on this particular device:
+// It is NOT Leaflet, and that is a deliberate deviation from the charter, which
+// says to reuse <FeatureMap/> read-only. See src/components/kiosk-map.tsx for
+// the full reasoning; briefly, a slippy map on this device fails three ways —
+// tiles go grey the moment the venue Wi-Fi hiccups (offline tile packs are an
+// explicit non-goal), Leaflet's OSM attribution is a genuine external anchor on
+// a panel with no back button, and it is a client bundle doing continuous
+// canvas work on a fanless mini PC.
 //
-//   1. OFFLINE. Slippy-map tiles come off the network per pan and zoom, and
-//      offline map-tile packs are an explicit non-goal. The first thing a
-//      visitor does to a map is drag it — straight into grey squares, on the
-//      one screen whose entire job is orientation. Everything below is server-
-//      rendered text and survives the venue Wi-Fi dropping.
-//   2. ESCAPE HATCHES. Leaflet's attribution control is a real external anchor
-//      to openstreetmap.org, rendered client-side where the no-external-anchors
-//      test cannot see it. Removing it would breach the tile licence; leaving
-//      it puts a tappable way off-app on a panel with no back button.
-//   3. FITNESS. This is a 20-60 second interaction by someone who wants to know
-//      which way to walk and how long it takes. "Eight minutes, up the hill" is
-//      a better answer than a map they have to pinch, and it reads from further
-//      away.
-//
-// The interactive map is one QR away, on the device best suited to it — the
-// visitor's own phone, which has GPS and shows them as a blue dot.
+// So the map is an SVG projected from the SAME coordinates the website's map
+// uses. No tiles, no network, no attribution, nothing tappable — it simply
+// cannot break when the network does. It answers "what is near what, and how
+// far", which is the orientation question a walk-up visitor actually has.
+// Street-level detail and the visitor's own position stay one QR away, on the
+// device with a GPS in it.
 
 export const revalidate = 60;
 
 /** The seed view carrying the town's landmarks. */
 const EXPLORE_VIEW = "explore";
 
+/**
+ * Everything worth drawing, as map points.
+ *
+ * Kept to a walkable radius on purpose: the George's Corner park-and-ride is
+ * two and a half miles out, and including it would shrink the whole downtown —
+ * where every walk-up visitor actually is — into a corner of the frame. A map
+ * that fits everything in is not the same as a map that answers anything.
+ */
+const WALKABLE_KM = 1.6;
+
+function kmFromDock([lat, lng]: [number, number]): number {
+  const dLat = (lat - FERRY_DOCK[0]) * 111;
+  const dLng = (lng - FERRY_DOCK[1]) * 111 * Math.cos((lat * Math.PI) / 180);
+  return Math.hypot(dLat, dLng);
+}
+
 export default async function KioskMapPage() {
-  const [explore, restaurants, copy] = await Promise.all([
+  const [explore, restaurants, zones, copy] = await Promise.all([
     resolveMapView(EXPLORE_VIEW).catch(() => null),
     getRestaurants(),
+    getParkingZones().catch(() => []),
     getCopyOverrides(),
   ]);
 
@@ -51,8 +64,45 @@ export default async function KioskMapPage() {
     .sort((a, b) => a.walkMinutesFromFerry - b.walkMinutesFromFerry)
     .slice(0, 4);
 
+  const points: KioskMapPoint[] = [
+    { id: "dock", label: "You are here", at: FERRY_DOCK, kind: "you-are-here" },
+    ...nearest.map((r) => ({
+      id: `eat-${r.id}`,
+      label: r.name,
+      at: [r.lat, r.lng] as [number, number],
+      kind: "food" as const,
+    })),
+    ...zones
+      .filter((z) => Array.isArray(z.center) && kmFromDock(z.center) <= WALKABLE_KM)
+      .slice(0, 4)
+      .map((z) => ({
+        id: `park-${z.id}`,
+        label: z.name,
+        at: z.center,
+        kind: "parking" as const,
+      })),
+    ...landmarks
+      .filter((f) => Array.isArray(f.point) && kmFromDock(f.point as [number, number]) <= WALKABLE_KM)
+      .slice(0, 5)
+      .map((f) => ({
+        id: `place-${f.id}`,
+        label: f.title,
+        at: f.point as [number, number],
+        kind: "place" as const,
+      })),
+  ];
+
   return (
     <KioskScreen title="Getting around" subtitle="You are at the Kingston ferry terminal">
+      {/* The map itself, first — it is what the screen is for. */}
+      <div className="mb-10">
+        <KioskMap points={points} />
+        <p className="mt-4 text-2xl text-white/60">
+          A sketch of what is near the dock, drawn to scale. It has no streets — scan below for the
+          full map with directions.
+        </p>
+      </div>
+
       <div className="mb-10 flex items-center gap-10 rounded-3xl bg-white/10 p-10">
         <KioskQr
           value={kioskHandoffUrl("/map")}

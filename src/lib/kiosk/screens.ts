@@ -46,6 +46,12 @@ export const KIOSK_SCREENS = [
     icon: "🅿️",
   },
   {
+    id: "bus",
+    label: "Buses",
+    blurb: "Getting further without a car",
+    icon: "🚌",
+  },
+  {
     id: "stay",
     label: "Stay",
     blurb: "Rooms and lodging",
@@ -81,6 +87,10 @@ export const DEFAULT_ENABLED_SCREENS: readonly KioskScreenId[] = [
   "events",
   "map",
   "parking",
+  // Buses earn a default slot for the same reason Ferry does: the audience is a
+  // walk-on passenger with no car, and "how do I get further than walking
+  // distance" is the one question nothing else on the panel answers.
+  "bus",
 ];
 
 /** Narrow an unknown value to a real screen id — the API's input filter. */

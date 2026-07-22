@@ -1,8 +1,11 @@
 import { KioskQr } from "@/components/kiosk-qr";
+import { KioskTides } from "@/components/kiosk-tides";
 import { KioskEmpty, KioskScreen } from "@/components/kiosk-ui";
 import { getFerryStatusSnapshot } from "@/lib/ferry-status";
 import { kioskHandoffUrl } from "@/lib/qr";
+import { getFerryInfo } from "@/lib/stores/ferry-info-store";
 import { copyText, getCopyOverrides } from "@/lib/stores/site-store";
+import { getTodaysTides } from "@/lib/tides";
 import { formatPacificTime } from "@/lib/time";
 
 // The full Kingston departure board, kiosk-scaled.
@@ -11,6 +14,14 @@ import { formatPacificTime } from "@/lib/time";
 // only. The panel is at the Kingston dock: someone reading it is leaving, and a
 // second column of arrivals is noise that makes the column they need smaller.
 // Arrivals stay one QR away on the phone version.
+//
+// WALKING ON IS THE HEADLINE, and it sits above the fares table on purpose.
+// The single most useful thing this panel can tell the person standing in front
+// of it is that walking onto the boat at Kingston costs nothing — WSF collects
+// passenger fares at Edmonds only — and that foot passengers never need the
+// boarding pass the vehicle signage is all about. Both facts are the Chamber's
+// own admin-editable ferry record, not restated here, so a fare change or a
+// policy correction reaches the kiosk the same way it reaches the website.
 
 export const revalidate = 60;
 
@@ -31,9 +42,13 @@ function departingSoon(
 }
 
 export default async function KioskFerryPage() {
-  const [snapshot, copy] = await Promise.all([
+  const [snapshot, copy, ferryInfo, tides] = await Promise.all([
     getFerryStatusSnapshot().catch(() => null),
     getCopyOverrides(),
+    getFerryInfo(),
+    // Each of these degrades on its own. A NOAA outage must not cost the panel
+    // its departure board, and a WSDOT outage must not cost it the tides.
+    getTodaysTides().catch(() => []),
   ]);
 
   if (!snapshot) {
@@ -71,6 +86,17 @@ export default async function KioskFerryPage() {
         </div>
       )}
 
+      {/* WALKING ON — above the board on purpose. Most people reading this are
+          on foot, and "it's free from here" is the single most useful sentence
+          the panel has. Both facts come from the admin-editable ferry record. */}
+      <section className="mb-10 rounded-3xl bg-fern p-10" aria-labelledby="kiosk-walkon">
+        <h2 id="kiosk-walkon" className="text-5xl font-semibold text-white">
+          Walking on? It&apos;s free from Kingston.
+        </h2>
+        <p className="mt-4 text-3xl leading-relaxed text-white">{ferryInfo.payment.freeLegNote}</p>
+        <p className="mt-4 text-3xl leading-relaxed text-white">{ferryInfo.boardingPass.exempt}</p>
+      </section>
+
       {departures.length === 0 ? (
         <KioskEmpty>No further sailings are listed today. Check the terminal board.</KioskEmpty>
       ) : (
@@ -98,6 +124,37 @@ export default async function KioskFerryPage() {
           })}
         </ul>
       )}
+
+      {/* Coming back the other way, and what it costs. Rendered from the same
+          structured fares the website uses, so October's WSF adjustment is one
+          edit in /admin/ferry-info rather than a code change in two places. */}
+      <section className="mb-10" aria-labelledby="kiosk-fares">
+        <h2 id="kiosk-fares" className="mb-6 text-4xl font-semibold text-white/80">
+          Coming back from Edmonds
+        </h2>
+        <ul>
+          {ferryInfo.fares.walkOn.map((row) => (
+            <li
+              key={row.label}
+              className="mb-4 flex flex-wrap items-baseline justify-between gap-6 rounded-2xl bg-white/10 px-8 py-6"
+            >
+              <span className="text-3xl text-white">{row.label}</span>
+              <span className="text-3xl font-semibold text-white tabular-nums">{row.amount}</span>
+              {row.note && <span className="w-full text-2xl text-white/70">{row.note}</span>}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-4 text-2xl text-white/60">Fares as of {ferryInfo.fares.ratesAsOf}.</p>
+      </section>
+
+      {/* Tides — the shoreline is what most visitors walk to, and the cove is a
+          different place at a minus low than a plus-eleven high. */}
+      <section className="mb-10" aria-labelledby="kiosk-tides">
+        <h2 id="kiosk-tides" className="mb-6 text-4xl font-semibold text-white/80">
+          Tides at Appletree Cove today
+        </h2>
+        <KioskTides tides={tides} />
+      </section>
 
       <div className="flex items-center gap-10 rounded-3xl bg-white/10 p-10">
         <KioskQr
