@@ -694,7 +694,20 @@ export function FeatureMap({
       //    far pin would zoom the whole map out and bury downtown, so we keep
       //    the configured center/zoom and let the visitor pan to the outlier.
       if (!data.builtins.streets && pts.length > 0) {
-        const bounds = L.latLngBounds(pts);
+        // …and a handful of far pins must not decide the frame either. The bail
+        // below is all-or-nothing, so a view that lands JUST under 4 km gets the
+        // worst of both: /parking draws park & rides 0.8 and 2.5 mi out, spans
+        // 3.85 km, and left its 23 downtown zones on 3.6% of the map. Set the
+        // outliers aside first; the 4 km bail stays as a backstop.
+        const OUTLIER_M = 1200;
+        const mid = (xs: number[]) => {
+          const s = [...xs].sort((a, b) => a - b);
+          const h = s.length >> 1;
+          return s.length % 2 ? s[h] : (s[h - 1] + s[h]) / 2;
+        };
+        const centre = L.latLng(mid(pts.map((p) => p[0])), mid(pts.map((p) => p[1])));
+        const core = pts.filter((p) => centre.distanceTo(L.latLng(p[0], p[1])) <= OUTLIER_M);
+        const bounds = L.latLngBounds(core.length >= 3 ? core : pts);
         const spanKm = bounds.getNorthWest().distanceTo(bounds.getSouthEast()) / 1000;
         if (spanKm <= 4) {
           // animate:false → map state is final synchronously, so the initial

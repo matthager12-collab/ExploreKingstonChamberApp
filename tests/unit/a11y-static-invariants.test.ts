@@ -20,10 +20,17 @@ import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { mapViews } from "@/lib/data/map-views";
 
 const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const SRC_ROOT = path.join(REPO_ROOT, "src");
 const LAYOUT = path.join(SRC_ROOT, "app", "layout.tsx");
+
+/** The seed view /parking resolves by id, and the source its text alternative needs. */
+const PARKING_VIEW_ID = "parking-cash";
+const PARKING_ZONES_SOURCE = "parking-zones";
+/** The key on `builtins` that src/app/parking/page.tsx gates the list on. */
+const PARKING_ZONES_BUILTIN = "parkingZones";
 
 /**
  * The three grandfathered px holdouts. These are the SAME paths the AC-10
@@ -360,6 +367,80 @@ describe("E14 static a11y invariants", () => {
       `white label text on a raw LEVELS[].hex fill is under AA (busy = 2.27:1). ` +
         `Use chipFillHex(meta):\n${rectWithRawHex.join("\n")}`,
     ).toEqual([]);
+  });
+
+  it("the parking view seeds the source its text alternative depends on", () => {
+    // /parking's "Every lot, in words" list is M-14-04's text alternative to
+    // the frozen map: src/components/feature-map.tsx encodes a lot's parking
+    // type in MARKER COLOUR alone, and the type name only appears inside a
+    // popup you have to tap. That list is the only non-colour way to get it.
+    //
+    // The list renders only when `builtins.parkingZones` is non-empty, and
+    // resolveMapView() fills that ONLY when the view lists this source. The
+    // seed shipped `sources: []`, so the alternative existed only where a
+    // human had ticked the box in /admin/maps. On production nobody ever had —
+    // the live payload read `"sources":[],"features":[],"builtins":{}`, so the
+    // list had never once rendered to a visitor, and the map itself was blank
+    // under copy promising colour-coded lots.
+    //
+    // Seeding it makes the guarantee structural: a restored backup, a wiped
+    // store, or a fresh environment now carries the alternative by default.
+    const parking = mapViews.find((v) => v.id === PARKING_VIEW_ID);
+    expect(parking, `no "${PARKING_VIEW_ID}" seed view — /parking resolves it by id`).toBeDefined();
+    expect(
+      parking!.sources,
+      `/parking's "Every lot, in words" text alternative (M-14-04) renders only when ` +
+        `the "${PARKING_VIEW_ID}" view carries the "${PARKING_ZONES_SOURCE}" source. Without ` +
+        `it the page drops the list with nothing failing, and the frozen map's ` +
+        `colour-coded lot types are left with no non-colour equivalent.`,
+    ).toContain(PARKING_ZONES_SOURCE);
+  });
+
+  it("keeps the parking seed's source wired to the resolver that reads it", () => {
+    // Assert BOTH halves of the coupling, like the feature-map and forecast
+    // pairings above. The test directly above proves the SEED says
+    // "parking-zones"; it cannot prove the RESOLVER still listens for that
+    // exact string, or still parks the result on `builtins.parkingZones`
+    // where src/app/parking/page.tsx looks for it. Rename either end and the
+    // seed keeps its source, every existing test stays green, and the text
+    // alternative silently disappears again — the precise failure this whole
+    // pair exists to prevent.
+    //
+    // Read, do not import: src/lib/map/resolve.ts is server-only and pulls in
+    // the stores (and therefore a database) at import time. Comparing the
+    // source text is the same move parking-labels.test.ts makes against the
+    // frozen map component, for the same reason.
+    const resolver = readFileSync(path.join(SRC_ROOT, "lib", "map", "resolve.ts"), "utf8");
+    const page = readFileSync(path.join(SRC_ROOT, "app", "parking", "page.tsx"), "utf8");
+
+    // Parse the literals out rather than string-matching a whole expression.
+    // The two existing coupling tests in this file match exact class strings,
+    // which is fine against frozen files that barely change — but resolve.ts is
+    // NOT frozen, so it will get reformatted and refactored. Matching the parsed
+    // literal survives a Prettier re-wrap or a switch to a Set, and still fails
+    // on the one thing that actually breaks the page: the string changing.
+    const gatedSources = [...resolver.matchAll(/sources\.includes\("([^"]+)"\)/g)].map((m) => m[1]);
+    expect(
+      gatedSources,
+      `resolve.ts no longer gates any branch on "${PARKING_ZONES_SOURCE}" (it gates on: ` +
+        `${gatedSources.join(", ") || "nothing"}). The seed still lists that source, so the ` +
+        `test above keeps passing — but builtins.parkingZones is never filled and /parking ` +
+        `drops its text alternative with nothing else failing.`,
+    ).toContain(PARKING_ZONES_SOURCE);
+
+    // The other half of the chain: the key the resolver writes has to be the key
+    // the page reads. Rename it at either end and the list empties in silence.
+    const assignedBuiltins = [...resolver.matchAll(/builtins\.(\w+)\s*=/g)].map((m) => m[1]);
+    expect(
+      assignedBuiltins,
+      `resolve.ts no longer assigns builtins.${PARKING_ZONES_BUILTIN} (it assigns: ` +
+        `${assignedBuiltins.join(", ") || "nothing"}).`,
+    ).toContain(PARKING_ZONES_BUILTIN);
+    expect(
+      page,
+      `src/app/parking/page.tsx no longer reads builtins.${PARKING_ZONES_BUILTIN} — if the ` +
+        `list moved to another key, this guard is now protecting the wrong one.`,
+    ).toContain(`builtins.${PARKING_ZONES_BUILTIN}`);
   });
 
   it("the simple-mode bootstrap is inline and localStorage-backed", () => {

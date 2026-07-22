@@ -175,7 +175,7 @@ export const parkingZones: MapZone[] = [
     name: "POKPARK row 89–103",
     rule: "paid",
     summary:
-      "$12/12 hr car — text POKPARK to 25023. Single row of 15 stalls along the drive NW of the yacht club.",
+      "$12/12 hr car · $6 motorcycle · $3.49/hr short-term — text POKPARK to 25023. Single row of 15 stalls along the drive NW of the yacht club.",
     details:
       "Short numbered row (89–103) lining the loop drive northwest of the Kingston Cove Yacht Club, immediately west of the KCYC-permit-only row. Same rates, payment and overnight rules as the rest of POKPARK (call 360-297-3545 before overnight).",
     confidence: "probable",
@@ -195,7 +195,7 @@ export const parkingZones: MapZone[] = [
     name: "POKHILL hill zone (104–162)",
     rule: "paid",
     summary:
-      "$12/12 hr car ($15 truck+trailer) — text POKHILL to 25023. Spaces 104–132 plus truck/trailer overflow 133–162 on the slope.",
+      "$12/12 hr car · $6 motorcycle · $15 truck+trailer ($30/24 hr) · $3.49/hr short-term — text POKHILL to 25023. Spaces 104–132 plus truck/trailer overflow 133–162 on the slope.",
     details:
       "The long double-loaded strip west of the boat-launch access road, running from NE West Kingston Rd downhill to the main lot (~120 m). Spaces 104–132 are general parking; 133–162 are truck-and-trailer overflow for busy launch days. A few Port-use stalls sit at the very top end. Same text-to-pay system (POKHILL to 25023) and overnight rule of thumb: call the Port office first (360-297-3545).",
     confidence: "probable",
@@ -345,12 +345,14 @@ export const parkingZones: MapZone[] = [
       "https://wsdot.com/ferries/vesselwatch/terminaldetail.aspx?terminalid=12",
     overnight: "yes",
     center: [47.798685, -122.496815],
-    polygon: [
-      [47.798349, -122.496296],
-      [47.798447, -122.496441],
-      [47.79902, -122.497305],
-      [47.798968, -122.497232],
-    ],
+    // NO POLYGON ON PURPOSE. The four corners that used to sit here described a
+    // 98 m × 0.21 m sliver — 21 m² of area for a 73-stall lot that needs ~1,900 m².
+    // Two of the corners were near-duplicates, so it drew as a hairline streaked
+    // across the other zones rather than as a lot. OpenStreetMap has no footprint
+    // for D515 either (its nearest mapped lot is a private customers-only lot 58 m
+    // away), so there is nothing to replace it with that we could source. A circle
+    // at the verified center claims only what we actually know; re-adding a shape
+    // is a job for /admin/maps with aerial imagery under it.
   },
 
   /* ---------------- Park & rides ---------------- */
@@ -497,16 +499,43 @@ export const parkingZones: MapZone[] = [
   },
   {
     id: "street-washington-blvd",
-    name: "Washington Blvd NE",
+    name: "Washington Blvd NE (north of the SR 104 loop)",
     rule: "prohibited",
-    summary: "No parking — this is the ferry offload route.",
+    summary: "No parking on the ferry offload stretch north of the SR 104 loop.",
     details:
-      "Marked prohibited in the county inventory. SR 104 outside the downtown core and NE West Kingston Rd are also no-parking, and much of the eastbound SR 104 shoulder is striped/signed against ferry-queue parking.",
+      "Marked prohibited in the county inventory. SR 104 outside the downtown core and NE West Kingston Rd are also no-parking, and much of the eastbound SR 104 shoulder is striped/signed against ferry-queue parking. NOTE: this entry no longer covers the block between the two SR 104 legs — that block has 2-hour parking on both sides and is listed separately.",
     confidence: "probable",
     sourceUrl: STUDY_URL,
     sourceNote: STUDY_NOTE,
     overnight: "no",
     center: [47.79855, -122.49419],
+  },
+  {
+    // Chamber field correction, July 2026. The 2015 county inventory marked the
+    // WHOLE of Washington Blvd NE as no-parking, so the app was telling visitors
+    // they could not park on a block where they can — the costliest direction for
+    // this error to point. The offload-route entry above now stops short of here.
+    //
+    // Extent from OpenStreetMap: the ~114 m of Washington Blvd NE bounded by an
+    // SR 104 junction at each end — [47.797036, -122.496929] on the west and
+    // [47.797548, -122.495625] on the east (OSM ways 292111730 + 117576626).
+    // The block is signed one-way for ferry offload AND has parking both sides;
+    // the old entry conflated "one-way offload route" with "no parking".
+    //
+    // Centre pin only, like every other street entry — MapZone has no polyline,
+    // so a two-sided curb cannot be drawn. See the geometry note in the header.
+    id: "street-washington-blvd-104-loop",
+    name: "Washington Blvd NE (between the SR 104 legs)",
+    rule: "free-2hr",
+    summary:
+      "Free 2-hour parking on BOTH sides, on the block between the two SR 104 legs. One-way for ferry offload — but you may park.",
+    details:
+      "The short block of Washington Blvd NE enclosed by the SR 104 loop, a block up from the dock. Free parking with a posted 2-hour limit on both sides of the street. The street is one-way here because it carries traffic coming off the boat, which is why an earlier version of this map wrongly showed the whole street as no-parking. Obey the posted signs — they are the legal authority.",
+    confidence: "probable",
+    sourceNote:
+      "Chamber field correction July 2026, replacing the 2015 county study — obey posted signs.",
+    overnight: "no",
+    center: [47.797292, -122.496277],
   },
 
   /* ---------------- Unverified — field-check before relying on these ---------------- */

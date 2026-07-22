@@ -17,15 +17,24 @@ export const mapViews: MapView[] = [
   {
     id: "parking-cash",
     name: "Parking",
-    // A blank canvas built by hand in /admin/maps — draw the real parking areas
-    // from the ground up. Starts as a draft (hidden from the
-    // public /map switcher) until it's ready to publish. To pull in the
-    // built-in layers again, tick sources in the editor's "Edit view" panel.
+    // The 25 seeded lots in src/lib/data/parking.ts, shown by default. This
+    // was a blank canvas to be drawn by hand in /admin/maps; that never
+    // happened, and the live map sat empty under copy promising markers.
+    //
+    // "parking-zones" here is load-bearing for accessibility, not just for the
+    // map. /parking's "Every lot, in words" list — M-14-04's text alternative
+    // to the frozen map's colour-only lot types — renders only when
+    // resolveMapView() fills builtins.parkingZones, and it only does that when
+    // this source is listed. Seeded rather than ticked in /admin/maps so a
+    // restored backup, a wiped store, or a fresh environment cannot silently
+    // drop the alternative. tests/unit/parking-seed-source.test.ts holds this.
+    //
+    // Admins still draw on top in /admin/maps; overlay edits win by id.
     description: "Where to park in Kingston — built by the Chamber.",
     center: [47.7972, -122.498],
     zoom: 17,
-    sources: [],
-    published: false,
+    sources: ["parking-zones"],
+    published: true,
   },
   {
     id: "explore",
