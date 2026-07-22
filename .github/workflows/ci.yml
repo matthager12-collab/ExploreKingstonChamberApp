@@ -50,6 +50,11 @@ jobs:
       - run: npm run lint
       - run: npm run lint:boundaries
       - run: node scripts/check-frozen.mjs
+      # Raw control bytes make `file` classify a source file as binary, which
+      # makes grep skip it silently — so every grep-based guard here, and every
+      # hand-run sweep, goes blind to it and says nothing. Twice now that has
+      # hidden a live file from review. Cheap, full-tree, no deps.
+      - run: node scripts/check-control-bytes.mjs
       - run: npm run test
       - run: npm run build
       - run: npx playwright install --with-deps chromium

@@ -358,7 +358,7 @@ export async function summarize(): Promise<AnalyticsSummary> {
       outboundClicks++;
       const href = e.href ?? "(unknown)";
       const label = e.label ?? "(unlabeled)";
-      const key = `${href} ${label}`;
+      const key = `${href}\u0000${label}`;
       const entry = byLink.get(key) ?? { href, label, count: 0 };
       entry.count++;
       byLink.set(key, entry);
@@ -393,7 +393,7 @@ export async function summarize(): Promise<AnalyticsSummary> {
     const region = geo.region ?? "";
     const city = geo.city ?? "";
     const source: GeoSource = geo.source ?? "unknown";
-    const geoKey = `${country} ${region} ${city} ${source}`;
+    const geoKey = `${country}\u0000${region}\u0000${city}\u0000${source}`;
     const geoEntry =
       byGeo.get(geoKey) ?? { country, region, city, source, sessions: new Set<string>() };
     geoEntry.sessions.add(e.sessionId);
