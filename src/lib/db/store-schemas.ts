@@ -92,6 +92,12 @@ export const STORE_SCHEMAS: Record<string, z.ZodType> = {
   "site-pages": z.looseObject({ id: pagePathId }),
   "ferry-info": z.looseObject({ id: entityId }),
   "ferry-prediction": z.looseObject({ id: entityId }),
+  // E22 kiosk settings — one record, id "settings". Structural only, matching
+  // its ferry-prediction sibling: the real validation is in kiosk-store.ts and
+  // it runs on the way OUT as well as in, because these values configure an
+  // unattended device and a restored or hand-edited overlay must not be able to
+  // hand it a 0-second idle timeout or a screen id that has no page.
+  kiosk: z.looseObject({ id: entityId }),
   "boarding-pass-override": z.looseObject({ id: entityId }),
   "ferry-accuracy": z.looseObject({ id: entityId }),
   "custom-hunts": z.looseObject({ id: entityId, title: nonempty }),

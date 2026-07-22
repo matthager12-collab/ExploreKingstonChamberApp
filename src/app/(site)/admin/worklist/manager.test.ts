@@ -13,7 +13,7 @@ import {
   reportInaccuratePayload,
   stalenessPayload,
   syncConflictPayload,
-} from "../../../../tests/fixtures/worklist-fixtures";
+} from "../../../../../tests/fixtures/worklist-fixtures";
 import {
   WorklistManager,
   type WorklistCounts,

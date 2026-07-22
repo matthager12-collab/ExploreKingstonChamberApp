@@ -28,11 +28,16 @@
 // never stored at all, and a failed cache write could change which page a
 // visitor was handed — so a returning device drops them wholesale on activate
 // rather than carrying that state forward.
-const VERSION = "v2";
+// v3: E22 added the kiosk cache and a stale-while-revalidate branch for kiosk
+// navigations. The navigate() path now behaves differently per URL, so a
+// returning device drops the v2 caches wholesale rather than carrying entries
+// filled by the old logic forward.
+const VERSION = "v3";
 
 const SHELL_CACHE = `vk-shell-${VERSION}`; // HTML for allowlisted pages
 const STATIC_CACHE = `vk-static-${VERSION}`; // build output + brand images
 const DATA_CACHE = `vk-data-${VERSION}`; // exactly one ferry snapshot
+const KIOSK_CACHE = `vk-kiosk-${VERSION}`; // HTML for the ferry-dock kiosk screens
 
 // Exact-pathname membership ONLY — never a prefix match. A prefix on "/events"
 // would swallow /events/suggest (which renders an admin preview of unpublished
@@ -51,6 +56,35 @@ const DATA_CACHE = `vk-data-${VERSION}`; // exactly one ferry snapshot
 // slack below already covers both. tests/unit/sw-contract.test.ts asserts every
 // entry here resolves to a real page.tsx, so adding them early fails the build.
 const NAV_ALLOWLIST = ["/", "/ferry", "/eat", "/events", "/parking", "/about", "/offline"];
+
+// The ferry-dock kiosk's screens (E22). A SEPARATE list, with its own cache and
+// its own strategy, for three reasons that all bite if they share the shell's:
+//
+//   1. BUDGET. SHELL_LIMIT is sized to the visitor allowlist. Folding eight
+//      kiosk screens in would let a panel that reloads itself every fifteen
+//      minutes evict the pages a phone in the ferry queue came for.
+//   2. STRATEGY. Visitor navigations are network-first: a phone should wait a
+//      moment for the truth. The kiosk is the opposite — it is a wall display
+//      whose content changes on an ISR cycle, so painting instantly from cache
+//      and revalidating behind it is both faster and steadier, and the shell's
+//      own freshness reload closes the loop.
+//   3. FALLBACK. A failed kiosk navigation must NEVER land on /offline. That
+//      page carries the site nav and footer, which on a locked-down panel with
+//      no address bar is a working escape hatch out of the kiosk. See
+//      kioskNavigate().
+//
+// Exact pathnames, same rule as above. tests/unit/sw-contract.test.ts asserts
+// every entry resolves to a real page file (route-group aware since E22).
+const KIOSK_NAV_ALLOWLIST = [
+  "/kiosk",
+  "/kiosk/ferry",
+  "/kiosk/eat",
+  "/kiosk/events",
+  "/kiosk/map",
+  "/kiosk/parking",
+  "/kiosk/stay",
+  "/kiosk/do",
+];
 
 // The site's declared private surface — identical to src/app/robots.ts. Do NOT
 // derive this from src/proxy.ts's matcher: that one deliberately omits /portal
@@ -130,6 +164,9 @@ const FERRY_STATUS_PATH = "/api/ferry/status";
 // cannot evict the pages people actually came for.
 const SHELL_LIMIT = NAV_ALLOWLIST.length + 2;
 const STATIC_LIMIT = 80;
+// Same slack rule as the shell, against its own list — so the kiosk's screens
+// and the visitor's pages can never evict each other.
+const KIOSK_LIMIT = KIOSK_NAV_ALLOWLIST.length + 2;
 
 /* ------------------------------------------------------------------ */
 /* Lifecycle                                                           */
@@ -207,9 +244,14 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 4. Page navigations: network-first, cached copy as the safety net.
+  // 4. Page navigations. The kiosk gets its own branch — stale-while-revalidate
+  //    into its own cache, and a fallback that never leaves the kiosk.
   if (request.mode === "navigate") {
-    event.respondWith(navigate(event, request, url));
+    if (KIOSK_NAV_ALLOWLIST.includes(url.pathname)) {
+      event.respondWith(kioskNavigate(event, request, url));
+    } else {
+      event.respondWith(navigate(event, request, url));
+    }
     return;
   }
 
@@ -275,6 +317,109 @@ async function navigate(event, request, url) {
   // Unconditional, and never behind an await on storage: the visitor gets the
   // live page whether or not it was saved.
   return res;
+}
+
+/**
+ * Stale-while-revalidate for the ferry-dock kiosk's screens (E22).
+ *
+ * Paint whatever we have instantly, then refresh it behind the visitor's back.
+ * A wall panel is not a phone: nobody is waiting on a spinner, the content
+ * changes on a 60s ISR cycle rather than per-tap, and the shell reloads the
+ * whole page every fifteen idle minutes anyway — so the freshest thing we can
+ * put on the glass in zero milliseconds beats the truest thing in eight
+ * hundred, every time.
+ *
+ * WHAT THIS DELIBERATELY DOES NOT DO: fall back to /offline. That document
+ * carries SiteNav and SiteFooter, and on a device with no address bar and no
+ * back button those links are a one-tap route out of the kiosk and into the
+ * public site, where a visitor is then stuck. A kiosk with nothing cached gets
+ * the self-contained notice below instead, and KioskShell's heartbeat is what
+ * puts "Be right back" on screen while the network is away.
+ */
+async function kioskNavigate(event, request, url) {
+  const cache = await caches.open(KIOSK_CACHE);
+  const saved = await cache.match(url.pathname);
+
+  // Started whether or not we hit, because the "revalidate" half is the whole
+  // point: a hit that is never refreshed is just a stale cache.
+  const network = fetch(request)
+    .then((res) => {
+      // Same three conditions navigate() uses, and for the same reasons — a
+      // kiosk screen the Chamber has switched off answers 404, and caching that
+      // would outlive them switching it back on.
+      if (res.status === 200 && !res.redirected && KIOSK_NAV_ALLOWLIST.includes(url.pathname)) {
+        saveInBackground(event, KIOSK_CACHE, KIOSK_LIMIT, url.pathname, res.clone());
+      } else if (res.status === 404) {
+        // AND THE OTHER HALF, which stale-while-revalidate needs and
+        // network-first does not: EVICT on a 404.
+        //
+        // Without this the admin off-switch is a no-op on the actual device.
+        // Turning the kiosk off makes /kiosk 404, but this branch would serve
+        // the cached copy first and only "revalidate" behind it — and a
+        // revalidation that declines to store anything leaves the old page in
+        // the cache for ever. The panel would keep showing the directory after
+        // staff had switched it off, with no way to tell from the admin page
+        // that it had not taken. Same for a screen removed from enabledScreens.
+        dropFromCache(event, KIOSK_CACHE, url.pathname);
+      }
+      return res;
+    })
+    .catch(() => null);
+
+  if (saved) {
+    // Keep the worker alive for the refresh even though nobody is awaiting it.
+    try {
+      event.waitUntil(network);
+    } catch {
+      // The event's lifetime already ended; the visitor has their page.
+    }
+    return saved;
+  }
+
+  const res = await network;
+  if (res) return res;
+
+  // Nothing cached and no network — the state a kiosk is in on its very first
+  // boot at the dock if the venue Wi-Fi is not up yet. Self-contained markup:
+  // no nav, no links, nothing to tap, styled to match the kiosk so it does not
+  // look like a browser error page to a member of the public.
+  //
+  // THE META REFRESH IS THE POINT, not decoration. This document replaces the
+  // app, so none of KioskShell's recovery runs from here: no heartbeat, no
+  // freshness reload, no self-heal — that JS is in a bundle this response does
+  // not load. Without a refresh the panel sits on this screen for ever once the
+  // network returns, and the only cure is a human power-cycling the mini PC,
+  // which defeats the whole unattended-recovery story in docs/KIOSK-DEPLOY.md.
+  // Ten seconds is frequent enough to look instant to anyone watching and far
+  // too slow to be load on a server that is, by definition, unreachable.
+  return new Response(
+    `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
+      `<meta http-equiv="refresh" content="10">` +
+      `<title>Explore Kingston</title></head>` +
+      `<body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;` +
+      `background:#22334d;color:#fff;font:600 2rem/1.4 system-ui,sans-serif;text-align:center">` +
+      `<p style="max-width:32rem;padding:2rem">Be right back &mdash; this screen is reconnecting.<br>` +
+      `<span style="font-weight:400;opacity:.75">Ferry times are posted at the terminal.</span></p>` +
+      `</body></html>`,
+    { status: 503, headers: { "Content-Type": "text/html; charset=utf-8" } },
+  );
+}
+
+/**
+ * Delete one entry, off the response path. Mirrors saveInBackground's contract:
+ * nothing is awaited by the caller and every failure is swallowed, because an
+ * eviction is bookkeeping and must never change what the visitor sees.
+ */
+function dropFromCache(event, cacheName, key) {
+  const write = caches
+    .open(cacheName)
+    .then((cache) => cache.delete(key))
+    .catch(() => {});
+  try {
+    event.waitUntil(write);
+  } catch {
+    // The event's lifetime already ended; the next navigation will retry.
+  }
 }
 
 /** Cache-first for content-hashed assets and optimizer-served brand imagery. */

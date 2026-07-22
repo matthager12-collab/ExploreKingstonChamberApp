@@ -229,12 +229,21 @@ export async function POST(request: NextRequest) {
       webVital = { metric, value };
     }
 
+    // E22: which client sent this. Whitelisted to the ONE literal we accept,
+    // exactly like every other field here — this endpoint is public, so an
+    // arbitrary client-supplied string would let anyone invent a series, and a
+    // free-text field is a free-text field even when we only meant to write
+    // "kiosk" into it. Absent (the website) stays absent, which is what keeps
+    // every event written before the kiosk existed counting as a visitor.
+    const source = body.source === "kiosk" ? ("kiosk" as const) : undefined;
+
     const event: AnalyticsEvent = {
       ts: new Date().toISOString(),
       type,
       path,
       sessionId,
       geo: deriveGeo(request),
+      ...(source ? { source } : {}),
       ...(type === "outbound" ? { href, label: trunc(body.label, MAX_LABEL) } : {}),
       ...(type === "consent"
         ? {

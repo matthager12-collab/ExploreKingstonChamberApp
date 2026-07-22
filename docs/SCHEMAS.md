@@ -6,7 +6,7 @@ Every editable content domain has exactly **one** zod schema in
 | surface | file | how |
 | --- | --- | --- |
 | Admin API | `src/app/api/admin/content-records/route.ts` | `POST` runs `<domain>Schema.safeParse(record)`; failures 400 with `firstZodMessage` |
-| Admin editors | `src/components/admin/record-editor.tsx` (engine), `src/app/admin/itineraries/editor.tsx` (bespoke stops UI) | `buildRecord` coerces the form draft, then parses with the **same schema object** |
+| Admin editors | `src/components/admin/record-editor.tsx` (engine), `src/app/(site)/admin/itineraries/editor.tsx` (bespoke stops UI) | `buildRecord` coerces the form draft, then parses with the **same schema object** |
 | Portal self-edit | `src/app/api/portal/listing/route.ts` | field rules imported from the schemas; the merged record gets a belt-and-braces `restaurantSchema.safeParse` before save |
 
 Before E07 the server sanitizers and the client `buildRecord`s were hand-synced

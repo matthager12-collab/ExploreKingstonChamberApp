@@ -58,7 +58,7 @@ editable in `/admin/map`.
   merges the `parking.ts` seed with admin overlay records (`readMerged<MapZone>("parking-zones",
   seed)`); `saveParkingZone()` writes an overlay record, `_deleted` tombstones. The admin API
   `POST /api/admin/parking` and the geoman editor at `/admin/map`
-  ([`src/app/admin/map/editor.tsx`](../src/app/admin/map/editor.tsx)) are the "parking-map area
+  ([`src/app/(site)/admin/map/editor.tsx`](../src/app/(site)/admin/map/editor.tsx)) are the "parking-map area
   setup" section named in R2. **We extend this existing pipe — we don't build a new one.**
 - **Custom map features already carry an editable pay link.** `ParkingMeta` in
   [`src/lib/map/types.ts`](../src/lib/map/types.ts) has `paymentMethod` / `paymentLink` /
@@ -72,7 +72,7 @@ editable in `/admin/map`.
   sourceUrl, sourceNote`). Anything else — including a new `pay` field — is dropped on save. So
   even a geometry drag would wipe `pay` unless the API is taught to keep it. **Fixing the API is
   mandatory, not optional** (see §6).
-- **The `/parking` page has no per-lot list.** [`src/app/parking/page.tsx`](../src/app/parking/page.tsx)
+- **The `/parking` page has no per-lot list.** [`src/app/(site)/parking/page.tsx`](../src/app/(site)/parking/page.tsx)
   is a server component: a `FeatureMap` (the `parking-cash` CMS view) plus prose. There's no
   scannable "here are the paid lots, tap to pay" surface — the highest-value thing to add for a
   ferry rider on a phone.
@@ -241,7 +241,7 @@ const zone: MapZone = {
 };
 ```
 
-### 6b. Editor — add pay fields (`src/app/admin/map/editor.tsx`)
+### 6b. Editor — add pay fields (`src/app/(site)/admin/map/editor.tsx`)
 
 - Extend the `Draft` type with `pay: PayHandoff[]`; `toDraft(zone)` sets `pay: zone.pay ?? []`;
   `buildZone()` sets `pay: draft.pay` (it already spreads `...zone`, but set it explicitly so an
@@ -294,7 +294,7 @@ minute — no deploy. That satisfies R2.
 ## 7. Surface 3 — a "Pay for parking" card list on `/parking`
 
 The mobile win: a ferry rider scans a short list and taps once. Add a `Section` to
-[`src/app/parking/page.tsx`](../src/app/parking/page.tsx) **above "Before you park for the ferry"**,
+[`src/app/(site)/parking/page.tsx`](../src/app/(site)/parking/page.tsx) **above "Before you park for the ferry"**,
 built from the **merged** zones (so admin edits show):
 
 ```tsx

@@ -1,9 +1,35 @@
 # KIOSK.md — Kiosk mode design
 
-**Status:** Design / not yet built. **Author:** research + design pass, July 2026.
+**Status: BUILT (E22, July 2026) — shipped dark, device not yet deployed.**
+This document is the *design*, kept as the record of why the kiosk is shaped this way.
+For running the actual panel, see **[KIOSK-DEPLOY.md](KIOSK-DEPLOY.md)** (Chromium
+flags, the URL-allowlist policy, the front-desk recovery card, and the install-day
+field test).
+
+**Author:** research + design pass, July 2026.
 **Companion:** [KIOSK-POWER.md](KIOSK-POWER.md) — hardware power budget + off-grid
-solar feasibility (the "can it run on battery/solar at the ferry" question). This doc
-is the *software* design.
+solar feasibility (the "can it run on battery/solar at the ferry" question).
+
+### What shipped, and where it differs from this design
+
+The route-group decision (§2), the screen list (§3), the layout split (§4), `KioskShell`
+(§5), the store-backed update story (§6) and the device setup (§8) all shipped as
+described. Three things landed differently, each for a reason recorded at the code:
+
+| §  | Designed | Shipped | Why |
+| -- | -------- | ------- | --- |
+| §4 | Kiosk viewport pins the zoom scale | It does not | E14 shipped an accessibility invariant forbidding that anywhere in `src/`, and kiosk WCAG AA is a launch gate. Zoom lockdown moved to the device (`--disable-pinch`), where it applies only to the panel and an operator can undo it. |
+| §3 | `/kiosk/map` reuses `<FeatureMap/>` | Server-rendered walking times + landmarks, with the interactive map one QR away | Tiles need the network per pan and offline tile packs are a non-goal, so the first drag on dropped Wi-Fi lands in grey squares. Leaflet's attribution is also a real external anchor, which a locked-down panel must not have. |
+| §7 | Possibly Serwist | E13's hand-rolled `public/sw.js`, extended | The worker already existed by the time E22 ran; the kiosk added one bounded cache and a stale-while-revalidate branch rather than a migration. |
+
+Also worth knowing: the kiosk deliberately does **not** fall back to `/offline`. That page
+carries the site nav, which on a panel with no address bar is a working escape hatch —
+`kioskNavigate()` in `public/sw.js` answers with self-contained markup instead.
+
+The open questions in §12 are now answered: refactor was done first (not the cover-up
+path), usage is tracked as a separate `source: "kiosk"` series, v1 defaults to Ferry ·
+Eat · Events · Map · Parking with Stay and Things-to-Do built but off, and the SW was
+extended rather than replaced.
 
 > **Before you write code:** heed `AGENTS.md` — this is Next.js **16.2.10** (React
 > 19, Tailwind v4) and conventions differ from older mental models. The route-group,

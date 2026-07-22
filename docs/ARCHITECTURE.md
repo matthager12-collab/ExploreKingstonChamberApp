@@ -264,7 +264,7 @@ hashes; stateless HMAC-signed session cookies
 (`/portal/setup` → `/api/auth/setup`) that self-destructs once any user exists;
 `src/proxy.ts` (the Next 16 file convention — **not** `middleware.ts`) turns
 unauthenticated requests away at the request boundary, and
-`src/app/admin/layout.tsx` gates all of `/admin` behind role `admin` — there is
+`src/app/(site)/admin/layout.tsx` gates all of `/admin` behind role `admin` — there is
 **no pre-setup grace** (E06 removed it): `/admin` always redirects to `/portal`,
 even on a fresh install with zero users, so it is never world-readable.
 Bootstrap runs through `/portal` → `/portal/setup` instead. Every write handler

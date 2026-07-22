@@ -54,7 +54,7 @@ separate export pipeline to drift out of sync.
   `PostalAddress` parsed from the single-string listing address (Kingston/WA
   fallbacks, zip end-anchored so a street number is never mistaken for it),
   `GeoCoordinates`, `telephone`, `servesCuisine`, `priceRange`, `hasMenu`.
-- **Currently wired only on `/eat`** (`src/app/eat/page.tsx` imports and renders
+- **Currently wired only on `/eat`** (`src/app/(site)/eat/page.tsx` imports and renders
   `LocalBusinessJsonLd` per restaurant). The component is deliberately page-agnostic —
   any listing page can import it — but today the restaurant grid is the only caller.
   Lodging/nonprofit pages do not emit JSON-LD yet.

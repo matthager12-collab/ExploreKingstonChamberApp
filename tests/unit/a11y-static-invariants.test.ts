@@ -25,11 +25,18 @@ import { mapViews } from "@/lib/data/map-views";
 const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const SRC_ROOT = path.join(REPO_ROOT, "src");
 const LAYOUT = path.join(SRC_ROOT, "app", "layout.tsx");
+// E22 split the app into route groups. The chrome — skip link, nav, <main>,
+// footer — moved out of the root layout into a component shared by
+// src/app/(site)/layout.tsx and the root 404, so the guards below follow it
+// there. All three files are on the shared graph of every public page, so all
+// three are held to the no-dynamic-API rule.
+const SITE_LAYOUT = path.join(SRC_ROOT, "app", "(site)", "layout.tsx");
+const CHROME = path.join(SRC_ROOT, "components", "site-chrome.tsx");
 
 /** The seed view /parking resolves by id, and the source its text alternative needs. */
 const PARKING_VIEW_ID = "parking-cash";
 const PARKING_ZONES_SOURCE = "parking-zones";
-/** The key on `builtins` that src/app/parking/page.tsx gates the list on. */
+/** The key on `builtins` that src/app/(site)/parking/page.tsx gates the list on. */
 const PARKING_ZONES_BUILTIN = "parkingZones";
 
 /**
@@ -38,8 +45,8 @@ const PARKING_ZONES_BUILTIN = "parkingZones";
  *
  *   git grep -nE 'text-\[[0-9]+px\]' -- 'src/' \
  *     ':!src/components/feature-map.tsx' \
- *     ':!src/app/admin/maps/editor.tsx' \
- *     ':!src/app/admin/map/editor.tsx'
+ *     ':!src/app/(site)/admin/maps/editor.tsx' \
+ *     ':!src/app/(site)/admin/map/editor.tsx'
  *
  * The reason is `.agent-frozen`: all three are frozen-zone files that no agent
  * may edit, so "fix the px size" is not an available move for them. The test
@@ -48,20 +55,20 @@ const PARKING_ZONES_BUILTIN = "parkingZones";
  */
 const FROZEN_PX_HOLDOUTS = [
   "src/components/feature-map.tsx",
-  "src/app/admin/maps/editor.tsx",
-  "src/app/admin/map/editor.tsx",
+  "src/app/(site)/admin/maps/editor.tsx",
+  "src/app/(site)/admin/map/editor.tsx",
 ];
 
 /**
  * Frozen files that still pair `text-fern` with a fern tint. Both are in
  * `.agent-frozen`, so repairing them in place is not an available move:
- *   - src/app/admin/map/editor.tsx — an admin-only toggle button.
+ *   - src/app/(site)/admin/map/editor.tsx — an admin-only toggle button.
  *   - src/lib/ferry-forecast.ts — LEVELS.light.chip, which IS repaired, at the
  *     two non-frozen components that render it (see src/lib/ferry-chip.ts).
  * The test below re-reads the manifest and fails if either is ever unfrozen
  * without this list being revisited.
  */
-const FERN_TINT_HOLDOUTS = ["src/app/admin/map/editor.tsx", "src/lib/ferry-forecast.ts"];
+const FERN_TINT_HOLDOUTS = ["src/app/(site)/admin/map/editor.tsx", "src/lib/ferry-forecast.ts"];
 
 /** Arbitrary Tailwind px font size, e.g. the ones swept to rem in E14 slice 1. */
 const ARBITRARY_PX_FONT_RE = /text-\[\d+px\]/;
@@ -196,21 +203,36 @@ describe("E14 static a11y invariants", () => {
     ).toEqual([]);
   });
 
-  it("the root layout never imports next/headers", () => {
-    // A cookies()/headers() read in the root layout opts every page out of static
-    // rendering. Simple mode is therefore localStorage + data-simple, never a cookie.
-    expect(readFileSync(LAYOUT, "utf8")).not.toMatch(/next\/headers/);
+  it("nothing on the shared layout graph imports next/headers", () => {
+    // A cookies()/headers() read anywhere on the graph EVERY page renders opts
+    // the whole site out of static rendering. Simple mode is therefore
+    // localStorage + data-simple, never a cookie.
+    //
+    // E22: checking the root layout alone stopped being sufficient the moment
+    // the chrome moved down — a headers() read in (site)/layout.tsx or in
+    // site-chrome.tsx would take out every public page while this guard stayed
+    // green. tests/server/static-rendering.test.ts is the property-level
+    // backstop; these three greps are the fast, specific version.
+    for (const file of [LAYOUT, SITE_LAYOUT, CHROME]) {
+      expect(readFileSync(file, "utf8"), `${rel(file)} imports next/headers`).not.toMatch(
+        /next\/headers/,
+      );
+    }
   });
 
-  it("the root layout carries the skip link and its target", () => {
-    const layout = readFileSync(LAYOUT, "utf8");
-    expect(layout).toContain('href="#main"');
-    expect(layout).toContain('id="main"');
+  it("the site chrome carries the skip link and its target", () => {
+    // Lives in site-chrome.tsx since E22 rather than the root layout, because
+    // the (kiosk) group must NOT get a skip link — it has no nav to skip and no
+    // #main to land on. The chrome is still the first child of <body>, so the
+    // link is still the first thing Tab reaches.
+    const chrome = readFileSync(CHROME, "utf8");
+    expect(chrome).toContain('href="#main"');
+    expect(chrome).toContain('id="main"');
     // The skip link must precede the nav so it is the first thing Tab reaches.
-    expect(layout.indexOf('href="#main"')).toBeLessThan(layout.indexOf("<SiteNav"));
+    expect(chrome.indexOf('href="#main"')).toBeLessThan(chrome.indexOf("<SiteNav"));
     // …and the target must be focusable, or Safari/iOS VoiceOver scroll to it
     // without MOVING focus and the next Tab returns to the top of the header.
-    expect(layout).toMatch(/id="main"\s+tabIndex=\{-1\}/);
+    expect(chrome).toMatch(/id="main"\s+tabIndex=\{-1\}/);
   });
 
   it("keeps the frozen map component's contrast override wired to its markup", () => {
@@ -331,7 +353,7 @@ describe("E14 static a11y invariants", () => {
     expect(forecast).toContain('chip: "bg-fern/10 text-fern"');
 
     for (const consumer of [
-      path.join(SRC_ROOT, "app", "ferry", "plan", "ferry-planner.tsx"),
+      path.join(SRC_ROOT, "app", "(site)", "ferry", "plan", "ferry-planner.tsx"),
       path.join(SRC_ROOT, "components", "ferry-busy-today.tsx"),
     ]) {
       const src = readFileSync(consumer, "utf8");
@@ -401,7 +423,7 @@ describe("E14 static a11y invariants", () => {
     // pairings above. The test directly above proves the SEED says
     // "parking-zones"; it cannot prove the RESOLVER still listens for that
     // exact string, or still parks the result on `builtins.parkingZones`
-    // where src/app/parking/page.tsx looks for it. Rename either end and the
+    // where src/app/(site)/parking/page.tsx looks for it. Rename either end and the
     // seed keeps its source, every existing test stays green, and the text
     // alternative silently disappears again — the precise failure this whole
     // pair exists to prevent.
@@ -411,7 +433,7 @@ describe("E14 static a11y invariants", () => {
     // source text is the same move parking-labels.test.ts makes against the
     // frozen map component, for the same reason.
     const resolver = readFileSync(path.join(SRC_ROOT, "lib", "map", "resolve.ts"), "utf8");
-    const page = readFileSync(path.join(SRC_ROOT, "app", "parking", "page.tsx"), "utf8");
+    const page = readFileSync(path.join(SRC_ROOT, "app", "(site)", "parking", "page.tsx"), "utf8");
 
     // Parse the literals out rather than string-matching a whole expression.
     // The two existing coupling tests in this file match exact class strings,
@@ -438,7 +460,7 @@ describe("E14 static a11y invariants", () => {
     ).toContain(PARKING_ZONES_BUILTIN);
     expect(
       page,
-      `src/app/parking/page.tsx no longer reads builtins.${PARKING_ZONES_BUILTIN} — if the ` +
+      `src/app/(site)/parking/page.tsx no longer reads builtins.${PARKING_ZONES_BUILTIN} — if the ` +
         `list moved to another key, this guard is now protecting the wrong one.`,
     ).toContain(`builtins.${PARKING_ZONES_BUILTIN}`);
   });

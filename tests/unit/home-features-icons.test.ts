@@ -15,7 +15,7 @@ import fs from "fs";
 import path from "path";
 import { describe, expect, it } from "vitest";
 
-const PAGE = path.join(process.cwd(), "src", "app", "page.tsx");
+const PAGE = path.join(process.cwd(), "src", "app", "(site)", "page.tsx");
 
 describe("home feature grid", () => {
   const source = fs.readFileSync(PAGE, "utf8");

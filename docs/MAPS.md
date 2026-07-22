@@ -156,8 +156,8 @@ Rendering details worth knowing:
 
 ### The `/map` public page
 
-`src/app/map/page.tsx` lists only **published** views and hands them to
-`MapSwitcher` (`src/app/map/switcher.tsx`), a thin client wrapper with pill
+`src/app/(site)/map/page.tsx` lists only **published** views and hands them to
+`MapSwitcher` (`src/app/(site)/map/switcher.tsx`), a thin client wrapper with pill
 buttons that swap which view `<FeatureMap>` renders. Header copy is editable via
 the content CMS (`copyText`); the page respects page-visibility (hidden-page
 banner + admin preview). `revalidate = 60`. When no views are published the
@@ -167,7 +167,7 @@ switcher shows an editable "No maps are published yet." message.
 
 ### The admin map builder — `/admin/maps`
 
-`src/app/admin/maps/{page,editor.tsx}` — the CMS the owner asked for
+`src/app/(site)/admin/maps/{page,editor.tsx}` — the CMS the owner asked for
 (laptop-first; server component gates on `user.role === "admin"`, redirecting
 non-admins to `/portal`). `MapBuilder` is a Leaflet + leaflet-geoman canvas with:
 
@@ -325,7 +325,7 @@ Streets study; see [DATA_SOURCES.md](DATA_SOURCES.md)). What "v2" means concrete
 
 ### `/admin/map` — `MapZoneEditor`
 
-`src/app/admin/map/{page,editor.tsx}`. Admin-gated (via the `/admin` layout;
+`src/app/(site)/admin/map/{page,editor.tsx}`. Admin-gated (via the `/admin` layout;
 the `/api/admin/parking` routes re-check). A Leaflet + geoman canvas where the
 admin:
 
@@ -347,7 +347,7 @@ the `map-features`/`map-views` routes.)
 
 ### How `/parking` renders
 
-`src/app/parking/page.tsx` calls `resolveMapView("parking-cash")` server-side
+`src/app/(site)/parking/page.tsx` calls `resolveMapView("parking-cash")` server-side
 and passes it as `resolved={…}` to `<FeatureMap>` — so the **draft**
 `parking-cash` CMS view drives the public parking map (the resolve path ignores
 `published`). Whatever built-in sources the Chamber ticks on that view in

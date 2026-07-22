@@ -327,7 +327,7 @@ ferry fact (FR-7.4). Parking is one view of the general map CMS (FR-17).
   structured ferry facts, the ferry-prediction switch, and visitor insights.
 - FR-13.3 All `/admin` routes are role-gated at the request boundary by
   `src/proxy.ts` (the Next 16 convention — not `middleware.ts`) and again by
-  `src/app/admin/layout.tsx`. There is **no pre-setup grace** — it was removed
+  `src/app/(site)/admin/layout.tsx`. There is **no pre-setup grace** — it was removed
   in E06. `/admin` is never world-readable, not even when zero accounts exist;
   it always redirects non-admins to `/portal`, and bootstrap goes through the
   first-run setup route (FR-13.1) instead. Every admin API route re-checks the

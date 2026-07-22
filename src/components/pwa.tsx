@@ -1,18 +1,25 @@
 "use client";
 
-// The three browser-only PWA concerns (E13), mounted ONCE from the root layout
-// so every page inherits them:
+// The three browser-only PWA concerns (E13), split across TWO mount points by
+// E22 because the kiosk needs one of them and must not have the other two:
 //
-// - Service worker registration + outbox replay. /sw.js is registered after
-//   `load` (never in competition with first paint) and only in production;
-//   the offline outbox is replayed on mount and on every "online" event —
-//   there is no Background Sync in this design because iOS Safari lacks it.
-// - <OfflineBanner/> — a fixed strip while the device is offline, carrying an
-//   honest "as of" time for the copy of the page being read.
-// - <InstallNudge/> — a quiet "add to home screen" card that asks at most once
-//   in a visitor's life. Dismissing it is permanent; <InstallAppButton/> in the
-//   nav's "More" surfaces is the deliberate way back in, so "never ask again"
-//   never means "never installable again".
+// - <ServiceWorkerClient/> — registration + outbox replay, renders NOTHING.
+//   Mounted from the ROOT layout, so the (site) and (kiosk) groups both get
+//   offline support. /sw.js is registered after `load` (never in competition
+//   with first paint) and only in production; the offline outbox is replayed on
+//   mount and on every "online" event — there is no Background Sync in this
+//   design because iOS Safari lacks it.
+// - <PwaClient/> — the visible pair, mounted from the SITE chrome only:
+//   - <OfflineBanner/> — a fixed strip while the device is offline, carrying an
+//     honest "as of" time for the copy of the page being read.
+//   - <InstallNudge/> — a quiet "add to home screen" card that asks at most once
+//     in a visitor's life. Dismissing it is permanent; <InstallAppButton/> in
+//     the nav's "More" surfaces is the deliberate way back in, so "never ask
+//     again" never means "never installable again".
+//   Neither belongs on the kiosk: "add to home screen" is meaningless on a
+//   wall-mounted panel, and both are tappable UI on a device whose entire
+//   design goal is that nothing can be tapped off-app. The kiosk states its own
+//   offline condition through KioskShell's "be right back" screen instead.
 //
 // Every browser capability used here is feature-detected and every failure
 // path is a silent no-op: a visitor in private mode, on an insecure origin, or
@@ -431,13 +438,28 @@ function InstallNudge() {
 /* ── mount point ────────────────────────────────────────────────────────── */
 
 /**
- * Mounted once from the root layout, inside CopyProvider. `renderedAt` comes
- * from the server render of that layout — when this page is later served from
- * the service worker's cache it is the age of the copy being read, which is
- * what the offline banner reports.
+ * Registration only — renders nothing, and deliberately so.
+ *
+ * Mounted from the ROOT layout (src/app/layout.tsx) rather than from the site
+ * chrome, because the kiosk's offline tolerance is the same service worker.
+ * Splitting it out this way is what lets the bare (kiosk) layout have a cached
+ * shell without also inheriting the offline banner and the install card.
+ *
+ * Registering on /admin and /portal too is unchanged from E13: the worker's own
+ * fetch handler denies those prefixes, so registration there caches nothing.
+ */
+export function ServiceWorkerClient() {
+  useServiceWorkerAndOutbox();
+  return null;
+}
+
+/**
+ * The visible pair, mounted once from the site chrome inside CopyProvider.
+ * `renderedAt` comes from the server render of that chrome — when this page is
+ * later served from the service worker's cache it is the age of the copy being
+ * read, which is what the offline banner reports.
  */
 export default function PwaClient({ renderedAt }: { renderedAt: string }) {
-  useServiceWorkerAndOutbox();
   return (
     <>
       <OfflineBanner renderedAt={renderedAt} />

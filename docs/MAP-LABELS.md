@@ -343,7 +343,7 @@ Import `MapLabel, LabelShow, LabelDir` from `@/lib/map/types`. **Add a round-tri
 
 ### 6b. Editor — Draft, toDraft, buildFeature
 
-In `src/app/admin/maps/editor.tsx`:
+In `src/app/(site)/admin/maps/editor.tsx`:
 
 - **`Draft` type** (line 138): add `labelText: string; labelShow: LabelShow; labelDir: LabelDir; labelPriority: string;` (priority as string for the `<input>`).
 - **`toDraft(f)`** (line 157): `labelText: f.label?.text ?? "", labelShow: f.label?.show ?? "auto", labelDir: f.label?.dir ?? "auto", labelPriority: f.label?.priority != null ? String(f.label.priority) : "",`

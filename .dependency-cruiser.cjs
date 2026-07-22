@@ -47,13 +47,15 @@ module.exports = {
       severity: "error",
       comment:
         "Reusable components must not depend on route/page code (src/app). " +
-        "BASELINE: src/components/ferry-webcams-box.tsx imports src/app/webcams/webcam-grid.tsx " +
-        "(the box embeds that page's client grid). Pre-existing; carve-out until it's refactored " +
-        "into a shared component — remove this pathNot when that lands.",
+        "BASELINE: src/components/ferry-webcams-box.tsx imports " +
+        "src/app/(site)/webcams/webcam-grid.tsx (the box embeds that page's client grid). " +
+        "Pre-existing; carve-out until it's refactored into a shared component — remove " +
+        "this pathNot when that lands. E22 repointed the path into the (site) route group; " +
+        "these are REGEXES, not globs, so the group's parentheses have to be escaped.",
       from: { path: "^src/components/" },
       to: {
         path: "^src/app/",
-        pathNot: "^src/app/webcams/webcam-grid",
+        pathNot: "^src/app/\\(site\\)/webcams/webcam-grid",
       },
     },
     {

@@ -1,14 +1,35 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Outfit, Satisfy } from "next/font/google";
 import "./globals.css";
-import { SiteNav } from "@/components/site-nav";
-import { SiteFooter } from "@/components/site-footer";
-import { Tracker, WebVitals } from "@/components/tracker";
-import PwaClient from "@/components/pwa";
-import { getCopyOverrides } from "@/lib/stores/site-store";
-import { getEffectiveHiddenPaths } from "@/lib/page-visibility";
+import { ServiceWorkerClient } from "@/components/pwa";
 import { siteUrl } from "@/lib/site-url";
-import { CopyProvider } from "@/lib/copy-context";
+
+// THE ROOT LAYOUT — deliberately holds only what BOTH route groups need.
+//
+// E22 moved the site chrome (nav, footer, Tracker, CopyProvider, the skip link,
+// the offline banner) down into src/app/(site)/layout.tsx via
+// src/components/site-chrome.tsx, so that src/app/(kiosk)/layout.tsx can render
+// a genuinely bare fullscreen stage. A descendant layout cannot remove chrome
+// an ancestor renders, so the chrome had to move rather than be hidden — and
+// hiding it conditionally here was rejected outright, because a pathname read
+// in the root layout means headers(), and a dynamic API here opts EVERY page
+// out of static rendering (docs/KIOSK.md §2).
+//
+// What is left, and why each piece cannot move down:
+//   - <html>/<body> and the three font CSS variables: only the root layout
+//     renders these elements at all, and both groups style against the vars.
+//   - globals.css: the design tokens, imported once.
+//   - viewport / metadata / metadataBase: the site-wide defaults. The kiosk
+//     layout exports its own viewport, which MERGES over this one.
+//   - the simple-mode bootstrap: it stamps documentElement before paint, so it
+//     has to be inline in the root document.
+//   - <ServiceWorkerClient/>: the kiosk's offline tolerance is this same
+//     worker, so registration lives here while the offline BANNER stays in the
+//     site chrome.
+//
+// The <body> flex-column classes stay here on purpose. Only the root layout can
+// set them, the site's `flex-1` <main> depends on them, and they cost the kiosk
+// nothing: its stage is position:fixed and therefore out of flow entirely.
 
 const inter = Inter({
   subsets: ["latin"],
@@ -71,75 +92,33 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Admin-hidden pages drop out of the nav and footer site-wide; admin copy
-  // overrides are provided to client components via CopyProvider (server
-  // components read them directly with copyText()).
-  //
-  // E14: the EFFECTIVE list, so a default-hidden page (/es, dark until a
-  // bilingual reviewer signs off) never appears as a footer link to a 404. This
-  // is a plain store read — it touches no cookies, so the layout stays out of
-  // the ISR trap the skip-link comment below describes.
-  const [hiddenPaths, copyOverrides] = await Promise.all([
-    getEffectiveHiddenPaths(),
-    getCopyOverrides(),
-  ]);
-  // E13: the honest "as of" for the offline banner. Genuinely per-request on /
-  // and /ferry (both dynamic via cookies()), and the moment of the prerender on
-  // the ISR pages — which is exactly the age of the copy a visitor reads from
-  // the service worker cache. /offline is deliberately static, so its value is
-  // build time; OfflineBanner suppresses the clause there for that reason.
-  const renderedAt = new Date().toISOString();
   return (
     <html
       lang="en"
       className={`${inter.variable} ${outfit.variable} ${satisfy.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
-        {/* E14: the skip link is deliberately the first element in <body> so it is
-            the first thing Tab reaches — keyboard and switch users clear the whole
-            header/nav in one keystroke. sr-only until focused, then a full-size
-            (>=44px) brand-token chip so sighted keyboard users can see it too. */}
-        <a
-          href="#main"
-          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-sound-deep focus:px-4 focus:py-3 focus:text-base focus:font-semibold focus:text-white"
-        >
-          Skip to content
-        </a>
         {/* E14 simple-mode bootstrap (vk/simple-mode). Runs before paint so the
             larger "easy read" type never flashes at the default size. State is
             localStorage + a data-simple attribute BY DESIGN: a cookies() read in
             the root layout would make every page dynamic (the audited v1 ISR
             trap), so this stays a raw inline <script>, not next/script and not a
             server read. try/catch because Safari private mode throws on any
-            localStorage access. The toggle that writes the key lands in a later
-            E14 slice; reading an absent key is a no-op. */}
+            localStorage access. Reading an absent key is a no-op, which is what
+            keeps it harmless in the kiosk group — the kiosk renders no toggle,
+            and its Chromium runs --incognito, so the key is never set there. */}
         <script
           dangerouslySetInnerHTML={{
             __html: `try{if(localStorage.getItem("ek-simple")==="1"){document.documentElement.dataset.simple="1"}}catch(e){}`,
           }}
         />
-        <CopyProvider overrides={copyOverrides}>
-          <Tracker />
-          <WebVitals />
-          <PwaClient renderedAt={renderedAt} />
-          <SiteNav hiddenPaths={hiddenPaths} />
-          {/* id="main" is the skip link's target (E14). tabIndex={-1} makes it
-              programmatically focusable, which is what actually MOVES focus on
-              activation: without it Safari (and iOS VoiceOver) scroll the page
-              but leave focus on the skip link, so the next Tab goes back to the
-              top of the header and the skip does nothing. Programmatic focus on
-              a tabindex=-1 container is not :focus-visible in any current
-              engine, so no ring appears. */}
-          <main id="main" tabIndex={-1} className="flex-1">
-            {children}
-          </main>
-          <SiteFooter hiddenPaths={hiddenPaths} copy={copyOverrides} />
-        </CopyProvider>
+        <ServiceWorkerClient />
+        {children}
       </body>
     </html>
   );

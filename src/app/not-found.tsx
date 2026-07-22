@@ -1,72 +1,36 @@
-import Link from "next/link";
-
-import { PageHeader, Section, Card } from "@/components/ui";
+import { NotFoundBody } from "@/components/not-found-body";
+import { SiteChrome } from "@/components/site-chrome";
 
 /*
- * Branded 404 (E13). Two very different visitors land here:
+ * The 404 for URLs that match NO route at all — a typo, a dead inbound link, a
+ * scanner probing for /wp-admin.
  *
- *   1. Someone who mistyped a URL or followed a dead link.
- *   2. Someone who opened a real page that a Chamber admin has HIDDEN — twelve
- *      public pages call notFound() through assertPageVisible(), and two more
- *      sit behind feature flags.
+ * Server component by convention: not-found components accept NO props — do not
+ * add "use client" and do not destructure anything. Next injects the noindex
+ * meta for 404s on its own.
  *
- * The copy has to be true for both, which is why it says "isn't here right
- * now" rather than "doesn't exist".
+ * E22: this file stays at the APP ROOT, outside both route groups, because a URL
+ * that matches no route belongs to no group — move it into (site) and mistyped
+ * URLs fall back to Next's unbranded built-in 404. The cost of sitting at the
+ * root is that it no longer inherits nav and footer from the layout, so it
+ * renders <SiteChrome/> itself and E13's behaviour is preserved exactly.
  *
- * Server component by convention: not-found components accept NO props — do
- * not add "use client" and do not destructure anything. Next injects the
- * noindex meta for 404s on its own.
- *
- * The "Explore Kingston" wordmark also arrives via SiteNav/SiteFooter from the
- * root layout, but it is stated in the body too so the branding does not depend
- * on the chrome rendering.
+ * WHAT THIS FILE DOES NOT COVER, measured rather than assumed. A page that calls
+ * notFound() itself — /ferry/plan, /es, /events/suggest, and the twelve pages
+ * behind assertPageVisible() — does NOT render this component. Next answers
+ * those with its own bare `__next_error__` document (zero navs, zero footers).
+ * That is pre-existing, not something the route-group split caused: the same
+ * probe against main at e95bbb5 returns byte-identical counts. An in-group
+ * src/app/(site)/not-found.tsx was written and then deleted during E22 because
+ * it changed nothing — Next never routed those 404s to it. If branding those
+ * pages ever becomes worth doing, it needs a different mechanism (render the
+ * 404 body from the page instead of calling notFound()), not another
+ * not-found.tsx.
  */
 export default function NotFound() {
   return (
-    <>
-      <PageHeader
-        eyebrow="404"
-        title="That page isn’t here right now"
-        intro="It may have moved, it may not be published yet, or the address may have a typo in it. Explore Kingston has plenty else going on."
-      />
-
-      <Section title="Where to go instead">
-        <Card>
-          <ul className="space-y-3 text-sm text-ink-soft">
-            <li>
-              <Link
-                className="font-semibold text-tide-deep underline underline-offset-2"
-                href="/"
-              >
-                Home
-              </Link>{" "}
-              — the next few sailings and what&apos;s open now.
-            </li>
-            <li>
-              <Link
-                className="font-semibold text-tide-deep underline underline-offset-2"
-                href="/ferry"
-              >
-                Ferry times
-              </Link>{" "}
-              — the full Kingston–Edmonds board.
-            </li>
-            <li>
-              <Link
-                className="font-semibold text-tide-deep underline underline-offset-2"
-                href="/events"
-              >
-                Events
-              </Link>{" "}
-              — what&apos;s happening in town this week.
-            </li>
-          </ul>
-          <p className="mt-4 text-sm text-ink-soft">
-            If you followed a link from somewhere on this site and expected a page here, the
-            Chamber would genuinely like to know — that is a broken link on our end, not yours.
-          </p>
-        </Card>
-      </Section>
-    </>
+    <SiteChrome>
+      <NotFoundBody />
+    </SiteChrome>
   );
 }

@@ -1004,6 +1004,36 @@ export const COPY_BLOCKS = [
     label: "Date this statement was last reviewed (update at least once a year)",
     fallback: "July 2026",
   },
+
+  // ------------------------------------------- Ferry-dock kiosk (E22, /kiosk)
+  // Editable because the kiosk is the Chamber's most public piece of writing —
+  // it is read by people standing at the ferry who have never seen the website
+  // — and the panel is the one surface where "wait for a deploy" is least
+  // acceptable. All four render on the physical device only.
+  {
+    key: "kiosk.attract.title",
+    page: "Kiosk (/kiosk)",
+    label: "Welcome screen headline, shown over the rotating photographs",
+    fallback: "Explore Kingston",
+  },
+  {
+    key: "kiosk.attract.prompt",
+    page: "Kiosk (/kiosk)",
+    label: "Welcome screen instruction — say what to DO, in as few words as possible",
+    fallback: "Touch anywhere to begin",
+  },
+  {
+    key: "kiosk.home.heading",
+    page: "Kiosk (/kiosk)",
+    label: "Heading above the row of big category buttons on the kiosk home screen",
+    fallback: "What are you looking for?",
+  },
+  {
+    key: "kiosk.handoff.prompt",
+    page: "Kiosk (/kiosk)",
+    label: "Caption above the QR codes that hand a page to the visitor's phone",
+    fallback: "Scan to take this with you",
+  },
 ] as const satisfies readonly CopyBlock[];
 
 /** Union of every registered copy key — a typo at a call site is a tsc error. */

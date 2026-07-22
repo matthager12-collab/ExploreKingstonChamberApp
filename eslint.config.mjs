@@ -21,15 +21,23 @@ const eslintConfig = defineConfig([
   // Policy: entries may only ever be REMOVED (when a later epic that owns a file
   // actually fixes it, delete that file from the list), never ADDED without an
   // explicit ask-first. See docs/TESTING.md.
+  //
+  // E22 REPOINTED seven of these into the (site) route group. That is not an
+  // addition — it is the same ten files at their new paths after a pure `git mv`
+  // (R100, zero content changed). It has to happen in the same commit as the
+  // move: the moment a path here stops matching, that file's pre-existing
+  // occurrences go back to being ERRORS and `npm run lint` fails the build. The
+  // failure is a nasty one to read, because it points at frozen files and reads
+  // as "E22 broke the map editor" when nothing in them changed at all.
   {
     files: [
-      "src/app/admin/accounts/manager.tsx",
-      "src/app/admin/map/editor.tsx",
-      "src/app/admin/maps/editor.tsx",
-      "src/app/ferry/ferry-board.tsx",
-      "src/app/page.tsx",
-      "src/app/portal/nonprofit/\\[id\\]/editor.tsx",
-      "src/app/webcams/webcam-grid.tsx",
+      "src/app/(site)/admin/accounts/manager.tsx",
+      "src/app/(site)/admin/map/editor.tsx",
+      "src/app/(site)/admin/maps/editor.tsx",
+      "src/app/(site)/ferry/ferry-board.tsx",
+      "src/app/(site)/page.tsx",
+      "src/app/(site)/portal/nonprofit/\\[id\\]/editor.tsx",
+      "src/app/(site)/webcams/webcam-grid.tsx",
       "src/components/feature-map.tsx",
       "src/components/hunt-player.tsx",
       "src/components/visitor-survey.tsx",

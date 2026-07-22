@@ -40,7 +40,7 @@ call that decides internally whether the path is allowlisted.
 | 8 | Everything else same-origin `GET` (e.g. `/manifest.webmanifest`, `/geo/*.json`) | Not intercepted | — | — | n/a. `/manifest.webmanifest` *is* warmed into the static cache at install, but no fetch branch ever reads it back — §2 |
 
 **The amber ferry label has two wordings, and the difference is a promise.**
-Both boards (`src/app/ferry/ferry-board.tsx` and `src/components/next-ferries.tsx`)
+Both boards (`src/app/(site)/ferry/ferry-board.tsx` and `src/components/next-ferries.tsx`)
 carry the same `Stale = { at, reason }` state and the same two strings:
 
 - `reason: "offline"` — the fetch threw, or the worker handed back its stamped
@@ -522,7 +522,7 @@ address bar** — Next builds `usePathname()` from `window.location`, not from
 the document it received, so the router says "/stay" while the screen says
 "You're offline". Being served under somebody else's url is that page's entire
 job; a hand-typed visit to `/offline` is the rare case. So
-`src/app/offline/page.tsx` declares `other: { "vk-offline-fallback": "1" }` in
+`src/app/(site)/offline/page.tsx` declares `other: { "vk-offline-fallback": "1" }` in
 its metadata, which renders as `<meta name="vk-offline-fallback" content="1">`
 inside the HTML, and `<OfflineBanner/>` reads it back with a
 `document.querySelector` behind `useSyncExternalStore` (server snapshot `false`,

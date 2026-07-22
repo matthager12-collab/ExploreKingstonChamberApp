@@ -83,7 +83,7 @@ describe("E14 simple mode is never a cookie", () => {
   });
 
   it("neither new page reads cookies of its own", () => {
-    for (const p of ["src/app/simple/page.tsx", "src/app/print/page.tsx"]) {
+    for (const p of ["src/app/(site)/simple/page.tsx", "src/app/(site)/print/page.tsx"]) {
       const src = read(p);
       expect(src, `${p} must not import next/headers`).not.toMatch(IMPORTS_NEXT_HEADERS);
       // side-server's getSide is the documented cookie read that quietly makes

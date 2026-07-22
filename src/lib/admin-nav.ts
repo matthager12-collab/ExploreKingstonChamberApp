@@ -130,6 +130,14 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     capability: "manage-site",
   },
   {
+    id: "kiosk",
+    href: "/admin/kiosk",
+    title: "Ferry-dock kiosk",
+    navLabel: "Kiosk",
+    blurb: "Turn the dock touchscreen on or off, pick its screens, push an update now.",
+    capability: "manage-site",
+  },
+  {
     id: "audit",
     href: "/admin/audit",
     title: "Change history",

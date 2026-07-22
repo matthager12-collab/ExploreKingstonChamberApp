@@ -15,9 +15,11 @@
 // `expect(src).not.toContain("sync")` fails on the word "async", which is why
 // the table below matches call sites and globals rather than words.
 
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+
+import { candidatePageFiles, resolvesToPage } from "../helpers/app-routes";
 
 const ROOT = process.cwd();
 const SRC = readFileSync(path.join(ROOT, "public/sw.js"), "utf8");
@@ -48,6 +50,10 @@ function stringArray(name: string): string[] {
 const NAV_ALLOWLIST = IS_KILL_SWITCH ? ["/"] : stringArray("NAV_ALLOWLIST");
 const NAV_DENY_PREFIXES = IS_KILL_SWITCH ? [] : stringArray("NAV_DENY_PREFIXES");
 const PRECACHE = IS_KILL_SWITCH ? [] : stringArray("PRECACHE");
+// E22. Read with the same literal-scraping trick — note stringArray matches the
+// FIRST `const NAME = [...]`, so this only works because the two allowlists have
+// distinct names rather than one being a prefix of the other.
+const KIOSK_NAV_ALLOWLIST = IS_KILL_SWITCH ? ["/kiosk"] : stringArray("KIOSK_NAV_ALLOWLIST");
 
 // Named so a red build names the rule that tripped, not just a line number.
 const FORBIDDEN: { name: string; re: RegExp }[] = [
@@ -173,9 +179,74 @@ describe.skipIf(IS_KILL_SWITCH)("public/sw.js allowlists", () => {
   // The strongest rule in this file, and the one that would have caught both
   // /ferry/plan and a missing /offline automatically: a cached 404 outlives the
   // deploy that caused it, so a dead allowlist entry must be a red build.
+  it.each(KIOSK_NAV_ALLOWLIST)("kiosk: %s resolves to a real page.tsx", (route) => {
+    // Same rule as the visitor allowlist, and it matters more here: a cached
+    // 404 on the kiosk sits on a wall in public with no address bar to correct
+    // it, until somebody physically power-cycles the panel.
+    expect(
+      resolvesToPage(route),
+      `${route} matched no page.tsx — looked in:\n  ${candidatePageFiles(route).join("\n  ")}`,
+    ).toBe(true);
+  });
+
+  it("keeps the kiosk out of the visitor shell cache, and vice versa", () => {
+    // The two lists must stay disjoint. If a kiosk path ever appeared in
+    // NAV_ALLOWLIST it would be served network-first and, on failure, handed
+    // /offline — a page carrying SiteNav, which is a working escape hatch off
+    // a locked-down panel. That is a security-shaped bug, not a caching one.
+    const overlap = KIOSK_NAV_ALLOWLIST.filter((r) => NAV_ALLOWLIST.includes(r));
+    expect(overlap, `kiosk routes must not be in the visitor allowlist: ${overlap}`).toEqual([]);
+    expect(NAV_ALLOWLIST.filter((r) => r.startsWith("/kiosk"))).toEqual([]);
+  });
+
+  it("evicts a kiosk page when the server starts answering 404", () => {
+    // Without this the admin off-switch is a no-op ON THE DEVICE. Turning the
+    // kiosk off makes /kiosk 404, but stale-while-revalidate serves the cached
+    // copy first and a revalidation that merely declines to store leaves the
+    // old page in the cache for ever — the panel keeps showing the directory
+    // after staff switched it off, and the admin page gives no hint it did not
+    // take. Network-first (the visitor path) does not need this; SWR does.
+    const start = SRC.indexOf("async function kioskNavigate");
+    const end = SRC.indexOf("\nasync function staticAsset", start);
+    const body = SRC.slice(start, end > start ? end : undefined);
+    expect(body).toMatch(/res\.status\s*===\s*404/);
+    expect(body).toMatch(/dropFromCache\s*\(/);
+    expect(SRC).toMatch(/function dropFromCache/);
+    expect(SRC).toMatch(/cache\.delete\(/);
+  });
+
+  it("gives the kiosk cold-start fallback a way to retry itself", () => {
+    // That document REPLACES the app, so none of KioskShell's recovery runs
+    // from it — no heartbeat, no freshness reload, no self-heal, because that
+    // JS is in a bundle the response does not load. Without a refresh the panel
+    // sits there for ever once the network returns and only a human
+    // power-cycling the mini PC clears it, which defeats the whole
+    // unattended-recovery story the runbook promises.
+    const start = SRC.indexOf("async function kioskNavigate");
+    const end = SRC.indexOf("\nasync function staticAsset", start);
+    const body = SRC.slice(start, end > start ? end : undefined);
+    expect(body).toMatch(/http-equiv="refresh"/);
+  });
+
+  it("never falls back to /offline for a kiosk navigation", () => {
+    // The fallback lives inside kioskNavigate(); assert that function exists and
+    // that it does not reach for the shared offline document.
+    const start = SRC.indexOf("async function kioskNavigate");
+    expect(start, "public/sw.js no longer defines kioskNavigate").toBeGreaterThan(0);
+    const end = SRC.indexOf("\nasync function staticAsset", start);
+    const body = SRC.slice(start, end > start ? end : undefined);
+    expect(body).not.toContain('match("/offline")');
+  });
+
   it.each(NAV_ALLOWLIST)("%s resolves to a real page.tsx", (route) => {
-    const rel = route.replace(/^\//, "");
-    const pageFile = path.join(ROOT, "src", "app", rel, "page.tsx");
-    expect(existsSync(pageFile), `${route} → ${pageFile} missing`).toBe(true);
+    // Route-group aware since E22: /eat is served by src/app/(site)/eat/page.tsx
+    // and /kiosk by src/app/(kiosk)/kiosk/page.tsx. Joining the URL straight
+    // onto src/app would now fail for every site route while the worker is
+    // perfectly correct — and, worse, would pass for a route that had been
+    // deleted from a group but left behind at the root.
+    expect(
+      resolvesToPage(route),
+      `${route} matched no page.tsx — looked in:\n  ${candidatePageFiles(route).join("\n  ")}`,
+    ).toBe(true);
   });
 });

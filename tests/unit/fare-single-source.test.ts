@@ -53,17 +53,17 @@ const SEED_FILE = "src/lib/data/ferry-info.ts";
  */
 const KNOWN_DUPLICATES: { file: string; amount: string; why: string }[] = [
   {
-    file: "src/app/ferry/page.tsx",
+    file: "src/app/(site)/ferry/page.tsx",
     amount: "$27.00",
     why: "Pre-E27 prose: the drive-on summary Badge ('$27 each way'). Same class of bug as the walk-on fare, out of scope here — it needs its own stable row key on the 'Car and driver' row.",
   },
   {
-    file: "src/app/ferry/page.tsx",
+    file: "src/app/(site)/ferry/page.tsx",
     amount: "$2.00",
     why: "Pre-E27 prose: the fast-ferry section TITLE ('The $2 boat to Seattle') and the Pier 50 card. Driving a title from an editable free-text amount would let an admin publish 'The Free boat to Seattle' — that needs an editorial decision, not just a lookup.",
   },
   {
-    file: "src/app/ferry/page.tsx",
+    file: "src/app/(site)/ferry/page.tsx",
     amount: "$13.00",
     why: "Pre-E27 prose: the 'Coming from Seattle without a car' card, alongside the $2 return leg.",
   },

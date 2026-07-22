@@ -37,7 +37,15 @@ const PAGES = [
 // (text-tide-deep — the same rule already baselined on every public page;
 // E14 owns that remediation). The worklist UI itself audits clean — any new
 // rule id on this page fails the suite.
-const ADMIN_PAGES = ["/admin/worklist"];
+//
+// E22 adds "/kiosk" here rather than to PAGES, and it is NOT an admin surface —
+// this list is really "pages that need a session". The kiosk ships dark, so it
+// 404s to an anonymous scanner exactly as /es does; a signed-in admin gets the
+// preview render, which is the same markup the panel will serve once the
+// Chamber flips it on. Scanning it is a launch gate, not a nicety: the business
+// coalition made kiosk accessibility a condition of go-live, and a wall-mounted
+// display in a public place is the one screen a visitor cannot work around.
+const ADMIN_PAGES = ["/admin/worklist", "/kiosk"];
 const ALL_PAGES = [...PAGES, ...ADMIN_PAGES];
 const BASELINE_FILE = path.join(process.cwd(), "tests", "server", "axe-baseline.json");
 const UPDATE = process.env.AXE_UPDATE_BASELINE === "1";

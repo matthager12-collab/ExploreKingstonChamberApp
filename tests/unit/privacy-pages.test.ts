@@ -6,7 +6,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import PrivacyPage from "@/app/privacy/page";
+import PrivacyPage from "@/app/(site)/privacy/page";
 // E14 slice 4 made /accessibility an async data shell (it reads the copy
 // overlay so the Chamber can edit the header, the feedback promise, and the
 // "last reviewed" date without a deploy). renderToStaticMarkup cannot await a
@@ -14,7 +14,7 @@ import PrivacyPage from "@/app/privacy/page";
 // split into this synchronous component and is rendered here directly, with an
 // empty override map so copyText() resolves to the registry fallbacks. Same
 // markup, same assertions, plus the new slice-4 ones below.
-import { AccessibilityStatement } from "@/app/accessibility/statement";
+import { AccessibilityStatement } from "@/app/(site)/accessibility/statement";
 import { SiteFooter } from "@/components/site-footer";
 import { PRIVACY_NOTICE_VERSION, RETENTION_POLICY } from "@/lib/privacy/policy";
 

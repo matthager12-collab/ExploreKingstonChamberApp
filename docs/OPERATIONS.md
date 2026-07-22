@@ -99,7 +99,7 @@ on Render; they belong only to a Vercel deployment (§7, `.env.production.exampl
    an amber banner until the first admin exists" grace** — `/admin` now always
    redirects to `/portal`, and `/portal` redirects to `/portal/setup` while
    zero users exist, so bootstrap still works without ever exposing `/admin`
-   (`src/app/admin/layout.tsx`, `src/proxy.ts`).
+   (`src/app/(site)/admin/layout.tsx`, `src/proxy.ts`).
 3. **Mint invites:** as admin go to `/admin/accounts`. Since E06 an invite is
    tied to one of **five** roles (`admin` / `moderator` / `org-editor` /
    `member-business` / `viewer`), carries a **14-day expiry**, and may be bound
@@ -553,7 +553,7 @@ use layer 2 (bundle) for the off-site copy. See [DEPLOY.md §d](DEPLOY.md).
 
 Everything under `/admin` is gated in three places (E06): `src/proxy.ts` turns
 away requests with no valid session cookie at the request boundary,
-`src/app/admin/layout.tsx` re-checks `role === "admin"`, and every
+`src/app/(site)/admin/layout.tsx` re-checks `role === "admin"`, and every
 `/api/admin/*` route calls the shared gate itself (route handlers bypass
 layouts). The old "open with an amber banner before bootstrap" grace is GONE —
 `/admin` is never public, and a fresh install bootstraps through `/portal`,

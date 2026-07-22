@@ -27,6 +27,12 @@ src/lib/time.ts
 .github/workflows/ferry-accuracy.yml
 
 # --- Audit-flagged monoliths (high blast radius; touch only with a chartered epic) ---
+# E22 moved the two geoman editors into the (site) route group. Pure `git mv`
+# renames — `git diff -M90%` reports R100 for both, i.e. zero content changed —
+# so the freeze is intact and only these two lines were repointed. The move
+# itself still trips check-frozen (a rename puts BOTH the old and the new path
+# in the changed set), which is why the E22 refactor PR carries the
+# 'frozen-change-approved' label: the label attests to the rename, not to an edit.
 src/components/feature-map.tsx
-src/app/admin/map/editor.tsx
-src/app/admin/maps/editor.tsx
+src/app/(site)/admin/map/editor.tsx
+src/app/(site)/admin/maps/editor.tsx

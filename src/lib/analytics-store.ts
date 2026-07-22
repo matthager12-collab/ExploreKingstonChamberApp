@@ -93,6 +93,19 @@ export interface AnalyticsEvent {
    * boundary (see the route), never trusted raw from the client.
    */
   value?: number;
+  /**
+   * Which CLIENT produced this event (E22). Absent means the website, which is
+   * every event written before the kiosk existed — so absence has to keep
+   * meaning "visitor" forever.
+   *
+   * "kiosk" is the physical panel at the ferry dock. It is deliberately kept
+   * OUT of every visitor rollup below: one shared device that never leaves
+   * Kingston is not a visitor, its geo bucket is a constant, and folding it in
+   * would quietly inflate exactly the numbers the Chamber reports to LTAC. It
+   * gets its own series instead, which is the honest way to answer "is the
+   * kiosk earning its place at the dock?".
+   */
+  source?: "kiosk";
 }
 
 /**
@@ -283,6 +296,19 @@ export interface AnalyticsSummary {
    * Only paths clearing WEB_VITAL_MIN_SAMPLES appear.
    */
   lcpByPath: { path: string; p75: number; samples: number }[];
+  /**
+   * The ferry-dock kiosk, as its OWN series (E22) — never mixed into any field
+   * above. `sessions` counts walk-ups, not devices: KioskShell rotates its
+   * session id on every idle reset, so one id is roughly one person's visit to
+   * the panel. This is the number that answers whether the kiosk is worth its
+   * spot, and it is reportable to LTAC without contaminating web visitor counts.
+   */
+  kiosk: {
+    pageviews: number;
+    sessions: number;
+    /** Which kiosk screens people actually open, most-used first. */
+    byPath: { path: string; count: number }[];
+  };
 }
 
 /**
@@ -348,7 +374,28 @@ export async function summarize(): Promise<AnalyticsSummary> {
   let geoPings = 0;
   let consents = 0;
 
+  // The kiosk's own accumulators. Separate maps, not a flag on the shared ones,
+  // so there is no way to accidentally add a kiosk row to a visitor total.
+  const kioskSessions = new Set<string>();
+  const kioskByPath = new Map<string, number>();
+  let kioskPageviews = 0;
+
   for (const e of events) {
+    // THE SPLIT, and it is first for a reason: everything below this line is a
+    // visitor rollup, and the kiosk is one shared device standing in one spot.
+    // Counting it as a visitor would inflate session counts, pin a geo bucket
+    // to the Chamber's own connection, and skew the web-vitals p75 with a
+    // machine that reloads itself every fifteen minutes. `continue` guarantees
+    // that by construction rather than by remembering to filter in six places.
+    if (e.source === "kiosk") {
+      kioskSessions.add(e.sessionId);
+      if (e.type === "pageview") {
+        kioskPageviews++;
+        kioskByPath.set(e.path, (kioskByPath.get(e.path) ?? 0) + 1);
+      }
+      continue;
+    }
+
     sessions.add(e.sessionId);
 
     if (e.type === "pageview") {
@@ -497,5 +544,12 @@ export async function summarize(): Promise<AnalyticsSummary> {
       .filter(([, values]) => values.length >= WEB_VITAL_MIN_SAMPLES)
       .map(([path, values]) => ({ path, p75: percentile75(values), samples: values.length }))
       .sort((a, b) => b.p75 - a.p75),
+    kiosk: {
+      pageviews: kioskPageviews,
+      sessions: kioskSessions.size,
+      byPath: [...kioskByPath.entries()]
+        .map(([path, count]) => ({ path, count }))
+        .sort((a, b) => b.count - a.count),
+    },
   };
 }

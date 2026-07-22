@@ -8,7 +8,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { Webcam } from "@/lib/types";
-import { WebcamGrid } from "@/app/webcams/webcam-grid";
+import { WebcamGrid } from "@/app/(site)/webcams/webcam-grid";
 
 export function FerryWebcamsBox({
   cams,

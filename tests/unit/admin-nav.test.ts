@@ -1,11 +1,9 @@
 import { describe, it, expect } from "vitest";
-import fs from "node:fs";
-import path from "node:path";
 import { ADMIN_NAV, adminNavFor, type AdminNavEntry } from "@/lib/admin-nav";
 import type { AuthSubject } from "@/lib/auth/authz";
 import type { Role } from "@/lib/db/schema";
 
-const SRC_APP = path.join(process.cwd(), "src", "app");
+import { candidatePageFiles, resolvesToPage } from "../helpers/app-routes";
 
 // A dead nav link should be a red build, not a 404 a visitor discovers. This is
 // the manifest's reason to exist: every href must map to a real page file.
@@ -17,9 +15,12 @@ describe("admin nav manifest ↔ routes", () => {
   it.each(ADMIN_NAV.map((e) => [e.href, e] as const))(
     "%s resolves to a page.tsx",
     (href) => {
-      const rel = href.replace(/[?#].*$/, "").replace(/^\//, "");
-      const pageFile = path.join(SRC_APP, rel, "page.tsx");
-      expect(fs.existsSync(pageFile), `${href} → ${pageFile} missing`).toBe(true);
+      // Route-group aware since E22 — /admin/* is served from
+      // src/app/(site)/admin/*, and the group is stripped from the URL.
+      expect(
+        resolvesToPage(href),
+        `${href} matched no page.tsx — looked in:\n  ${candidatePageFiles(href).join("\n  ")}`,
+      ).toBe(true);
     },
   );
 
