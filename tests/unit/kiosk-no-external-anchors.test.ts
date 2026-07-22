@@ -1,5 +1,9 @@
 // THE KIOSK LOCKDOWN FLOOR (E22, M-13-08 / FR-A36) — CI-blocking.
 //
+// Suite name: kiosk-no-external-anchors. Referenced by that name from
+// src/components/kiosk-shell.tsx and src/app/(kiosk)/kiosk/map/page.tsx, both
+// of which describe this file as the layer that fails the build.
+//
 // A kiosk must never open a third-party site in its own browser. That is how a
 // visitor escapes the lockdown and strands a wall-mounted panel on somebody
 // else's page, with no address bar and no back button, until a human notices.
