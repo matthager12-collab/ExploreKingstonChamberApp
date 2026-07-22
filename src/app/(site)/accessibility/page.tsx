@@ -13,8 +13,8 @@ export const metadata: Metadata = {
 };
 
 // Thin data shell. Everything the visitor reads is in ./statement.tsx — see the
-// comment there for why the statement is code-owned and why the ADA compliance
-// date is deliberately not stated.
+// comment there for why the statement is code-owned and how the ADA compliance
+// date is sourced (a registry block) and kept current.
 export default async function AccessibilityPage() {
   // hiddenPaths so the text-alternative list never links to a page an operator
   // has hidden — see the Alt helper in ./statement.tsx.

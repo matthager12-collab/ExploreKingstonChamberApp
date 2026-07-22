@@ -40,14 +40,13 @@ function telHref(phone: string): string {
 // parts an operator genuinely maintains (docs/OPERATIONS.md §13.3 asks for an
 // annual review of that date).
 //
-// THE ADA DATE IS DELIBERATELY ABSENT. The small-entity compliance date is left
-// for human verification rather than asserted — docs/OPERATIONS.md §9 item 15 is
-// the open gate: "verify the ADA small-entity compliance deadline date before
-// citing it anywhere (the accessibility page deliberately does not state a
-// date)". The "A note on the law" section below is written so a verified date
-// drops into ONE sentence when that gate closes, with no restructuring: the
-// deadline sentence stands alone and names no date. Do not add one here without
-// closing item 15 first.
+// THE ADA DATE IS A REGISTRY BLOCK (accessibility.ada.deadline), stated in the
+// "A note on the law" section below and editable without a deploy — the gate at
+// docs/OPERATIONS.md §9 item 15 ("verify the ADA small-entity compliance
+// deadline before citing it") is closed. The date is volatile: DOJ already
+// moved it once, from April 26, 2027 to April 26, 2028, and that history plus a
+// re-check-on-review note live in the same section. If it moves again, update
+// the registry block — do not hardcode a date in this file.
 //
 // Split out of page.tsx as a SYNCHRONOUS component on purpose: the page itself
 // is async (it reads the copy overlay), and tests/unit/privacy-pages.test.ts

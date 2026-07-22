@@ -10,8 +10,8 @@
 //     verified. No compass words for the free leg — it's "from Kingston,"
 //     collected "at Edmonds."
 //   - Boarding pass: vehicles only, 8 a.m.–8 p.m., in season + weekends/holidays.
-//     As of July 1–2, 2026 the automated dispenser was down and officers were
-//     handing passes out by hand at Lindvog staging.
+//     `currentNote` ships empty on purpose — it's the Chamber-editable slot for a
+//     transient notice (e.g. a dispenser outage), not a place to seed one.
 
 export interface Source {
   label: string;

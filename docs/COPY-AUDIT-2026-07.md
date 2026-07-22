@@ -1,14 +1,16 @@
 # Explore Kingston — Website Copy Audit & Replacement Guide
 
-**Date:** 2026-07-22 · **Revision:** 4
+**Date:** 2026-07-22 · **Revision:** 5
 **Status: ✅ APPLIED** on branch `copy/evergreen-audit`, rebased onto current `main`. Verified against a clean-`main` baseline: identical results (1,211 passing / 4 pre-existing `sitemap.xml` failures, unrelated to copy), zero new lint errors. The document is retained as the rationale record and as the **style guide for new copy** — §2 (the evergreen rules) and §3 (the standing decisions) are the parts that stay live.
+
+> **Revision 5** closes the §10 follow-up: `/simple`, `/es`, `/accessibility`, `/privacy`, `/print`, and `/offline` were audited. **Result: clean — no visitor copy edits warranted** (see §10 for why). Comment-only cleanups shipped: the stale `ferry-info.ts` header (after PR #90) and two ADA-date comments. Two legal-copy items on `/privacy` are flagged for the Chamber.
 
 > ⚠️ **Two carve-outs, deliberate.** Main shipped an **E14 plain-language pass (NFR-04)** that rewrote 11 registry blocks to be *longer and simpler* for accessibility — the opposite direction from this audit's brevity goal. Where the two conflict, **E14 wins**. The following are therefore left untouched, and future copy passes must respect the `// E14 plain-language pass` marker as a do-not-shorten flag:
 > `ferry.header.intro` · `parking.header.intro` · `parking.map.subtitle` · `webcams.header.intro` · `ferryLine.body1` · `ferryLine.body2` · `ferry.header.edmonds.intro` · `ferryLine.edmonds.body2` · `nearme.consent.body` · `hunt.disclosure` · `footer.credit`, plus the E14-marked parking callout on `/parking`.
 >
 > Separately, main's E27 work already retired the `(since March 2026)` surcharge stamp and the `summer 2026 rates` fare note — those findings needed no action.
 
-> 📋 **Open follow-up (not in this pass):** main added `/simple`, `/es`, `/accessibility`, `/privacy`, `/print`, and `/offline`. **None have been audited for verbosity or expiring language.** `/simple` and `/es` are the plain-language and Spanish surfaces, so they likely carry parallel copies of the same strings fixed here — worth a dedicated pass.
+> ✅ **Follow-up done (§10):** `/simple`, `/es`, `/accessibility`, `/privacy`, `/print`, `/offline` audited on 2026-07-22 — **clean, no edits.** These are the E14 / legal / accessibility surfaces, built to evergreen + plain-language principles already. Three items flagged for the Chamber/team rather than changed unilaterally. Details in §10.
 **Scope:** All visitor- and member-facing text — the editable copy registry, SEO/social metadata, public page bodies and components, the member portal, and the seeded content data (restaurants, lodging, events, parking, itineraries, charities, ferry info).
 **Two goals:** (1) cut verbosity — the site is too wordy; (2) remove *expiring verbiage* — wording that is accurate today but silently rots and makes the site look neglected. **Rule of thumb throughout: prefer evergreen over accurate-today, and the fix is almost always _cutting_ words, not adding them.**
 
@@ -315,6 +317,30 @@ Wording fixes stop the bleeding; these stop it recurring. Move load-bearing peri
 - **`map-features.ts` / `map-views.ts` / `ferry-fallback.ts`** — tight, durable notes; "(May–Oct)" and "(1879)" are the *evergreen* kind of date.
 - **`ferry-forecast.ts`** — conditional, date-aware advice. The pattern the rest of the site should borrow (§3.1, §8.9).
 - **The copy-registry mechanism** — one source of truth, a contract test forbidding inline fallbacks, admin-editable overrides, and empty-guarded transient fields. Keep editing copy *there*; don't scatter it back inline.
+
+---
+
+## 10. Follow-up audit — the E14 / legal / accessibility pages (2026-07-22)
+
+Revision 4 flagged six pages added on `main` as unaudited: `/simple`, `/es`, `/accessibility`, `/privacy`, `/print`, `/offline`. All six were read in full, plus the bilingual safety dictionary that feeds `/simple` and `/es`.
+
+**Result: clean. No copy edits warranted.** These are the disciplined surfaces — E14 plain-language, the bilingual safety slice, and the legal/commitment pages — and their authors already applied the §2 rules. An objective grep for every expiring pattern (`this summer`, hard counts, `v1`, `coming soon`, …) across all six pages and the dictionary returned **zero hits**.
+
+Why each is already right — and must stay that way:
+
+- **`/simple` + `/es`** — copy comes from the registry (`simple.*` / `es.*`, already plain and evergreen) and from **`src/lib/i18n/safety-content.ts`**, a typed EN+ES dictionary. That dictionary is a *model*: fares and the phone are `{tokens}` (never literals), it deliberately refuses to bake in a last-boat time ("it changes with the season and with repairs"), agency numbers are sourced literals, and it is guarded by a **parity test** plus a **bilingual review gate** (`/es` ships dark until a human reviews it). Editing it — especially the Spanish — would break parity and isn't a call to make unilaterally.
+- **`/print` + `/offline`** — registry copy, sourced agency phone numbers, and dynamic "As of {time}" honesty stamps that are *deliberately not* editable copy. Nothing to cut.
+- **`/privacy`** — a legal page, code-owned, with retention windows / version / changelog driven by the policy manifest (`src/lib/privacy/policy.ts`) that the purge job enforces. Its date-like content is legal commitment, not stale prose.
+- **`/accessibility`** — a public conformance commitment. Its "actively improving / coming next" language and its dates (`accessibility.ada.deadline`, `accessibility.lastReviewed`) are **mandatory honesty for the genre**, not neglect-signal build-state. An accessibility statement that hides what it doesn't do yet is *worse*, and a "last reviewed" date is required. Do not cut.
+
+### Comment-only changes that shipped (no visitor-facing text touched)
+- `src/lib/data/ferry-info.ts` header — trimmed a stale "As of July 1–2, 2026 the dispenser was down" line left over after PR #90 emptied `currentNote`; now documents why the field ships empty.
+- `accessibility/statement.tsx` + `accessibility/page.tsx` — the two comments (flag #3 below) claimed the ADA date is "deliberately absent"; the statement now renders it, so the comments were corrected to describe how the date is sourced (a registry block) and kept current. The `docs/OPERATIONS.md` §9 item-15 verification gate is treated as closed, consistent with what the code already renders.
+
+### Flagged for the Chamber / team (deliberately NOT changed — legal territory)
+1. **`/privacy:146` — "The app _is becoming_ the … membership records system."** Transitional/build-state phrasing inside a legal data-handling claim. If it *is* now the system of record, "is" is both tighter and more accurate — but that's a legal-accuracy call for the Chamber, not a unilateral copy edit.
+2. **`/privacy:146` — "Greater Kingston _Community_ Chamber of Commerce."** This is the **only** occurrence of "Community" in the name; the brand appears as "Greater Kingston Chamber of Commerce" 11× elsewhere. Either this legal page uses the correct full registered name (and the others are informal) or it's a typo. The Chamber should confirm which is the legal entity name and align the rest.
+3. **Stale ADA-date comments — ✅ fixed in this pass.** `accessibility/statement.tsx` and `accessibility/page.tsx` said the ADA compliance date was "deliberately absent," but the statement renders it ("April 26, 2028", via `accessibility.ada.deadline`). Comments corrected to match; no visitor copy changed.
 
 ---
 
