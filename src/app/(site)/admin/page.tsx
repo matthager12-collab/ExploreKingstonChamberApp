@@ -274,6 +274,14 @@ export default async function AdminPage() {
                 Showing top {TOP_N} of {namedGeo.length} named areas.
               </p>
             )}
+            {/* CC-BY-4.0 attribution — REQUIRED wherever DB-IP data is shown. */}
+            <p className="mt-3 text-xs text-ink-soft">
+              IP geolocation by{" "}
+              <a className="underline" href="https://db-ip.com" rel="noopener noreferrer" target="_blank">
+                DB-IP
+              </a>
+              .
+            </p>
           </Card>
 
           <Card>

@@ -29,10 +29,11 @@ import { appendAnalyticsEvent, readAnalyticsEvents } from "./db/append";
 import { applyKFloor } from "./privacy/k-floor";
 import { BELOW_K_BUCKET, BELOW_K_BUCKET_LABEL, K_FLOOR } from "./privacy/policy";
 
-// "geolite2" (E10): coarse geography from the self-hosted MaxMind GeoLite2 file
-// — the source on Render, where no platform geo headers exist. The IP is looked
-// up in memory and never stored; only the coarse strings below persist.
-export type GeoSource = "vercel-headers" | "dev-local" | "geolite2" | "unknown";
+// "dbip" (E10; renamed from "geolite2" on 2026-07-22 with the DB-IP swap):
+// coarse geography from the self-hosted DB-IP City Lite file — the source on
+// Render, where no platform geo headers exist. The IP is looked up in memory
+// and never stored; only the coarse strings below persist.
+export type GeoSource = "vercel-headers" | "dev-local" | "dbip" | "unknown";
 
 /** Coarse, connection-derived geography. Never an address or coordinates. */
 export interface AnalyticsGeo {

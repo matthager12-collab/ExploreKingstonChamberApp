@@ -51,7 +51,42 @@ ENV NODE_ENV=production
 RUN npm run build
 
 # ---------------------------------------------------------------------------
-# Stage 3: runner — the lean runtime image that actually gets deployed.
+# Stage 3: geoip — download the DB-IP City Lite database to bake into the image.
+#
+# DB-IP Lite is CC-BY-4.0 (redistributable), so — unlike MaxMind GeoLite2, which
+# it replaced 2026-07-22 — the .mmdb can ship IN the image: no runtime download,
+# no license key, present the instant the container boots (src/lib/geoip.ts).
+# Isolated stage so a DB-IP outage fails the build loudly HERE (never a runner
+# with a half-written DB), and so the layer caches by month. Runs in parallel
+# with build; only the ~125 MB .mmdb is copied into the runner below.
+# ---------------------------------------------------------------------------
+FROM alpine:3.20 AS geoip
+RUN apk add --no-cache curl
+WORKDIR /geoip
+# Try the current month, then the previous month: DB-IP publishes the new file
+# on the 1st, and a build in the first minutes of a month can race that upload.
+# Previous month is computed with POSIX arithmetic (busybox `date` has no
+# relative `-d`); 10# forces base-10 so "08"/"09" are not read as bad octal.
+# --retry rides out transient 5xx/network blips. Fail the build if NEITHER
+# month resolves — a failed deploy beats an image whose geo silently never works.
+RUN set -eu; \
+  cur="$(date -u +%Y-%m)"; \
+  y="$(date -u +%Y)"; m="$(date -u +%m)"; \
+  pm=$((10#$m - 1)); py="$y"; \
+  if [ "$pm" -lt 1 ]; then pm=12; py=$((y - 1)); fi; \
+  prev="$(printf '%04d-%02d' "$py" "$pm")"; \
+  ok=0; \
+  for ym in "$cur" "$prev"; do \
+    url="https://download.db-ip.com/free/dbip-city-lite-${ym}.mmdb.gz"; \
+    echo "geoip: trying ${url}"; \
+    if curl -fSL --retry 3 --retry-delay 5 --max-time 300 -o db.mmdb.gz "$url"; then ok=1; break; fi; \
+  done; \
+  [ "$ok" = 1 ] || { echo "geoip: could not download DB-IP City Lite for ${cur} or ${prev}"; exit 1; }; \
+  gunzip db.mmdb.gz; \
+  test -s db.mmdb
+
+# ---------------------------------------------------------------------------
+# Stage 4: runner — the lean runtime image that actually gets deployed.
 # ---------------------------------------------------------------------------
 FROM node:22-alpine AS runner
 WORKDIR /app
@@ -104,6 +139,13 @@ COPY --from=build --chown=nextjs:nodejs /app/scripts ./scripts
 # migration script's optional record-value check needs no equivalent line.
 # ~10 KB, and the migration cannot run without it.
 COPY --from=deps --chown=nextjs:nodejs /app/node_modules/aws4fetch ./node_modules/aws4fetch
+
+# Baked-in DB-IP City Lite geo database (CC-BY-4.0; src/lib/geoip.ts,
+# docs/runbooks/GEOIP.md). Present at boot, so visitor geography works
+# immediately with no runtime download and no license key. GEOIP_DB_PATH points
+# the app straight at it; redeploy to pick up the next monthly release.
+COPY --from=geoip --chown=nextjs:nodejs /geoip/db.mmdb ./geoip/dbip-city-lite.mmdb
+ENV GEOIP_DB_PATH=/app/geoip/dbip-city-lite.mmdb
 
 # No /data mount point and no VOLUME (E15 slice 3) — the persistent disk is
 # gone. Declaring a VOLUME here would make any host that honours it re-create

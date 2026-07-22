@@ -36,8 +36,9 @@ const TEXT_EXT = /\.(json|jsonl|txt|md|csv)$/i;
 //  - backups/ : scripts/backup-data.sh writes growing tar.gz snapshots here;
 //               inlining them would nest every prior backup and grow the bundle
 //               without bound (correctness, not just size).
-//  - geoip/   : the MaxMind GeoLite2 .mmdb (E10 §6) — the license forbids
-//               redistribution and the file is re-downloadable, so never ship it.
+//  - geoip/   : the DB-IP City Lite .mmdb (E10 §6) — ~125 MB, not durable
+//               state, and always re-obtainable (baked into the image at build,
+//               or `scripts/update-geoip.mjs` for dev), so never ship it.
 // Anchored to the TOP LEVEL (dir === root) so a legitimately-nested store folder
 // that happens to be named "backups"/"geoip" is not silently dropped.
 const EXCLUDE_TOP_LEVEL = new Set(["backups", "geoip"]);

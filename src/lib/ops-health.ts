@@ -20,7 +20,8 @@ export const FRESHNESS = {
   observeWarnMs: 2 * 60 * 60 * 1000,
   /** Accuracy cron runs daily at 08:00 UTC; 48 h = one full miss of slack. */
   accuracyWarnMs: 48 * 60 * 60 * 1000,
-  /** GeoLite2 self-refreshes at 30 d; 40 d means the self-refresh is failing. */
+  /** DB-IP is baked in at build and updates monthly; 40 d stale means the
+   *  service hasn't been redeployed in over a month (the way to refresh it). */
   geoipWarnMs: 40 * 24 * 60 * 60 * 1000,
 } as const;
 

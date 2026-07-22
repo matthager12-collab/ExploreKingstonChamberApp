@@ -70,7 +70,7 @@ function vital(metric: WebVitalMetric, value: number, path: string, sessionId: s
     type: "webvital",
     path,
     sessionId,
-    geo: { source: "geolite2" },
+    geo: { source: "dbip" },
     metric,
     value,
   });

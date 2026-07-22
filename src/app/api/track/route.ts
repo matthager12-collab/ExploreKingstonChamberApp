@@ -110,8 +110,8 @@ function deriveGeo(request: NextRequest): AnalyticsGeo {
 
   // No platform geo headers (the self-hosted / Render case). Peek at the
   // connection IP to classify local dev traffic and, for a public IP, to look up
-  // coarse geography in the local GeoLite2 database. The IP is inspected in
-  // memory and NEVER stored or logged — only the coarse country/region/city
+  // coarse geography in the local DB-IP City Lite database. The IP is inspected
+  // in memory and NEVER stored or logged — only the coarse country/region/city
   // strings returned below persist.
   const forwarded = request.headers.get("x-forwarded-for");
   const ip = (forwarded?.split(",")[0] ?? request.headers.get("x-real-ip") ?? "").trim();
@@ -125,7 +125,7 @@ function deriveGeo(request: NextRequest): AnalyticsGeo {
         country: trunc(hit.country, MAX_GEO_FIELD),
         region: trunc(hit.region, MAX_GEO_FIELD),
         city: trunc(hit.city, MAX_GEO_FIELD),
-        source: "geolite2",
+        source: "dbip",
       };
     }
   }

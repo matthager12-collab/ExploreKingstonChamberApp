@@ -24,7 +24,7 @@ import {
 import { probeDb } from "@/lib/db/ops-probe";
 import { getMarkers, type OpsMarker } from "@/lib/stores/ops-markers-store";
 import { getAccuracy, latestObservationAt } from "@/lib/stores/ferry-observations";
-import { geoipEdition, geoipStatus } from "@/lib/geoip";
+import { GEOIP_DB_FILE, geoipStatus } from "@/lib/geoip";
 
 export const metadata: Metadata = { title: "Ops & status" };
 export const dynamic = "force-dynamic";
@@ -63,7 +63,7 @@ async function loadOps() {
         count: null,
         dashboardUrl: "https://sentry.io/",
       }),
-      probe(() => geoipStatus(), { present: false, edition: geoipEdition() }),
+      probe(() => geoipStatus(), { present: false, file: GEOIP_DB_FILE }),
     ]);
 
   const backupMarker = markers.find((m) => m.id === "backup:last-success");
@@ -330,33 +330,38 @@ export default async function OpsPage() {
         <Card>
           <ul className="divide-y divide-sand">
             <Row
-              label={`GeoLite2 database (${d.geoip.edition})`}
+              label={`DB-IP City Lite database (${d.geoip.file})`}
               value={
                 d.geoip.present
-                  ? `installed, updated ${d.geoip.mtimeIso} (${ageOf(d.geoip.mtimeIso, d.now)})`
-                  : "not installed — visitor geography shows “Unknown”"
+                  ? `baked into image, built ${d.geoip.mtimeIso} (${ageOf(d.geoip.mtimeIso, d.now)})`
+                  : "missing from image — visitor geography shows “Unknown”"
               }
               status={d.geoipStatusVal}
             />
           </ul>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            {/* No-JS refresh: a plain POST form so the button works without client JS. */}
-            <form method="post" action="/api/admin/geoip/refresh">
-              <button
-                type="submit"
-                className="rounded-full border border-sound px-4 py-2 text-sm font-semibold text-sound hover:bg-sand"
-              >
-                Refresh now
-              </button>
-            </form>
-            <a className="text-xs underline text-ink-soft" href={`${REPO}/docs/runbooks/GEOIP.md`}>
-              GeoLite2 setup &amp; chore — docs/runbooks/GEOIP.md
-            </a>
-          </div>
+          <p className="mt-4 text-xs text-ink-soft">
+            The database is baked into the container image at build time, so it is
+            present at boot — there is no “refresh” button and no license key.
+            Redeploy to pick up the current month’s release.
+          </p>
           <p className="mt-3 text-xs text-ink-soft">
             Looked up in memory only; the visitor IP is never stored — just coarse
             country/region/city.
           </p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <a className="text-xs underline text-ink-soft" href={`${REPO}/docs/runbooks/GEOIP.md`}>
+              Setup &amp; edition notes — docs/runbooks/GEOIP.md
+            </a>
+            {/* CC-BY-4.0 attribution — REQUIRED wherever DB-IP data is shown. */}
+            <a
+              className="text-xs underline text-ink-soft"
+              href="https://db-ip.com"
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              IP geolocation by DB-IP
+            </a>
+          </div>
         </Card>
       </Section>
 
@@ -377,9 +382,9 @@ export default async function OpsPage() {
             </li>
             <li className="py-2">
               <a className="underline" href={`${REPO}/docs/runbooks/GEOIP.md`}>
-                GeoLite2 chore
+                Geo-IP notes
               </a>{" "}
-              <span className="text-sm text-ink-soft">— the MaxMind license-key update task</span>
+              <span className="text-sm text-ink-soft">— DB-IP City Lite, baked in at build (no chore)</span>
             </li>
           </ul>
         </Card>

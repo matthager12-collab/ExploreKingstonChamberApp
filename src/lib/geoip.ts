@@ -1,98 +1,108 @@
-// GeoLite2 geo-IP for the analytics tracker + the ops dashboard (E10 §6).
+// Coarse geo-IP for the analytics tracker + the ops dashboard (E10 §6).
 //
 // On Render there are no platform geo headers (those are Vercel-only), so every
 // visitor otherwise reads as "Unknown" and the Chamber's LTAC visitor-origin
 // reporting starves. This resolves a COARSE {country, region, city} from a local
-// MaxMind GeoLite2 .mmdb — and NEVER the raw IP: the lookup is in-memory and only
-// the coarse strings are returned; the caller (src/app/api/track/route.ts) still
+// IP database — and NEVER the raw IP: the lookup is in-memory and only the
+// coarse strings are returned; the caller (src/app/api/track/route.ts) still
 // stores no IP (MHMDA posture).
 //
-// The .mmdb is NOT in the repo or the Docker image — MaxMind's license forbids
-// redistribution and output:'standalone' wouldn't trace it anyway. It lives on
-// the mounted /data disk at dataPath('geoip', '<edition>.mmdb'), installed by the
-// ops-page refresh button, scripts/update-geolite2.mjs, or the self-heal below.
+// SOURCE: DB-IP City Lite (https://db-ip.com), CC-BY-4.0. It replaced MaxMind
+// GeoLite2 on 2026-07-22. The reason is the license: DB-IP Lite is
+// REDISTRIBUTABLE, so the .mmdb is downloaded AT DOCKER BUILD TIME and baked
+// into the image (see the `geoip` stage in the Dockerfile) instead of being
+// fetched at runtime with a per-account license key. What that buys us:
+//   - no MAXMIND_LICENSE_KEY, no MaxMind account, no annual EULA re-accept chore;
+//   - the DB is on disk the instant the container boots — no post-deploy
+//     "Unknown" window while a 125 MB file downloads (the old design re-fetched
+//     it on every deploy once the disk was removed in E15);
+//   - "refreshing" the data just means redeploying (each build grabs the
+//     current month). No cron, no self-heal, no runtime network dependency.
+//   - ATTRIBUTION IS REQUIRED wherever the data is shown (CC-BY) — rendered on
+//     the admin ops + analytics pages. Do not remove it.
 //
-// maxmind.open() is async (openSync is disabled in v5), so the Reader loads in
-// the BACKGROUND and lookupGeo() stays SYNCHRONOUS — the first lookups return
-// null until the ~70 MB City DB is loaded, then geo flows. That keeps
-// deriveGeo() synchronous, with no async ripple into the tracker's hot path.
+// DB-IP ships in the MaxMind DB format, so the `maxmind` reader still reads it.
+// maxmind.open() is async, so the Reader loads in the BACKGROUND on first use
+// and lookupGeo() stays SYNCHRONOUS — the first lookups return null until the
+// file is loaded, then geo flows, with no async ripple into the tracker's hot
+// path.
 //
-// Self-heal: when a lookup sees the file missing or older than 30 days AND
-// MAXMIND_LICENSE_KEY is set, a single-flight background refresh downloads and
-// atomically installs a fresh copy while the old one keeps serving. No cron.
+// FIELD NOTE — why deriveCoarseGeo() exists and is a pure exported function:
+// DB-IP and GeoLite2 disagree on ONE field that happens to be THE LTAC signal.
+// For a US visitor, GeoLite2 fills subdivisions[0].iso_code ("WA"); DB-IP leaves
+// iso_code EMPTY and fills subdivisions[0].names.en ("Washington") instead. The
+// pre-swap code read iso_code only, so a naïve source swap would have silently
+// dropped every state. deriveCoarseGeo() falls back name<-iso, so it is correct
+// for either database — and being pure + exported, that exact gap is unit-tested
+// (tests/unit/geoip.test.ts) without shipping a 125 MB fixture.
 
 import "server-only";
 
-import { spawn } from "node:child_process";
-import { createWriteStream } from "node:fs";
-import { mkdir, readdir, rename, rm, stat } from "node:fs/promises";
-import path from "node:path";
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
+import { stat } from "node:fs/promises";
 
 import maxmind, { type Reader, type CityResponse } from "maxmind";
 
 import { dataPath } from "@/lib/data-dir";
 
-const STALE_MS = 30 * 24 * 60 * 60 * 1000; // refresh a copy older than 30 days
+/** Basename of the baked-in database (see the Dockerfile `geoip` stage). */
+export const GEOIP_DB_FILE = "dbip-city-lite.mmdb";
 
-/** Default City; GeoLite2-Country (~6 MB) is the documented fallback if Render
- *  memory alarms fire (docs/runbooks/GEOIP.md). */
-export function geoipEdition(): string {
-  return process.env.GEOIP_EDITION || "GeoLite2-City";
-}
-function mmdbPath(edition = geoipEdition()): string {
-  return dataPath("geoip", `${edition}.mmdb`);
+/**
+ * Absolute path to the .mmdb. In the deployed image the Dockerfile bakes the
+ * file in and sets GEOIP_DB_PATH; local dev falls back to <dataDir>/geoip,
+ * populated on demand by `node scripts/update-geoip.mjs`. Absence is not an
+ * error anywhere — lookups just return null and geography shows "Unknown".
+ */
+export function geoipDbPath(): string {
+  return process.env.GEOIP_DB_PATH?.trim() || dataPath("geoip", GEOIP_DB_FILE);
 }
 
 let reader: Reader<CityResponse> | null = null;
-let readerMtime = 0;
-let refreshing = false; // single-flight guard for the background job
+let loading = false; // single-flight guard for the background open()
 let warned = false;
 
-function logOnce(msg: string, err: unknown): void {
-  if (warned) return;
-  warned = true;
-  console.warn(`geoip: ${msg}:`, err instanceof Error ? err.message : err);
-}
-
-async function mtimeMs(p: string): Promise<number | null> {
+/** Open the reader once, in the background. Never throws: a missing or corrupt
+ *  file leaves `reader` null and lookups degrade to "Unknown". */
+async function ensureReader(): Promise<void> {
+  if (reader || loading) return;
+  loading = true;
   try {
-    return (await stat(p)).mtimeMs;
-  } catch {
-    return null;
-  }
-}
-
-/** Load/reload the Reader from disk when a file is present and newer than what
- *  we hold. Async — never on the sync lookup path directly. */
-async function loadReader(): Promise<void> {
-  const p = mmdbPath();
-  const m = await mtimeMs(p);
-  if (m === null) return; // no file yet
-  if (reader && m <= readerMtime) return; // already have this copy (or newer)
-  reader = await maxmind.open<CityResponse>(p);
-  readerMtime = m;
-}
-
-/** Background: self-heal a missing/stale file (only when a key is set), then
- *  ensure the reader is loaded. Single-flight so concurrent lookups trigger at
- *  most one download/load. */
-async function ensureReady(): Promise<void> {
-  if (refreshing) return;
-  refreshing = true;
-  try {
-    const m = await mtimeMs(mmdbPath());
-    const stale = m === null || Date.now() - m > STALE_MS;
-    if (stale && process.env.MAXMIND_LICENSE_KEY) {
-      await installEdition(geoipEdition());
-    }
-    await loadReader();
+    reader = await maxmind.open<CityResponse>(geoipDbPath());
   } catch (err) {
-    logOnce("background refresh/load failed", err);
+    if (!warned) {
+      warned = true;
+      console.warn(
+        "geoip: database not loaded (visitor geography will show Unknown):",
+        err instanceof Error ? err.message : err,
+      );
+    }
   } finally {
-    refreshing = false;
+    loading = false;
   }
+}
+
+/**
+ * Map a raw reader response to the coarse fields we keep. PURE and exported so
+ * the field-compatibility logic — the DB-IP vs GeoLite2 subdivision gap
+ * described in the header — is unit-tested without a real database. Returns
+ * null when nothing usable resolved.
+ */
+export function deriveCoarseGeo(
+  res: CityResponse | null,
+): { country?: string; region?: string; city?: string } | null {
+  if (!res) return null;
+  const sub = res.subdivisions?.[0];
+  const country = res.country?.iso_code;
+  // iso_code first (GeoLite2), else the full subdivision name (DB-IP). Both are
+  // valid LTAC region labels; downstream aggregates by exact string, not code.
+  const region = sub?.iso_code ?? sub?.names?.en;
+  // DB-IP appends a neighborhood, e.g. "Seattle (Northeast Seattle)". Strip the
+  // trailing parenthetical so occurrences aggregate to the city, not to each
+  // neighborhood (GeoLite2 city names have no parenthetical, so this is inert
+  // there).
+  const city = res.city?.names?.en?.replace(/\s*\([^)]*\)\s*$/, "").trim() || undefined;
+  if (!country && !region && !city) return null;
+  return { country, region, city };
 }
 
 /**
@@ -104,11 +114,8 @@ export function lookupGeo(
   ip: string,
 ): { country?: string; region?: string; city?: string } | null {
   if (!reader) {
-    void ensureReady();
+    void ensureReader();
     return null;
-  }
-  if (Date.now() - readerMtime > STALE_MS) {
-    void ensureReady(); // self-heal in the background; keep serving the old file
   }
   let res: CityResponse | null;
   try {
@@ -116,110 +123,30 @@ export function lookupGeo(
   } catch {
     return null;
   }
-  if (!res) return null;
-  const country = res.country?.iso_code;
-  const region = res.subdivisions?.[0]?.iso_code;
-  const city = res.city?.names?.en;
-  if (!country && !region && !city) return null;
-  return { country, region, city };
+  return deriveCoarseGeo(res);
 }
 
 export interface GeoipStatus {
   present: boolean;
   mtimeIso?: string;
-  edition: string;
+  file: string;
 }
 
-/** File status for the ops dashboard. Never throws. */
+/** File status for the ops dashboard. Never throws. The mtime is the baked
+ *  file's timestamp — i.e. roughly when the image was last built, which is the
+ *  freshness signal that matters (redeploy to refresh). */
 export async function geoipStatus(): Promise<GeoipStatus> {
-  const edition = geoipEdition();
-  const m = await mtimeMs(mmdbPath(edition));
-  return m === null
-    ? { present: false, edition }
-    : { present: true, mtimeIso: new Date(m).toISOString(), edition };
-}
-
-/**
- * Download `edition` from MaxMind and ATOMICALLY install it at
- * dataPath('geoip', '<edition>.mmdb'). Throws on any failure (no license key,
- * HTTP error, missing tar, no .mmdb inside the archive). Awaited by the refresh
- * route + update script; fired in the background by the self-heal path. The
- * standalone scripts/update-geolite2.mjs mirrors this logic for manual installs.
- */
-export async function installEdition(edition = geoipEdition()): Promise<string> {
-  const key = process.env.MAXMIND_LICENSE_KEY;
-  if (!key) throw new Error("MAXMIND_LICENSE_KEY is not set");
-  const dir = dataPath("geoip");
-  await mkdir(dir, { recursive: true });
-
-  const url =
-    `https://download.maxmind.com/app/geoip_download` +
-    `?edition_id=${encodeURIComponent(edition)}` +
-    `&license_key=${encodeURIComponent(key)}&suffix=tar.gz`;
-  const res = await fetch(url);
-  if (!res.ok || !res.body) {
-    throw new Error(`MaxMind download failed: HTTP ${res.status}`);
-  }
-
-  const tarPath = path.join(dir, `.${edition}.download.tar.gz`);
-  const extractDir = path.join(dir, `.${edition}.extract`);
-  await rm(extractDir, { recursive: true, force: true });
-  await mkdir(extractDir, { recursive: true });
   try {
-    // Stream the download to disk — never buffer the whole ~40 MB archive.
-    // Cast bridges the DOM ReadableStream (fetch's res.body) to Node's.
-    const webStream = res.body as unknown as import("node:stream/web").ReadableStream<Uint8Array>;
-    await pipeline(Readable.fromWeb(webStream), createWriteStream(tarPath));
-    await runTar(["-xzf", tarPath, "-C", extractDir]);
-    const mmdb = await findMmdb(extractDir, `${edition}.mmdb`);
-    if (!mmdb) throw new Error(`no ${edition}.mmdb inside the downloaded archive`);
-    const finalPath = mmdbPath(edition);
-    await rename(mmdb, finalPath); // atomic within /data/geoip (same filesystem)
-    reader = null; // force a reload on the next lookup
-    readerMtime = 0;
-    warned = false;
-    return finalPath;
-  } finally {
-    await rm(tarPath, { force: true });
-    await rm(extractDir, { recursive: true, force: true });
+    const { mtimeMs } = await stat(geoipDbPath());
+    return { present: true, mtimeIso: new Date(mtimeMs).toISOString(), file: GEOIP_DB_FILE };
+  } catch {
+    return { present: false, file: GEOIP_DB_FILE };
   }
-}
-
-function runTar(args: string[]): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn("tar", args, { stdio: "ignore" });
-    child.on("error", reject);
-    child.on("close", (code) =>
-      code === 0 ? resolve() : reject(new Error(`tar exited with code ${code}`)),
-    );
-  });
-}
-
-/** Find <name> anywhere under dir — MaxMind nests it in GeoLite2-City_YYYYMMDD/. */
-async function findMmdb(dir: string, name: string): Promise<string | null> {
-  const entries = await readdir(dir, { withFileTypes: true });
-  for (const e of entries) {
-    const full = path.join(dir, e.name);
-    if (e.isDirectory()) {
-      const found = await findMmdb(full, name);
-      if (found) return found;
-    } else if (e.name === name) {
-      return full;
-    }
-  }
-  return null;
-}
-
-/** Force a refresh NOW (awaited) — the ops-page button and the update script. */
-export async function refreshGeoip(): Promise<GeoipStatus> {
-  await installEdition(geoipEdition());
-  return geoipStatus();
 }
 
 /** Test-only reset of the module-level reader/single-flight state. */
 export function __resetGeoipForTests(): void {
   reader = null;
-  readerMtime = 0;
-  refreshing = false;
+  loading = false;
   warned = false;
 }

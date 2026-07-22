@@ -15,6 +15,7 @@
     "test:watch": "TZ=UTC vitest",
     "ams:checks": "node scripts/ams-ground-truth-checks.mjs",
     "events:probe": "node scripts/events-source-probe.mjs",
+    "geoip:update": "node scripts/update-geoip.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "import:data-dir": "NODE_OPTIONS=--conditions=react-server tsx scripts/import-data-dir.ts",

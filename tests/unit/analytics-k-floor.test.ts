@@ -11,9 +11,9 @@ import { summarize } from "@/lib/analytics-store";
 import { BELOW_K_BUCKET } from "@/lib/privacy/policy";
 import { createTestDb, type TestDb } from "../setup/pglite-db";
 
-const geoSeattle = { country: "US", region: "WA", city: "Seattle", source: "geolite2" };
-const geoPoulsbo = { country: "US", region: "WA", city: "Poulsbo", source: "geolite2" };
-const geoTacoma = { country: "US", region: "WA", city: "Tacoma", source: "geolite2" };
+const geoSeattle = { country: "US", region: "WA", city: "Seattle", source: "dbip" };
+const geoPoulsbo = { country: "US", region: "WA", city: "Poulsbo", source: "dbip" };
+const geoTacoma = { country: "US", region: "WA", city: "Tacoma", source: "dbip" };
 
 function ping(area: string, sessionId: string, geo = geoSeattle) {
   return appendAnalyticsEvent({

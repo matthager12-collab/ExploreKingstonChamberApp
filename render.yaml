@@ -154,16 +154,11 @@ services:
       - key: RETENTION_TOKEN
         sync: false
 
-      # MaxMind GeoLite2 license key — geo-IP for the Visitor Insights dashboard
-      # + ops page (src/lib/geoip.ts). Free MaxMind account (docs/runbooks/
-      # GEOIP.md). No-op when unset (analytics geo shows "Unknown", as before).
-      # Server-only; set in the dashboard, never in git.
-      - key: MAXMIND_LICENSE_KEY
-        sync: false
-      # Which GeoLite2 edition to download/serve. GeoLite2-City (~70 MB) is
-      # richer; GeoLite2-Country (~6 MB) is the fallback if memory alarms fire.
-      - key: GEOIP_EDITION
-        value: GeoLite2-City
+      # Geo-IP: NO env var. The DB-IP City Lite database (CC-BY-4.0) is baked
+      # into the image at build time and located via GEOIP_DB_PATH, set in the
+      # Dockerfile — no MaxMind license key, no edition toggle. See
+      # src/lib/geoip.ts and docs/runbooks/GEOIP.md. (Replaced MAXMIND_LICENSE_KEY
+      # + GEOIP_EDITION on 2026-07-22.)
 
       # Bearer token for the E12 events-ingest cron (below) to call
       # POST /api/events/ingest. FAIL-CLOSED like WORKLIST_SWEEP_TOKEN: unset
@@ -350,11 +345,8 @@ services:
         sync: false
       - key: RETENTION_TOKEN
         sync: false
-      # GeoLite2 geo-IP (staging mirrors prod so the ops page behaves the same).
-      - key: MAXMIND_LICENSE_KEY
-        sync: false
-      - key: GEOIP_EDITION
-        value: GeoLite2-City
+      # Geo-IP: none — the DB-IP database is baked into the image (GEOIP_DB_PATH
+      # set in the Dockerfile), so staging mirrors prod with no env var.
       # E12 events ingest (staging has no cron; admin "Sync now" / manual curl).
       - key: EVENTS_INGEST_TOKEN
         sync: false

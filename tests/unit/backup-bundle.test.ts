@@ -27,7 +27,7 @@ beforeAll(async () => {
   await mkdir(path.join(root, "backups"), { recursive: true });
   await writeFile(path.join(root, "backups", "old.tar"), "prior tarball");
   await mkdir(path.join(root, "geoip"), { recursive: true });
-  await writeFile(path.join(root, "geoip", "GeoLite2-City.mmdb"), "licensed blob");
+  await writeFile(path.join(root, "geoip", "dbip-city-lite.mmdb"), "geo blob");
   await writeFile(path.join(root, ".health-probe"), "123");
 });
 
