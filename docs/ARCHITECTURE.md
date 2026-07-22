@@ -448,9 +448,10 @@ Render↔GitHub sync issue (no secrets in git — all `sync:false`). The DB
 migration is done (commit `c74ebb0`), so Phase 2 is a real option, but Render is
 the running home. Alternative host config `fly.toml` ships for Fly.io (Seattle
 region, `fly volumes create data`). The custom domain
-`app.explorekingstonwa.com` (one CNAME at NameHero — **never** a nameserver
-move; the VPS also serves the domain's DNS and mail) is **deferred until
-launch**.
+`app.explorekingstonwa.com` (one CNAME → `explore-kingston.onrender.com`,
+added in the zone editor on the Chamber's WordPress VPS — the registrar,
+NameCheap, is not authoritative; **never** a nameserver move, since that VPS
+also serves the domain's DNS and mail) is **deferred until launch**.
 
 **Backups:** (1) Render daily disk snapshots (7-day restore); (2) off-site
 admin-gated `/api/admin/backup` — a JSON bundle of the whole `DATA_DIR`

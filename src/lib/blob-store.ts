@@ -12,9 +12,10 @@
 //      cutover).
 //
 // WHY R2 IS PRIVATE AND PROXIED, rather than served from a public URL:
-//   - An R2 custom domain requires the DNS zone to be hosted on Cloudflare.
-//     Chamber DNS and EMAIL live at NameHero and a nameserver move is rejected
-//     in the binding decisions, so that option does not exist here.
+//   - An R2 custom domain requires the DNS zone to be hosted on Cloudflare, and
+//     the Chamber's DNS and EMAIL are served from the same VPS as its WordPress
+//     site. A nameserver move is rejected in the binding decisions, so that
+//     option does not exist here.
 //   - `r2.dev` public URLs are rate-limited and documented by Cloudflare as not
 //     for production.
 //   So the bucket stays private and /api/hunts/photo + /api/map/image +

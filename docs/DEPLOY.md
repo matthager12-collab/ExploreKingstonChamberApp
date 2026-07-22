@@ -469,26 +469,102 @@ moves to Blob (versioned object store).
 
 ## 6. Domain & DNS
 
-Add **one** record, nothing else. In **NameHero cPanel → Zone Editor**, a
-**CNAME**:
+**This section is the authoritative custom-domain procedure.** Measured
+2026-07-22; earlier notes elsewhere that say "at NameHero" name the IP's owner,
+not the control panel.
+
+### Who controls what (get this right or the change silently does nothing)
+
+| Layer | Reality |
+|---|---|
+| **Registrar** | **NameCheap** — renewals and the nameserver setting. **Records are NOT edited here.** |
+| **Registry delegation (parent)** | `ns1/ns2.enticemedia.com` — what NameCheap's panel displays |
+| **In-zone NS (child)** | `ns1/ns2.vps42664.nodevm.com` — the cPanel default from the VPS hostname |
+| **All four resolve to** | `165.140.69.20` — one box, one zone file |
+| **That IP belongs to** | Name Hero, LLC (infrastructure vendor) |
+| **Administered by** | Most likely **Entice Media** — the delegation uses their vanity nameservers and their own site is on the same box |
+| **Panel** | cPanel (`:2083`) and WHM (`:2087`) both confirmed live |
+
+Because the domain uses **custom nameservers**, NameCheap's "Advanced DNS" tab
+is **inert**: a record typed there saves, looks correct, and is never published,
+because nothing on the internet asks NameCheap for this zone.
+
+> ⚠️ **Parent/child nameserver mismatch — expected and correct.** NameCheap
+> shows `enticemedia.com`; `dig NS` shows `vps42664.nodevm.com`. Both point at
+> the same box. **Do not "fix" it.** The nameserver control is the most
+> prominent thing on that NameCheap screen, and changing it takes the WordPress
+> site and Chamber email down together.
+
+### The record
+
+Add **one** record in **cPanel → Zone Editor** for `explorekingstonwa.com`
+(or WHM → DNS Functions → DNS Zone Manager):
 
 ```
-app.explorekingstonwa.com   CNAME   <the host's target>
+app.explorekingstonwa.com.   14400   IN   CNAME   explore-kingston.onrender.com.
 ```
 
-- **Render** custom domain → the `onrender.com` CNAME target Render shows.
-- **Vercel** → `cname.vercel-dns.com` (the target Vercel shows in Settings →
-  Domains).
-- **Fly** → the `<app>.fly.dev` hostname, or an `A`/`AAAA` to a dedicated IP as
-  Fly instructs.
+| Field | Value |
+|---|---|
+| Type | **CNAME** |
+| Name / Host | `app` — just `app`; cPanel appends the origin |
+| TTL | default (14400) |
+| Record / Target | `explore-kingston.onrender.com.` — **with the trailing dot** |
 
-**Do NOT move nameservers.** The NameHero box serves three things off one host:
-the **WordPress site**, the **domain's DNS**, and **Chamber email** (MX/SPF). A
-single CNAME added to the existing zone leaves all three untouched — mail rides
-those nameservers, so moving them would break DNS and email. Swap the **apex**
-(`explorekingstonwa.com` → an `A` record) **only at a full cutover** when the app
-actually replaces WordPress — not before. The custom domain is **deferred until
-launch**; the app currently lives at the raw `explore-kingston.onrender.com`.
+Then add the custom domain in the **Render dashboard** (Settings → Custom
+Domains) and click Verify. Render issues TLS automatically.
+
+### Ways this silently fails
+
+- **Adding it at NameCheap.** Looks saved; `app.` stays NXDOMAIN forever.
+- **Switching to NameCheap BasicDNS** to un-grey that tab — catastrophic: the
+  apex A, `www`, MX and SPF all vanish. Site dark, email dead.
+- **cPanel → Domains / Subdomains instead of Zone Editor.** Writes an **A**
+  record for `app`. The worst failure mode: the name *does* resolve, to a parked
+  page, so it reads as success — but a CNAME cannot coexist with an A record at
+  the same name, so TLS never issues. Delete the A record first.
+- **Typing the full `app.explorekingstonwa.com` in the Name field** — cPanel
+  appends the origin, giving `app.explorekingstonwa.com.explorekingstonwa.com`.
+- **Omitting the trailing dot on the target** — same double-suffix result.
+  Highest risk in WHM's raw editor, which does not normalise.
+- **A URL redirect / web forwarding record, or an A record, or ALIAS.** Render's
+  edge is Cloudflare-fronted with **rotating** IPs, and a redirect fails the
+  ACME challenge, so the certificate never issues.
+- **Adding a CAA or AAAA record.** There are none today — that is *why*
+  Let's Encrypt works, and Render is IPv4-only.
+
+### Do not touch
+
+The VPS at `165.140.69.20` serves three things off one host: the **WordPress
+site**, the **domain's DNS**, and **Chamber email**. Leave alone: the
+nameservers, `MX 0 explorekingstonwa.com`, the SPF TXT
+(`v=spf1 +a +mx +ip4:165.140.69.20 ~all`), the apex `A`, and the `www` CNAME.
+Adding a new subdomain record is purely additive.
+
+Swap the **apex** to the app **only at a full WordPress cutover** — nobody's
+current plan.
+
+### Verify (and capture as the attestation)
+
+```bash
+# immediate truth, skips negative caching:
+dig @ns1.vps42664.nodevm.com app.explorekingstonwa.com CNAME +short
+dig +short CNAME app.explorekingstonwa.com @8.8.8.8   # once caches expire
+# these four must be IDENTICAL before and after — a zero diff is the proof
+dig +short NS explorekingstonwa.com
+dig +short MX explorekingstonwa.com
+dig +short A  explorekingstonwa.com
+dig +short CNAME www.explorekingstonwa.com
+curl -sI https://app.explorekingstonwa.com/api/health   # 200 + valid cert
+```
+
+**After DNS resolves, the cutover is not done:** set
+`NEXT_PUBLIC_SITE_URL=https://app.explorekingstonwa.com` and **redeploy**. It is
+build-time inlined, so a dashboard-only change does nothing and canonical/OG
+URLs keep pointing at `onrender.com`.
+
+*Other hosts, reference only — Render is the live deployment:* Vercel would use
+`cname.vercel-dns.com`; Fly the `<app>.fly.dev` hostname. **Do not use these.**
 
 ---
 

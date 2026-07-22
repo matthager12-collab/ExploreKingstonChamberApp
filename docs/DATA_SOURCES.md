@@ -591,14 +591,21 @@ crons at the deployment.
 
 ## Hosting on explorekingstonwa.com (verified 2026-07-02)
 
-The Chamber site is WordPress 7 + Elementor on a NameHero VPS (165.140.69.20,
-vps42664.nodevm.com), which also serves the domain's **DNS and email** (MX + SPF on the same
-box) — **do not move nameservers.**
+The Chamber site is WordPress 7 + Elementor on a VPS at **165.140.69.20**, which also serves
+the domain's **DNS and email** (MX + SPF on the same box) — **do not move nameservers.**
 
-**Path to go live:** in NameHero cPanel Zone Editor add
-`CNAME app.explorekingstonwa.com → cname.vercel-dns.com` (Phase 2) or the Render CNAME target
-(Phase 1), then attach the subdomain in the host dashboard. Zero impact on the WordPress site,
-apex, or email. If the app ever replaces the WP site, swap the apex A record at cutover.
+Who controls what (re-measured 2026-07-22): the **registrar is NameCheap**, and records are
+**not** edited there — the domain uses custom nameservers, so NameCheap's DNS tab is inert.
+Registry delegation is `ns1/ns2.enticemedia.com`; the zone's own NS are
+`ns1/ns2.vps42664.nodevm.com`; all four resolve to 165.140.69.20. The IP belongs to Name Hero,
+LLC (the infrastructure vendor), and the box is most likely administered by **Entice Media**.
+cPanel (`:2083`) and WHM (`:2087`) are both live on it.
+
+**Path to go live:** add `app` **CNAME → `explore-kingston.onrender.com.`** in the **cPanel Zone
+Editor on that VPS**, then add the custom domain in the **Render** dashboard. Never via cPanel's
+Subdomains tool (it writes a shadowing A record) and never a redirect record. Zero impact on the
+WordPress site, apex, or email. Full procedure and failure modes: [DEPLOY.md §6](DEPLOY.md).
+If the app ever replaces the WP site, swap the apex A record at cutover.
 (This subdomain move is **deferred until launch** — the running home is
 https://explore-kingston.onrender.com.)
 

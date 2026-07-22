@@ -138,7 +138,8 @@ before it becomes the only copy.
 `/api/hunts/photo`, `/api/map/image` and `/api/events/attachment`. Nothing is
 served from `r2.dev`, and there is no R2 custom domain — that would require
 moving the DNS zone to Cloudflare, which is rejected (Chamber DNS and *email*
-live at NameHero). Proxying is also a privacy upgrade: hunt player submissions
+and email are served from the same VPS as its WordPress site). Proxying is
+also a privacy upgrade: hunt player submissions
 used to be stored as public URLs that bypassed the admin gate entirely, and are
 now genuinely admin-only on every read.
 
@@ -317,10 +318,13 @@ at `/data`, same `/api/health` check) but Render is the running home. Other
 persistent-disk hosts (Railway, a VPS) work identically — the only requirement
 is a writable disk at `DATA_DIR`.
 
-**Custom domain** `app.explorekingstonwa.com` (a single **CNAME** in the
-NameHero Zone Editor → the `onrender.com` target; **do not move nameservers** —
-that would break Chamber email) is **deferred until launch**. See
-[DEPLOY.md §c](DEPLOY.md). The `onrender.com` URL is the live address until then.
+**Custom domain** `app.explorekingstonwa.com` — a single **CNAME** →
+`explore-kingston.onrender.com`, added in the **cPanel Zone Editor on the
+Chamber's WordPress VPS**. The registrar (NameCheap) is **not** where records
+are edited; a record added there is never published. **Do not move
+nameservers** — that would break Chamber email. Deferred until launch; the
+`onrender.com` URL is the live address until then. See
+[DEPLOY.md §6](DEPLOY.md#6-domain--dns).
 
 ### Redeploy / rollback
 
@@ -1119,7 +1123,7 @@ Things a **person** (mostly the Chamber) must do — no code involved.
 | 7 | **Confirm info@kingstonchamber.com is monitored** — the Stay/About pages use it as the public mailto. | Chamber office, 360-860-2239 |
 | 8 | **Recruit hunt-reward businesses** — local perks (discount, sticker, free coffee) so finished scavenger hunts pay off; also needed before printing QR signage. | Chamber member outreach |
 | 9 | **Confirm The Kingston Coffee Company details** — newly opened, hours reported but unverified. | Chamber / phone |
-| 10 | **Resend email (before businesses self-serve)** — SPF + DKIM for `mail.explorekingstonwa.com` at NameHero so invite email works. Until then hand invite codes over directly. | SYNDICATION "Email" |
+| 10 | **Resend email (before businesses self-serve)** — SPF + DKIM TXT added to the authoritative zone on the Chamber's WordPress VPS (the same cPanel Zone Editor as the app CNAME — **not** at the registrar, NameCheap, where they would have no effect) so invite email works. ⚠️ These are **mail** records on the box carrying Chamber email: capture `dig TXT` + `dig MX` before and after, and only ADD records — never edit or replace the existing SPF/MX. Until then hand invite codes over directly. | SYNDICATION "Email" |
 | 11 | **Send the GrowthZone written non-renewal notice by March 1, 2027** — the contract auto-renews each April; notice must land ≥30 days before term end and missing it costs another non-refundable ~$4k year. Confirm the exact April term-end day from the renewal invoice and complete ALL data exports first (no export rights after termination). Full plan: docs/ROLLOFF-GROWTHZONE.md §4. | Mat + Chamber office — calendar this NOW |
 | 12 | **Constant Contact takeover (Mat)** — when the CC export work is set up: inventory which CC lists GrowthZone auto-fills (Contacts → Lists), gather whatever access is needed, export the GZ email/newsletter templates at the same time, and stand up the app→CC list-export runbook (docs/ROLLOFF-GROWTHZONE.md §3). | Mat, with Chamber CC login |
 | 13 | **Name the on-call secondary contact (the Chamber board designee)** — fill in name/phone/email in [`docs/runbooks/ALERTS.md`](runbooks/ALERTS.md), add them as an UptimeRobot alert contact, and grant Render dashboard access. Bus-factor: someone's phone must ring when Mat is unavailable (UE-20 / FR-A29). | Chamber board + Mat |
