@@ -1023,6 +1023,45 @@ Rule sources are the 2015/2016 county "Kingston Complete Streets" study, Port of
 Kingston policy, and KCC 46.02/.04 — see [DATA_SOURCES.md](DATA_SOURCES.md) and
 [MAPS.md](MAPS.md). Signs on the pole always win.
 
+### Basemap vector tiles — `kingston.pmtiles` on R2 (E31)
+
+The map basemap is a **self-hosted Protomaps vector archive** (ADR-0006), not a
+live third-party tile fetch. One ~1 MB PMTiles file covers downtown Kingston +
+the churches + ferry + immediate surroundings; MapLibre reads it by HTTP range.
+
+**Where it lives.** A dedicated **private** R2 bucket (`visit-kingston-tiles`),
+kept apart from the private image bucket (`R2_IMAGES_*`). R2 has no public URL
+here (a Cloudflare custom domain needs a nameserver move the binding decisions
+reject; `r2.dev` is not for prod — the same reason images are private), so the
+public route `GET /api/map/tiles/<name>.pmtiles`
+(`src/app/api/map/tiles/[file]/route.ts`) proxies the client's `Range` header to
+the bucket and passes R2's `206` straight back. `src/lib/map/tiles-store.ts`
+holds the `R2_TILES_*` accessor and the filename allowlist.
+
+**Env** (four vars, mirroring `R2_IMAGES_*`): `R2_TILES_ENDPOINT`,
+`R2_TILES_BUCKET`, `R2_TILES_ACCESS_KEY_ID`, `R2_TILES_SECRET_ACCESS_KEY`. Local:
+`.env.local`. Prod: **Render env** — add these before flipping any map to
+MapLibre. A half-set config reads as "not configured" and 502s the tile route
+rather than half-serving.
+
+**Refresh** (quarterly — OSM drifts slowly):
+
+```bash
+brew install pmtiles                 # once, if not present
+set -a; . ./.env.local; set +a       # load R2_TILES_* (or run in CI with env set)
+node scripts/build-tiles.mjs         # newest Protomaps build -> extract Kingston bbox -> R2
+# node scripts/build-tiles.mjs --dry-run   # extract only, no upload
+```
+
+The bbox is the only knob (`BBOX` in the script); widen it there if the map ever
+needs Hansville / Point No Point / Indianola.
+
+**Verify:**
+
+```bash
+curl -I -H 'Range: bytes=0-0' https://<host>/api/map/tiles/kingston.pmtiles   # expect: HTTP 206 + Content-Range
+```
+
 ### Ferry busyness forecast — seasonal recalibration
 
 `src/lib/ferry-forecast.ts` is a **pure, client-safe** heuristic (no fetch/env),
