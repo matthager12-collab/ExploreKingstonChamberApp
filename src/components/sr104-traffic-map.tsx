@@ -11,6 +11,7 @@
 import { useEffect, useRef } from "react";
 import type { Map as LeafletMap } from "leaflet";
 import { FERRY_LINE_STAGING } from "@/lib/ferry-line";
+import { leafletBasemap } from "@/lib/map/basemap";
 
 const WSDOT_POST =
   "https://wsdotblog.blogspot.com/2026/04/smoother-sailing-in-kingston-new-sr-104.html";
@@ -95,11 +96,7 @@ export function Sr104TrafficMap({ height = "420px" }: { height?: string }) {
 
       const map = L.map(containerRef.current, { scrollWheelZoom: false });
       mapRef.current = map;
-      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      }).addTo(map);
+      leafletBasemap(L).addTo(map);
 
       // The holding-lane route: a casing + a bright coral line with arrowheads
       // implied by the numbered stops.

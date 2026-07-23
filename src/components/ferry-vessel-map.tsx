@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Map as LeafletMap, LayerGroup } from "leaflet";
 import type { VesselPosition } from "@/lib/wsf";
+import { leafletBasemap } from "@/lib/map/basemap";
 import { formatPacificTime } from "@/lib/time";
 
 const EDMONDS = { lat: 47.8125, lng: -122.3829, name: "Edmonds" };
@@ -61,11 +62,7 @@ export function FerryVesselMap({
 
       const map = L.map(containerRef.current, { scrollWheelZoom: false });
       mapRef.current = map;
-      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      }).addTo(map);
+      leafletBasemap(L).addTo(map);
 
       // Crossing line + terminal markers.
       L.polyline(
