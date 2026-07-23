@@ -4,20 +4,25 @@
 // (the ferry boarding-pass / holding-lane system). Route + step locations are
 // georeferenced from OpenStreetMap SR 104 geometry and the Barber Cutoff /
 // Lindvog Rd junctions; the operational steps come from WSDOT's April 2026
-// announcement. Leaflet is imported dynamically (window at module scope); its
-// CSS is global. Map init is hardened with invalidateSize so a below-the-fold
-// mount never paints half-blank.
+// announcement.
+//
+// E31 Phase 3 (ADR-0006): migrated from Leaflet+OSM raster to MapLibre GL on our
+// self-hosted Protomaps vector tiles. MapLibre + the pmtiles:// protocol are
+// loaded dynamically (they touch window at module scope); map.resize() on a
+// ResizeObserver keeps a below-the-fold mount from painting half-blank.
 
 import { useEffect, useRef } from "react";
-import type { Map as LeafletMap } from "leaflet";
+import type { Map as MapLibreMap } from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
 import { FERRY_LINE_STAGING } from "@/lib/ferry-line";
-import { leafletBasemap } from "@/lib/map/basemap";
+import { TILES_PMTILES_PATH, mapStyle } from "@/lib/map/basemap";
+import { loadMapLibre, pmtilesUrl } from "@/lib/map/maplibre";
 
 const WSDOT_POST =
   "https://wsdotblog.blogspot.com/2026/04/smoother-sailing-in-kingston-new-sr-104.html";
 
 // The ferry holding-lane path along SR 104, ordered terminal → Barber Cutoff
-// (traffic flows the other way: in from the west, down to the dock).
+// (traffic flows the other way: in from the west, down to the dock). [lat, lng].
 const HOLDING_ROUTE: [number, number][] = [
   [47.7959, -122.4961], // terminal / tollbooths
   [47.7967, -122.4966],
@@ -83,74 +88,87 @@ function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+function stepEl(num: number, color: string): HTMLElement {
+  const el = document.createElement("div");
+  el.style.cssText = `width:26px;height:26px;border-radius:50%;background:${color};color:#fff;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;font:700 14px/1 system-ui,sans-serif;cursor:pointer;`;
+  el.textContent = String(num);
+  return el;
+}
+
+function pinEl(): HTMLElement {
+  const el = document.createElement("div");
+  el.style.cssText = "font-size:22px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));cursor:pointer;";
+  el.textContent = "📍";
+  return el;
+}
+
 export function Sr104TrafficMap({ height = "420px" }: { height?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<LeafletMap | null>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
   const resizeObsRef = useRef<ResizeObserver | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const L = (await import("leaflet")).default;
+      const maplibregl = await loadMapLibre();
       if (cancelled || !containerRef.current || mapRef.current) return;
 
-      const map = L.map(containerRef.current, { scrollWheelZoom: false });
+      const coords = HOLDING_ROUTE.map(([lat, lng]) => [lng, lat] as [number, number]);
+      const map = new maplibregl.Map({
+        container: containerRef.current,
+        style: mapStyle(pmtilesUrl(TILES_PMTILES_PATH)),
+        center: [-122.505, 47.803],
+        zoom: 12.5,
+        scrollZoom: false,
+      });
       mapRef.current = map;
-      leafletBasemap(L).addTo(map);
 
-      // The holding-lane route: a casing + a bright coral line with arrowheads
-      // implied by the numbered stops.
-      L.polyline(HOLDING_ROUTE, { color: "#ffffff", weight: 9, opacity: 0.9 }).addTo(map);
-      L.polyline(HOLDING_ROUTE, { color: "#d96b4f", weight: 5, opacity: 0.95 }).addTo(map);
-
-      for (const s of STEPS) {
-        const icon = L.divIcon({
-          className: "",
-          html: `<div style="transform:translate(-50%,-50%);width:26px;height:26px;border-radius:50%;background:${s.color};color:#fff;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;font:700 14px/1 system-ui,sans-serif;">${s.num}</div>`,
-          iconSize: [0, 0],
-        });
-        L.marker([s.lat, s.lng], { icon })
-          .addTo(map)
-          .bindPopup(
-            `<div style="font-size:0.8rem;line-height:1.35;max-width:220px;">
-              <p style="margin:0;font-weight:600;">${s.num}. ${esc(s.title)}</p>
-              <p style="margin:4px 0 0;">${esc(s.detail)}</p>
-            </div>`,
-            { maxWidth: 240 },
-          );
-      }
-
-      // Staging point — exactly where the "Get in the ferry line" button sends
-      // drivers when the pass is on (the end of the SR-104 line).
-      L.marker([FERRY_LINE_STAGING.lat, FERRY_LINE_STAGING.lng], {
-        icon: L.divIcon({
-          className: "",
-          html: `<div style="transform:translate(-50%,-100%);font-size:22px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));">📍</div>`,
-          iconSize: [0, 0],
-        }),
-      })
-        .addTo(map)
-        .bindPopup(
-          `<div style="font-size:0.8rem;line-height:1.35;max-width:220px;">
-            <p style="margin:0;font-weight:600;">Join the line here</p>
-            <p style="margin:4px 0 0;">When a boarding pass is required, the "Get in the ferry line" button routes you to this spot — approach from the west via Barber Cutoff Rd, and don't U-turn into the line early.</p>
-          </div>`,
-          { maxWidth: 240 },
+      const fit = () =>
+        map.fitBounds(
+          coords.reduce((b, c) => b.extend(c), new maplibregl.LngLatBounds(coords[0], coords[0])),
+          { padding: 40, duration: 0 },
         );
 
-      const bounds = L.latLngBounds(HOLDING_ROUTE);
-      const fit = () => map.fitBounds(bounds, { padding: [40, 40] });
-      fit();
+      map.on("load", () => {
+        if (cancelled) return;
+
+        // The holding-lane route: a white casing under a bright coral line.
+        map.addSource("route", {
+          type: "geojson",
+          data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coords } },
+        });
+        map.addLayer({ id: "route-casing", type: "line", source: "route", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": 9, "line-opacity": 0.9 } });
+        map.addLayer({ id: "route-line", type: "line", source: "route", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#d96b4f", "line-width": 5 } });
+
+        for (const s of STEPS) {
+          new maplibregl.Marker({ element: stepEl(s.num, s.color), anchor: "center" })
+            .setLngLat([s.lng, s.lat])
+            .setPopup(
+              new maplibregl.Popup({ offset: 16, maxWidth: "240px" }).setHTML(
+                `<div style="font-size:0.8rem;line-height:1.35;"><p style="margin:0;font-weight:600;">${s.num}. ${esc(s.title)}</p><p style="margin:4px 0 0;">${esc(s.detail)}</p></div>`,
+              ),
+            )
+            .addTo(map);
+        }
+
+        // Staging point — where the "Get in the ferry line" button sends drivers
+        // when the pass is on (the west end of the SR-104 line).
+        new maplibregl.Marker({ element: pinEl(), anchor: "bottom" })
+          .setLngLat([FERRY_LINE_STAGING.lng, FERRY_LINE_STAGING.lat])
+          .setPopup(
+            new maplibregl.Popup({ offset: 20, maxWidth: "240px" }).setHTML(
+              `<div style="font-size:0.8rem;line-height:1.35;"><p style="margin:0;font-weight:600;">Join the line here</p><p style="margin:4px 0 0;">When a boarding pass is required, the "Get in the ferry line" button routes you to this spot — approach from the west via Barber Cutoff Rd, and don't U-turn into the line early.</p></div>`,
+            ),
+          )
+          .addTo(map);
+
+        fit();
+      });
 
       requestAnimationFrame(() => {
-        if (mapRef.current) {
-          map.invalidateSize();
-          fit();
-        }
+        if (mapRef.current) mapRef.current.resize();
       });
-      const ro = new ResizeObserver(() => {
-        if (mapRef.current) map.invalidateSize();
-      });
+      const ro = new ResizeObserver(() => mapRef.current?.resize());
       ro.observe(containerRef.current);
       resizeObsRef.current = ro;
     })();
