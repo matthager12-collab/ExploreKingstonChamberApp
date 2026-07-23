@@ -88,7 +88,12 @@ export const STORE_SCHEMAS: Record<string, z.ZodType> = {
   "parking-zones": z.looseObject({ id: entityId, name: nonempty }),
   "map-views": z.looseObject({ id: entityId, name: nonempty }),
   "map-features": z.looseObject({ id: entityId, title: nonempty }),
-  "site-copy": z.looseObject({ id: copyKeyId, text: z.string() }),
+  // expiresAt: optional "YYYY-MM-DD" auto-restore date (site-store.activeRows).
+  "site-copy": z.looseObject({
+    id: copyKeyId,
+    text: z.string(),
+    expiresAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expiresAt must be YYYY-MM-DD").optional(),
+  }),
   "site-pages": z.looseObject({ id: pagePathId }),
   "ferry-info": z.looseObject({ id: entityId }),
   "ferry-prediction": z.looseObject({ id: entityId }),

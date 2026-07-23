@@ -13,6 +13,7 @@
 
 import { readMerged, writeOverlayRecord, type WriteMeta } from "./json-store";
 import { copyFallback, type CopyKey } from "@/lib/site-copy-registry";
+import { todayPacific } from "@/lib/time";
 
 const COPY_STORE = "site-copy";
 const PAGES_STORE = "site-pages";
@@ -20,6 +21,11 @@ const PAGES_STORE = "site-pages";
 export interface CopyOverride {
   id: string; // copy key, e.g. "eat.header.intro"
   text: string;
+  /** Optional auto-restore date, "YYYY-MM-DD" (Pacific). On/after this date the
+   *  override is ignored and the block falls back to the code wording — a lazy,
+   *  scheduler-free expiry checked at read time (see activeRows). Used for
+   *  temporary/seasonal copy that should clean itself up. */
+  expiresAt?: string;
 }
 
 export interface PageSetting {
@@ -27,10 +33,38 @@ export interface PageSetting {
   hidden: boolean;
 }
 
-/** All admin copy overrides as a key → text map (one store read per render). */
+/** Drop overrides whose auto-restore date has arrived (expiresAt on/before
+ *  today, Pacific). Lazy by design: no cron — a read after the date returns the
+ *  fallback, which lands on public pages within their revalidate window. */
+function activeRows(rows: CopyOverride[]): CopyOverride[] {
+  const today = todayPacific();
+  return rows.filter((r) => !r.expiresAt || r.expiresAt > today);
+}
+
+/** All admin copy overrides as a key → text map (one store read per render).
+ *  Expired overrides are excluded, so copyText falls back to the code wording. */
 export async function getCopyOverrides(): Promise<Record<string, string>> {
-  const rows = await readMerged<CopyOverride>(COPY_STORE, []);
+  const rows = activeRows(await readMerged<CopyOverride>(COPY_STORE, []));
   return Object.fromEntries(rows.map((r) => [r.id, r.text]));
+}
+
+export interface CopyOverrideDetail {
+  text: string;
+  /** Scheduled auto-restore date, if one is set and still in the future. */
+  expiresAt?: string;
+}
+
+/** Admin view: the same effective overrides, plus any scheduled revert date, so
+ *  the editor can show "reverts on …". An already-expired block reads as default
+ *  here too (same activeRows filter). */
+export async function getCopyOverridesDetailed(): Promise<Record<string, CopyOverrideDetail>> {
+  const rows = activeRows(await readMerged<CopyOverride>(COPY_STORE, []));
+  return Object.fromEntries(
+    rows.map((r) => [
+      r.id,
+      r.expiresAt ? { text: r.text, expiresAt: r.expiresAt } : { text: r.text },
+    ]),
+  );
 }
 
 /** Resolve one block: admin override if present (non-empty), else the
@@ -40,8 +74,17 @@ export function copyText(overrides: Record<string, string>, key: CopyKey): strin
   return t && t.trim().length > 0 ? t : copyFallback(key);
 }
 
-export async function saveCopyOverride(key: string, text: string, meta?: WriteMeta): Promise<void> {
-  await writeOverlayRecord<CopyOverride>(COPY_STORE, { id: key, text }, meta);
+export async function saveCopyOverride(
+  key: string,
+  text: string,
+  opts?: { expiresAt?: string | null },
+  meta?: WriteMeta,
+): Promise<void> {
+  // writeOverlayRecord overwrites the whole row, so omitting expiresAt when it's
+  // null/absent is exactly how the auto-restore date gets cleared.
+  const record: CopyOverride = { id: key, text };
+  if (opts?.expiresAt) record.expiresAt = opts.expiresAt;
+  await writeOverlayRecord<CopyOverride>(COPY_STORE, record, meta);
 }
 
 export async function getPageSettings(): Promise<PageSetting[]> {

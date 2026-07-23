@@ -80,6 +80,16 @@ services:
       - key: WSDOT_API_KEY
         sync: false
 
+      # GitHub token for the "Request permanent change" button on /admin/content
+      # (src/lib/github.ts). A fine-grained PAT with Issues: Read & Write on the
+      # app repo. Without it the button is hidden and the API returns 503 — the
+      # feature ships dark and lights up once this is set in the dashboard.
+      - key: GITHUB_TOKEN
+        sync: false
+      # Optional override of the target repo (defaults to the app repo in code).
+      - key: GITHUB_REPO
+        value: matthager12-collab/ExploreKingstonChamberApp
+
       # Absolute production origin for share-card/canonical URLs
       # (src/app/layout.tsx metadataBase). NEXT_PUBLIC_* = BUILD-time inlined —
       # changing the value requires a rebuild, not just a restart.

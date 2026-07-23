@@ -4,7 +4,12 @@
 // server-side.
 
 import type { Metadata } from "next";
-import { getCopyOverrides, getPageSettings } from "@/lib/stores/site-store";
+import {
+  getCopyOverrides,
+  getCopyOverridesDetailed,
+  getPageSettings,
+} from "@/lib/stores/site-store";
+import { githubConfigured } from "@/lib/github";
 import { COPY_BLOCKS } from "@/lib/site-copy-registry";
 import { effectiveHiddenPaths, HIDEABLE_PAGES } from "@/lib/page-visibility";
 import { PageHeader } from "@/components/ui";
@@ -18,10 +23,16 @@ export const metadata: Metadata = {
 };
 
 export default async function AdminContentPage() {
-  const [overrides, pageSettings] = await Promise.all([
+  const [overrides, detailed, pageSettings] = await Promise.all([
     getCopyOverrides(),
+    getCopyOverridesDetailed(),
     getPageSettings(),
   ]);
+  // key → scheduled auto-restore date, for the blocks that have one.
+  const initialExpiry: Record<string, string> = {};
+  for (const [key, detail] of Object.entries(detailed)) {
+    if (detail.expiresAt) initialExpiry[key] = detail.expiresAt;
+  }
   // E14: the effective view, so a default-hidden page (/es) shows as HIDDEN
   // here even before anyone has ever written a record for it — otherwise the
   // toggle would read "Visible" for a page visitors are getting a 404 on, and
@@ -40,6 +51,8 @@ export default async function AdminContentPage() {
         initialHidden={hiddenPaths}
         blocks={[...COPY_BLOCKS]}
         initialOverrides={overrides}
+        initialExpiry={initialExpiry}
+        githubEnabled={githubConfigured()}
       />
     </>
   );
