@@ -134,11 +134,13 @@ Two modes:
   to show the unpublished `parking-cash` view.
 
 Rendering details worth knowing:
-- Leaflet touches `window` at module scope, so it's imported **dynamically
-  inside `useEffect`**; the component renders an empty shell on the server and
-  hydrates on the client. Leaflet's default marker icons are deliberately
-  avoided (their asset paths break under bundlers) — markers use `L.divIcon`
-  teardrops; everything else is `polyline`/`polygon`/`circleMarker`.
+- **MapLibre GL on the self-hosted vector base** (E31, ADR-0006): the engine
+  loads dynamically inside `useEffect` via `src/lib/map/maplibre.ts` (which
+  registers the `pmtiles://` protocol once), deferred behind an
+  IntersectionObserver until the map scrolls into view (perf budget). The base
+  style comes from `mapStyle()` in `src/lib/map/basemap.ts` — label-free,
+  POI-free, fully same-origin. Markers are HTML `Marker` elements (teardrops);
+  lines/areas are GeoJSON sources batched by render style.
 - **Auto-frame:** after drawing, the map fits bounds to the content it actually
   drew (overriding a stale center/zoom) — but only when the content spans ≤ 4 km
   and the view doesn't carry the wide `streets` overlay. A lone far pin (e.g.
@@ -169,54 +171,55 @@ switcher shows an editable "No maps are published yet." message.
 
 `src/app/(site)/admin/maps/{page,editor.tsx}` — the CMS the owner asked for
 (laptop-first; server component gates on `user.role === "admin"`, redirecting
-non-admins to `/portal`). `MapBuilder` is a Leaflet + leaflet-geoman canvas with:
+non-admins to `/portal`). `MapBuilder` is a MapLibre GL + **terra-draw** canvas
+(E32b, ADR-0006) with:
 
 - **Views strip** — pills to pick the active view (the draw target + canvas
   filter), a "Show all" toggle, "New view", and a "Features (N)" dropdown.
   The view edit form (name, description, center/zoom with a "use current map
   center" button, built-in sources checkboxes, published toggle) opens as an
   overlay on the map's left edge.
-- **Draw / edit / erase** via geoman's toolbar: draw markers, polylines
-  (→ line or trail), polygons (→ area); the **eraser** (removalMode) deletes a
-  feature by clicking it; vertex editing and whole-shape drag. Circle,
-  rectangle, circle-marker, text, cut, and rotate are disabled.
-- **Reshape ⟷ Move toggle** — geoman can't run vertex editing and whole-layer
-  drag on the same shape at once (`enableLayerDrag()` disables edit mode), so a
-  selected line/area gets an explicit toggle. Markers are simply draggable while
-  selected.
+- **Draw / edit** via the app's own Draw buttons (marker → terra-draw `point`
+  mode, line/trail → `linestring`, area → `polygon`). Vertex drag, midpoint
+  insert (click the faint ＋), and right-click vertex delete run in select
+  mode; whole-shape drag works **simultaneously** with vertex editing (grab
+  the shape body away from the handles), which is why the old Reshape ⟷ Move
+  toggle and geoman's toolbar/eraser are gone. Areas may not self-intersect;
+  lines/trails may while reshaping.
 - **Feature form** (floating drawer on the right ≥lg, a block below the map
   <lg): kind (line↔trail switchable, sharing geometry), title, parking type
   (markers + areas), icon category (markers), color or auto parking-color, notes,
   link, multi-image upload, and view-assignment checkboxes.
 - **Category-aware food pins** and **muted built-in context layers**: the active
   view's built-in sources (restaurants, parking zones, streets) render as dimmed,
-  non-interactive context on a dedicated Leaflet pane (z-index 350, below the
-  overlay pane at 400, `pointer-events: none`) so the admin can draw *against*
-  real data and clicks/draws pass straight through. Toggle with "Show built-ins".
-- **Mobile tap-to-activate** and auto-frame behavior mirror the public map.
+  non-interactive context — canvas layers inserted *below* terra-draw's layers,
+  context pins as `pointer-events: none` DOM markers — so the admin can draw
+  *against* real data and clicks/draws pass straight through. Toggle with
+  "Show built-ins".
 
-**Geometry read-back on save** queries the live Leaflet layer directly
-(`marker.getLatLng()`, `polyline/polygon.getLatLngs()` walked to a flat ring),
-so any geoman vertex drag or whole-shape move is captured at Save time. Points
-are rounded to 6 decimals.
+**Geometry read-back on save** queries the terra-draw snapshot (shapes) or the
+MapLibre marker (points) — never a render layer — and converts through
+`src/lib/map/draw-coords.ts`: stored geometry stays `[lat,lng]`, open rings,
+r6-rounded, byte-identical on a no-touch save. That module is
+characterization-tested; a drift there corrupts what every public map renders.
 
-### The leaflet-geoman ordering gotcha
+### Terra-draw notes (both editors)
 
-Geoman's browser bundle registers itself onto the **global `L`**, so the import
-order inside the map-bootstrap effect is load-bearing and identical in both
-editors:
-
-```ts
-const L = (await import("leaflet")).default;
-(window as unknown as { L?: typeof L }).L = L;   // MUST set global L first
-await import("@geoman-io/leaflet-geoman-free");  // reads window.L on import
-// …then create the map (map.pm.* is now available)
-```
-
-Import geoman before assigning `window.L` and `map.pm` is undefined. Geoman's
-CSS is a plain top-of-file stylesheet import — safe because these files are
-client-only and Next extracts CSS at build time. StrictMode double-mount is
-guarded (`if (cancelled || !containerRef.current || mapRef.current) return`).
+- Feature ids in the draw store ARE the app's feature/zone ids (a custom
+  `idStrategy` in `src/lib/map/terradraw.ts` — terra-draw's default accepts
+  only UUIDs).
+- Selection is app-driven: `allowManualSelection/Deselection` are off, map
+  clicks hit-test via `getFeaturesAtLngLat`, and the same `select()` function
+  the sidebar uses runs — so the dirty-discard confirm stays authoritative.
+- Programmatic store mutations are wrapped in a `withStoreOps()` suppression
+  guard: terra-draw fires the same `change` events for API and user edits, and
+  only user edits may mark the form dirty.
+- The adapter is pinned to `coordinatePrecision: 6` (the r6 wire precision)
+  with `ignoreMismatchedPointerEvents: true` (sidebar-press/map-release).
+- StrictMode double-mount is guarded
+  (`if (cancelled || !containerRef.current || mapRef.current) return`), and
+  terra-draw is created inside `map.on("load", …)` — the adapter needs the
+  style loaded.
 
 ### Admin API — features & views
 
@@ -326,22 +329,23 @@ Streets study; see [DATA_SOURCES.md](DATA_SOURCES.md)). What "v2" means concrete
 ### `/admin/map` — `MapZoneEditor`
 
 `src/app/(site)/admin/map/{page,editor.tsx}`. Admin-gated (via the `/admin` layout;
-the `/api/admin/parking` routes re-check). A Leaflet + geoman canvas where the
-admin:
+the `/api/admin/parking` routes re-check). A MapLibre GL + terra-draw canvas
+(E32a, ADR-0006) where the admin:
 
 - picks a zone from the sidebar list or the map → the map fits to it, its
-  polygon grows drag-able **corner handles** (geoman edit mode, no
-  self-intersection), and its center **pin becomes draggable** (the pin is
-  plain-leaflet draggable, `pmIgnore: true`, not geoman-managed);
+  polygon grows drag-able **corner handles** (terra-draw select mode: drag a
+  corner, click a midpoint to add one, right-click a corner to remove it, no
+  self-intersection), and its center **pin becomes draggable** (a MapLibre
+  HTML marker, outside the draw store);
 - edits name / rule / summary / details / overnight / confidence;
 - clicks **"✓ field-verified"** to flip confidence to `verified` (the whole
   point — replace probable schematic geometry with ground truth);
 - draws a brand-new zone, or deletes one (seed zones are tombstoned in the
   overlay, not erased).
 
-Save (`POST /api/admin/parking`) reads geometry back from the live layers and
-persists; `/parking` reflects it within a minute (`revalidate = 60`). Same
-leaflet-geoman ordering gotcha applies. (The parking admin API lives at
+Save (`POST /api/admin/parking`) reads geometry back from the terra-draw
+snapshot + pin and persists; `/parking` reflects it within a minute
+(`revalidate = 60`). The terra-draw notes above apply. (The parking admin API lives at
 `/api/admin/parking` — see [ARCHITECTURE.md](ARCHITECTURE.md); it is not part of
 the `map-features`/`map-views` routes.)
 
@@ -377,9 +381,10 @@ client fetches the static file directly and orders segments so quiet
 
 ## Part 3 — the specialized ferry maps
 
-Hand-coded Leaflet maps on `/ferry` (no CMS; same dynamic-import pattern, no
-geoman). Both are hardened with `invalidateSize()` + a `ResizeObserver` so a
-below-the-fold mount never paints half-blank.
+Hand-coded MapLibre maps on `/ferry` (no CMS; same dynamic-import + lazy
+IntersectionObserver pattern as the public feature-map). Both are hardened with
+`map.resize()` + a `ResizeObserver` so a below-the-fold mount never paints
+half-blank.
 
 ### Live vessel map — `FerryVesselMap` (`src/components/ferry-vessel-map.tsx`)
 
