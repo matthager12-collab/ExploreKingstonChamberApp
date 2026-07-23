@@ -196,7 +196,7 @@ export const COPY_BLOCKS = [
     // E14 plain-language pass (NFR-04): a 40-word sentence with a five-item
     // embedded list, the idiom "gotchas", and "park & rides" unexplained.
     fallback:
-      "Kingston has only a few places to park, and each one has its own rules. There is a paid Port lot by the marina. There is a commuter lot one block up the hill. There is a free row with a 2-hour limit, and it is strictly enforced. A few streets have no limit at all. And there are two free park-and-ride lots, where you leave the car and take a bus or the ferry. The map below shows all of them. Each spot is colored by its parking type, and tells you who owns it, how to pay, and how long you can stay.",
+      "Kingston has plenty of parking if you know where to look. There is a text-to-pay waterfront Port lot. There are several monthly pass commuter lots within a block of ferry. There is a free row with a 2-hour limit in the Port lot, and it is strictly enforced. There are two rows of 2-hour free parking alongside the waterfront Kiwanis park. Most residential streets within 2 blocks of ferry have 2 hour limits but beyond that, most have no limit at all. There are also two free park-and-ride lots, where you leave the car and take a bus or walk to the ferry. The map below shows all of them. Each spot is colored by its parking type, and tells you who owns it, how to pay, and how long you can stay.",
   },
   {
     key: "parking.map.subtitle",
