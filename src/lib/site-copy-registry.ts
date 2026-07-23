@@ -32,7 +32,7 @@ export const COPY_BLOCKS = [
     key: "home.hero.eyebrow",
     page: "Home",
     label: "Hero eyebrow",
-    fallback: "Gateway to the Peninsula",
+    fallback: "Not Just the Gateway to the Kitsap & Olympic Peninsulas; A Destination Itself!",
   },
   {
     key: "home.hero.title1",
