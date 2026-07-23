@@ -3,7 +3,7 @@
 // libraries are imported here — never at module scope in a shared file — so
 // nothing server-side pulls them in.
 
-import type { IdStrategy } from "terra-draw";
+import type { IdStrategy, TerraDrawExtend } from "terra-draw";
 
 /** Load the terra-draw namespace and the MapLibre adapter class together. */
 export async function loadTerraDraw() {
@@ -21,7 +21,7 @@ export async function loadTerraDraw() {
  * across — so accept any non-empty string. Ids for newly drawn shapes are
  * still UUIDs.
  */
-export function editorIdStrategy(): IdStrategy<string> {
+export function editorIdStrategy(): IdStrategy<TerraDrawExtend.FeatureId> {
   return {
     getId: () => crypto.randomUUID(),
     isValidId: (id) => typeof id === "string" && id.length > 0,

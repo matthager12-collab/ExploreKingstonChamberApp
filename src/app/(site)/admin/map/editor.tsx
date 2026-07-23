@@ -2,33 +2,43 @@
 
 // Parking-map zone editor for the Chamber admin (laptop-first).
 //
-// Leaflet touches `window` at module scope, so it is imported dynamically
-// inside useEffect (same pattern as components/town-map.tsx). Geoman's
-// browser bundle reads the global `L`, so the import order in the effect is:
-// leaflet → window.L = L → geoman → create the map. Geoman's CSS is a plain
-// stylesheet import — safe at module top because this file is client-only
-// and Next extracts CSS at build time.
+// E32a (ADR-0006): MapLibre GL on the self-hosted vector tiles + terra-draw
+// for interactive editing — the Leaflet + geoman stack this file was built on
+// is retired. The heavy browser-only libraries are loaded dynamically inside
+// useEffect (same pattern as components/feature-map.tsx); terra-draw is
+// created after the map's style loads, which the adapter requires.
 //
-// Flow: pick a zone from the sidebar (or click it on the map) → the map fits
-// to it, its polygon grows drag-able corner handles (geoman edit mode, no
-// self-intersection) and its center pin becomes draggable → adjust shape and
-// fields → Save POSTs the geometry read back from the live layers to
-// /api/admin/parking. "Draw new zone" arms geoman's polygon draw; Delete
-// tombstones the zone in the overlay store (seed zones stay hidden).
+// Flow (unchanged): pick a zone from the sidebar (or click it on the map) →
+// the map fits to it, its polygon grows drag-able corner handles (terra-draw
+// select mode: drag corners, click a midpoint to add one, right-click a
+// corner to remove it, no self-intersection) and its center pin becomes
+// draggable → adjust shape and fields → Save POSTs the geometry read back
+// from the draw store to /api/admin/parking. "Draw new zone" arms terra-draw
+// polygon draw; Delete tombstones the zone in the overlay store (seed zones
+// stay hidden).
+//
+// Wire-format invariant (FR-EDIT-06): the API speaks stored [lat,lng] open
+// rings, r6-rounded; terra-draw speaks GeoJSON [lng,lat] closed rings. Every
+// crossing goes through @/lib/map/draw-coords — nothing here converts by hand.
 
-import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
+import "maplibre-gl/dist/maplibre-gl.css";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import type { LatLng, Map as LeafletMap, Marker, Polygon } from "leaflet";
+import type { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
+import type { GeoJSONStoreFeatures, TerraDraw } from "terra-draw";
 import { RULE_LABELS, type MapZone, type ParkingRule } from "@/lib/data/parking";
+import { mapStyle, TILES_PMTILES_PATH } from "@/lib/map/basemap";
+import { loadMapLibre, pmtilesUrl } from "@/lib/map/maplibre";
+import { editorIdStrategy, loadTerraDraw } from "@/lib/map/terradraw";
+import { r6, toGeoJsonRing, toStoredRing } from "@/lib/map/draw-coords";
 import { Badge } from "@/components/ui";
 
 /* ------------------------------------------------------------------ */
 /* Constants & small helpers                                           */
 /* ------------------------------------------------------------------ */
 
-// Same canvas colors as town-map.tsx — they live on the map, not in the
+// Same canvas colors as the public maps — they live on the map, not in the
 // page's token system.
 const RULE_COLORS: Record<string, string> = {
   "free-2hr": "#2e9e4f",
@@ -53,14 +63,14 @@ const RULES: ParkingRule[] = [
 const INPUT =
   "w-full rounded-lg border border-sand bg-white px-3 py-2 text-sm text-ink focus:border-tide focus:outline-none";
 
-function ruleColor(rule: string): string {
-  return RULE_COLORS[rule] ?? "#6b7280";
+function ruleColor(rule: string): `#${string}` {
+  return (RULE_COLORS[rule] ?? "#6b7280") as `#${string}`;
 }
 
-const r6 = (n: number): number => Math.round(n * 1e6) / 1e6;
-
-function ringToPolygon(ring: LatLng[]): [number, number][] {
-  return ring.map((ll) => [r6(ll.lat), r6(ll.lng)] as [number, number]);
+/** Rule color for a terra-draw feature (zone polygons carry `rule`). */
+function featureRuleColor(f: GeoJSONStoreFeatures): `#${string}` {
+  const rule = f.properties?.rule;
+  return ruleColor(typeof rule === "string" ? rule : "");
 }
 
 function centroidOf(polygon: [number, number][]): [number, number] {
@@ -68,6 +78,13 @@ function centroidOf(polygon: [number, number][]): [number, number] {
   const lng = polygon.reduce((s, p) => s + p[1], 0) / polygon.length;
   return [r6(lat), r6(lng)];
 }
+
+// Leaflet ran the old editor at raster zooms (256px tiles); MapLibre's vector
+// zooms render one level lower for the same scale, so every zoom constant
+// here is the old one minus 1.
+const START_CENTER: [number, number] = [-122.4979, 47.7968]; // [lng, lat]
+const START_ZOOM = 16;
+const MAX_ZOOM = 18;
 
 type Draft = {
   name: string;
@@ -104,11 +121,19 @@ function ConfidenceBadge({ confidence }: { confidence: MapZone["confidence"] }) 
   return <Badge tone="sand">probable</Badge>;
 }
 
+/** The zone's polygon as a terra-draw store feature (id = zone id). */
+function zoneDrawFeature(zone: MapZone): GeoJSONStoreFeatures {
+  return {
+    id: zone.id,
+    type: "Feature",
+    properties: { mode: "polygon", rule: zone.rule },
+    geometry: { type: "Polygon", coordinates: [toGeoJsonRing(zone.polygon ?? [])] },
+  } as GeoJSONStoreFeatures;
+}
+
 /* ------------------------------------------------------------------ */
 /* Editor                                                              */
 /* ------------------------------------------------------------------ */
-
-type ZoneLayers = { polygon?: Polygon; marker: Marker };
 
 export function MapZoneEditor({ initialZones }: { initialZones: MapZone[] }) {
   const router = useRouter();
@@ -123,9 +148,15 @@ export function MapZoneEditor({ initialZones }: { initialZones: MapZone[] }) {
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<LeafletMap | null>(null);
-  const leafletRef = useRef<typeof import("leaflet") | null>(null);
-  const layersRef = useRef(new Map<string, ZoneLayers>());
+  const mapRef = useRef<MapLibreMap | null>(null);
+  const maplibreRef = useRef<typeof import("maplibre-gl") | null>(null);
+  const drawRef = useRef<TerraDraw | null>(null);
+  const markersRef = useRef(new Map<string, MapLibreMarker>());
+  const hoverChipRef = useRef<HTMLDivElement | null>(null);
+  // True while WE mutate the draw store (add/remove/select) — terra-draw fires
+  // the same change events for API and user edits, and only user edits may
+  // mark the draft dirty.
+  const suppressRef = useRef(false);
   // Ids drawn in this session but never saved — deleting them skips the API.
   const unsavedIdsRef = useRef(new Set<string>());
 
@@ -136,79 +167,73 @@ export function MapZoneEditor({ initialZones }: { initialZones: MapZone[] }) {
   selectedIdRef.current = selectedId;
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
+  const drawingRef = useRef(drawing);
+  drawingRef.current = drawing;
   const selectRef = useRef<(id: string) => void>(() => {});
+
+  /** Run a programmatic draw-store mutation without tripping dirty tracking. */
+  function withStoreOps<T>(fn: () => T): T {
+    suppressRef.current = true;
+    try {
+      return fn();
+    } finally {
+      suppressRef.current = false;
+    }
+  }
 
   /* ---------------- imperative layer management ---------------- */
 
-  function baseStyle(zone: MapZone, selected: boolean) {
-    const color = ruleColor(zone.rule);
-    return {
-      color,
-      weight: selected ? 3 : 2,
-      fillColor: color,
-      fillOpacity: selected ? 0.5 : 0.3,
-    };
-  }
-
-  function markerIcon(zone: MapZone, selected: boolean) {
-    const L = leafletRef.current!;
-    const color = ruleColor(zone.rule);
-    const size = selected ? 18 : 13;
-    return L.divIcon({
-      className: "",
-      html: `<span style="display:block;width:${size}px;height:${size}px;border-radius:9999px;background:${color};border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.4);"></span>`,
-      iconSize: [size, size],
-      iconAnchor: [size / 2, size / 2],
+  function pinEl(zone: MapZone, selected: boolean): HTMLDivElement {
+    const wrap = document.createElement("div");
+    wrap.className = selected ? "pe-pin pe-pin--selected" : "pe-pin";
+    const dot = document.createElement("span");
+    dot.className = "pe-dot";
+    dot.style.background = ruleColor(zone.rule);
+    const tip = document.createElement("span");
+    tip.className = "pe-tip";
+    tip.textContent = zone.name; // textContent — no HTML, no XSS
+    wrap.append(dot, tip);
+    wrap.addEventListener("click", (ev) => {
+      ev.stopPropagation(); // don't also run the map's hit-test click
+      selectRef.current(zone.id);
     });
+    return wrap;
   }
 
-  function addZoneLayers(zone: MapZone) {
-    const L = leafletRef.current;
+  function addZoneToMap(zone: MapZone) {
+    const maplibregl = maplibreRef.current;
     const map = mapRef.current;
-    if (!L || !map) return;
+    const draw = drawRef.current;
+    if (!maplibregl || !map || !draw) return;
 
-    const entry: ZoneLayers = {
-      marker: L.marker(zone.center, {
-        icon: markerIcon(zone, false),
-        pmIgnore: true, // the pin is plain-leaflet draggable, not geoman-managed
-      })
-        .addTo(map)
-        .bindTooltip(zone.name, { direction: "top", offset: [0, -8] })
-        .on("click", () => selectRef.current(zone.id))
-        .on("dragend", () => setDirty(true)),
-    };
+    const marker = new maplibregl.Marker({ element: pinEl(zone, false), anchor: "center" })
+      .setLngLat([zone.center[1], zone.center[0]])
+      .addTo(map);
+    marker.on("dragend", () => setDirty(true));
+    markersRef.current.set(zone.id, marker);
 
     if (zone.polygon && zone.polygon.length >= 3) {
-      entry.polygon = L.polygon(zone.polygon, baseStyle(zone, false))
-        .addTo(map)
-        .bindTooltip(zone.name, { sticky: true })
-        .on("click", () => selectRef.current(zone.id))
-        // Both fire only while geoman editing is enabled — i.e. when selected.
-        .on("pm:edit", () => setDirty(true))
-        .on("pm:markerdragend", () => setDirty(true));
+      withStoreOps(() => draw.addFeatures([zoneDrawFeature(zone)]));
     }
-
-    layersRef.current.set(zone.id, entry);
   }
 
-  function removeZoneLayers(id: string) {
-    const entry = layersRef.current.get(id);
-    entry?.polygon?.remove();
-    entry?.marker.remove();
-    layersRef.current.delete(id);
+  function removeZoneFromMap(id: string) {
+    const draw = drawRef.current;
+    if (draw?.hasFeature(id)) withStoreOps(() => draw.removeFeatures([id]));
+    markersRef.current.get(id)?.remove();
+    markersRef.current.delete(id);
   }
 
   function setEditing(id: string, zone: MapZone, on: boolean) {
-    const entry = layersRef.current.get(id);
-    if (!entry) return;
-    if (entry.polygon) {
-      if (on) entry.polygon.pm.enable({ allowSelfIntersection: false });
-      else entry.polygon.pm.disable();
-      entry.polygon.setStyle(baseStyle(zone, on));
+    const draw = drawRef.current;
+    if (draw && zone.polygon && zone.polygon.length >= 3 && draw.hasFeature(id)) {
+      withStoreOps(() => (on ? draw.selectFeature(id) : draw.deselectFeature(id)));
     }
-    entry.marker.setIcon(markerIcon(zone, on));
-    if (on) entry.marker.dragging?.enable();
-    else entry.marker.dragging?.disable();
+    const marker = markersRef.current.get(id);
+    if (marker) {
+      marker.getElement().classList.toggle("pe-pin--selected", on);
+      marker.setDraggable(on);
+    }
   }
 
   /* ---------------- selection ---------------- */
@@ -221,6 +246,11 @@ export function MapZoneEditor({ initialZones }: { initialZones: MapZone[] }) {
       !window.confirm("Discard unsaved changes to the current zone?")
     ) {
       return;
+    }
+    // A single terra-draw mode runs at a time: selecting disarms an armed draw.
+    if (drawingRef.current) {
+      drawRef.current?.setMode("select");
+      setDrawing(false);
     }
     if (prev) {
       const prevZone = zonesRef.current.find((z) => z.id === prev);
@@ -235,12 +265,18 @@ export function MapZoneEditor({ initialZones }: { initialZones: MapZone[] }) {
     setMessage(null);
 
     const map = mapRef.current;
-    const entry = layersRef.current.get(id);
-    if (map && entry) {
-      if (entry.polygon) {
-        map.fitBounds(entry.polygon.getBounds(), { padding: [60, 60], maxZoom: 19 });
+    const maplibregl = maplibreRef.current;
+    if (map && maplibregl) {
+      if (zone.polygon && zone.polygon.length >= 3) {
+        const first: [number, number] = [zone.polygon[0][1], zone.polygon[0][0]];
+        const bounds = new maplibregl.LngLatBounds(first, first);
+        for (const p of zone.polygon) bounds.extend([p[1], p[0]]);
+        map.fitBounds(bounds, { padding: 60, maxZoom: MAX_ZOOM });
       } else {
-        map.setView(zone.center, Math.max(map.getZoom(), 17));
+        map.easeTo({
+          center: [zone.center[1], zone.center[0]],
+          zoom: Math.max(map.getZoom(), START_ZOOM),
+        });
       }
       setEditing(id, zone, true);
     }
@@ -264,40 +300,182 @@ export function MapZoneEditor({ initialZones }: { initialZones: MapZone[] }) {
     let cancelled = false;
 
     (async () => {
-      const L = (await import("leaflet")).default;
-      // Geoman's browser bundle registers itself on the global L.
-      (window as unknown as { L?: typeof L }).L = L;
-      await import("@geoman-io/leaflet-geoman-free");
+      const [maplibregl, { terraDraw, TerraDrawMapLibreGLAdapter }] = await Promise.all([
+        loadMapLibre(),
+        loadTerraDraw(),
+      ]);
       // Guard: unmounted while loading, or already initialized (StrictMode).
       if (cancelled || !containerRef.current || mapRef.current) return;
 
-      leafletRef.current = L;
-      const map = L.map(containerRef.current, {
-        center: [47.7968, -122.4979],
-        zoom: 17,
+      maplibreRef.current = maplibregl;
+      const map = new maplibregl.Map({
+        container: containerRef.current,
+        style: mapStyle(pmtilesUrl(TILES_PMTILES_PATH)),
+        center: START_CENTER,
+        zoom: START_ZOOM,
+        maxZoom: MAX_ZOOM,
       });
       mapRef.current = map;
 
-      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      }).addTo(map);
+      map.on("load", () => {
+        if (cancelled || mapRef.current !== map) return;
 
-      map.pm.setGlobalOptions({ allowSelfIntersection: false });
-      map.on("pm:create", (e) => {
-        handleDrawnRef.current(e.layer as Polygon);
+        const {
+          TerraDraw: TerraDrawCtor,
+          TerraDrawPolygonMode,
+          TerraDrawSelectMode,
+          ValidateNotSelfIntersecting,
+        } = terraDraw;
+
+        const draw = new TerraDrawCtor({
+          adapter: new TerraDrawMapLibreGLAdapter({
+            map,
+            // r6 wire precision; also stops sidebar-press/map-release ghosts.
+            coordinatePrecision: 6,
+            ignoreMismatchedPointerEvents: true,
+          }),
+          idStrategy: editorIdStrategy(),
+          modes: [
+            new TerraDrawPolygonMode({
+              validation: (feature, { updateType }) =>
+                updateType === "finish" || updateType === "commit"
+                  ? ValidateNotSelfIntersecting(feature)
+                  : { valid: true },
+              styles: {
+                fillColor: featureRuleColor,
+                fillOpacity: 0.3,
+                outlineColor: featureRuleColor,
+                outlineWidth: 2,
+                closingPointColor: "#ffffff",
+                closingPointOutlineColor: "#16405e",
+                closingPointOutlineWidth: 2,
+              },
+            }),
+            new TerraDrawSelectMode({
+              // Selection is driven by the app (sidebar + hit-test click), so
+              // the dirty-discard confirm stays authoritative.
+              allowManualSelection: false,
+              allowManualDeselection: false,
+              keyEvents: { deselect: null, delete: null, rotate: null, scale: null },
+              flags: {
+                polygon: {
+                  feature: {
+                    draggable: false, // zones reshape; they don't slide whole
+                    selfIntersectable: false,
+                    coordinates: { midpoints: true, draggable: true, deletable: true },
+                  },
+                },
+              },
+              styles: {
+                selectedPolygonColor: featureRuleColor,
+                selectedPolygonFillOpacity: 0.5,
+                selectedPolygonOutlineColor: featureRuleColor,
+                selectedPolygonOutlineWidth: 3,
+                selectionPointColor: "#ffffff",
+                selectionPointOutlineColor: "#16405e",
+                selectionPointOutlineWidth: 2,
+                selectionPointWidth: 6,
+                midPointColor: "#ffffff",
+                midPointOutlineColor: "#16405e",
+                midPointWidth: 4,
+              },
+            }),
+          ],
+        });
+        draw.start();
+        draw.setMode("select");
+        drawRef.current = draw;
+
+        draw.on("finish", (finishedId, context) => {
+          if (context.mode === "polygon" && context.action === "draw") {
+            handleDrawnRef.current(String(finishedId));
+            return;
+          }
+          // Vertex or midpoint drag finished on the selected zone.
+          if (context.action === "dragCoordinate" || context.action === "dragFeature") {
+            setDirty(true);
+          }
+        });
+        // Geometry edits that don't end in a drag (right-click vertex delete,
+        // midpoint insert) — user-driven updates to the selected zone only.
+        draw.on("change", (ids, type, context) => {
+          if (suppressRef.current || type !== "update") return;
+          if (context && "origin" in context && context.origin === "api") return;
+          if (context?.target === "properties") return;
+          const sel = selectedIdRef.current;
+          if (sel && ids.some((i) => String(i) === sel)) setDirty(true);
+        });
+
+        // Click-to-select via hit-test (manual selection is disabled above).
+        map.on("click", (e) => {
+          const d = drawRef.current;
+          if (!d || drawingRef.current) return;
+          const hit = d
+            .getFeaturesAtLngLat(e.lngLat, {
+              ignoreSelectFeatures: false,
+              ignoreCoordinatePoints: true,
+              ignoreClosingPoints: true,
+              ignoreSnappingPoints: true,
+            })
+            .find((f) => f.geometry.type === "Polygon" && f.properties?.mode === "polygon");
+          if (hit?.id != null) selectRef.current(String(hit.id));
+        });
+
+        // Hover: name chip + pointer cursor over zone polygons (the Leaflet
+        // sticky tooltip's replacement).
+        const chip = document.createElement("div");
+        chip.className = "pe-hover";
+        chip.style.display = "none";
+        map.getContainer().appendChild(chip);
+        hoverChipRef.current = chip;
+        map.on("mousemove", (e) => {
+          const d = drawRef.current;
+          if (!d || drawingRef.current) {
+            chip.style.display = "none";
+            return;
+          }
+          const hit = d
+            .getFeaturesAtLngLat(e.lngLat, {
+              ignoreSelectFeatures: false,
+              ignoreCoordinatePoints: true,
+              ignoreClosingPoints: true,
+              ignoreSnappingPoints: true,
+            })
+            .find((f) => f.geometry.type === "Polygon" && f.properties?.mode === "polygon");
+          const zone = hit ? zonesRef.current.find((z) => z.id === String(hit.id)) : undefined;
+          if (zone) {
+            chip.textContent = zone.name;
+            chip.style.display = "block";
+            chip.style.left = `${e.point.x + 12}px`;
+            chip.style.top = `${e.point.y + 12}px`;
+            map.getCanvas().style.cursor = "pointer";
+          } else {
+            chip.style.display = "none";
+            map.getCanvas().style.cursor = "";
+          }
+        });
+
+        for (const zone of zonesRef.current) addZoneToMap(zone);
+        setMapReady(true);
       });
 
-      for (const zone of zonesRef.current) addZoneLayers(zone);
-      setMapReady(true);
+      requestAnimationFrame(() => mapRef.current?.resize());
     })();
 
     return () => {
       cancelled = true;
+      try {
+        drawRef.current?.stop();
+      } catch {
+        // stop() throws if the adapter never registered — nothing to undo
+      }
+      drawRef.current = null;
+      for (const m of markersRef.current.values()) m.remove();
+      markersRef.current.clear();
+      hoverChipRef.current?.remove();
+      hoverChipRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
-      layersRef.current.clear();
     };
     // Zones are managed imperatively after mount; re-running would tear the
     // map down mid-edit.
@@ -306,13 +484,19 @@ export function MapZoneEditor({ initialZones }: { initialZones: MapZone[] }) {
 
   /* ---------------- draw new zone ---------------- */
 
-  const handleDrawnRef = useRef<(layer: Polygon) => void>(() => {});
-  handleDrawnRef.current = (layer: Polygon) => {
+  const handleDrawnRef = useRef<(tdId: string) => void>(() => {});
+  handleDrawnRef.current = (tdId: string) => {
     const map = mapRef.current;
+    const draw = drawRef.current;
     setDrawing(false);
-    const ring = layer.getLatLngs()[0] as LatLng[];
-    const polygon = ringToPolygon(ring);
-    layer.remove(); // re-added via addZoneLayers so the wiring is uniform
+    if (!draw) return;
+    draw.setMode("select");
+
+    const feat = draw.getSnapshotFeature(tdId);
+    // Re-added under the zone's own id via addZoneToMap so wiring is uniform.
+    withStoreOps(() => draw.removeFeatures([tdId]));
+    if (!feat || feat.geometry.type !== "Polygon") return;
+    const polygon = toStoredRing(feat.geometry.coordinates[0]);
     if (!map || polygon.length < 3) return;
 
     const id = `zone-${Math.random().toString(36).slice(2, 8)}`;
@@ -330,7 +514,7 @@ export function MapZoneEditor({ initialZones }: { initialZones: MapZone[] }) {
     unsavedIdsRef.current.add(id);
     zonesRef.current = [...zonesRef.current, zone];
     setZones(zonesRef.current);
-    addZoneLayers(zone);
+    addZoneToMap(zone);
     select(id);
     setDirty(true);
     setMessage({
@@ -340,14 +524,18 @@ export function MapZoneEditor({ initialZones }: { initialZones: MapZone[] }) {
   };
 
   function toggleDraw() {
-    const map = mapRef.current;
-    if (!map) return;
+    const draw = drawRef.current;
+    if (!draw) return;
     if (drawing) {
-      map.pm.disableDraw();
+      draw.setMode("select");
       setDrawing(false);
+      // Arming the draw dropped the zone's draw-selection — hand it back.
+      const sel = selectedIdRef.current;
+      const zone = sel ? zonesRef.current.find((z) => z.id === sel) : undefined;
+      if (sel && zone) setEditing(sel, zone, true);
       return;
     }
-    map.pm.enableDraw("Polygon");
+    draw.setMode("polygon");
     setDrawing(true);
     setMessage({
       kind: "ok",
@@ -363,20 +551,20 @@ export function MapZoneEditor({ initialZones }: { initialZones: MapZone[] }) {
     setMessage(null);
   }
 
-  /** The draft zone with geometry read back from the live map layers. */
+  /** The draft zone with geometry read back from the draw store + pin. */
   function buildZone(): MapZone | null {
     if (!draft || !selectedId) return null;
     const zone = zonesRef.current.find((z) => z.id === selectedId);
     if (!zone) return null;
 
-    const entry = layersRef.current.get(selectedId);
     let polygon = zone.polygon;
-    if (entry?.polygon) {
-      const ring = entry.polygon.getLatLngs()[0] as LatLng[];
-      polygon = ringToPolygon(ring);
+    const feat = drawRef.current?.getSnapshotFeature(selectedId);
+    if (feat && feat.geometry.type === "Polygon") {
+      polygon = toStoredRing(feat.geometry.coordinates[0]);
     }
-    const center: [number, number] = entry
-      ? [r6(entry.marker.getLatLng().lat), r6(entry.marker.getLatLng().lng)]
+    const marker = markersRef.current.get(selectedId);
+    const center: [number, number] = marker
+      ? [r6(marker.getLngLat().lat), r6(marker.getLngLat().lng)]
       : zone.center;
 
     return {
@@ -417,10 +605,11 @@ export function MapZoneEditor({ initialZones }: { initialZones: MapZone[] }) {
       zonesRef.current = zonesRef.current.map((z) => (z.id === saved.id ? saved : z));
       setZones(zonesRef.current);
 
-      // Rebuild the zone's layers so color, tooltip, and geometry all reflect
-      // the saved record, then hand the editing handles straight back.
-      removeZoneLayers(saved.id);
-      addZoneLayers(saved);
+      // Rebuild the zone's pin + draw feature so color, tooltip, and geometry
+      // all reflect the saved record, then hand the editing handles straight
+      // back.
+      removeZoneFromMap(saved.id);
+      addZoneToMap(saved);
       setEditing(saved.id, saved, true);
 
       setDraft(toDraft(saved));
@@ -471,7 +660,7 @@ export function MapZoneEditor({ initialZones }: { initialZones: MapZone[] }) {
 
     const id = selectedId;
     deselect();
-    removeZoneLayers(id);
+    removeZoneFromMap(id);
     unsavedIdsRef.current.delete(id);
     zonesRef.current = zonesRef.current.filter((z) => z.id !== id);
     setZones(zonesRef.current);
@@ -485,6 +674,7 @@ export function MapZoneEditor({ initialZones }: { initialZones: MapZone[] }) {
 
   return (
     <div className="grid gap-4 lg:grid-cols-[290px_1fr]">
+      <style>{PIN_CSS}</style>
       {/* Sidebar: zone list */}
       <div className="flex flex-col gap-3">
         <button
@@ -687,3 +877,45 @@ export function MapZoneEditor({ initialZones }: { initialZones: MapZone[] }) {
     </div>
   );
 }
+
+const PIN_CSS = `
+.pe-pin { position: relative; width: 0; height: 0; cursor: pointer; }
+.pe-dot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  display: block;
+  width: 13px;
+  height: 13px;
+  border-radius: 9999px;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+.pe-pin--selected .pe-dot { width: 18px; height: 18px; }
+.pe-tip {
+  position: absolute;
+  left: 0;
+  bottom: 10px;
+  transform: translateX(-50%);
+  display: none;
+  white-space: nowrap;
+  font: 600 11px/1.2 system-ui, -apple-system, sans-serif;
+  color: #fff;
+  background: #16405e;
+  border-radius: 3px;
+  padding: 2px 6px;
+}
+.pe-pin:hover .pe-tip { display: block; }
+.pe-hover {
+  position: absolute;
+  z-index: 30;
+  pointer-events: none;
+  white-space: nowrap;
+  font: 600 11px/1.2 system-ui, -apple-system, sans-serif;
+  color: #fff;
+  background: #16405e;
+  border-radius: 3px;
+  padding: 2px 6px;
+}
+`;
