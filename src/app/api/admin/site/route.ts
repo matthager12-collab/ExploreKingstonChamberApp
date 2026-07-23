@@ -116,6 +116,11 @@ export async function POST(request: NextRequest) {
     const requested = body.text.slice(0, MAX_TEXT_LENGTH);
     const note = typeof body.note === "string" ? body.note.slice(0, 1000).trim() : "";
     const title = `Copy change request: ${key}`;
+    // Machine-readable payload for the copy-change workflow: base64(JSON) inside
+    // an HTML comment, so it's invisible in the rendered issue and survives any
+    // wording (base64 can't contain the "-->" that would close the comment).
+    // Keep the marker string in sync with scripts/apply-copy-change.mjs.
+    const payload = Buffer.from(JSON.stringify({ key, text: requested })).toString("base64");
     const bodyMd = [
       `**Requested by:** ${actor}`,
       `**Page:** ${block.page}`,
@@ -129,7 +134,9 @@ export async function POST(request: NextRequest) {
       ...(note ? ["", "**Note:**", `> ${note.replace(/\n/g, "\n> ")}`] : []),
       "",
       "—",
-      "Filed from **/admin/content** on Explore Kingston. Making this permanent means updating the fallback in `src/lib/site-copy-registry.ts`.",
+      "Filed from **/admin/content** on Explore Kingston. The `copy-change` workflow drafts a PR updating the fallback in `src/lib/site-copy-registry.ts` for review.",
+      "",
+      `<!-- copy-change-data: ${payload} -->`,
     ].join("\n");
     try {
       const { url, number } = await createGithubIssue({ title, body: bodyMd, labels: ["copy-change"] });

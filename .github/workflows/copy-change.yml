@@ -1,0 +1,86 @@
+name: Copy change request
+
+# Closes the loop on the /admin/content "Request permanent change" button: when
+# it files a "Copy change request" issue, this turns it into a REVIEWABLE PR that
+# swaps the block's built-in wording in src/lib/site-copy-registry.ts.
+#
+# Safety: it never edits main directly and never auto-merges — a human reviews
+# the PR, and CI must pass before it can land. Gated to the `copy-change` label
+# the button applies. The edit itself is done by scripts/apply-copy-change.mjs,
+# which refuses anything it can't apply cleanly (then we comment instead).
+
+on:
+  issues:
+    types: [opened, labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  draft-pr:
+    if: contains(github.event.issue.labels.*.name, 'copy-change')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Apply the requested wording to the registry
+        id: apply
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: node scripts/apply-copy-change.mjs
+
+      - name: Explain on the issue if nothing could be applied
+        if: steps.apply.outputs.applied != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+          REASON: ${{ steps.apply.outputs.reason }}
+        run: |
+          gh issue comment "$NUMBER" -R "$GITHUB_REPOSITORY" \
+            --body "🤖 I couldn't draft a PR automatically — ${REASON:-unknown reason}. A developer will need to make this change by hand."
+
+      - name: Open a pull request for review
+        if: steps.apply.outputs.applied == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+          KEY: ${{ steps.apply.outputs.key }}
+        run: |
+          set -euo pipefail
+          branch="copy-change/issue-${NUMBER}"
+
+          # Idempotent: if we already drafted this issue, don't do it twice
+          # (the `opened` and `labeled` events can both fire).
+          if git ls-remote --exit-code origin "refs/heads/${branch}" >/dev/null 2>&1; then
+            echo "Branch ${branch} already exists — already drafted; nothing to do."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "${branch}"
+          git add src/lib/site-copy-registry.ts
+          git commit -m "Copy: update ${KEY} built-in wording (closes #${NUMBER})"
+          git push -u origin "${branch}"
+
+          body="Automated draft from #${NUMBER}: updates the built-in wording for \`${KEY}\` in \`src/lib/site-copy-registry.ts\`.
+
+          Review the diff and merge when it looks right.
+
+          Heads-up: GitHub does not auto-run CI on a bot-opened PR. Push any commit, or re-run the checks, before merging so the quality gate runs.
+
+          Closes #${NUMBER}"
+
+          gh pr create -R "$GITHUB_REPOSITORY" \
+            --base main --head "${branch}" \
+            --title "Copy: update ${KEY} (closes #${NUMBER})" \
+            --body "$body"
+
+          gh issue comment "$NUMBER" -R "$GITHUB_REPOSITORY" \
+            --body "🤖 Drafted a pull request with this change on branch \`${branch}\` — review and merge when it looks right."
