@@ -1026,8 +1026,9 @@ Kingston policy, and KCC 46.02/.04 — see [DATA_SOURCES.md](DATA_SOURCES.md) an
 ### Basemap vector tiles — `kingston.pmtiles` on R2 (E31)
 
 The map basemap is a **self-hosted Protomaps vector archive** (ADR-0006), not a
-live third-party tile fetch. One ~1 MB PMTiles file covers downtown Kingston +
-the churches + ferry + immediate surroundings; MapLibre reads it by HTTP range.
+live third-party tile fetch. One ~1.9 MB PMTiles file covers Kingston + the
+churches + the full Edmonds–Kingston ferry crossing (east to the Edmonds
+terminal, for the live-vessel map); MapLibre reads it by HTTP range.
 
 **Where it lives.** A dedicated **private** R2 bucket (`visit-kingston-tiles`),
 kept apart from the private image bucket (`R2_IMAGES_*`). R2 has no public URL

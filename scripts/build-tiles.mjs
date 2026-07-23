@@ -24,10 +24,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AwsClient } from "aws4fetch";
 
-// Downtown Kingston + the churches + ferry terminal + immediate surroundings.
-// Widen here (bbox is the only knob) if the tourism map ever needs Hansville /
-// Point No Point / Indianola — ADR-0006 resolved Q3 keeps this Kingston-first.
-const BBOX = "-122.530,47.775,-122.460,47.820";
+// Kingston + the churches + the full Edmonds–Kingston ferry crossing (east edge
+// past the Edmonds terminal at -122.383) so the live-vessel map has base tiles
+// the whole way across Puget Sound. The extra span is mostly water, so the
+// archive barely grows. bbox is the only knob — widen further (Hansville / Point
+// No Point / Indianola) if the tourism map ever needs it (ADR-0006 resolved Q3).
+const BBOX = "-122.530,47.770,-122.370,47.830";
 const KEY = "kingston.pmtiles";
 const R2_ENV = ["R2_TILES_ENDPOINT", "R2_TILES_BUCKET", "R2_TILES_ACCESS_KEY_ID", "R2_TILES_SECRET_ACCESS_KEY"];
 

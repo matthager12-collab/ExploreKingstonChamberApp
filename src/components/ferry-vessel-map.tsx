@@ -3,13 +3,20 @@
 // Live Edmonds–Kingston vessel map — our own take on WSDOT's VesselWatch.
 // Shows both terminals, the crossing line, and the boats' real-time positions
 // (heading-rotated ferry markers) from /api/ferry/vessels, polled every ~20s
-// and paused while the tab is hidden. Leaflet is imported dynamically inside
-// the effect (it touches window at module scope); its CSS is global.
+// and paused while the tab is hidden.
+//
+// E31 Phase 3 (ADR-0006): migrated from Leaflet+OSM raster to MapLibre GL on our
+// self-hosted Protomaps vector tiles. MapLibre is loaded lazily on scroll-into-
+// view (it is ~200 KB — the E15 perf budget), and map.resize() on a
+// ResizeObserver keeps a below-the-fold mount from painting half-blank. The tile
+// bbox was widened to cover the whole crossing east to Edmonds.
 
 import { useEffect, useRef, useState } from "react";
-import type { Map as LeafletMap, LayerGroup } from "leaflet";
+import type { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
 import type { VesselPosition } from "@/lib/wsf";
-import { leafletBasemap } from "@/lib/map/basemap";
+import { TILES_PMTILES_PATH, mapStyle } from "@/lib/map/basemap";
+import { loadMapLibre, pmtilesUrl } from "@/lib/map/maplibre";
 import { formatPacificTime } from "@/lib/time";
 
 const EDMONDS = { lat: 47.8125, lng: -122.3829, name: "Edmonds" };
@@ -38,6 +45,22 @@ function vesselPopup(v: VesselPosition): string {
   return `<div style="font-size:0.8rem;line-height:1.35;">${lines.join("")}</div>`;
 }
 
+function terminalEl(name: string): HTMLElement {
+  const el = document.createElement("div");
+  el.style.cssText = "display:flex;align-items:center;gap:4px;white-space:nowrap;pointer-events:none;";
+  el.innerHTML =
+    `<span style="width:11px;height:11px;border-radius:50%;background:#16405e;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4);"></span>` +
+    `<span style="font:600 11px/1.2 system-ui,sans-serif;color:#16405e;background:rgba(255,255,255,.85);border-radius:4px;padding:1px 5px;">${name}</span>`;
+  return el;
+}
+
+function vesselEl(): HTMLElement {
+  const el = document.createElement("div");
+  el.style.cssText = "font-size:22px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));cursor:pointer;";
+  el.textContent = "⛴️";
+  return el;
+}
+
 export function FerryVesselMap({
   initial,
   height = "380px",
@@ -46,99 +69,104 @@ export function FerryVesselMap({
   height?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<LeafletMap | null>(null);
-  const vesselLayerRef = useRef<LayerGroup | null>(null);
-  const leafletRef = useRef<typeof import("leaflet") | null>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
+  const maplibreRef = useRef<typeof import("maplibre-gl") | null>(null);
+  const vesselMarkersRef = useRef<MapLibreMarker[]>([]);
   const resizeObsRef = useRef<ResizeObserver | null>(null);
   const [data, setData] = useState<VesselData>(initial);
 
-  // ---- init map once ----
+  // ---- redraw vessels whenever data changes (no-op until the map exists) ----
+  function renderVessels() {
+    const maplibregl = maplibreRef.current;
+    const map = mapRef.current;
+    if (!maplibregl || !map) return;
+    for (const m of vesselMarkersRef.current) m.remove();
+    vesselMarkersRef.current = data.vessels.map((v) =>
+      new maplibregl.Marker({ element: vesselEl(), anchor: "center", rotation: v.heading })
+        .setLngLat([v.lng, v.lat])
+        .setPopup(new maplibregl.Popup({ offset: 14, maxWidth: "220px" }).setHTML(vesselPopup(v)))
+        .addTo(map),
+    );
+  }
+
+  // ---- init map once, deferred until it scrolls into view (perf budget) ----
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      const L = (await import("leaflet")).default;
+    let cleanupIo: (() => void) | undefined;
+    const container = containerRef.current;
+    if (!container) return;
+
+    const init = async () => {
+      const maplibregl = await loadMapLibre();
       if (cancelled || !containerRef.current || mapRef.current) return;
-      leafletRef.current = L;
+      maplibreRef.current = maplibregl;
 
-      const map = L.map(containerRef.current, { scrollWheelZoom: false });
+      const map = new maplibregl.Map({
+        container: containerRef.current,
+        style: mapStyle(pmtilesUrl(TILES_PMTILES_PATH)),
+        center: [-122.44, 47.804],
+        zoom: 10.5,
+        scrollZoom: false,
+      });
       mapRef.current = map;
-      leafletBasemap(L).addTo(map);
 
-      // Crossing line + terminal markers.
-      L.polyline(
-        [
-          [EDMONDS.lat, EDMONDS.lng],
-          [KINGSTON.lat, KINGSTON.lng],
-        ],
-        { color: "#16405e", weight: 2, opacity: 0.4, dashArray: "6 8" },
-      ).addTo(map);
+      // Build via extend so corner order does not matter (the two-arg
+      // constructor needs sw/ne and silently inverts if they are swapped).
+      const bounds = new maplibregl.LngLatBounds([EDMONDS.lng, EDMONDS.lat], [EDMONDS.lng, EDMONDS.lat]);
+      bounds.extend([KINGSTON.lng, KINGSTON.lat]);
+      const fit = () => map.fitBounds(bounds, { padding: 50, duration: 0 });
 
-      for (const t of [EDMONDS, KINGSTON]) {
-        L.marker([t.lat, t.lng], {
-          icon: L.divIcon({
-            className: "",
-            html: `<div style="display:flex;align-items:center;gap:4px;transform:translate(-6px,-50%);white-space:nowrap;">
-              <span style="width:11px;height:11px;border-radius:50%;background:#16405e;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4);"></span>
-              <span style="font:600 11px/1.2 system-ui,sans-serif;color:#16405e;background:rgba(255,255,255,.85);border-radius:4px;padding:1px 5px;">${t.name}</span>
-            </div>`,
-            iconSize: [0, 0],
-          }),
-          interactive: false,
-        }).addTo(map);
-      }
-
-      const bounds: [[number, number], [number, number]] = [
-        [EDMONDS.lat, EDMONDS.lng],
-        [KINGSTON.lat, KINGSTON.lng],
-      ];
-      const fit = () => map.fitBounds(bounds, { padding: [40, 40] });
-      fit();
-
-      vesselLayerRef.current = L.layerGroup().addTo(map);
-      renderVessels();
-
-      // The section can mount below the fold, so the container's final size
-      // may land a frame after init — recompute tile layout and refit then,
-      // and whenever the container resizes, so the map never paints half-blank.
-      requestAnimationFrame(() => {
-        if (mapRef.current) {
-          map.invalidateSize();
-          fit();
+      map.on("load", () => {
+        if (cancelled) return;
+        // Crossing line (dashed).
+        map.addSource("crossing", {
+          type: "geojson",
+          data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [[EDMONDS.lng, EDMONDS.lat], [KINGSTON.lng, KINGSTON.lat]] } },
+        });
+        map.addLayer({ id: "crossing", type: "line", source: "crossing", paint: { "line-color": "#16405e", "line-width": 2, "line-opacity": 0.4, "line-dasharray": [2, 3] } });
+        // Terminal markers (static, non-interactive).
+        for (const t of [EDMONDS, KINGSTON]) {
+          new maplibregl.Marker({ element: terminalEl(t.name), anchor: "left" }).setLngLat([t.lng, t.lat]).addTo(map);
         }
+        renderVessels();
+        fit();
       });
-      const ro = new ResizeObserver(() => {
-        if (mapRef.current) map.invalidateSize();
-      });
+
+      requestAnimationFrame(() => mapRef.current?.resize());
+      const ro = new ResizeObserver(() => mapRef.current?.resize());
       ro.observe(containerRef.current);
       resizeObsRef.current = ro;
-    })();
+    };
+
+    if (typeof IntersectionObserver === "undefined") {
+      void init();
+    } else {
+      const io = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((e) => e.isIntersecting)) {
+            io.disconnect();
+            void init();
+          }
+        },
+        { rootMargin: "200px" },
+      );
+      io.observe(container);
+      cleanupIo = () => io.disconnect();
+    }
 
     return () => {
       cancelled = true;
+      cleanupIo?.();
       resizeObsRef.current?.disconnect();
       resizeObsRef.current = null;
+      for (const m of vesselMarkersRef.current) m.remove();
+      vesselMarkersRef.current = [];
       mapRef.current?.remove();
       mapRef.current = null;
-      vesselLayerRef.current = null;
+      maplibreRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // ---- redraw vessels whenever data changes ----
-  function renderVessels() {
-    const L = leafletRef.current;
-    const layer = vesselLayerRef.current;
-    if (!L || !layer) return;
-    layer.clearLayers();
-    for (const v of data.vessels) {
-      const icon = L.divIcon({
-        className: "",
-        html: `<div style="transform:translate(-50%,-50%) rotate(${v.heading}deg);font-size:22px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));">⛴️</div>`,
-        iconSize: [0, 0],
-      });
-      L.marker([v.lat, v.lng], { icon }).addTo(layer).bindPopup(vesselPopup(v), { maxWidth: 220 });
-    }
-  }
 
   useEffect(() => {
     renderVessels();
