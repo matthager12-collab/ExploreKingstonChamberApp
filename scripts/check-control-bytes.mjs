@@ -47,8 +47,8 @@ const BACKSLASH = String.fromCharCode(92);
 const BINARY_EXTENSIONS = new Set([
   // images
   "avif", "bmp", "gif", "heic", "heif", "ico", "jpeg", "jpg", "png", "webp",
-  // fonts
-  "eot", "otf", "ttf", "woff", "woff2",
+  // fonts (pbf = protobuf-encoded SDF glyph ranges, the map's street-name font)
+  "eot", "otf", "pbf", "ttf", "woff", "woff2",
   // documents
   "docx", "pdf", "pptx", "xlsx",
   // archives, media, compiled output
