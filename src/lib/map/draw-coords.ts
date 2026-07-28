@@ -13,9 +13,17 @@
 /** Wire rounding for stored coordinates (~11 cm), matching the admin APIs. */
 export const r6 = (n: number): number => Math.round(n * 1e6) / 1e6;
 
-/** Stored [lat, lng] → GeoJSON [lng, lat]. */
+/**
+ * Stored [lat, lng] → GeoJSON [lng, lat], wire-rounded. Stored data should be
+ * r6 already, but the admin APIs accept unrounded coordinates (a script POST
+ * can store 10-decimal points) and terra-draw silently REJECTS features whose
+ * precision exceeds the adapter's coordinatePrecision — the shape would render
+ * on the public maps yet be invisible and uneditable in the editors. Rounding
+ * on the way out heals such data for display, exactly as the old Leaflet
+ * editors' re-round-on-save did.
+ */
 export function toGeoJsonPosition(p: readonly [number, number]): [number, number] {
-  return [p[1], p[0]];
+  return [r6(p[1]), r6(p[0])];
 }
 
 /** GeoJSON [lng, lat] → stored [lat, lng], wire-rounded. */

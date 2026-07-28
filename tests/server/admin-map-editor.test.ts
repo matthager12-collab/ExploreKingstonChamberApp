@@ -91,6 +91,13 @@ beforeAll(async () => {
         "run locally with tiles, and the E32 V-1 checklist covers the gap",
     );
   }
+  // Opt into the editor's test hook (window.__vkDraw) so the suite can prove
+  // geometry actually entered the terra-draw store — without this, the
+  // round-trip assertions could pass vacuously through buildZone's
+  // stored-geometry fallback.
+  await context.addInitScript(() => {
+    (window as unknown as { __vkTestHooks?: boolean }).__vkTestHooks = true;
+  });
   page = await context.newPage();
   page.on("dialog", (d) => void d.accept());
   page.on("console", (m) => {
@@ -120,6 +127,14 @@ describe("admin parking-zone editor (MapLibre + terra-draw)", () => {
     expect(pre?.polygon?.length).toBeGreaterThanOrEqual(3);
     try {
       await page.click(`li button:has-text("${ZONE_NAME}")`);
+      // Non-vacuity guard: the polygon must actually be in the draw store
+      // (otherwise the byte-identity below would pass via the stored-geometry
+      // fallback and prove nothing).
+      const inStore = await page.evaluate(
+        (id) => (window as unknown as { __vkDraw?: { hasFeature(i: string): boolean } }).__vkDraw?.hasFeature(id),
+        ZONE_ID,
+      );
+      expect(inStore).toBe(true);
       const pin = page.locator(".pe-pin--selected");
       // The wrapper is 0x0 (anchor center), which Playwright reports as
       // "hidden" — wait for attachment and read the anchor point directly.
@@ -221,14 +236,24 @@ describe("admin parking-zone editor (MapLibre + terra-draw)", () => {
     const newId = idText?.trim() ?? "";
     expect(newId.startsWith("zone-")).toBe(true);
 
-    await page.click('button:has-text("Save zone")');
-    await page.waitForSelector("text=Saved — live on /parking", { timeout: 10_000 });
-    const saved = await getZone(newId);
-    expect(saved?.name).toBe("New zone");
-    expect(saved?.polygon?.length).toBe(3);
+    try {
+      await page.click('button:has-text("Save zone")');
+      await page.waitForSelector("text=Saved — live on /parking", { timeout: 10_000 });
+      const saved = await getZone(newId);
+      expect(saved?.name).toBe("New zone");
+      expect(saved?.polygon?.length).toBe(3);
 
-    await page.click('button:has-text("Delete zone")'); // dialog auto-accepted
-    await page.waitForSelector(`text=Deleted "New zone"`, { timeout: 10_000 });
-    expect(await getZone(newId)).toBeUndefined();
+      await page.click('button:has-text("Delete zone")'); // dialog auto-accepted
+      await page.waitForSelector(`text=Deleted "New zone"`, { timeout: 10_000 });
+      expect(await getZone(newId)).toBeUndefined();
+    } finally {
+      // Never strand a test zone in the shared per-run DB for later suites.
+      if (await getZone(newId)) {
+        await page.evaluate(
+          (id) => fetch(`/api/admin/parking?id=${encodeURIComponent(id)}`, { method: "DELETE" }),
+          newId,
+        );
+      }
+    }
   });
 });

@@ -213,7 +213,12 @@ export function MapZoneEditor({ initialZones }: { initialZones: MapZone[] }) {
     markersRef.current.set(zone.id, marker);
 
     if (zone.polygon && zone.polygon.length >= 3) {
-      withStoreOps(() => draw.addFeatures([zoneDrawFeature(zone)]));
+      const results = withStoreOps(() => draw.addFeatures([zoneDrawFeature(zone)]));
+      // A rejected add means the polygon silently won't render or edit here —
+      // surface it for diagnosis instead of swallowing the validation result.
+      for (const r of results) {
+        if (!r.valid) console.warn(`map editor: zone "${zone.id}" not editable — ${r.reason}`);
+      }
     }
   }
 
@@ -260,6 +265,9 @@ export function MapZoneEditor({ initialZones }: { initialZones: MapZone[] }) {
     const zone = zonesRef.current.find((z) => z.id === id);
     if (!zone) return;
     setSelectedId(id);
+    // Eager mirror sync: same-tick callers (map events, rebuild paths) must
+    // see the new selection before React re-renders.
+    selectedIdRef.current = id;
     setDraft(toDraft(zone));
     setDirty(false);
     setMessage(null);
@@ -290,6 +298,7 @@ export function MapZoneEditor({ initialZones }: { initialZones: MapZone[] }) {
       if (prevZone) setEditing(prev, prevZone, false);
     }
     setSelectedId(null);
+    selectedIdRef.current = null; // eager mirror sync (see select)
     setDraft(null);
     setDirty(false);
   }
@@ -385,6 +394,13 @@ export function MapZoneEditor({ initialZones }: { initialZones: MapZone[] }) {
         draw.start();
         draw.setMode("select");
         drawRef.current = draw;
+        // Test-only hook: the server-tier spec must be able to prove features
+        // actually entered the draw store (its no-touch round-trip would pass
+        // vacuously via buildZone's stored-geometry fallback otherwise). Inert
+        // unless the spec set the flag before load.
+        if ((window as unknown as { __vkTestHooks?: boolean }).__vkTestHooks) {
+          (window as unknown as { __vkDraw?: unknown }).__vkDraw = draw;
+        }
 
         draw.on("finish", (finishedId, context) => {
           if (context.mode === "polygon" && context.action === "draw") {
@@ -515,7 +531,15 @@ export function MapZoneEditor({ initialZones }: { initialZones: MapZone[] }) {
     zonesRef.current = [...zonesRef.current, zone];
     setZones(zonesRef.current);
     addZoneToMap(zone);
+    const before = selectedIdRef.current;
     select(id);
+    if (selectedIdRef.current === before) {
+      // The dirty-discard confirm was declined: hand the editing handles back
+      // to the still-selected zone (arming the draw had dropped them).
+      const prev = before ? zonesRef.current.find((z) => z.id === before) : undefined;
+      if (before && prev) setEditing(before, prev, true);
+      return;
+    }
     setDirty(true);
     setMessage({
       kind: "ok",
