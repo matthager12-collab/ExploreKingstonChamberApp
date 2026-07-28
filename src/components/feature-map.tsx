@@ -417,6 +417,9 @@ export function FeatureMap({
         scrollZoom: false, // don't hijack page scroll; pinch/± still zoom
       });
       mapRef.current = map;
+      // Leaflet showed +/- buttons by default; with scrollZoom off they are the
+      // only mouse way to zoom, so MapLibre needs them added explicitly.
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
 
       // On touch devices a full-width map otherwise eats the page's vertical
       // swipes: disable panning until the visitor taps to activate.

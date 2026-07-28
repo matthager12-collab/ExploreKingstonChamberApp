@@ -45,17 +45,20 @@ export const VECTOR_ATTRIBUTION =
 /**
  * MapLibre base style for the self-hosted Kingston vector tiles (ADR-0006).
  *
- * Deliberately LABEL-FREE — no glyphs, no sprite — so the base is fully
- * self-hosted with no external font/icon fetch (only our same-origin
- * `/api/map/tiles` route), and it carries NO POI layer, which is why no church
- * symbol can appear. Labels (self-hosted glyphs) are a later refinement.
+ * Fully self-hosted: tiles come from our same-origin `/api/map/tiles` route
+ * and street-name glyphs from `public/fonts` (Noto Sans, OFL — the Protomaps
+ * basemaps glyph set). There is still NO sprite, NO icon, and NO `pois`
+ * source-layer, which is why no church symbol (or any POI icon) can appear —
+ * the only symbol layer is line-placed street-name TEXT from the roads layer.
  *
  * `pmtilesUrl` is the absolute `pmtiles://…` archive URL; callers build it from
- * `TILES_PMTILES_PATH` + `location.origin` (this module stays window-free).
+ * `TILES_PMTILES_PATH` + `location.origin` (this module stays window-free —
+ * the glyphs URL is derived from the archive URL's origin).
  */
 export function mapStyle(pmtilesUrl: string): StyleSpecification {
   return {
     version: 8,
+    glyphs: `${new URL(pmtilesUrl).origin}/fonts/{fontstack}/{range}.pbf`,
     sources: {
       kingston: { type: "vector", url: `pmtiles://${pmtilesUrl}`, attribution: VECTOR_ATTRIBUTION },
     },
@@ -89,6 +92,24 @@ export function mapStyle(pmtilesUrl: string): StyleSpecification {
           // interpolate. Roads are differentiated by colour above; per-kind width
           // would need separate layers (a later refinement).
           "line-width": ["interpolate", ["linear"], ["zoom"], 10, 0.6, 13, 1.8, 16, 5, 19, 12],
+        },
+      },
+      {
+        // Street names, drawn along the road line. TEXT ONLY — no icon-image
+        // anywhere in this style, so the no-POI-symbol guarantee holds.
+        id: "road-labels", type: "symbol", source: "kingston", "source-layer": "roads",
+        minzoom: 12.5,
+        filter: ["match", ["get", "kind"], ["highway", "major_road", "medium_road", "minor_road"], true, false],
+        layout: {
+          "symbol-placement": "line",
+          "text-field": ["get", "name"],
+          "text-font": ["Noto Sans Regular"],
+          "text-size": ["interpolate", ["linear"], ["zoom"], 12.5, 10, 16, 13, 19, 16],
+        },
+        paint: {
+          "text-color": "#4a4a40",
+          "text-halo-color": "#f4f1ea",
+          "text-halo-width": 1.4,
         },
       },
     ],

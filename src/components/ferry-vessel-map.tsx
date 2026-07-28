@@ -109,6 +109,9 @@ export function FerryVesselMap({
         scrollZoom: false,
       });
       mapRef.current = map;
+      // Leaflet showed +/- buttons by default; with scrollZoom off they are the
+      // only mouse way to zoom, so MapLibre needs them added explicitly.
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
 
       // Build via extend so corner order does not matter (the two-arg
       // constructor needs sw/ne and silently inverts if they are swapped).

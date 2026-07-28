@@ -126,6 +126,9 @@ export function Sr104TrafficMap({ height = "420px" }: { height?: string }) {
         scrollZoom: false,
       });
       mapRef.current = map;
+      // Leaflet showed +/- buttons by default; with scrollZoom off they are the
+      // only mouse way to zoom, so MapLibre needs them added explicitly.
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
 
       const fit = () =>
         map.fitBounds(
