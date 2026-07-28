@@ -37,16 +37,31 @@ describe("mapStyle (self-hosted vector base)", () => {
     expect(src.url).toBe(`pmtiles://https://example.test${TILES_PMTILES_PATH}`);
   });
 
-  it("carries NO POI layer and NO labels — so no church symbol can ever appear", () => {
+  it("carries NO POI layer and NO icons — so no church symbol can ever appear", () => {
     for (const layer of style.layers) {
       expect((layer as { "source-layer"?: string })["source-layer"]).not.toBe("pois");
-      expect(layer.type).not.toBe("symbol"); // no text/label layers
+      // Symbol layers are allowed for street-name TEXT only: an icon needs a
+      // sprite image, and the style must never grow one.
+      const layout = (layer as { layout?: Record<string, unknown> }).layout ?? {};
+      expect(layout["icon-image"]).toBeUndefined();
+      if (layer.type === "symbol") {
+        expect((layer as { "source-layer"?: string })["source-layer"]).toBe("roads");
+        expect(layout["text-field"]).toBeDefined();
+      }
     }
+    expect(style.sprite).toBeUndefined(); // no sprite = no icon can ever render
   });
 
-  it("is fully self-hosted: no external glyphs or sprite", () => {
-    expect(style.glyphs).toBeUndefined();
-    expect(style.sprite).toBeUndefined();
+  it("is fully self-hosted: glyphs come from OUR origin, never a third party", () => {
+    expect(style.glyphs).toBe("https://example.test/fonts/{fontstack}/{range}.pbf");
+  });
+
+  it("labels streets from the roads layer", () => {
+    const labels = style.layers.find((l) => l.id === "road-labels");
+    expect(labels?.type).toBe("symbol");
+    expect((labels as { layout?: Record<string, unknown> }).layout?.["text-font"]).toEqual([
+      "Noto Sans Regular", // the glyph set committed under public/fonts
+    ]);
   });
 
   it("draws the recognizable base layers", () => {
