@@ -79,8 +79,8 @@ export function mapStyle(pmtilesUrl: string): StyleSpecification {
       },
       { id: "water", type: "fill", source: "kingston", "source-layer": "water", paint: { "fill-color": "#a6d3e4" } },
       {
-        id: "buildings", type: "fill", source: "kingston", "source-layer": "buildings", minzoom: 13.5,
-        paint: { "fill-color": "#e3ddcc", "fill-outline-color": "#d2cab4", "fill-opacity": 0.9 },
+        id: "buildings", type: "fill", source: "kingston", "source-layer": "buildings", minzoom: 13,
+        paint: { "fill-color": "#dbd2ba", "fill-outline-color": "#c2b697", "fill-opacity": 1 },
       },
       {
         id: "roads", type: "line", source: "kingston", "source-layer": "roads",
@@ -95,16 +95,42 @@ export function mapStyle(pmtilesUrl: string): StyleSpecification {
         },
       },
       {
-        // Street names, drawn along the road line. TEXT ONLY — no icon-image
-        // anywhere in this style, so the no-POI-symbol guarantee holds.
+        // Side-street names: smaller type, tighter repeat spacing, minimal
+        // collision padding — the goal is that most named residential streets
+        // show SOME label. TEXT ONLY — no icon-image anywhere in this style,
+        // so the no-POI-symbol guarantee holds.
+        id: "road-labels-minor", type: "symbol", source: "kingston", "source-layer": "roads",
+        minzoom: 13,
+        filter: ["match", ["get", "kind"], ["minor_road", "path", "other"], true, false],
+        layout: {
+          // line-center: one label mid-street. Downtown blocks are short, and
+          // repeating "line" placement rarely finds room on them — centering
+          // is what gets most named side streets SOME label.
+          "symbol-placement": "line-center",
+          "text-field": ["get", "name"],
+          "text-font": ["Noto Sans Regular"],
+          "text-size": ["interpolate", ["linear"], ["zoom"], 13, 9.5, 16, 12, 19, 15],
+          "text-padding": 1,
+        },
+        paint: {
+          "text-color": "#5b5b50",
+          "text-halo-color": "#f4f1ea",
+          "text-halo-width": 1.3,
+        },
+      },
+      {
+        // Main-road names. Placed after the minor layer so, where the two
+        // collide, MapLibre keeps these (topmost symbols claim space first).
         id: "road-labels", type: "symbol", source: "kingston", "source-layer": "roads",
         minzoom: 12.5,
-        filter: ["match", ["get", "kind"], ["highway", "major_road", "medium_road", "minor_road"], true, false],
+        filter: ["match", ["get", "kind"], ["highway", "major_road", "medium_road"], true, false],
         layout: {
           "symbol-placement": "line",
           "text-field": ["get", "name"],
           "text-font": ["Noto Sans Regular"],
-          "text-size": ["interpolate", ["linear"], ["zoom"], 12.5, 10, 16, 13, 19, 16],
+          "text-size": ["interpolate", ["linear"], ["zoom"], 12.5, 10, 16, 13.5, 19, 16.5],
+          "symbol-spacing": 220,
+          "text-padding": 1,
         },
         paint: {
           "text-color": "#4a4a40",
