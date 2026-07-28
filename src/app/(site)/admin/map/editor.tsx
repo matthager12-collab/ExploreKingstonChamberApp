@@ -325,6 +325,8 @@ export function MapZoneEditor({ initialZones }: { initialZones: MapZone[] }) {
         maxZoom: MAX_ZOOM,
       });
       mapRef.current = map;
+      // Leaflet showed +/- buttons by default; MapLibre needs them explicitly.
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
 
       map.on("load", () => {
         if (cancelled || mapRef.current !== map) return;
