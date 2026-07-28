@@ -197,7 +197,11 @@ function styleMarkerEl(
   tooltip: string,
 ) {
   const cat = markerCategory(f.category);
-  el.className = selected ? "me-pin me-pin--selected" : "me-pin";
+  // classList, never `el.className =` — MapLibre's Marker adds its own
+  // positioning classes (maplibregl-marker …) to this element after
+  // construction, and wiping them breaks the marker's absolute positioning.
+  el.classList.add("me-pin");
+  el.classList.toggle("me-pin--selected", selected);
   const dot = el.querySelector(".me-dot") as HTMLElement;
   dot.style.background = parkingDrawColor(f) || f.color || cat.color;
   dot.textContent = cat.emoji;
@@ -485,7 +489,14 @@ export function MapBuilder({
     }
     const feat = shapeDrawFeature(f);
     if (feat) {
-      withStoreOps(() => draw.addFeatures([feat]));
+      const results = withStoreOps(() => draw.addFeatures([feat]));
+      // A rejected add means the shape silently won't render or edit here —
+      // surface it for diagnosis, and don't record it as on-canvas.
+      const rejected = results.find((r) => !r.valid);
+      if (rejected) {
+        console.warn(`map builder: feature "${f.id}" not editable — ${rejected.reason}`);
+        return;
+      }
       canvasIdsRef.current.add(f.id);
     }
   }
@@ -805,6 +816,9 @@ export function MapBuilder({
     const f = featuresRef.current.find((x) => x.id === id);
     if (!f) return;
     setSelectedId(id);
+    // Eager mirror sync: same-tick callers (renderCanvas's re-arm, map
+    // events) must see the new selection before React re-renders.
+    selectedIdRef.current = id;
     setDraft(toDraft(f));
     setDirty(false);
     setMsg(null);
@@ -836,6 +850,7 @@ export function MapBuilder({
       if (prevF) setEditing(prev, prevF, false);
     }
     setSelectedId(null);
+    selectedIdRef.current = null; // eager mirror sync (see select)
     setDraft(null);
     setDirty(false);
   }
@@ -961,6 +976,13 @@ export function MapBuilder({
         draw.start();
         draw.setMode("select");
         drawRef.current = draw;
+        // Test-only hook: the server-tier spec must be able to prove features
+        // actually entered the draw store (its no-touch round-trip would pass
+        // vacuously via buildFeature's stored-geometry fallback otherwise).
+        // Inert unless the spec set the flag before load.
+        if ((window as unknown as { __vkTestHooks?: boolean }).__vkTestHooks) {
+          (window as unknown as { __vkDraw?: unknown }).__vkDraw = draw;
+        }
 
         draw.on("finish", (finishedId, context) => {
           if (
@@ -1119,7 +1141,15 @@ export function MapBuilder({
     featuresRef.current = [...featuresRef.current, f];
     setFeatures(featuresRef.current);
     addFeatureToMap(f);
+    const before = selectedIdRef.current;
     select(id);
+    if (selectedIdRef.current === before) {
+      // The dirty-discard confirm was declined: hand the editing handles back
+      // to the still-selected feature (arming the draw had dropped them).
+      const prev = before ? featuresRef.current.find((x) => x.id === before) : undefined;
+      if (before && prev) setEditing(before, prev, true);
+      return;
+    }
     setDirty(true);
     setMsg({
       kind: "ok",
@@ -1425,6 +1455,12 @@ export function MapBuilder({
 
   function pickActiveView(id: string) {
     if (dirtyRef.current && !window.confirm("Discard unsaved feature changes?")) return;
+    // renderCanvas's re-arm path switches terra-draw into select mode; keep
+    // the Draw buttons honest by disarming an in-flight draw first.
+    if (drawingRef.current) {
+      drawRef.current?.setMode("select");
+      setDrawing(null);
+    }
     deselect();
     setActiveViewId(id);
     activeViewIdRef.current = id;
@@ -1442,6 +1478,10 @@ export function MapBuilder({
 
   function toggleShowAll() {
     if (dirtyRef.current && !window.confirm("Discard unsaved feature changes?")) return;
+    if (drawingRef.current) {
+      drawRef.current?.setMode("select");
+      setDrawing(null);
+    }
     deselect();
     const next = !showAll;
     setShowAll(next);
@@ -2363,5 +2403,8 @@ const ME_CSS = `
   border-radius: 3px;
   padding: 2px 6px;
 }
-.ctx-pin { pointer-events: none; opacity: 0.55; }
+/* 0x0 wrapper: anchor "center" then pins the ORIGIN at the point, and the
+   teardrop's own translate(-50%,-100%) puts its TIP there — the same geometry
+   Leaflet's iconSize [0,0] gave the public map's context pins. */
+.ctx-pin { width: 0; height: 0; pointer-events: none; opacity: 0.55; }
 `;
