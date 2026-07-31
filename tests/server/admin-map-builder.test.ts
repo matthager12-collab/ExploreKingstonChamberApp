@@ -52,6 +52,51 @@ async function putFeature(feature: Feature): Promise<void> {
   expect(status).toBe(200);
 }
 
+/** A map-relative point clear of existing pins — a click landing on an
+ *  editable marker selects it (its element stops propagation) and silently
+ *  disarms the draw. */
+async function clearSpot(mb: { width: number; height: number }): Promise<{ x: number; y: number }> {
+  return page.evaluate(({ w, h }) => {
+    const el = document.querySelector('[aria-label="Editable map canvas for the selected view"]')!;
+    const base = el.getBoundingClientRect();
+    const pins = [...document.querySelectorAll(".me-pin")].map((p) => {
+      const r = p.getBoundingClientRect();
+      return { x: r.x + r.width / 2 - base.x, y: r.y + r.height / 2 - base.y };
+    });
+    for (let fy = 0.2; fy <= 0.6; fy += 0.1) {
+      for (let fx = 0.15; fx <= 0.6; fx += 0.1) {
+        const x = w * fx;
+        const y = h * fy;
+        if (!pins.some((p) => Math.hypot(p.x - x, p.y - y) < 40)) return { x, y };
+      }
+    }
+    return { x: w * 0.25, y: h * 0.3 };
+  }, { w: mb.width, h: mb.height });
+}
+
+/** Screen coords of a lng/lat, via the map exposed under the test hook. */
+async function atLngLat(lngLat: [number, number]): Promise<{ x: number; y: number }> {
+  return page.evaluate((ll) => {
+    const w = window as unknown as {
+      __vkMap?: { project(c: [number, number]): { x: number; y: number }; getContainer(): HTMLElement };
+    };
+    const p = w.__vkMap!.project(ll);
+    const r = w.__vkMap!.getContainer().getBoundingClientRect();
+    return { x: r.x + p.x, y: r.y + p.y };
+  }, lngLat);
+}
+
+/** The selected feature's geometry as terra-draw currently holds it. */
+async function drawCoords(id: string): Promise<[number, number][]> {
+  return page.evaluate((fid) => {
+    const w = window as unknown as {
+      __vkDraw?: { getSnapshotFeature(i: string): { geometry: { type: string; coordinates: unknown } } | undefined };
+    };
+    const g = w.__vkDraw!.getSnapshotFeature(fid)!.geometry;
+    return (g.type === "Polygon" ? (g.coordinates as number[][][])[0] : g.coordinates) as [number, number][];
+  }, id);
+}
+
 async function openBuilder(): Promise<void> {
   await page.goto(BASE_URL + "/admin/maps", { waitUntil: "load" });
   await page.waitForSelector('button:has-text("Draw marker"):not([disabled])', {
@@ -145,24 +190,7 @@ describe("admin map builder (MapLibre + terra-draw)", () => {
     const map = page.locator('[aria-label="Editable map canvas for the selected view"]');
     const mb = (await map.boundingBox())!;
 
-    // Pick a pin-free spot: a click landing on an editable marker selects it
-    // (its element stops propagation), silently disarming the draw.
-    const spot = await page.evaluate(({ w, h }) => {
-      const el = document.querySelector('[aria-label="Editable map canvas for the selected view"]')!;
-      const base = el.getBoundingClientRect();
-      const pins = [...document.querySelectorAll(".me-pin")].map((p) => {
-        const r = p.getBoundingClientRect();
-        return { x: r.x + r.width / 2 - base.x, y: r.y + r.height / 2 - base.y };
-      });
-      for (let fy = 0.2; fy <= 0.7; fy += 0.1) {
-        for (let fx = 0.15; fx <= 0.8; fx += 0.1) {
-          const x = w * fx;
-          const y = h * fy;
-          if (!pins.some((p) => Math.hypot(p.x - x, p.y - y) < 40)) return { x, y };
-        }
-      }
-      return { x: w * 0.25, y: h * 0.3 };
-    }, { w: mb.width, h: mb.height });
+    const spot = await clearSpot(mb);
 
     await page.click('button:has-text("Draw marker")');
     await page.mouse.click(mb.x + spot.x, mb.y + spot.y);
@@ -193,6 +221,147 @@ describe("admin map builder (MapLibre + terra-draw)", () => {
         await page.evaluate(
           (id) => fetch(`/api/admin/map-features?id=${encodeURIComponent(id)}`, { method: "DELETE" }),
           newId,
+        );
+      }
+    }
+  });
+
+  it("draws a line, switches it to a trail, and deletes it", async (ctx) => {
+    if (!tilesAvailable) return ctx.skip();
+    await openBuilder();
+    const mb = (await page
+      .locator('[aria-label="Editable map canvas for the selected view"]')
+      .boundingBox())!;
+    const spot = await clearSpot(mb);
+    const at = (dx: number, dy: number) =>
+      [mb.x + spot.x + dx, mb.y + spot.y + dy] as const;
+
+    await page.click('button:has-text("Draw line")');
+    // Paced clicks: the adapter discriminates double-clicks, so back-to-back
+    // synthetic clicks get partially swallowed.
+    const pts = [at(0, 0), at(90, 25), at(150, 95)];
+    for (const [x, y] of pts) {
+      await page.mouse.click(x, y);
+      await page.waitForTimeout(400);
+    }
+    await page.mouse.click(...pts[2]); // click the last point again to finish
+
+    await page.waitForSelector("text=Shape drawn", { timeout: 8_000 });
+    const newId =
+      (await page.locator("span.font-mono").filter({ hasText: /^feat-/ }).first().textContent())?.trim() ?? "";
+    expect(newId.startsWith("feat-")).toBe(true);
+
+    try {
+      await page.click('button:has-text("Save feature")');
+      await page.waitForSelector("text=Saved — live on the public map", { timeout: 10_000 });
+      const asLine = await getFeature(newId);
+      expect(asLine?.kind).toBe("line");
+      expect(asLine?.path?.length).toBeGreaterThanOrEqual(2);
+      expect(asLine?.polygon).toBeUndefined(); // exactly one geometry key
+
+      // line -> trail keeps the SAME LineString in the draw store, so the save
+      // must fall back to it rather than dropping the path (FR-EDIT-06).
+      await page.selectOption("select >> nth=0", "trail");
+      await page.click('button:has-text("Save feature")');
+      await page.waitForSelector("text=Saved — live on the public map", { timeout: 10_000 });
+      const asTrail = await getFeature(newId);
+      expect(asTrail?.kind).toBe("trail");
+      expect(asTrail?.path).toEqual(asLine!.path); // geometry survived the switch
+
+      await page.click('button:has-text("Delete feature")'); // dialog auto-accepted
+      await page.waitForSelector('text=Deleted "New line"', { timeout: 10_000 });
+      expect(await getFeature(newId)).toBeUndefined();
+    } finally {
+      if (await getFeature(newId)) {
+        await page.evaluate(
+          (id) => fetch(`/api/admin/map-features?id=${encodeURIComponent(id)}`, { method: "DELETE" }),
+          newId,
+        );
+      }
+    }
+  });
+
+  it("inserts a midpoint and right-click-deletes a vertex on a trail", async (ctx) => {
+    if (!tilesAvailable) return ctx.skip();
+    const pre = await (async () => {
+      await openBuilder();
+      return getFeature(TRAIL_ID);
+    })();
+    try {
+      await page.click('button:has-text("Explore Kingston")');
+      await page.click('button:has-text("Features (")');
+      await page.click(`li button:has-text("${TRAIL_TITLE}")`);
+      await page.locator(`input[value="${TRAIL_TITLE}"]`).first().waitFor({ timeout: 10_000 });
+
+      const before = await drawCoords(TRAIL_ID);
+      expect(before.length).toBe(pre!.path!.length);
+
+      // Midpoint insert: terra-draw renders midpoints as store features while a
+      // feature is selected; click one and the ring gains a vertex.
+      const mid = await page.evaluate(() => {
+        const w = window as unknown as {
+          __vkDraw?: { getSnapshot(): { properties: Record<string, unknown>; geometry: { type: string; coordinates: [number, number] } }[] };
+        };
+        const m = w.__vkDraw!.getSnapshot().find((f) => f.properties.midPoint);
+        return m ? m.geometry.coordinates : null;
+      });
+      expect(mid, "select mode must render midpoints").not.toBeNull();
+      const midPx = await atLngLat(mid as [number, number]);
+      await page.mouse.click(midPx.x, midPx.y);
+      const afterInsert = await drawCoords(TRAIL_ID);
+      expect(afterInsert.length).toBe(before.length + 1);
+
+      // Right-click a vertex to remove it, back to the original count.
+      const vtx = await atLngLat(afterInsert[1]);
+      await page.mouse.click(vtx.x, vtx.y, { button: "right" });
+      const afterDelete = await drawCoords(TRAIL_ID);
+      expect(afterDelete.length).toBe(before.length);
+
+      // Both gestures marked the draft dirty, and the edit persists as an OPEN
+      // [lat,lng] path of the same length.
+      await page.waitForSelector("text=unsaved changes", { timeout: 5_000 });
+      await page.click('button:has-text("Save feature")');
+      await page.waitForSelector("text=Saved — live on the public map", { timeout: 10_000 });
+      const post = await getFeature(TRAIL_ID);
+      expect(post!.path!.length).toBe(pre!.path!.length);
+      for (const [lat, lng] of post!.path!) {
+        expect(lat).toBeGreaterThan(47); // [lat,lng] order, not flipped
+        expect(lng).toBeLessThan(-122);
+      }
+    } finally {
+      if (pre) await putFeature(pre); // restore the seed geometry
+    }
+  });
+
+  it("creates and deletes a view", async (ctx) => {
+    if (!tilesAvailable) return ctx.skip();
+    await openBuilder();
+    const listViews = async () =>
+      (await page.evaluate(async () => (await (await fetch("/api/admin/map-views")).json()).views)) as {
+        id: string;
+        name: string;
+      }[];
+    const NAME = "E32 spec view";
+    let id = "";
+    try {
+      await page.click('button:has-text("+ New view")');
+      await page.fill('input[placeholder="e.g. Food & Drink"]', NAME);
+      await page.click('button:has-text("Save view")');
+      await page.waitForSelector(`button:has-text("${NAME}")`, { timeout: 10_000 });
+      const created = (await listViews()).find((v) => v.name === NAME);
+      expect(created, "the view must reach the API").toBeDefined();
+      id = created!.id;
+
+      // Saving makes it active, so Edit view targets it.
+      await page.click('button:has-text("✎ Edit view")');
+      await page.click('button:has-text("Delete view")'); // dialog auto-accepted
+      await page.waitForSelector("text=Deleted", { timeout: 10_000 });
+      expect((await listViews()).find((v) => v.id === id)).toBeUndefined();
+    } finally {
+      if (id && (await listViews()).some((v) => v.id === id)) {
+        await page.evaluate(
+          (vid) => fetch(`/api/admin/map-views?id=${encodeURIComponent(vid)}`, { method: "DELETE" }),
+          id,
         );
       }
     }

@@ -983,7 +983,11 @@ export function MapBuilder({
         // vacuously via buildFeature's stored-geometry fallback otherwise).
         // Inert unless the spec set the flag before load.
         if ((window as unknown as { __vkTestHooks?: boolean }).__vkTestHooks) {
-          (window as unknown as { __vkDraw?: unknown }).__vkDraw = draw;
+          const w = window as unknown as { __vkDraw?: unknown; __vkMap?: unknown };
+          w.__vkDraw = draw;
+          // The map too: vertex/midpoint gestures need lngLat -> pixel
+          // projection to know where to click.
+          w.__vkMap = map;
         }
 
         draw.on("finish", (finishedId, context) => {
