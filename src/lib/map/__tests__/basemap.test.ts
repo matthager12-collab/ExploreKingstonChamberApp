@@ -1,33 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
-import { BASEMAP, leafletBasemap, mapStyle, TILES_PMTILES_PATH } from "@/lib/map/basemap";
+import { describe, expect, it } from "vitest";
+import { mapStyle, TILES_PMTILES_PATH, VECTOR_ATTRIBUTION } from "@/lib/map/basemap";
 
-// Guards the single source of truth for the map base layer (E31 Phase 1).
-// When the vector swap lands (ADR-0006), these expectations change here, in one
-// place — that is the point of centralizing the config.
-describe("BASEMAP", () => {
-  it("is the OSM raster source shared by every map", () => {
-    expect(BASEMAP.url).toBe("https://tile.openstreetmap.org/{z}/{x}/{y}.png");
-    expect(BASEMAP.maxZoom).toBe(19);
-    expect(BASEMAP.attribution).toContain("OpenStreetMap");
-  });
-});
-
-describe("leafletBasemap", () => {
-  it("builds the tile layer from BASEMAP, options unchanged", () => {
-    const layer = { addTo: vi.fn() };
-    const tileLayer = vi.fn().mockReturnValue(layer);
-    const L = { tileLayer } as unknown as typeof import("leaflet");
-
-    const result = leafletBasemap(L);
-
-    expect(tileLayer).toHaveBeenCalledWith(BASEMAP.url, {
-      maxZoom: BASEMAP.maxZoom,
-      attribution: BASEMAP.attribution,
-    });
-    expect(result).toBe(layer);
-  });
-});
-
+// Guards the single source of truth for the map base layer. The vector swap
+// (E31, ADR-0006) landed and E32 removed the legacy raster config — these
+// expectations now describe the only base layer in the tree.
 describe("mapStyle (self-hosted vector base)", () => {
   const style = mapStyle(`https://example.test${TILES_PMTILES_PATH}`);
 
@@ -67,5 +43,10 @@ describe("mapStyle (self-hosted vector base)", () => {
   it("draws the recognizable base layers", () => {
     const ids = style.layers.map((l) => l.id);
     expect(ids).toEqual(expect.arrayContaining(["earth", "water", "roads", "buildings"]));
+  });
+
+  it("credits OSM (ODbL) and Protomaps on the vector source", () => {
+    expect(VECTOR_ATTRIBUTION).toContain("OpenStreetMap");
+    expect(VECTOR_ATTRIBUTION).toContain("Protomaps");
   });
 });

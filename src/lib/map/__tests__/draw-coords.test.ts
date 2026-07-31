@@ -39,6 +39,14 @@ describe("axis order", () => {
   it("wire-rounds on the way back in", () => {
     expect(toStoredPoint([-122.49832149, 47.79681251])).toEqual([47.796813, -122.498321]);
   });
+
+  it("wire-rounds on the way OUT too — over-precise stored data must stay editable", () => {
+    // terra-draw rejects coordinates above the adapter's precision; unrounded
+    // stored data (the APIs accept it) must be healed here, not dropped there.
+    expect(toGeoJsonPosition([47.7968124567, -122.4983214567])).toEqual([
+      -122.498321, 47.796812,
+    ]);
+  });
 });
 
 describe("paths (LineString)", () => {

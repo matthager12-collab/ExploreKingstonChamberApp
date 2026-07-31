@@ -3,44 +3,34 @@
 // The Map Builder (laptop-first) — the Chamber's map CMS.
 //
 // Layout: a compact VIEWS strip (pills + "New view" + features dropdown) sits
-// above a dominant leaflet+geoman CANVAS. The view edit form opens as a
+// above a dominant MapLibre + terra-draw CANVAS. The view edit form opens as a
 // dismissible overlay on the map's left edge; the selected-FEATURE form is a
 // floating drawer on the map's right edge (≥lg) or a plain block under the
 // map (<lg). The active view's built-in source layers (restaurants,
 // parking zones, street overlay) render as muted, non-interactive CONTEXT so
 // the admin can draw against them.
 //
-// Leaflet touches `window` at module scope, so it is imported dynamically
-// inside useEffect (same pattern as components/town-map.tsx and the parking
-// editor). Geoman's browser bundle reads the global `L`, so the import order
-// in the effect is: leaflet → window.L = L → geoman → create the map. Geoman's
-// CSS is a plain stylesheet import — safe at module top because this file is
-// client-only and Next extracts CSS at build time.
+// E32b (ADR-0006): the Leaflet + geoman stack is retired. Lines, trails, and
+// areas live in the terra-draw store (feature id = app feature id; color/kind
+// in properties drive data-driven styling); markers are MapLibre HTML markers.
+// Geometry read-back on save queries the draw snapshot (shapes) or the marker
+// (points) — vertex drags, whole-shape drags, and pin moves are all captured
+// at Save time, exactly as the live-layer read-back did before.
 //
-// Geometry read-back on save: the currently selected feature's live leaflet
-// layer is queried directly — marker.getLatLng() for markers, and
-// polyline/polygon.getLatLngs() (walked to a flat ring) for lines/trails/areas
-// — so any geoman vertex drag, whole-shape drag, or marker move is captured at
-// Save time (geoman's drag mixin mutates the layer's latlngs in place).
+// Terra-draw runs vertex editing AND whole-shape drag simultaneously, so the
+// old Reshape ⟷ Move toggle (a geoman-limitation workaround) is gone: drag a
+// corner to reshape, drag the shape body to move it.
 //
-// Moving vs reshaping: geoman can't run vertex editing and whole-layer drag on
-// the same shape at once (enableLayerDrag() disables edit mode), so selected
-// lines/areas get an explicit Reshape ⟷ Move toggle. Markers are simply
-// draggable while selected (pm.enable() on a marker enables layer drag).
+// Wire-format invariant (FR-EDIT-06): the API speaks stored [lat,lng] open
+// rings/paths, r6-rounded; terra-draw speaks GeoJSON [lng,lat] closed rings.
+// Every crossing goes through @/lib/map/draw-coords.
 
-import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
+import "maplibre-gl/dist/maplibre-gl.css";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import type {
-  LatLng,
-  Layer,
-  LayerGroup,
-  Map as LeafletMap,
-  Marker,
-  Polygon,
-  Polyline,
-} from "leaflet";
+import type { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
+import type { GeoJSONStoreFeatures, TerraDraw } from "terra-draw";
 import {
   MARKER_CATEGORIES,
   markerCategory,
@@ -57,6 +47,17 @@ import {
   type LabelShow,
   type LabelDir,
 } from "@/lib/map/types";
+import { mapStyle, TILES_PMTILES_PATH } from "@/lib/map/basemap";
+import { loadMapLibre, pmtilesUrl } from "@/lib/map/maplibre";
+import { editorIdStrategy, loadTerraDraw } from "@/lib/map/terradraw";
+import {
+  r6,
+  toGeoJsonPath,
+  toGeoJsonRing,
+  toStoredPath,
+  toStoredPoint,
+  toStoredRing,
+} from "@/lib/map/draw-coords";
 import { Badge } from "@/components/ui";
 
 /* ------------------------------------------------------------------ */
@@ -67,11 +68,6 @@ const KINGSTON_CENTER: [number, number] = [47.7985, -122.4975];
 
 // The canvas is the dominant element of the builder.
 const MAP_HEIGHT = "clamp(560px, 72vh, 900px)";
-
-// Leaflet pane for muted built-in context layers: below the overlay pane
-// (z 400) so drawn features always sit on top, and pointer-events none so
-// clicks and geoman draws pass straight through to the canvas.
-const CONTEXT_PANE = "builtin-context";
 
 const INPUT =
   "w-full rounded-lg border border-sand bg-white px-3 py-2 text-sm text-ink focus:border-tide focus:outline-none";
@@ -116,38 +112,17 @@ function shapeColor(f: { kind: FeatureKind; color?: string; parking?: { type?: s
   return parkingDrawColor(f) || f.color || defaultColor(f.kind);
 }
 
-const r6 = (n: number): number => Math.round(n * 1e6) / 1e6;
-
-function pointOf(ll: LatLng): [number, number] {
-  return [r6(ll.lat), r6(ll.lng)];
-}
-
-function ringToPath(ring: LatLng[]): [number, number][] {
-  return ring.map(pointOf);
-}
-
-/** polyline.getLatLngs() may nest one level (multi-polyline); take the first. */
-function flatLatLngs(raw: unknown): LatLng[] {
-  const arr = raw as LatLng[] | LatLng[][];
-  if (Array.isArray(arr) && arr.length && Array.isArray(arr[0])) {
-    return (arr as LatLng[][])[0];
-  }
-  return arr as LatLng[];
-}
-
-// Leaflet's .bindTooltip(string)/.setTooltipContent(string) assign innerHTML, so
-// any dynamic text (feature title / admin label) must be HTML-escaped first, or
-// an admin could self-XSS with e.g. `<img src=x onerror=…>` in a label field.
-function escHtml(s: string): string {
-  return s.replace(
-    /[&<>"']/g,
-    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c,
-  );
-}
-
 function randomId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
 }
+
+// Stored [lat,lng] view centers → MapLibre [lng,lat]. View ZOOMS pass through
+// unchanged: since E31 the public feature-map feeds stored zooms straight to
+// MapLibre, and this editor must frame views exactly as the public map does.
+// Hardcoded GESTURE zoom caps below are the old raster numbers minus 1
+// (256px raster → 512px vector tiles, same on-screen scale).
+const toLngLat = (p: readonly [number, number]): [number, number] => [p[1], p[0]];
+const MAX_ZOOM = 18;
 
 type Draft = {
   kind: FeatureKind;
@@ -213,39 +188,63 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 /* Marker / shape rendering                                            */
 /* ------------------------------------------------------------------ */
 
-/** divIcon showing the category emoji on a colored pin. */
-function markerIcon(
-  L: typeof import("leaflet"),
+/** Style an existing marker element in place (used at build and for the live
+ *  draft preview). Tooltip is textContent — no HTML, no XSS. */
+function styleMarkerEl(
+  el: HTMLElement,
   f: { category?: string; color?: string; parking?: { type?: string } | null; parkingType?: string },
   selected: boolean,
+  tooltip: string,
 ) {
   const cat = markerCategory(f.category);
-  const color = parkingDrawColor(f) || f.color || cat.color;
-  const size = selected ? 34 : 28;
-  return L.divIcon({
-    className: "",
-    html: `<span style="display:flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;border-radius:9999px;background:${color};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.45);font-size:${
-      selected ? 17 : 14
-    }px;line-height:1;">${cat.emoji}</span>`,
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
-  });
+  // classList, never `el.className =` — MapLibre's Marker adds its own
+  // positioning classes (maplibregl-marker …) to this element after
+  // construction, and wiping them breaks the marker's absolute positioning.
+  el.classList.add("me-pin");
+  el.classList.toggle("me-pin--selected", selected);
+  const dot = el.querySelector(".me-dot") as HTMLElement;
+  dot.style.background = parkingDrawColor(f) || f.color || cat.color;
+  dot.textContent = cat.emoji;
+  (el.querySelector(".me-tip") as HTMLElement).textContent = tooltip;
 }
 
-function shapeStyle(
-  f: { kind: FeatureKind; color?: string; parking?: { type?: string } | null; parkingType?: string },
-  selected: boolean,
-) {
-  const color = shapeColor(f);
-  const base = { color, weight: selected ? 5 : 3, opacity: 0.9 };
-  if (f.kind === "area") {
-    return { ...base, weight: selected ? 3 : 2, fillColor: color, fillOpacity: selected ? 0.4 : 0.25 };
-  }
-  if (f.kind === "trail") {
-    return { ...base, dashArray: "6 6" };
-  }
-  return base;
+function markerTooltip(f: {
+  title: string;
+  category?: string;
+  label?: MapFeature["label"];
+}): string {
+  return resolveLabel({ title: f.title, category: f.category, kind: "marker", label: f.label }).text;
 }
+
+/** The line/trail/area as a terra-draw store feature (id = feature id). */
+function shapeDrawFeature(f: MapFeature): GeoJSONStoreFeatures | null {
+  if ((f.kind === "line" || f.kind === "trail") && f.path && f.path.length >= 2) {
+    return {
+      id: f.id,
+      type: "Feature",
+      properties: { mode: "linestring", kind: f.kind, color: shapeColor(f) },
+      geometry: { type: "LineString", coordinates: toGeoJsonPath(f.path) },
+    } as GeoJSONStoreFeatures;
+  }
+  if (f.kind === "area" && f.polygon && f.polygon.length >= 3) {
+    return {
+      id: f.id,
+      type: "Feature",
+      properties: { mode: "polygon", kind: f.kind, color: shapeColor(f) },
+      geometry: { type: "Polygon", coordinates: [toGeoJsonRing(f.polygon)] },
+    } as GeoJSONStoreFeatures;
+  }
+  return null;
+}
+
+/** Stroke color for a terra-draw feature (shapes carry `color`). */
+function featureDrawColor(f: GeoJSONStoreFeatures): `#${string}` {
+  const c = f.properties?.color;
+  return (typeof c === "string" && /^#/.test(c) ? c : DEFAULT_LINE_COLOR) as `#${string}`;
+}
+
+const trailDash = (f: GeoJSONStoreFeatures): [number, number] | undefined =>
+  f.properties?.kind === "trail" ? [3, 3] : undefined;
 
 /* ------------------------------------------------------------------ */
 /* Built-in context layer styling (kept in sync with feature-map.tsx)  */
@@ -289,11 +288,11 @@ function streetStyle(rule: StreetRule): {
   color: string;
   weight: number;
   opacity: number;
-  dashArray?: string;
+  dashed?: boolean;
 } {
   switch (rule) {
     case "ferry-holding":
-      return { color: STREET_COLORS[rule], weight: 3, opacity: 0.45, dashArray: "4 6" };
+      return { color: STREET_COLORS[rule], weight: 3, opacity: 0.45, dashed: true };
     case "prohibited":
       return { color: STREET_COLORS[rule], weight: 4, opacity: 0.6 };
     case "free-2hr":
@@ -317,7 +316,7 @@ interface StreetData {
   segments: StreetSegment[];
 }
 
-/** Rounded teardrop divIcon html — same pin as the public feature-map. */
+/** Rounded teardrop html — same pin as the public feature-map, muted. */
 function contextPinHtml(emoji: string, ring: string): string {
   return `<div style="position:relative;transform:translate(-50%,-100%);">
     <div style="width:30px;height:30px;border-radius:50% 50% 50% 0;background:#fff;border:2px solid ${ring};box-shadow:0 2px 4px rgba(0,0,0,0.3);transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;">
@@ -351,17 +350,9 @@ const SOURCE_SHORT: Record<string, string> = {
   streets: "🛣",
 };
 
-/** Geoman's per-layer API (the browser bundle attaches `pm` to every layer). */
-type GeomanLayer = Layer & {
-  pm: {
-    enable: (opts?: Record<string, unknown>) => void;
-    disable: () => void;
-    enableLayerDrag: () => void;
-    disableLayerDrag: () => void;
-  };
-};
-
-type ShapeMode = "reshape" | "move";
+/** Everything one context render put on the map, so the next one (or unmount)
+ *  can clear it wholesale — the layerGroup's replacement. */
+type ContextHandles = { markers: MapLibreMarker[]; layerIds: string[]; sourceIds: string[] };
 
 export function MapBuilder({
   initialViews,
@@ -397,8 +388,6 @@ export function MapBuilder({
   const [msg, setMsg] = useState<Msg | null>(null);
   // Drawer visibility (≥lg). Collapsing keeps the selection + map editing.
   const [panelOpen, setPanelOpen] = useState(true);
-  // Reshape (vertex edit) vs Move (whole-shape drag) for the selected shape.
-  const [shapeMode, setShapeMode] = useState<ShapeMode>("reshape");
   // "Features (N)" dropdown in the strip above the map.
   const [featListOpen, setFeatListOpen] = useState(false);
   // Built-in context layers toggle (default ON).
@@ -408,14 +397,21 @@ export function MapBuilder({
   const [contextEpoch, setContextEpoch] = useState(0);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<LeafletMap | null>(null);
-  const leafletRef = useRef<typeof import("leaflet") | null>(null);
-  const layersRef = useRef(new Map<string, Layer>());
+  const mapRef = useRef<MapLibreMap | null>(null);
+  const maplibreRef = useRef<typeof import("maplibre-gl") | null>(null);
+  const drawRef = useRef<TerraDraw | null>(null);
+  // Marker-kind features on the canvas (shapes live in the terra-draw store).
+  const markersRef = useRef(new Map<string, MapLibreMarker>());
+  // Every feature id currently on the canvas (markers + draw-store shapes).
+  const canvasIdsRef = useRef(new Set<string>());
+  const hoverChipRef = useRef<HTMLDivElement | null>(null);
+  // True while WE mutate the draw store — terra-draw fires the same change
+  // events for API and user edits, and only user edits may mark dirty.
+  const suppressRef = useRef(false);
   // Ids drawn this session but never saved — deleting them skips the API.
   const unsavedIdsRef = useRef(new Set<string>());
-  // Muted built-in layers for the active view, grouped so a view switch
-  // clears and redraws them in one shot.
-  const contextGroupRef = useRef<LayerGroup | null>(null);
+  // Muted built-in context for the active view, cleared wholesale on redraw.
+  const contextRef = useRef<ContextHandles | null>(null);
   // Monotonic token guarding stale context fetches (view switched mid-flight).
   const contextSeqRef = useRef(0);
   // /geo/street-parking.json is static — fetch it once per mount.
@@ -428,19 +424,28 @@ export function MapBuilder({
   selectedIdRef.current = selectedId;
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
+  const drawingRef = useRef(drawing);
+  drawingRef.current = drawing;
   const activeViewIdRef = useRef(activeViewId);
   activeViewIdRef.current = activeViewId;
   const showAllRef = useRef(showAll);
   showAllRef.current = showAll;
   const showBuiltinsRef = useRef(showBuiltins);
   showBuiltinsRef.current = showBuiltins;
-  const shapeModeRef = useRef(shapeMode);
-  shapeModeRef.current = shapeMode;
   const selectRef = useRef<(id: string) => void>(() => {});
-  // Deletes a feature by id — used by the drawer button and the eraser tool.
-  const deleteRef = useRef<
-    (id: string, opts?: { confirm?: boolean; alreadyRemovedFromMap?: boolean }) => Promise<void>
-  >(async () => {});
+  const deleteRef = useRef<(id: string, opts?: { confirm?: boolean }) => Promise<void>>(
+    async () => {},
+  );
+
+  /** Run a programmatic draw-store mutation without tripping dirty tracking. */
+  function withStoreOps<T>(fn: () => T): T {
+    suppressRef.current = true;
+    try {
+      return fn();
+    } finally {
+      suppressRef.current = false;
+    }
+  }
 
   /* ---------------- which features belong on the canvas ---------------- */
 
@@ -452,118 +457,116 @@ export function MapBuilder({
 
   /* ---------------- imperative layer management ---------------- */
 
-  function makeLayer(f: MapFeature): Layer | null {
-    const L = leafletRef.current;
-    const map = mapRef.current;
-    if (!L || !map) return null;
-
-    let layer: Layer | null = null;
-    if (f.kind === "marker" && f.point) {
-      layer = L.marker(f.point, { icon: markerIcon(L, f, false) })
-        .addTo(map)
-        .bindTooltip(
-          escHtml(
-            resolveLabel({ title: f.title, category: f.category, kind: f.kind, label: f.label })
-              .text,
-          ),
-          { direction: "top", offset: [0, -14] },
-        );
-    } else if ((f.kind === "line" || f.kind === "trail") && f.path && f.path.length >= 2) {
-      layer = L.polyline(f.path, shapeStyle(f, false))
-        .addTo(map)
-        .bindTooltip(escHtml(f.title), { sticky: true });
-    } else if (f.kind === "area" && f.polygon && f.polygon.length >= 3) {
-      layer = L.polygon(f.polygon, shapeStyle(f, false))
-        .addTo(map)
-        .bindTooltip(escHtml(f.title), { sticky: true });
-    }
-    if (!layer) return null;
-
-    layer.on("click", () => selectRef.current(f.id));
-    // pm:* events fire only while geoman editing/dragging is enabled.
-    layer.on("pm:edit", () => setDirty(true));
-    layer.on("pm:markerdragend", () => setDirty(true));
-    layer.on("pm:dragend", () => setDirty(true)); // geoman whole-layer drag
-    layer.on("dragend", () => setDirty(true));
-    layersRef.current.set(f.id, layer);
-    return layer;
+  function markerEl(f: MapFeature): HTMLDivElement {
+    const wrap = document.createElement("div");
+    const dot = document.createElement("span");
+    dot.className = "me-dot";
+    const tip = document.createElement("span");
+    tip.className = "me-tip";
+    wrap.append(dot, tip);
+    styleMarkerEl(wrap, f, false, markerTooltip(f));
+    wrap.addEventListener("click", (ev) => {
+      ev.stopPropagation(); // don't also run the map's hit-test click
+      selectRef.current(f.id);
+    });
+    return wrap;
   }
 
-  function removeLayer(id: string) {
-    const layer = layersRef.current.get(id);
-    layer?.remove();
-    layersRef.current.delete(id);
+  function addFeatureToMap(f: MapFeature) {
+    const maplibregl = maplibreRef.current;
+    const map = mapRef.current;
+    const draw = drawRef.current;
+    if (!maplibregl || !map || !draw) return;
+
+    if (f.kind === "marker" && f.point) {
+      const marker = new maplibregl.Marker({ element: markerEl(f), anchor: "center" })
+        .setLngLat(toLngLat(f.point))
+        .addTo(map);
+      marker.on("dragend", () => setDirty(true));
+      markersRef.current.set(f.id, marker);
+      canvasIdsRef.current.add(f.id);
+      return;
+    }
+    const feat = shapeDrawFeature(f);
+    if (feat) {
+      const results = withStoreOps(() => draw.addFeatures([feat]));
+      // A rejected add means the shape silently won't render or edit here —
+      // surface it for diagnosis, and don't record it as on-canvas.
+      const rejected = results.find((r) => !r.valid);
+      if (rejected) {
+        console.warn(`map builder: feature "${f.id}" not editable — ${rejected.reason}`);
+        return;
+      }
+      canvasIdsRef.current.add(f.id);
+    }
+  }
+
+  function removeFeatureFromMap(id: string) {
+    const draw = drawRef.current;
+    if (draw?.hasFeature(id)) withStoreOps(() => draw.removeFeatures([id]));
+    markersRef.current.get(id)?.remove();
+    markersRef.current.delete(id);
+    canvasIdsRef.current.delete(id);
   }
 
   function renderCanvas() {
     // Rebuild every layer to reflect the current view filter + feature data.
-    for (const id of [...layersRef.current.keys()]) removeLayer(id);
-    for (const f of visibleFeatures()) makeLayer(f);
+    for (const id of [...canvasIdsRef.current]) removeFeatureFromMap(id);
+    for (const f of visibleFeatures()) addFeatureToMap(f);
     // Re-arm editing on the selected feature if it's still visible.
     const sel = selectedIdRef.current;
     if (sel) {
       const f = featuresRef.current.find((x) => x.id === sel);
-      if (f && layersRef.current.has(sel)) setEditing(sel, f, true);
+      if (f && canvasIdsRef.current.has(sel)) setEditing(sel, f, true);
     }
   }
 
   function setEditing(id: string, f: MapFeature, on: boolean) {
-    const layer = layersRef.current.get(id) as GeomanLayer | undefined;
-    const L = leafletRef.current;
-    if (!layer || !L) return;
     if (f.kind === "marker") {
-      (layer as unknown as Marker).setIcon(markerIcon(L, f, on));
-      // pm.enable() on a marker enables layer drag (move) automatically.
-      // preventMarkerRemoval stops geoman's right-click delete, which would
-      // silently desync the layer from app state.
-      if (on) layer.pm.enable({ draggable: true, preventMarkerRemoval: true });
-      else layer.pm.disable();
+      const marker = markersRef.current.get(id);
+      if (!marker) return;
+      styleMarkerEl(marker.getElement(), f, on, markerTooltip(f));
+      marker.setDraggable(on);
       return;
     }
-    (layer as unknown as Polyline).setStyle(shapeStyle(f, on));
-    if (!on) {
-      layer.pm.disableLayerDrag();
-      layer.pm.disable();
-      return;
+    const draw = drawRef.current;
+    if (draw?.hasFeature(id)) {
+      withStoreOps(() => (on ? draw.selectFeature(id) : draw.deselectFeature(id)));
     }
-    // Geoman can't vertex-edit and whole-layer-drag simultaneously, so the
-    // selected shape honors the Reshape ⟷ Move toggle.
-    if (shapeModeRef.current === "move") {
-      layer.pm.disable();
-      layer.pm.enableLayerDrag();
-    } else {
-      layer.pm.disableLayerDrag();
-      layer.pm.enable({ allowSelfIntersection: f.kind !== "area" });
-    }
-  }
-
-  /** Switch the selected shape between vertex editing and whole-shape drag. */
-  function pickShapeMode(mode: ShapeMode) {
-    if (shapeModeRef.current === mode) return;
-    shapeModeRef.current = mode;
-    setShapeMode(mode);
-    const id = selectedIdRef.current;
-    if (!id) return;
-    const f = featuresRef.current.find((x) => x.id === id);
-    if (f && f.kind !== "marker" && layersRef.current.has(id)) setEditing(id, f, true);
   }
 
   /* ---------------- built-in context layers ---------------- */
 
+  function clearContext() {
+    const map = mapRef.current;
+    const ctx = contextRef.current;
+    contextRef.current = null;
+    if (!ctx) return;
+    for (const m of ctx.markers) m.remove();
+    if (map) {
+      for (const lid of ctx.layerIds) if (map.getLayer(lid)) map.removeLayer(lid);
+      for (const sid of ctx.sourceIds) if (map.getSource(sid)) map.removeSource(sid);
+    }
+  }
+
+  /** First terra-draw layer id, so context canvas layers slot BELOW the drawn
+   *  features (the old context pane's z-ordering). */
+  function firstDrawLayerId(map: MapLibreMap): string | undefined {
+    return map.getStyle().layers?.find((l) => l.id.startsWith("td-"))?.id;
+  }
+
   // Renders the active view's built-in sources as muted, non-interactive
   // context (same colors/shapes as the public feature-map, opacity roughly
-  // halved, no popups). Everything lives in one layerGroup on a pane below
-  // the overlay pane with pointer-events disabled, so clicks and geoman draws
-  // pass straight through.
+  // halved, no popups). Canvas layers sit below the terra-draw layers;
+  // context pins are pointer-events-none DOM markers.
   async function renderContextLayers() {
     const seq = ++contextSeqRef.current;
-    contextGroupRef.current?.remove();
-    contextGroupRef.current = null;
+    clearContext();
 
-    const L = leafletRef.current;
+    const maplibregl = maplibreRef.current;
     const map = mapRef.current;
     const viewId = activeViewIdRef.current;
-    if (!L || !map || !viewId || !showBuiltinsRef.current) return;
+    if (!maplibregl || !map || !viewId || !showBuiltinsRef.current) return;
 
     try {
       const res = await fetch(`/api/map/${encodeURIComponent(viewId)}`);
@@ -586,75 +589,153 @@ export function MapBuilder({
         if (seq !== contextSeqRef.current || !mapRef.current) return;
       }
 
-      const muted = { pane: CONTEXT_PANE, interactive: false } as const;
-      const group = L.layerGroup();
+      const ctx: ContextHandles = { markers: [], layerIds: [], sourceIds: [] };
+      const before = firstDrawLayerId(map);
+      const addSource = (sid: string, features: GeoJSON.Feature[]) => {
+        map.addSource(sid, { type: "geojson", data: { type: "FeatureCollection", features } });
+        ctx.sourceIds.push(sid);
+      };
+      const addLayer = (layer: Parameters<MapLibreMap["addLayer"]>[0]) => {
+        map.addLayer(layer, before);
+        ctx.layerIds.push((layer as { id: string }).id);
+      };
+      const lineFeat = (path: [number, number][], props: Record<string, unknown>) =>
+        ({
+          type: "Feature",
+          properties: props,
+          geometry: { type: "LineString", coordinates: path.map(toLngLat) },
+        }) as GeoJSON.Feature;
+      const polyFeat = (ring: [number, number][], props: Record<string, unknown>) =>
+        ({
+          type: "Feature",
+          properties: props,
+          geometry: { type: "Polygon", coordinates: [ring.map(toLngLat)] },
+        }) as GeoJSON.Feature;
 
-      // Restaurants — same teardrop pins as the public map, dimmed.
+      // Restaurants — same teardrop pins as the public map, dimmed and inert.
       for (const r of data.builtins.restaurants ?? []) {
         const cat = markerCategory(r.category);
-        const icon = L.divIcon({
-          className: "",
-          html: contextPinHtml(cat.emoji, cat.color),
-          iconSize: [0, 0],
-        });
-        group.addLayer(L.marker([r.lat, r.lng], { ...muted, icon, opacity: 0.55 }));
+        const el = document.createElement("div");
+        el.className = "ctx-pin";
+        el.innerHTML = contextPinHtml(cat.emoji, cat.color);
+        ctx.markers.push(
+          new maplibregl.Marker({ element: el, anchor: "center" })
+            .setLngLat([r.lng, r.lat])
+            .addTo(map),
+        );
       }
 
       // Parking zones — polygons colored by rule (circle fallback).
+      const zonePolys: GeoJSON.Feature[] = [];
+      const zonePts: GeoJSON.Feature[] = [];
       for (const z of data.builtins.parkingZones ?? []) {
         const color = parkingColor(z.rule);
         if (z.polygon && z.polygon.length >= 3) {
-          group.addLayer(
-            L.polygon(z.polygon, {
-              ...muted,
-              color,
-              weight: 2,
-              opacity: 0.45,
-              fillColor: color,
-              fillOpacity: 0.18,
-            }),
-          );
+          zonePolys.push(polyFeat(z.polygon, { color }));
         } else {
-          group.addLayer(
-            L.circleMarker(z.center, {
-              ...muted,
-              radius: 7,
-              color: "#ffffff",
-              weight: 2,
-              opacity: 0.5,
-              fillColor: color,
-              fillOpacity: 0.45,
-            }),
-          );
+          zonePts.push({
+            type: "Feature",
+            properties: { color },
+            geometry: { type: "Point", coordinates: toLngLat(z.center) },
+          });
         }
       }
+      if (zonePolys.length) {
+        addSource("ctx-parking", zonePolys);
+        addLayer({
+          id: "ctx-parking-fill",
+          type: "fill",
+          source: "ctx-parking",
+          paint: { "fill-color": ["get", "color"], "fill-opacity": 0.18 },
+        });
+        addLayer({
+          id: "ctx-parking-line",
+          type: "line",
+          source: "ctx-parking",
+          paint: { "line-color": ["get", "color"], "line-width": 2, "line-opacity": 0.45 },
+        });
+      }
+      if (zonePts.length) {
+        addSource("ctx-parking-pts", zonePts);
+        addLayer({
+          id: "ctx-parking-pts",
+          type: "circle",
+          source: "ctx-parking-pts",
+          paint: {
+            "circle-radius": 7,
+            "circle-color": ["get", "color"],
+            "circle-opacity": 0.45,
+            "circle-stroke-color": "#ffffff",
+            "circle-stroke-width": 2,
+            "circle-stroke-opacity": 0.5,
+          },
+        });
+      }
 
-      // Streets — UGA boundary (dashed navy) + rule-styled segments.
+      // Streets — UGA boundary (dashed navy) + rule-styled segments. Segments
+      // are z-ordered by adding default/ferry-holding first (rule-colored on
+      // top), same rank order the layerGroup relied on.
       if (street) {
-        group.addLayer(
-          L.polygon(street.boundary, {
-            ...muted,
-            color: BOUNDARY_COLOR,
-            weight: 2,
-            dashArray: "6 6",
-            fill: false,
-            opacity: 0.5,
-          }),
-        );
+        addSource("ctx-boundary", [lineFeat(street.boundary, {})]);
+        addLayer({
+          id: "ctx-boundary",
+          type: "line",
+          source: "ctx-boundary",
+          paint: {
+            "line-color": BOUNDARY_COLOR,
+            "line-width": 2,
+            "line-opacity": 0.5,
+            "line-dasharray": [3, 3],
+          },
+        });
         const rank = (r: StreetRule) => (r === "default" ? 0 : r === "ferry-holding" ? 1 : 2);
         const ordered = [...street.segments].sort(
           (a, b) => rank(normalizeStreetRule(a.rule)) - rank(normalizeStreetRule(b.rule)),
         );
+        const solid: GeoJSON.Feature[] = [];
+        const dashed: GeoJSON.Feature[] = [];
         for (const seg of ordered) {
           const style = streetStyle(normalizeStreetRule(seg.rule));
-          group.addLayer(
-            L.polyline(seg.coords, { ...muted, ...style, opacity: style.opacity / 2 }),
+          (style.dashed ? dashed : solid).push(
+            lineFeat(seg.coords, {
+              color: style.color,
+              width: style.weight,
+              opacity: style.opacity / 2,
+              order: rank(normalizeStreetRule(seg.rule)),
+            }),
           );
+        }
+        if (dashed.length) {
+          addSource("ctx-streets-dashed", dashed);
+          addLayer({
+            id: "ctx-streets-dashed",
+            type: "line",
+            source: "ctx-streets-dashed",
+            paint: {
+              "line-color": ["get", "color"],
+              "line-width": ["get", "width"],
+              "line-opacity": ["get", "opacity"],
+              "line-dasharray": [2, 3],
+            },
+          });
+        }
+        if (solid.length) {
+          addSource("ctx-streets", solid);
+          addLayer({
+            id: "ctx-streets",
+            type: "line",
+            source: "ctx-streets",
+            layout: { "line-sort-key": ["get", "order"] },
+            paint: {
+              "line-color": ["get", "color"],
+              "line-width": ["get", "width"],
+              "line-opacity": ["get", "opacity"],
+            },
+          });
         }
       }
 
-      group.addTo(mapRef.current);
-      contextGroupRef.current = group;
+      contextRef.current = ctx;
     } catch {
       // Context is best-effort; drawing still works on the bare tiles.
     }
@@ -671,41 +752,42 @@ export function MapBuilder({
 
   /* ---------------- live draft color on the canvas ---------------- */
 
-  // Reflect the selected feature's draft color / parking type on its live map
-  // layer as the admin edits (before Save). Parking type wins over manual
-  // color; falls back to the stored feature otherwise.
+  // Reflect the selected feature's draft color / parking type on the canvas as
+  // the admin edits (before Save). Parking type wins over manual color; falls
+  // back to the stored feature otherwise. For shapes the color rides the draw
+  // feature's properties (an API update — never marks dirty).
   useEffect(() => {
     const id = selectedIdRef.current;
-    const L = leafletRef.current;
-    if (!id || !draft || !L) return;
+    if (!id || !draft) return;
     const f = featuresRef.current.find((x) => x.id === id);
-    const layer = layersRef.current.get(id);
-    if (!f || !layer) return;
-    const selected = true;
-    // Draft-driven color source for the style/icon helpers.
-    const styled = { kind: f.kind, color: draft.color, parkingType: draft.parkingType };
+    if (!f) return;
     if (f.kind === "marker") {
-      (layer as unknown as Marker).setIcon(
-        markerIcon(L, { category: draft.category, color: draft.color, parkingType: draft.parkingType }, selected),
-      );
-      // Live-preview the effective label text in the hover tooltip as the admin types.
-      (layer as unknown as Marker).setTooltipContent(
-        escHtml(
-          resolveLabel({
-            title: draft.title,
-            category: draft.category,
-            kind: "marker",
-            label: {
-              text: draft.labelText || undefined,
-              show: draft.labelShow,
-              dir: draft.labelDir,
-              priority: draft.labelPriority ? Number(draft.labelPriority) : undefined,
-            },
-          }).text,
-        ),
+      const marker = markersRef.current.get(id);
+      if (!marker) return;
+      styleMarkerEl(
+        marker.getElement(),
+        { category: draft.category, color: draft.color, parkingType: draft.parkingType },
+        true,
+        // Live-preview the effective label text in the hover tooltip.
+        resolveLabel({
+          title: draft.title,
+          category: draft.category,
+          kind: "marker",
+          label: {
+            text: draft.labelText || undefined,
+            show: draft.labelShow,
+            dir: draft.labelDir,
+            priority: draft.labelPriority ? Number(draft.labelPriority) : undefined,
+          },
+        }).text,
       );
     } else {
-      (layer as unknown as Polyline).setStyle(shapeStyle(styled, selected));
+      const draw = drawRef.current;
+      if (draw?.hasFeature(id)) {
+        draw.updateFeatureProperties(id, {
+          color: shapeColor({ kind: f.kind, color: draft.color, parkingType: draft.parkingType }),
+        });
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft?.color, draft?.parkingType, draft?.category, draft?.title, draft?.labelText]);
@@ -721,6 +803,11 @@ export function MapBuilder({
     if (dirtyRef.current && !window.confirm("Discard unsaved changes to the current feature?")) {
       return;
     }
+    // A single terra-draw mode runs at a time: selecting disarms an armed draw.
+    if (drawingRef.current) {
+      drawRef.current?.setMode("select");
+      setDrawing(null);
+    }
     if (prev) {
       const prevF = featuresRef.current.find((f) => f.id === prev);
       if (prevF) setEditing(prev, prevF, false);
@@ -729,20 +816,27 @@ export function MapBuilder({
     const f = featuresRef.current.find((x) => x.id === id);
     if (!f) return;
     setSelectedId(id);
+    // Eager mirror sync: same-tick callers (renderCanvas's re-arm, map
+    // events) must see the new selection before React re-renders.
+    selectedIdRef.current = id;
     setDraft(toDraft(f));
     setDirty(false);
     setMsg(null);
     setPanelOpen(true);
-    shapeModeRef.current = "reshape";
-    setShapeMode("reshape");
 
     const map = mapRef.current;
-    const layer = layersRef.current.get(id);
-    if (map && layer) {
+    const maplibregl = maplibreRef.current;
+    if (map && maplibregl && canvasIdsRef.current.has(id)) {
       if (f.kind === "marker" && f.point) {
-        map.setView(f.point, Math.max(map.getZoom(), 16));
-      } else if ("getBounds" in layer) {
-        map.fitBounds((layer as Polyline).getBounds(), { padding: [60, 60], maxZoom: 18 });
+        map.easeTo({ center: toLngLat(f.point), zoom: Math.max(map.getZoom(), 15) });
+      } else {
+        const ring = f.polygon ?? f.path ?? [];
+        if (ring.length > 0) {
+          const first = toLngLat(ring[0]);
+          const bounds = new maplibregl.LngLatBounds(first, first);
+          for (const p of ring) bounds.extend(toLngLat(p));
+          map.fitBounds(bounds, { padding: 60, maxZoom: 17 });
+        }
       }
       setEditing(id, f, true);
     }
@@ -756,10 +850,9 @@ export function MapBuilder({
       if (prevF) setEditing(prev, prevF, false);
     }
     setSelectedId(null);
+    selectedIdRef.current = null; // eager mirror sync (see select)
     setDraft(null);
     setDirty(false);
-    shapeModeRef.current = "reshape";
-    setShapeMode("reshape");
   }
 
   /* ---------------- map bootstrap ---------------- */
@@ -768,83 +861,237 @@ export function MapBuilder({
     let cancelled = false;
 
     (async () => {
-      const L = (await import("leaflet")).default;
-      // Geoman's browser bundle registers itself on the global L.
-      (window as unknown as { L?: typeof L }).L = L;
-      await import("@geoman-io/leaflet-geoman-free");
+      const [maplibregl, { terraDraw, TerraDrawMapLibreGLAdapter }] = await Promise.all([
+        loadMapLibre(),
+        loadTerraDraw(),
+      ]);
       // Guard: unmounted while loading, or already initialized (StrictMode).
       if (cancelled || !containerRef.current || mapRef.current) return;
 
-      leafletRef.current = L;
+      maplibreRef.current = maplibregl;
       const first = initialViews[0];
-      const map = L.map(containerRef.current, {
-        center: first ? first.center : KINGSTON_CENTER,
-        zoom: first ? first.zoom : 15,
+      const map = new maplibregl.Map({
+        container: containerRef.current,
+        style: mapStyle(pmtilesUrl(TILES_PMTILES_PATH)),
+        center: toLngLat(first ? first.center : KINGSTON_CENTER),
+        zoom: first ? first.zoom : 14,
+        maxZoom: MAX_ZOOM,
       });
       mapRef.current = map;
+      // Leaflet showed +/- buttons by default; MapLibre needs them explicitly.
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
 
-      // Pane for muted built-in context layers: between the tiles (z 200) and
-      // the overlay pane (z 400); pointer-events none so it never swallows a
-      // click or a geoman draw.
-      const pane = map.createPane(CONTEXT_PANE);
-      pane.style.zIndex = "350";
-      pane.style.pointerEvents = "none";
+      map.on("load", () => {
+        if (cancelled || mapRef.current !== map) return;
 
-      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      }).addTo(map);
+        const {
+          TerraDraw: TerraDrawCtor,
+          TerraDrawPointMode,
+          TerraDrawLineStringMode,
+          TerraDrawPolygonMode,
+          TerraDrawSelectMode,
+          ValidateNotSelfIntersecting,
+        } = terraDraw;
 
-      // Geoman controls — draw markers, polylines (line/trail), polygons (area).
-      map.pm.addControls({
-        position: "topleft",
-        drawMarker: true,
-        drawPolyline: true,
-        drawPolygon: true,
-        drawCircle: false,
-        drawRectangle: false,
-        drawCircleMarker: false,
-        drawText: false,
-        editMode: true,
-        dragMode: true,
-        cutPolygon: false,
-        rotateMode: false,
-        removalMode: true, // the trash tool: click a feature to delete it
-      });
-      map.pm.setGlobalOptions({ allowSelfIntersection: false });
+        const draw = new TerraDrawCtor({
+          adapter: new TerraDrawMapLibreGLAdapter({
+            map,
+            // r6 wire precision; also stops sidebar-press/map-release ghosts.
+            coordinatePrecision: 6,
+            ignoreMismatchedPointerEvents: true,
+          }),
+          idStrategy: editorIdStrategy(),
+          modes: [
+            new TerraDrawPointMode(),
+            new TerraDrawLineStringMode({
+              styles: {
+                lineStringColor: featureDrawColor,
+                lineStringWidth: 3,
+                lineStringDash: trailDash,
+                closingPointColor: "#ffffff",
+                closingPointOutlineColor: "#16405e",
+                closingPointOutlineWidth: 2,
+              },
+            }),
+            new TerraDrawPolygonMode({
+              validation: (feature, { updateType }) =>
+                updateType === "finish" || updateType === "commit"
+                  ? ValidateNotSelfIntersecting(feature)
+                  : { valid: true },
+              styles: {
+                fillColor: featureDrawColor,
+                fillOpacity: 0.25,
+                outlineColor: featureDrawColor,
+                outlineWidth: 2,
+                closingPointColor: "#ffffff",
+                closingPointOutlineColor: "#16405e",
+                closingPointOutlineWidth: 2,
+              },
+            }),
+            new TerraDrawSelectMode({
+              // Selection is driven by the app (dropdown + hit-test click), so
+              // the dirty-discard confirm stays authoritative.
+              allowManualSelection: false,
+              allowManualDeselection: false,
+              // Handle grab radius. The 40px default swallows entire short
+              // lines, making a whole-shape body drag unreachable; 24px keeps
+              // handles easy on a laptop while leaving line bodies grabbable.
+              pointerDistance: 24,
+              keyEvents: { deselect: null, delete: null, rotate: null, scale: null },
+              flags: {
+                linestring: {
+                  feature: {
+                    draggable: true,
+                    // Lines/trails may self-intersect while reshaping (the old
+                    // edit-time rule); areas may not.
+                    selfIntersectable: true,
+                    coordinates: { midpoints: true, draggable: true, deletable: true },
+                  },
+                },
+                polygon: {
+                  feature: {
+                    draggable: true,
+                    selfIntersectable: false,
+                    coordinates: { midpoints: true, draggable: true, deletable: true },
+                  },
+                },
+              },
+              styles: {
+                selectedLineStringColor: featureDrawColor,
+                selectedLineStringWidth: 5,
+                selectedLineStringDash: trailDash,
+                selectedPolygonColor: featureDrawColor,
+                selectedPolygonFillOpacity: 0.4,
+                selectedPolygonOutlineColor: featureDrawColor,
+                selectedPolygonOutlineWidth: 3,
+                selectionPointColor: "#ffffff",
+                selectionPointOutlineColor: "#16405e",
+                selectionPointOutlineWidth: 2,
+                selectionPointWidth: 6,
+                midPointColor: "#ffffff",
+                midPointOutlineColor: "#16405e",
+                midPointWidth: 4,
+              },
+            }),
+          ],
+        });
+        draw.start();
+        draw.setMode("select");
+        drawRef.current = draw;
+        // Test-only hook: the server-tier spec must be able to prove features
+        // actually entered the draw store (its no-touch round-trip would pass
+        // vacuously via buildFeature's stored-geometry fallback otherwise).
+        // Inert unless the spec set the flag before load.
+        if ((window as unknown as { __vkTestHooks?: boolean }).__vkTestHooks) {
+          const w = window as unknown as { __vkDraw?: unknown; __vkMap?: unknown };
+          w.__vkDraw = draw;
+          // The map too: vertex/midpoint gestures need lngLat -> pixel
+          // projection to know where to click.
+          w.__vkMap = map;
+        }
 
-      map.on("pm:create", (e: { shape: string; layer: Layer }) => {
-        handleDrawnRef.current(e.shape, e.layer);
-      });
-
-      // Eraser tool removed a layer — reverse-look it up and delete the
-      // matching feature (context layers are non-interactive, so they never
-      // fire this; an untracked half-drawn layer is ignored).
-      map.on("pm:remove", (e: { layer: Layer }) => {
-        let removedId: string | null = null;
-        for (const [fid, layer] of layersRef.current) {
-          if (layer === e.layer) {
-            removedId = fid;
-            break;
+        draw.on("finish", (finishedId, context) => {
+          if (
+            context.action === "draw" &&
+            (context.mode === "point" || context.mode === "linestring" || context.mode === "polygon")
+          ) {
+            handleDrawnRef.current(context.mode, String(finishedId));
+            return;
           }
-        }
-        if (removedId) {
-          void deleteRef.current(removedId, { confirm: false, alreadyRemovedFromMap: true });
-        }
+          // Vertex/midpoint drag or whole-shape drag finished.
+          if (context.action === "dragCoordinate" || context.action === "dragFeature") {
+            setDirty(true);
+          }
+        });
+        // Geometry edits that don't end in a drag (right-click vertex delete,
+        // midpoint insert) — user-driven updates to the selected feature only.
+        draw.on("change", (ids, type, context) => {
+          if (suppressRef.current || type !== "update") return;
+          if (context && "origin" in context && context.origin === "api") return;
+          if (context?.target === "properties") return;
+          const sel = selectedIdRef.current;
+          if (sel && ids.some((i) => String(i) === sel)) setDirty(true);
+        });
+
+        // Click-to-select via hit-test (manual selection is disabled above).
+        map.on("click", (e) => {
+          const d = drawRef.current;
+          if (!d || drawingRef.current) return;
+          const hit = d
+            .getFeaturesAtLngLat(e.lngLat, {
+              pointerDistance: 10,
+              ignoreSelectFeatures: false,
+              ignoreCoordinatePoints: true,
+              ignoreClosingPoints: true,
+              ignoreSnappingPoints: true,
+            })
+            .find(
+              (x) => x.properties?.mode === "linestring" || x.properties?.mode === "polygon",
+            );
+          if (hit?.id != null) selectRef.current(String(hit.id));
+        });
+
+        // Hover: title chip + pointer cursor over shapes (the Leaflet sticky
+        // tooltip's replacement). Markers carry their own CSS tooltip.
+        const chip = document.createElement("div");
+        chip.className = "me-hover";
+        chip.style.display = "none";
+        map.getContainer().appendChild(chip);
+        hoverChipRef.current = chip;
+        map.on("mousemove", (e) => {
+          const d = drawRef.current;
+          if (!d || drawingRef.current) {
+            chip.style.display = "none";
+            return;
+          }
+          const hit = d
+            .getFeaturesAtLngLat(e.lngLat, {
+              pointerDistance: 10,
+              ignoreSelectFeatures: false,
+              ignoreCoordinatePoints: true,
+              ignoreClosingPoints: true,
+              ignoreSnappingPoints: true,
+            })
+            .find(
+              (x) => x.properties?.mode === "linestring" || x.properties?.mode === "polygon",
+            );
+          const f = hit ? featuresRef.current.find((x) => x.id === String(hit.id)) : undefined;
+          if (f) {
+            chip.textContent = f.title;
+            chip.style.display = "block";
+            chip.style.left = `${e.point.x + 12}px`;
+            chip.style.top = `${e.point.y + 12}px`;
+            map.getCanvas().style.cursor = "pointer";
+          } else {
+            chip.style.display = "none";
+            map.getCanvas().style.cursor = "";
+          }
+        });
+
+        renderCanvas();
+        setMapReady(true);
       });
 
-      renderCanvas();
-      setMapReady(true);
+      requestAnimationFrame(() => mapRef.current?.resize());
     })();
 
     return () => {
       cancelled = true;
       contextSeqRef.current++; // invalidate in-flight context fetches
+      clearContext();
+      try {
+        drawRef.current?.stop();
+      } catch {
+        // stop() throws if the adapter never registered — nothing to undo
+      }
+      drawRef.current = null;
+      for (const m of markersRef.current.values()) m.remove();
+      markersRef.current.clear();
+      canvasIdsRef.current.clear();
+      hoverChipRef.current?.remove();
+      hoverChipRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
-      layersRef.current.clear();
-      contextGroupRef.current = null;
     };
     // Features are managed imperatively after mount; re-running would tear the
     // map down mid-edit.
@@ -853,41 +1100,39 @@ export function MapBuilder({
 
   /* ---------------- draw a new feature ---------------- */
 
-  const handleDrawnRef = useRef<(shape: string, layer: Layer) => void>(() => {});
-  handleDrawnRef.current = (shape: string, layer: Layer) => {
+  const handleDrawnRef = useRef<(mode: string, tdId: string) => void>(() => {});
+  handleDrawnRef.current = (mode: string, tdId: string) => {
     setDrawing(null);
-    const L = leafletRef.current;
+    const draw = drawRef.current;
     const map = mapRef.current;
-    if (!L || !map) return;
+    if (!draw || !map) return;
+    draw.setMode("select");
 
-    // Infer kind + geometry from the drawn shape.
+    const feat = draw.getSnapshotFeature(tdId);
+    // Re-added under the feature's own id via addFeatureToMap so wiring is
+    // uniform.
+    withStoreOps(() => draw.removeFeatures([tdId]));
+    if (!feat) return;
+
+    // Infer kind + geometry from the drawn mode.
     let kind: FeatureKind;
     const partial: Partial<MapFeature> = {};
-    if (shape === "Marker") {
+    if (mode === "point" && feat.geometry.type === "Point") {
       kind = "marker";
-      partial.point = pointOf((layer as Marker).getLatLng());
-    } else if (shape === "Line") {
+      partial.point = toStoredPoint(feat.geometry.coordinates);
+    } else if (mode === "linestring" && feat.geometry.type === "LineString") {
       kind = "line"; // admin can switch to "trail" in the form
-      const path = ringToPath(flatLatLngs((layer as Polyline).getLatLngs()));
-      if (path.length < 2) {
-        layer.remove();
-        return;
-      }
+      const path = toStoredPath(feat.geometry.coordinates);
+      if (path.length < 2) return;
       partial.path = path;
-    } else if (shape === "Polygon") {
+    } else if (mode === "polygon" && feat.geometry.type === "Polygon") {
       kind = "area";
-      const poly = ringToPath(flatLatLngs((layer as Polygon).getLatLngs()));
-      if (poly.length < 3) {
-        layer.remove();
-        return;
-      }
+      const poly = toStoredRing(feat.geometry.coordinates[0]);
+      if (poly.length < 3) return;
       partial.polygon = poly;
     } else {
-      layer.remove();
       return;
     }
-
-    layer.remove(); // re-added via makeLayer so wiring is uniform
 
     const targetView = activeViewIdRef.current;
     const id = randomId("feat");
@@ -901,8 +1146,16 @@ export function MapBuilder({
     unsavedIdsRef.current.add(id);
     featuresRef.current = [...featuresRef.current, f];
     setFeatures(featuresRef.current);
-    makeLayer(f);
+    addFeatureToMap(f);
+    const before = selectedIdRef.current;
     select(id);
+    if (selectedIdRef.current === before) {
+      // The dirty-discard confirm was declined: hand the editing handles back
+      // to the still-selected feature (arming the draw had dropped them).
+      const prev = before ? featuresRef.current.find((x) => x.id === before) : undefined;
+      if (before && prev) setEditing(before, prev, true);
+      return;
+    }
     setDirty(true);
     setMsg({
       kind: "ok",
@@ -913,16 +1166,18 @@ export function MapBuilder({
   };
 
   function toggleDraw(kind: FeatureKind) {
-    const map = mapRef.current;
-    if (!map) return;
+    const draw = drawRef.current;
+    if (!draw) return;
     if (drawing === kind) {
-      map.pm.disableDraw();
+      draw.setMode("select");
       setDrawing(null);
+      // Arming the draw dropped the selection's handles — hand them back.
+      const sel = selectedIdRef.current;
+      const f = sel ? featuresRef.current.find((x) => x.id === sel) : undefined;
+      if (sel && f) setEditing(sel, f, true);
       return;
     }
-    map.pm.disableDraw();
-    const geomanShape = kind === "marker" ? "Marker" : kind === "area" ? "Polygon" : "Line";
-    map.pm.enableDraw(geomanShape);
+    draw.setMode(kind === "marker" ? "point" : kind === "area" ? "polygon" : "linestring");
     setDrawing(kind);
     setMsg({
       kind: "ok",
@@ -951,30 +1206,32 @@ export function MapBuilder({
     setMsg(null);
   }
 
-  /** The draft feature with geometry read back from its live map layer. */
+  /** The draft feature with geometry read back from the draw store / marker. */
   function buildFeature(): MapFeature | null {
     if (!draft || !selectedId) return null;
     const existing = featuresRef.current.find((f) => f.id === selectedId);
     if (!existing) return null;
 
-    const layer = layersRef.current.get(selectedId);
     const kind = draft.kind;
 
-    // Read geometry back from the live layer where its shape matches the kind;
-    // fall back to the stored geometry otherwise (e.g. line ↔ trail switch
-    // keeps the same polyline layer, so its path is still valid). Geoman's
-    // vertex edits AND whole-layer drags both mutate the live layer's latlngs,
-    // so dragged positions are captured here too.
+    // Read geometry back where its shape matches the kind; fall back to the
+    // stored geometry otherwise (e.g. line ↔ trail switch keeps the same
+    // LineString in the draw store, so its path is still valid). Vertex drags,
+    // whole-shape drags, and pin moves are all captured here.
     let point = existing.point;
     let path = existing.path;
     let polygon = existing.polygon;
-    if (layer) {
-      if (kind === "marker" && "getLatLng" in layer) {
-        point = pointOf((layer as Marker).getLatLng());
-      } else if ((kind === "line" || kind === "trail") && "getLatLngs" in layer) {
-        path = ringToPath(flatLatLngs((layer as Polyline).getLatLngs()));
-      } else if (kind === "area" && "getLatLngs" in layer) {
-        polygon = ringToPath(flatLatLngs((layer as Polygon).getLatLngs()));
+    const marker = markersRef.current.get(selectedId);
+    if (kind === "marker" && marker) {
+      const ll = marker.getLngLat();
+      point = toStoredPoint([ll.lng, ll.lat]);
+    }
+    const snap = drawRef.current?.getSnapshotFeature(selectedId);
+    if (snap) {
+      if ((kind === "line" || kind === "trail") && snap.geometry.type === "LineString") {
+        path = toStoredPath(snap.geometry.coordinates);
+      } else if (kind === "area" && snap.geometry.type === "Polygon") {
+        polygon = toStoredRing(snap.geometry.coordinates[0]);
       }
     }
 
@@ -1085,10 +1342,10 @@ export function MapBuilder({
 
       // Rebuild this feature's layer so color/emoji/geometry reflect the saved
       // record; drop it if it no longer belongs on the current view filter.
-      removeLayer(saved.id);
+      removeFeatureFromMap(saved.id);
       const onCanvas = visibleFeatures().some((f) => f.id === saved.id);
       if (onCanvas) {
-        makeLayer(saved);
+        addFeatureToMap(saved);
         setEditing(saved.id, saved, true);
       }
       setDraft(toDraft(saved));
@@ -1103,16 +1360,11 @@ export function MapBuilder({
   }
 
   /**
-   * Delete a feature by id. Used by the drawer "Delete" button (confirm) and
-   * the toolbar eraser tool (no confirm; geoman already pulled the layer off
-   * the map, so pass alreadyRemovedFromMap). Seed features are tombstoned
-   * server-side, not erased; unsaved drafts just drop locally.
+   * Delete a feature by id (drawer "Delete" button). Seed features are
+   * tombstoned server-side, not erased; unsaved drafts just drop locally.
    */
-  async function deleteFeatureById(
-    id: string,
-    opts: { confirm?: boolean; alreadyRemovedFromMap?: boolean } = {},
-  ) {
-    const { confirm = true, alreadyRemovedFromMap = false } = opts;
+  async function deleteFeatureById(id: string, opts: { confirm?: boolean } = {}) {
+    const { confirm = true } = opts;
     const f = featuresRef.current.find((x) => x.id === id);
     if (!f) return;
     if (confirm && !window.confirm(`Delete "${f.title}" from the map? (Seed features stay hidden, not erased.)`)) {
@@ -1130,19 +1382,10 @@ export function MapBuilder({
         if (!res.ok && res.status !== 404) {
           const data = (await res.json()) as { error?: string };
           setMsg({ kind: "error", text: data.error ?? "Could not delete the feature." });
-          // Server refused — put the erased layer back so state stays honest.
-          if (alreadyRemovedFromMap) {
-            layersRef.current.delete(id);
-            renderCanvas();
-          }
           return;
         }
       } catch {
         setMsg({ kind: "error", text: "Could not reach the server — is the app running?" });
-        if (alreadyRemovedFromMap) {
-          layersRef.current.delete(id);
-          renderCanvas();
-        }
         return;
       } finally {
         setSaving(false);
@@ -1151,8 +1394,7 @@ export function MapBuilder({
 
     const title = f.title;
     if (selectedIdRef.current === id) deselect();
-    if (alreadyRemovedFromMap) layersRef.current.delete(id);
-    else removeLayer(id);
+    removeFeatureFromMap(id);
     unsavedIdsRef.current.delete(id);
     featuresRef.current = featuresRef.current.filter((x) => x.id !== id);
     setFeatures(featuresRef.current);
@@ -1219,6 +1461,12 @@ export function MapBuilder({
 
   function pickActiveView(id: string) {
     if (dirtyRef.current && !window.confirm("Discard unsaved feature changes?")) return;
+    // renderCanvas's re-arm path switches terra-draw into select mode; keep
+    // the Draw buttons honest by disarming an in-flight draw first.
+    if (drawingRef.current) {
+      drawRef.current?.setMode("select");
+      setDrawing(null);
+    }
     deselect();
     setActiveViewId(id);
     activeViewIdRef.current = id;
@@ -1230,12 +1478,16 @@ export function MapBuilder({
     // Recenter on the picked view, then redraw the filtered canvas.
     const map = mapRef.current;
     const view = views.find((v) => v.id === id);
-    if (map && view) map.setView(view.center, view.zoom);
+    if (map && view) map.jumpTo({ center: toLngLat(view.center), zoom: view.zoom });
     renderCanvas();
   }
 
   function toggleShowAll() {
     if (dirtyRef.current && !window.confirm("Discard unsaved feature changes?")) return;
+    if (drawingRef.current) {
+      drawRef.current?.setMode("select");
+      setDrawing(null);
+    }
     deselect();
     const next = !showAll;
     setShowAll(next);
@@ -1245,12 +1497,19 @@ export function MapBuilder({
 
   /* ---------------- view create / edit ---------------- */
 
-  function newView() {
+  function currentMapCenterZoom(): { center: [number, number]; zoom: number } {
     const map = mapRef.current;
-    const center: [number, number] = map
-      ? [r6(map.getCenter().lat), r6(map.getCenter().lng)]
-      : KINGSTON_CENTER;
-    const zoom = map ? map.getZoom() : 15;
+    if (!map) return { center: KINGSTON_CENTER, zoom: 15 };
+    const c = map.getCenter();
+    return {
+      center: [r6(c.lat), r6(c.lng)],
+      // MapLibre zooms are fractional; the stored view zoom is an int 10–19.
+      zoom: Math.min(19, Math.max(10, Math.round(map.getZoom()))),
+    };
+  }
+
+  function newView() {
+    const { center, zoom } = currentMapCenterZoom();
     setViewEditId(null);
     setViewDraft({ name: "", description: "", center, zoom, sources: [], published: false });
     setViewMsg(null);
@@ -1289,12 +1548,8 @@ export function MapBuilder({
   }
 
   function useCurrentCenter() {
-    const map = mapRef.current;
-    if (!map) return;
-    patchView({
-      center: [r6(map.getCenter().lat), r6(map.getCenter().lng)],
-      zoom: map.getZoom(),
-    });
+    if (!mapRef.current) return;
+    patchView(currentMapCenterZoom());
   }
 
   async function saveView() {
@@ -1404,39 +1659,11 @@ export function MapBuilder({
           Drag the pin on the map to move it, then Save.
         </p>
       ) : (
-        <div>
-          <span className="text-sm font-medium text-ink">Editing mode</span>
-          <div className="mt-1.5 flex gap-2">
-            <button
-              type="button"
-              onClick={() => pickShapeMode("reshape")}
-              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                shapeMode === "reshape"
-                  ? "border-tide bg-tide/10 text-tide-deep"
-                  : "border-sand bg-white text-ink-soft hover:bg-shell"
-              }`}
-            >
-              Reshape (drag points)
-            </button>
-            <button
-              type="button"
-              onClick={() => pickShapeMode("move")}
-              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                shapeMode === "move"
-                  ? "border-tide bg-tide/10 text-tide-deep"
-                  : "border-sand bg-white text-ink-soft hover:bg-shell"
-              }`}
-            >
-              Move whole shape
-            </button>
-          </div>
-          {shapeMode === "reshape" && (
-            <p className="mt-1.5 rounded-lg bg-shell/70 px-3 py-2 text-xs text-ink-soft">
-              Drag a point to move it. Click a faint <b>＋</b> midpoint to add a point.
-              Right-click (or two-finger tap) a point to remove it. Then Save.
-            </p>
-          )}
-        </div>
+        <p className="rounded-lg bg-shell/70 px-3 py-2 text-xs text-ink-soft">
+          Drag a point to move it. Click a faint <b>＋</b> midpoint to add a point.
+          Right-click a point to remove it. Drag anywhere else on the shape to move
+          the whole thing. Then Save.
+        </p>
       )}
 
       <Field label="Kind">
@@ -1893,6 +2120,7 @@ export function MapBuilder({
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
+      <style>{ME_CSS}</style>
       {/* ---------------- views strip ---------------- */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-semibold tracking-wide text-sound-deep uppercase">Views</span>
@@ -2065,10 +2293,9 @@ export function MapBuilder({
           aria-label="Editable map canvas for the selected view"
         />
 
-        {/* View edit panel — dismissible overlay on the map's left edge,
-            offset past the geoman toolbar. */}
+        {/* View edit panel — dismissible overlay on the map's left edge. */}
         {viewDraft && (
-          <div className="absolute top-4 left-14 z-10 flex max-h-[calc(100%-2rem)] w-80 max-w-[calc(100%-5rem)] flex-col overflow-hidden rounded-2xl border border-sand bg-white/95 shadow-xl backdrop-blur">
+          <div className="absolute top-4 left-3 z-10 flex max-h-[calc(100%-2rem)] w-80 max-w-[calc(100%-5rem)] flex-col overflow-hidden rounded-2xl border border-sand bg-white/95 shadow-xl backdrop-blur">
             <div className="flex items-center justify-between gap-2 border-b border-sand px-4 py-2">
               <span className="text-xs font-semibold tracking-wide text-sound-deep uppercase">
                 {viewEditId ? "Edit view" : "New view"}
@@ -2117,11 +2344,11 @@ export function MapBuilder({
       </div>
 
       <p className="text-xs text-ink-soft">
-        Draw with the buttons above (or geoman’s toolbar, top-left). Click any feature to select
-        it — drag its vertices (or switch to “Move whole shape”), drag marker pins, then Save.
-        To remove a point while reshaping, right-click it; to delete a whole feature, select it
-        and hit <b>Delete</b>, or use the trash (🗑) tool in the toolbar and click the feature.
-        “Trail” and “Line” use the same polyline tool; switch between them in the feature form.
+        Draw with the buttons above. Click any feature to select it — drag its vertices,
+        drag the shape body to move the whole thing, drag marker pins, then Save. To remove
+        a point while reshaping, right-click it; to delete a whole feature, select it and
+        hit <b>Delete</b>. “Trail” and “Line” use the same polyline tool; switch between
+        them in the feature form.
       </p>
 
       {!selectedFeature && msg && (
@@ -2140,3 +2367,50 @@ export function MapBuilder({
     </div>
   );
 }
+
+const ME_CSS = `
+.me-pin { position: relative; width: 28px; height: 28px; cursor: pointer; }
+.me-pin--selected { width: 34px; height: 34px; }
+.me-dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.45);
+  font-size: 14px;
+  line-height: 1;
+}
+.me-pin--selected .me-dot { font-size: 17px; }
+.me-tip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 6px);
+  transform: translateX(-50%);
+  display: none;
+  white-space: nowrap;
+  font: 600 11px/1.2 system-ui, -apple-system, sans-serif;
+  color: #fff;
+  background: #16405e;
+  border-radius: 3px;
+  padding: 2px 6px;
+}
+.me-pin:hover .me-tip { display: block; }
+.me-hover {
+  position: absolute;
+  z-index: 30;
+  pointer-events: none;
+  white-space: nowrap;
+  font: 600 11px/1.2 system-ui, -apple-system, sans-serif;
+  color: #fff;
+  background: #16405e;
+  border-radius: 3px;
+  padding: 2px 6px;
+}
+/* 0x0 wrapper: anchor "center" then pins the ORIGIN at the point, and the
+   teardrop's own translate(-50%,-100%) puts its TIP there — the same geometry
+   Leaflet's iconSize [0,0] gave the public map's context pins. */
+.ctx-pin { width: 0; height: 0; pointer-events: none; opacity: 0.55; }
+`;
