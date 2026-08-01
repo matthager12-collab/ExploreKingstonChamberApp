@@ -1561,6 +1561,43 @@ Yes / No / Partly / Not checked), plus notes, a verified-on date, and a source.
 - The venue-audit *programme* that would produce verified facts at scale is
   deliberately deferred — see `BACKLOG.md`.
 
+### 14.5 Edmonds-side parking (the walk-on section on `/parking`)
+
+**Where the words live:** Admin → Site content → **Parking — Edmonds side**
+(the `edmonds.*` copy block). Names, source links and directions destinations
+live in `src/lib/data/edmonds-parking.ts` (a deploy). The walk-on fare in the
+section is the same §14.1 fares-record row every other page quotes — never
+type a fare figure into the Edmonds copy.
+
+**No map, on purpose:** the self-hosted tiles cover downtown Kingston only;
+Edmonds is outside the bbox (widening it is an ADR-0006 parameter decision).
+The section is cards with Google-Maps directions links instead.
+
+**Time-sensitive facts to re-verify (research banked 2026-07-31, in
+`EDMONDS-PARKING-RESEARCH-2026-07-31.md` beside the repo):**
+
+- **U-Park rates drift.** WSDOT's Edmonds terminal page said $15–$20 in July
+  2026; older sources describe different tiers. The visitor copy hedges to
+  WSDOT's range and says "verify the posted rate on site" — keep that hedge
+  unless someone photographs the rate board. Multi-day parking there is
+  UNVERIFIED anywhere; the copy says "call first" ((206) 284-9797).
+- **Sound Transit paid parking, possibly 2027 (ST3).** "No date certain" for
+  Edmonds as of the research. If ST starts charging at Edmonds Station, the
+  lot stays transit-only — but re-check the wording of the do-not-park item.
+- **The Sounder lot may refill through 2026** as ridership returns; it ran
+  30–50% occupied when researched. Its rule (transit passengers only, 24-hr
+  max, impound) is what the section cites, not its emptiness.
+- **Multi-day gap:** the section says plainly that no verified multi-day
+  option exists near the Edmonds terminal. Do not soften that without a
+  published source — an invented option is a towing bill with our name on it.
+- Re-verification gotcha: `myedmondsnews.com` and `edmonds.municipal.codes`
+  return 403 to plain fetchers — use a browser user-agent (the links work
+  fine for visitors).
+
+Ground-truth items Mat can close on site (rate-board photo, U-Park multi-day
+tolerance, Port commuter-permit price, Brackett's posted hours) are listed at
+the end of the research file.
+
 ## 15. The SR-104 Line Lander (`/line`, E33)
 
 Ships DARK behind the same Admin → Site content toggle as every hideable page,

@@ -13,7 +13,9 @@ import { resolveMapView } from "@/lib/map/resolve";
 import { getParkingZones } from "@/lib/stores/parking-store";
 import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
 import { getFerryInfo } from "@/lib/stores/ferry-info-store";
+import { walkOnRoundTripFare } from "@/lib/data/ferry-info";
 import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
+import { EdmondsSideParking } from "./edmonds-section";
 
 // The parking map is the Chamber's live "parking-cash" map-CMS view, built and
 // edited in the portal. resolveMapView() renders the draft directly (it does
@@ -23,7 +25,7 @@ export const revalidate = 60;
 export const metadata: Metadata = {
   title: "Parking",
   description:
-    "Where to park in Kingston, WA — Port lots, the free 2-hour zone, street parking, and overnight options near the ferry dock, on one live map.",
+    "Where to park in Kingston, WA — Port lots, the free 2-hour zone, street parking, and overnight options near the ferry dock, on one live map. Plus where a car can stay on the Edmonds side if you walk on.",
 };
 
 /* ------------------------------------------------------------------ */
@@ -231,6 +233,13 @@ export default async function ParkingPage() {
           </p>
         </div>
       </Section>
+
+      {/* The Edmonds side (owner ask, 2026-08-01): the page's audience is
+          Kingston-bound, so this sits below all the Kingston content — it
+          serves the return-trip/walk-on story. The fare figure is the E27
+          record's; null here means "no confirmed figure", and the section
+          words around it rather than inventing one. */}
+      <EdmondsSideParking copy={copy} walkOnRoundTrip={walkOnRoundTripFare(ferryInfo.fares)} />
 
     </>
   );
