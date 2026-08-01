@@ -84,7 +84,9 @@ function buildBoardingPass(doc: Record<string, unknown>): BoardingPass | string 
     whenRequired: text(doc.whenRequired),
     where: text(doc.where),
     how,
-    voids: text(doc.voids),
+    // No `voids` — dropped deliberately (see BoardingPass in data/ferry-info).
+    // A stored record from before the removal keeps the key in its jsonb; not
+    // reading it here is what retires it.
     exempt: text(doc.exempt),
     currentNote: text(doc.currentNote),
   };

@@ -256,7 +256,7 @@ export default async function FerryPage() {
                   <strong className="text-ink">Summer line rules:</strong> when it is busy, the line
                   of cars runs up SR 104. A boarding-pass system runs every day from 8 am to 8 pm.
                   Watch for the flashing sign at Barber Cutoff Rd. Take a pass from the machine near
-                  Lindvog Rd. Stay in the line — if you leave it, your pass stops working.
+                  Lindvog Rd, then wait for a green light before you move up to the tollbooths.
                 </li>
               </ul>
             </div>
@@ -335,8 +335,8 @@ export default async function FerryPage() {
           <p className="mt-2">
             Driving on? In the busy season — every day from 8 am to 8 pm, plus weekends and
             holidays — you need a vehicle boarding pass from the SR 104 line. Take one from the
-            machine near Lindvog Rd, and stay in the line: if you leave it, the pass stops working.
-            You do not need a pass if you are walking on, riding a bike, or riding a motorcycle.
+            machine near Lindvog Rd. You do not need a pass if you are walking on, riding a bike,
+            or riding a motorcycle.
           </p>
           <p className="mt-2">
             Full payment details:{" "}

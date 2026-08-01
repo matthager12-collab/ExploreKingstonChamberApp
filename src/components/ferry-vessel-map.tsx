@@ -10,6 +10,14 @@
 // view (it is ~200 KB — the E15 perf budget), and map.resize() on a
 // ResizeObserver keeps a below-the-fold mount from painting half-blank. The tile
 // bbox was widened to cover the whole crossing east to Edmonds.
+//
+// Two mounting modes, and the difference is a caching constraint, not a visual
+// one — see the `initial` prop's doc comment before changing either:
+//   /ferry  — dynamic page, passes a server-rendered `initial`.
+//   /line   — statically prerendered, passes NOTHING and lets the map fetch its
+//             own first payload on reveal, so a 10s-revalidate fetch never
+//             enters that page's ISR window.
+// Both defer polling until the map is actually in view.
 
 import { useEffect, useRef, useState } from "react";
 import type { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
@@ -61,11 +69,25 @@ function vesselEl(): HTMLElement {
   return el;
 }
 
+const NO_VESSELS: VesselData = { vessels: [], live: false };
+
 export function FerryVesselMap({
   initial,
   height = "380px",
 }: {
-  initial: VesselData;
+  /**
+   * Server-rendered first payload. OMIT IT on a statically prerendered page:
+   * getVesselLocations() fetches with revalidate 10, and Next collapses a
+   * prerendered route's ISR window to the shortest revalidate reachable from
+   * it (incremental-static-regeneration.md — "the lowest time will be used").
+   * /line declares 60, already sits at 30 via getRouteDelays, and would drop
+   * to 10 just by rendering this map. With `initial` omitted the map fetches
+   * its own first payload when it scrolls into view, so the page's cache
+   * window is untouched and nothing is fetched at all for a visitor who never
+   * scrolls this far. /ferry still passes it: that page reads cookies, so it
+   * is dynamic anyway and its revalidate is already inert.
+   */
+  initial?: VesselData;
   height?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -73,7 +95,14 @@ export function FerryVesselMap({
   const maplibreRef = useRef<typeof import("maplibre-gl") | null>(null);
   const vesselMarkersRef = useRef<MapLibreMarker[]>([]);
   const resizeObsRef = useRef<ResizeObserver | null>(null);
-  const [data, setData] = useState<VesselData>(initial);
+  const [data, setData] = useState<VesselData>(initial ?? NO_VESSELS);
+  // Only true in the no-`initial` mode, and only until the first fetch settles.
+  // Without it the caption would claim the WSDOT feed is down during the normal
+  // second-or-so before the first payload lands.
+  const [awaitingFirst, setAwaitingFirst] = useState(initial === undefined);
+  // Polling is gated on the same reveal that loads the map: refreshing vessel
+  // positions onto a map the visitor cannot see is pure cellular spend.
+  const [inView, setInView] = useState(false);
 
   // ---- redraw vessels whenever data changes (no-op until the map exists) ----
   function renderVessels() {
@@ -141,14 +170,25 @@ export function FerryVesselMap({
       resizeObsRef.current = ro;
     };
 
-    if (typeof IntersectionObserver === "undefined") {
+    // Revealing does two things: builds the map, and releases the poller.
+    const reveal = () => {
+      setInView(true);
       void init();
+    };
+
+    if (typeof IntersectionObserver === "undefined") {
+      // No IntersectionObserver (jsdom, very old browsers): show it immediately,
+      // but on a microtask — setState straight from an effect body cascades a
+      // render, and react-hooks/set-state-in-effect rightly rejects it.
+      queueMicrotask(() => {
+        if (!cancelled) reveal();
+      });
     } else {
       const io = new IntersectionObserver(
         (entries) => {
           if (entries.some((e) => e.isIntersecting)) {
             io.disconnect();
-            void init();
+            reveal();
           }
         },
         { rootMargin: "200px" },
@@ -176,18 +216,27 @@ export function FerryVesselMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
-  // ---- poll every 20s, paused while hidden ----
+  // ---- poll every 20s once revealed, paused while hidden ----
   useEffect(() => {
+    if (!inView) return;
     let timer: ReturnType<typeof setInterval> | null = null;
     const poll = async () => {
+      // Returning before the try is deliberate: a skipped poll must not settle
+      // `awaitingFirst`, or a map revealed in a background tab would flip to
+      // "feed is down" without ever having asked.
       if (document.hidden) return;
       try {
         const res = await fetch("/api/ferry/vessels");
         if (res.ok) setData((await res.json()) as VesselData);
       } catch {
         // keep the last-known positions on a transient failure
+      } finally {
+        setAwaitingFirst(false);
       }
     };
+    // No server payload means the map has nothing to draw yet, so fetch on
+    // reveal rather than leaving it empty for a full interval.
+    if (initial === undefined) void poll();
     timer = setInterval(poll, 20_000);
     const onVisible = () => {
       if (!document.hidden) poll();
@@ -197,7 +246,8 @@ export function FerryVesselMap({
       if (timer) clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inView]);
 
   const noBoats = data.vessels.length === 0;
 
@@ -211,11 +261,13 @@ export function FerryVesselMap({
         aria-label="Live map of the Edmonds–Kingston ferries"
       />
       <p className="mt-2 text-xs text-ink">
-        {data.live
-          ? `Live vessel positions from WSDOT, refreshed every 20 seconds${
-              noBoats ? " — no Edmonds–Kingston boats are reporting a position right now." : "."
-            }`
-          : "Live positions need the WSDOT feed. "}
+        {awaitingFirst
+          ? "Finding the boats… "
+          : data.live
+            ? `Live vessel positions from WSDOT, refreshed every 20 seconds${
+                noBoats ? " — no Edmonds–Kingston boats are reporting a position right now." : "."
+              }`
+            : "Live positions need the WSDOT feed. "}
         Full map with every route on{" "}
         <a
           href={WSDOT_VESSELWATCH}

@@ -24,8 +24,19 @@ const amenityFeatures = mapFeatures.filter((f) => f.views.includes(AMENITY_VIEW)
 
 /** Phrases that admit the pin is not field-verified. */
 const CAVEAT = /approximate|not field-checked|probable|unverified|treat the pin/i;
-/** A named, checkable origin for the fact. */
-const SOURCE = /portofkingston\.org|port of kingston|wsdot|kitsap|chamber-verified|per the/i;
+/**
+ * A named, checkable origin for the fact.
+ *
+ * "reported by the … chamber" was added for the tollbooth portable toilet: the
+ * Chamber telling us a thing exists IS a named origin someone can go back and
+ * question, even though nothing was published and nobody field-checked it. The
+ * alternative was labelling it "chamber-verified" to satisfy this pattern,
+ * which would have claimed a verification that never happened — the exact
+ * dishonesty this rule exists to prevent. The CAVEAT half still applies, so a
+ * Chamber-reported pin must ALSO admit it is approximate.
+ */
+const SOURCE =
+  /portofkingston\.org|port of kingston|wsdot|kitsap|chamber-verified|reported by the [a-z ]*chamber|per the/i;
 
 describe("amenities map view", () => {
   it("is published, or it is invisible on /map", () => {

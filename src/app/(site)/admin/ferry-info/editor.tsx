@@ -583,12 +583,6 @@ export function FerryInfoEditor({ initial }: { initial: FerryInfo }) {
             placeholder="Add a step"
           />
           <TextField
-            label="Voids (leaving the line)"
-            value={boarding.voids}
-            onChange={(v) => setBoarding((b) => ({ ...b, voids: v }))}
-            rows={3}
-          />
-          <TextField
             label="Who's exempt"
             value={boarding.exempt}
             onChange={(v) => setBoarding((b) => ({ ...b, exempt: v }))}

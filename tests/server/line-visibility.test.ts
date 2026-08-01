@@ -85,9 +85,30 @@ async function poll(label: string, fn: () => Promise<boolean>, timeoutMs = 150_0
   }
 }
 
-/** The one sentence this page exists to deliver. Seed wording — the admin
- *  overlay is empty in the test database, so the page must render exactly it. */
-const VOIDS = escapeHtml(BOARDING_PASS.voids);
+/** Who does not need a pass at all — the one boarding-pass fact the page still
+ *  states in the record's own words. Seed wording: the admin overlay is empty
+ *  in the test database, so the page must render exactly it. */
+const EXEMPT = escapeHtml(BOARDING_PASS.exempt);
+
+/** Phrases the app must NOT say anywhere any more (2026-07-31, Chamber's call).
+ *  The "leave the line and your pass is void" rule is not enforced, so stating
+ *  it is a threat we do not back up — see BoardingPass in lib/data/ferry-info.
+ *  Asserted against the RENDERED page, not the source, because the wording can
+ *  also arrive from an admin copy override. */
+const RETIRED_CLAIMS = [
+  "stay in the line",
+  "leave the line",
+  "leaves the line",
+  "pass is void",
+  "losing your place",
+];
+
+function assertNoRetiredClaims(visible: string): void {
+  const lower = visible.toLowerCase();
+  for (const claim of RETIRED_CLAIMS) {
+    expect(lower, `/line rendered the retired boarding-pass claim "${claim}"`).not.toContain(claim);
+  }
+}
 
 describe("/line — the Line Lander ships dark (fail-closed)", () => {
   let cookie = "";
@@ -137,9 +158,10 @@ describe("/line — the Line Lander ships dark (fail-closed)", () => {
     expect(status).toBe(200);
     expect(html).toContain("Hidden page");
     const visible = visibleHtml(html);
-    // The page's most important copy, from the shared ferry-info record.
-    expect(visible).toContain(escapeHtml(copyFallback("line.stay.title")));
-    expect(visible).toContain(VOIDS);
+    // The boarding-pass copy the page still carries, from the shared record.
+    expect(visible).toContain(escapeHtml(copyFallback("line.exempt.title")));
+    expect(visible).toContain(EXEMPT);
+    assertNoRetiredClaims(visible);
     // The boarding-pass status hero rendered one of its two states.
     const on = escapeHtml(copyFallback("line.pass.on"));
     const off = escapeHtml(copyFallback("line.pass.off"));
@@ -170,7 +192,10 @@ describe("/line — the Line Lander ships dark (fail-closed)", () => {
 
       const { html } = await get("/line");
       const visible = visibleHtml(html);
-      expect(visible).toContain(VOIDS);
+      expect(visible).toContain(EXEMPT);
+      // The retired claims must be gone from the PUBLIC page too, not just the
+      // admin preview — this is the assertion a visitor's eyes correspond to.
+      assertNoRetiredClaims(visible);
       // No half-rendered shell: the next-boats module and both link-outs made it.
       expect(html).toContain('href="/parking"');
       expect(html).toContain('href="/ferry"');

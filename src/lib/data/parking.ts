@@ -622,7 +622,7 @@ export const parkingAreas: ParkingArea[] = [
     address: "Kingston Ferry Terminal, 11264 NE State Route 104, Kingston, WA 98346",
     rates: "Not parking — this is the line for the boat",
     notes:
-      "During peak periods (daily 8 am–8 pm), ferry traffic on SR 104 stops at Barber Cutoff Rd, takes a boarding pass from the dispenser, and waits for green lights before advancing to the tollbooths. Leave the line and your pass is void — you start over. There are no vehicle reservations on the Edmonds–Kingston run; the line is the system.",
+      "During peak periods (daily 8 am–8 pm), ferry traffic on SR 104 stops at Barber Cutoff Rd, takes a boarding pass from the dispenser, and waits for green lights before advancing to the tollbooths. There are no vehicle reservations on the Edmonds–Kingston run; the line is the system.",
     lat: 47.793,
     lng: -122.509,
   },
