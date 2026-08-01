@@ -173,15 +173,18 @@ export function SetupForm() {
   );
 }
 
-export function JoinForm() {
+export function JoinForm({ initialCode }: { initialCode?: string }) {
   const { busy, error, submit } = useSubmit("/api/auth/redeem");
   return (
     <form onSubmit={(e) => submit(formValues(e))} className="max-w-sm space-y-4">
       <Field id="join-code" label="Invite code">
+        {/* E17: ?code= links from the Chamber land with the code pre-filled
+            (still editable — a mistyped or expired link shouldn't dead-end). */}
         <input
           id="join-code"
           name="code"
           required
+          defaultValue={initialCode}
           className={inputClass}
           placeholder="from the Chamber"
         />

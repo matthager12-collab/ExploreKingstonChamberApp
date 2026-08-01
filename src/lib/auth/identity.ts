@@ -36,6 +36,11 @@ import {
 } from "@/lib/db/auth-store";
 import { ORG_ROLES, type OrgKind, type Role } from "@/lib/db/schema";
 import {
+  backfillLinkedOwnership,
+  findOwnedLinkedRecords,
+  OwnershipConflictError,
+} from "@/lib/ownership";
+import {
   generateId,
   generateInviteCode,
   generateTempPassword,
@@ -419,12 +424,26 @@ export async function revokeInvite(code: string, actor: string): Promise<boolean
 
 export const getInvite = findInvite;
 
+/** The store universe an invite's linked ids point into, derived from the
+ *  role exactly the way mintInvite derives the new-org kind — so mint
+ *  validation, the redeem re-check, and the ownership backfill all read the
+ *  same stores for the same invite. */
+function linkedKindFor(role: Role): OrgKind {
+  return role === "member-business" ? "business" : "nonprofit";
+}
+
 /**
  * Redeem an invite and create the account.
  *
  * Every rejection returns the SAME message. Distinguishing expired from
  * revoked from already-used would turn the endpoint into an oracle for
  * probing which codes ever existed.
+ *
+ * E17 ownership: after the invite checks pass but BEFORE any row is created,
+ * every linked record's owner_org_id is re-checked — a listing claimed
+ * between mint and redeem refuses cleanly (OwnershipConflictError → 409)
+ * with no user, no org, and no session. On success, owner_org_id is
+ * backfilled onto every linked record still unowned.
  */
 export async function redeemInvite(
   code: string,
@@ -436,20 +455,44 @@ export async function redeemInvite(
   }
   const email = account.email.trim();
 
-  return redeemInviteTx({
+  const validate = (invite: InviteRow) => {
+    if (invite.usedBy) throw invalid();
+    if (invite.revokedAt) throw invalid();
+    if (invite.expiresAt.getTime() <= Date.now()) throw invalid();
+    if (invite.email && invite.email.toLowerCase() !== email.toLowerCase()) {
+      // Distinct message: the holder needs to know to use the invited
+      // address. It reveals nothing they do not already have.
+      throw new AuthError("This invite is bound to a different email address.");
+    }
+  };
+
+  // Advisory pre-read: run the SAME validity checks first (an expired or
+  // burned code must answer identically whether or not its records are
+  // claimed), then the ownership re-check. It runs outside the redemption
+  // transaction — readRecordRows on the global handle inside an open tx
+  // would deadlock PGlite's single connection — which is fine: the check
+  // this closes is a claim that landed between mint and redeem, and nothing
+  // below creates rows before it passes.
+  const preview = await findInvite(code);
+  if (!preview) throw invalid();
+  validate(preview);
+  if (preview.linkedIds.length > 0) {
+    const owned = await findOwnedLinkedRecords(
+      linkedKindFor(preview.role),
+      preview.linkedIds,
+    );
+    if (owned.length > 0) {
+      throw new OwnershipConflictError(
+        "This listing has already been claimed — contact the Chamber.",
+      );
+    }
+  }
+
+  const redeemed = await redeemInviteTx({
     code,
     actor: email || "system",
     // Re-checked against the row locked FOR UPDATE inside the transaction.
-    validate: (invite) => {
-      if (invite.usedBy) throw invalid();
-      if (invite.revokedAt) throw invalid();
-      if (invite.expiresAt.getTime() <= Date.now()) throw invalid();
-      if (invite.email && invite.email.toLowerCase() !== email.toLowerCase()) {
-        // Distinct message: the holder needs to know to use the invited
-        // address. It reveals nothing they do not already have.
-        throw new AuthError("This invite is bound to a different email address.");
-      }
-    },
+    validate,
     buildOrg: (invite) =>
       invite.newOrgName
         ? {
@@ -468,6 +511,27 @@ export async function redeemInvite(
       passwordHash: hashPassword(account.password),
     }),
   });
+
+  // E17 ownership backfill: stamp owner_org_id onto every linked record that
+  // is still unowned, each write audited (source "portal", actor = the new
+  // account). Runs AFTER the redemption committed; a failure here must not
+  // strand the freshly created account behind an error response (the code is
+  // already burned), so it logs instead of throwing — the audit trail shows
+  // exactly how far it got, and an admin can finish the job.
+  if (preview.linkedIds.length > 0 && redeemed.user.orgId) {
+    try {
+      await backfillLinkedOwnership(
+        linkedKindFor(preview.role),
+        preview.linkedIds,
+        redeemed.user.orgId,
+        redeemed.user.email,
+      );
+    } catch (err) {
+      console.error("invite-redeem ownership backfill failed", err);
+    }
+  }
+
+  return redeemed;
 }
 
 /**

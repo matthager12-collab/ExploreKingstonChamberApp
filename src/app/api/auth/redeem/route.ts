@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { redeemInvite, sessionCookie, tokenFor } from "@/lib/auth";
+import { OwnershipConflictError } from "@/lib/ownership";
 import { checkRateLimit, clientKey } from "@/lib/rate-limit";
 
 function tooMany(retryAfterSeconds: number): NextResponse {
@@ -43,6 +44,12 @@ export async function POST(request: NextRequest) {
     res.cookies.set(sessionCookie.name, tokenFor(user), sessionCookie.options);
     return res;
   } catch (e) {
+    if (e instanceof OwnershipConflictError) {
+      // E17: the linked listing was claimed between mint and redeem. The
+      // refusal happened BEFORE any row was created — no user, no org, and
+      // (by falling through here without touching cookies) no session.
+      return NextResponse.json({ error: e.message }, { status: 409 });
+    }
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "could not redeem invite" },
       { status: 400 },
