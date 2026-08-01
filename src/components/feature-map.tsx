@@ -117,6 +117,22 @@ function streetLineStyle(rule: StreetRule): { width: number; opacity: number; da
   }
 }
 
+/** Chamber-member pin ring — a map-specific deepening of the brand cyan, in the
+ *  same spirit as the basemap PALETTE (ADR-0007): tints and shades derived from
+ *  the globals.css tokens, because the UI values are tuned for text on white,
+ *  not for graphics on a basemap.
+ *
+ *  A member pin should read as "this is a Chamber business", so brand blue is
+ *  the honest colour — but the ring is a graphical object under WCAG 1.4.11 and
+ *  needs 3:1 against whatever it overlaps. Neither token qualifies: the logo
+ *  cyan `--color-tide #1E96C0` is 2.14:1 on water, and `--color-tide-deep
+ *  #16758f` is 2.80:1 on the deepened greenspace green. This shade clears every
+ *  base surface (worst 3.44:1, on greenspace).
+ *
+ *  tests/unit/member-pin.test.ts recomputes all of this — if the basemap
+ *  palette moves, that test fails rather than the contrast quietly rotting. */
+const MEMBER_RING = "#136680";
+
 const BOUNDARY_COLOR = "#324A6D";
 const LINE_COLOR = "#2a7f8a";
 const TRAIL_COLOR = "#4a7c59";
@@ -215,12 +231,22 @@ function prPinEl(): HTMLElement {
  *  ring. MapLibre positions it with anchor "bottom" (the rotate puts the sharp
  *  tip at bottom-center), so there is no translate here (unlike the Leaflet
  *  divIcon version). */
-function pinEl(emoji: string, ring: string): HTMLElement {
+function pinEl(emoji: string, ring: string, member = false): HTMLElement {
   const el = document.createElement("div");
-  el.className = "feature-pin";
+  el.className = member ? "feature-pin feature-pin--member" : "feature-pin";
   el.style.cursor = "pointer";
-  el.innerHTML = `<div style="width:30px;height:30px;border-radius:50% 50% 50% 0;background:#fff;border:2px solid ${ring};box-shadow:0 2px 4px rgba(0,0,0,0.3);transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;">
-    <span style="transform:rotate(45deg);font-size:15px;line-height:1;">${emoji}</span>
+  // Member emphasis rides two channels at once — size AND a concentric outer
+  // ring — so it never depends on colour alone (the category ring is already
+  // carrying colour, and colour-blind visitors would lose a colour-only cue).
+  // The white 1px gap is what keeps the two rings from reading as one thick
+  // band. box-shadow (not border) draws it, so it follows the teardrop radius
+  // and adds nothing to layout size.
+  const size = member ? 34 : 30;
+  const shadow = member
+    ? `0 0 0 1px #fff, 0 0 0 3.5px ${MEMBER_RING}, 0 2px 5px rgba(0,0,0,0.35)`
+    : "0 2px 4px rgba(0,0,0,0.3)";
+  el.innerHTML = `<div style="width:${size}px;height:${size}px;border-radius:50% 50% 50% 0;background:#fff;border:2px solid ${ring};box-shadow:${shadow};transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;">
+    <span style="transform:rotate(45deg);font-size:${member ? 17 : 15}px;line-height:1;">${emoji}</span>
   </div>`;
   return el;
 }
@@ -285,6 +311,13 @@ function featurePopupHtml(f: MapFeature): string {
   const parts: string[] = [
     `<p style="margin:0;font-weight:600;font-size:0.95rem;">${esc(f.title)}</p>`,
   ];
+  // Says in words what the pin's outer ring says in colour — the ring alone
+  // would leave the fact invisible to anyone who can't distinguish it.
+  if (f.member) {
+    parts.push(
+      `<p style="margin:4px 0 0;"><span style="display:inline-block;padding:1px 8px;border-radius:9999px;font-size:0.72rem;font-weight:600;color:#fff;background:${MEMBER_RING};">Chamber member</span></p>`,
+    );
+  }
   if (f.parking) parts.push(parkingBlockHtml(f.parking));
   if (f.notes) parts.push(`<p style="margin:4px 0 0;">${esc(f.notes)}</p>`);
   for (const img of featureImages(f)) {
@@ -622,7 +655,7 @@ export function FeatureMap({
         if (f.kind === "marker" && f.point) {
           const cat = markerCategory(f.category);
           const ring = featureColor(f, cat.color);
-          new maplibregl.Marker({ element: pinEl(cat.emoji, ring), anchor: "bottom" })
+          new maplibregl.Marker({ element: pinEl(cat.emoji, ring, f.member === true), anchor: "bottom" })
             .setLngLat(toLngLat(f.point))
             .setPopup(markerPopup(featurePopupHtml(f)))
             .addTo(map);
