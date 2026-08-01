@@ -63,11 +63,21 @@ const externalKeyId = z
   .min(1)
   .regex(/^\S+$/, "external event keys contain no whitespace");
 
+/** media ids ARE the stored file name — a content hash plus an extension, so
+ *  they contain a dot and the entity regex would reject every one of them.
+ *  Identical to media-store.mediaImagePath()'s validator on purpose: the same
+ *  shape gates the record here and the filesystem/R2 key there, so a name that
+ *  survives one can never be refused by the other. */
+const mediaNameId = z
+  .string()
+  .regex(/^[a-f0-9]{8,}\.(jpg|jpeg|png|webp|gif)$/i, "media ids are '<hash>.<ext>'");
+
 const ID_RULES: Record<string, z.ZodType<string>> = {
   "site-copy": copyKeyId,
   "site-pages": pagePathId,
   "external-events": externalKeyId,
   "event-overrides": externalKeyId,
+  media: mediaNameId,
 };
 
 export function idRuleFor(store: string): z.ZodType<string> {
@@ -135,6 +145,11 @@ export const STORE_SCHEMAS: Record<string, z.ZodType> = {
   }),
   "calendar-sources": z.looseObject({ id: entityId, enabled: z.boolean() }),
   "unified-calendar": z.looseObject({ id: entityId }),
+  // Shared photo library. `title` is required because an untitled photo is
+  // unfindable in a grid of thumbnails; `alt` is NOT, deliberately — bulk
+  // upload has to be possible in one pass, and the alt-text gate lives at
+  // PLACEMENT time where the context that makes good alt text is known.
+  media: z.looseObject({ id: mediaNameId, title: nonempty }),
 };
 
 /** Unknown stores validate permissively ({ id } only) with a warn-once —
