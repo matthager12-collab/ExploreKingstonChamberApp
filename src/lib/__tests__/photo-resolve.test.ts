@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 import { isAltStale, resolvePhoto, resolveAlt } from "@/lib/photo-resolve";
-import { photoSlot } from "@/lib/photo-slots";
+import { KIOSK_ATTRACT_KEYS, photoSlot } from "@/lib/photo-slots";
 import type { MediaItem } from "@/lib/media/refs";
 
 function item(over: Partial<MediaItem> = {}): MediaItem {
@@ -91,6 +91,42 @@ describe("resolveAlt — what it announces", () => {
     // It is a deliberate trade against an empty alt, whose cost is silence.
     // Changing it is a product decision, not a refactor.
     expect(got).toContain("Point No Point lighthouse");
+  });
+});
+
+describe("kiosk attract loop", () => {
+  it("every key in the loop is a registered slot with a shipped photo", () => {
+    // The layout maps over KIOSK_ATTRACT_KEYS and photoSlot() would throw on an
+    // unregistered key — on the layout of an unattended panel at the dock.
+    for (const key of KIOSK_ATTRACT_KEYS) {
+      const slot = photoSlot(key);
+      expect(slot, `${key} is not registered`).toBeDefined();
+      expect(slot.fallback).toMatch(/^\/brand\//);
+    }
+  });
+
+  it("is decorative throughout, so nothing announces over the button's own label", () => {
+    // The attract overlay is one <button aria-label="Touch to explore
+    // Kingston">. An aria-label overrides its contents, so per-image alt is
+    // dropped by assistive tech — and the picker must not ask for descriptions
+    // that can never be heard.
+    for (const key of KIOSK_ATTRACT_KEYS) {
+      expect(photoSlot(key).decorative, `${key} should be decorative`).toBe(true);
+      const i = item();
+      expect(resolvePhoto(key, { name: i.id }, library(i)).alt).toBe("");
+    }
+  });
+
+  it("resolves an admin-chosen photo but never leaves the stage blank", () => {
+    const i = item();
+    expect(resolvePhoto("kiosk.attract.1", { name: i.id }, library(i)).src).toBe(
+      `/api/media/image?p=${i.id}`,
+    );
+    // A dangling reference falls back rather than rendering nothing — a blank
+    // panel at the ferry dock is the failure mode that actually matters here.
+    expect(resolvePhoto("kiosk.attract.1", { name: "deadbeefdeadbeef.jpg" }, {}).src).toBe(
+      photoSlot("kiosk.attract.1").fallback,
+    );
   });
 });
 

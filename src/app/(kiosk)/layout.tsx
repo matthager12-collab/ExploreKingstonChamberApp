@@ -4,6 +4,9 @@ import { notFound } from "next/navigation";
 import { KioskShell } from "@/components/kiosk-shell";
 import { getKioskAccess } from "@/lib/stores/kiosk-store";
 import { copyText, getCopyOverrides } from "@/lib/stores/site-store";
+import { getPhotoContext } from "@/lib/stores/photo-store";
+import { resolvePhoto } from "@/lib/photo-resolve";
+import { KIOSK_ATTRACT_KEYS } from "@/lib/photo-slots";
 
 // The bare layout for the physical ferry-dock kiosk (E22).
 //
@@ -52,7 +55,16 @@ export default async function KioskLayout({ children }: { children: React.ReactN
   // and handed to KioskShell as props: the shell is a client component and
   // cannot read the overlay store, but the Chamber still has to be able to
   // reword the most-read text in the whole app without a deploy.
-  const copy = await getCopyOverrides();
+  //
+  // The attract PHOTOS take the same route for the same reason. Every slot
+  // resolves to either an admin-chosen library photo or the /brand asset the
+  // code ships, so a panel at the dock is never one bad record away from a
+  // blank stage.
+  const [copy, photos] = await Promise.all([getCopyOverrides(), getPhotoContext()]);
+  const attractPhotos = KIOSK_ATTRACT_KEYS.map((key) => {
+    const { src, alt } = resolvePhoto(key, photos.overrides[key], photos.library);
+    return { src, alt };
+  });
 
   return (
     <div
@@ -105,6 +117,7 @@ export default async function KioskLayout({ children }: { children: React.ReactN
           adminPreview={adminPreview}
           attractTitle={copyText(copy, "kiosk.attract.title")}
           attractPrompt={copyText(copy, "kiosk.attract.prompt")}
+          attractPhotos={attractPhotos}
         >
           {children}
         </KioskShell>
