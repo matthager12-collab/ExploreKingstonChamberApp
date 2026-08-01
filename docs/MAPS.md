@@ -90,13 +90,32 @@ in sync with the listings automatically.
 
 ### Seed vs overlay
 
-- **Views** seed: `src/lib/data/map-views.ts` — four starters: `food-drink`
-  (published, `restaurants`), `explore` (published), `trails` (published), and
-  `parking-cash` (name "Parking", **`sources: []`, `published: false`** — a
-  hand-built draft the Chamber fills in the builder).
-- **Features** seed: `src/lib/data/map-features.ts` — a handful of starter
-  landmarks (Mike Wallace Park, Point No Point, Village Green, a waterfront
-  boardwalk trail) that show the shape of each kind.
+- **Views** seed: `src/lib/data/map-views.ts` — six views, all published:
+
+  | id | name | `sources` | features come from |
+  | --- | --- | --- | --- |
+  | `food-drink` | Food & Drink | `["restaurants"]` | the restaurant listings, live |
+  | `parking-cash` | Parking | `["parking-zones"]` | the `MapZone` store (seeded, **not** a blank canvas — see the comment in the seed; this once shipped empty under copy promising markers) |
+  | `explore` | Explore Kingston | `[]` | drawn features |
+  | `trails` | Trails & Walks | `[]` | drawn features |
+  | `amenities` | Restrooms & Amenities | `[]` | drawn features (E27) |
+  | `shopping` | Shopping & Services | `[]` | drawn features |
+
+- **Features** seed: `src/lib/data/map-features.ts` — starter landmarks (Mike
+  Wallace Park, Point No Point, Village Green, a waterfront boardwalk trail)
+  that show the shape of each kind, the E27 amenity block, and the shopping
+  block. The last two are **sourced data, not placeholders**: each carries its
+  provenance in `notes`, and `tests/unit/{amenity,shopping}-seed.test.ts`
+  fail if a new pin arrives without one. Read those block headers before
+  adding to either — the shopping header records three specific ways
+  OpenStreetMap was wrong about Kingston businesses.
+- **Why `shopping` has no built-in source.** It is the obvious candidate for
+  one, and there isn't a source to use: `BuiltInSource` offers
+  `restaurants | parking-zones | streets`, and E17's `DirectoryListing`
+  (`src/lib/schemas/directory.ts`) has no `lat`/`lng` — name, address, phone,
+  website, tags only. If a later epic geocodes directory records, adding a
+  `directory` source filtered to `shop`/`services` and retiring the hand-seeded
+  pins is the intended path; the seam is commented at the view.
 - Admin edits overlay both via `writeOverlayRecord()`; `readMerged()` merges
   seed with overlay (custom wins by id; `{ _deleted: true }` tombstones a seed
   row). Store module: `src/lib/stores/map-store.ts`
