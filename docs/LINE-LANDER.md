@@ -2,8 +2,14 @@
 
 The page for people sitting in the SR-104 ferry boarding line west of the
 Lindvog Rd dispenser, reached by a QR code on a physical roadside sign.
-Slices 1–3 shipped DARK in the launch build; the QR/sign slice (4) and the
-go-live + service-worker slice (5) wait for the custom domain.
+
+**Status: LIVE BUT UNLISTED since 2026-08-01.** It shipped dark through slices
+1–3; an explicit `hidden: false` record has since made it public, so it answers
+200 to anyone with the URL. It is deliberately not advertised — no nav link, no
+sitemap entry, `noindex` on the page — because its framing ("you're in the
+line") is wrong for anyone who is not, and it would compete with /ferry for
+queries /ferry should win. The QR/sign slice (4) and the service-worker slice
+(5) still wait for the custom domain.
 
 Owner: `vk/line-lander`. Geometry: `vk/ferry-line-geometry`
 (src/lib/ferry-line-geometry.ts — polyline + `distanceToLineMeters` /
@@ -11,14 +17,19 @@ Owner: `vk/line-lander`. Geometry: `vk/ferry-line-geometry`
 
 ## Current state (slices 1–3)
 
-- `src/app/(site)/line/page.tsx` — ISR (`revalidate = 60`), ships dark via
-  `DEFAULT_HIDDEN_PAGES`: with no site-pages record it 404s for **everyone**.
+- `src/app/(site)/line/page.tsx` — ISR (`revalidate = 60`), `noindex`, and
+  listed in `UNLISTED_PAGES` so it never enters sitemap.xml. Still in
+  `DEFAULT_HIDDEN_PAGES`, which is now a **restore-safety net**, not a
+  ship-dark gate: the live `hidden: false` record makes it public, and if that
+  record is ever lost the page falls back to 404 for **everyone** rather than
+  republishing itself unattended. Do not remove it from that list as a
+  tidy-up — with no record, removing it means public by default.
 - `src/app/(site)/line/preview/page.tsx` — the admin preview (banner + the
   exact visitor body). Admin-only, always.
 - Body: `src/components/line-lander.tsx` (+ `line-food.tsx`,
   `line-amenities.tsx`). Every visitor sentence is a `line.*` key in
   `src/lib/site-copy-registry.ts`, editable at Admin → Content. Boarding-pass
-  FACTS (voids/when-required/exempt + the transient notice) come from
+  FACTS (when-required/exempt + the transient notice) come from
   Admin → Ferry info, shared with /ferry.
 
 ### Why /line has no in-place admin preview (deviation from the /es pattern)

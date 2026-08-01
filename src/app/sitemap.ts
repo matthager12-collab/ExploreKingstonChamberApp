@@ -13,7 +13,7 @@
 import type { MetadataRoute } from "next";
 
 import { getAllHunts } from "@/lib/hunt-store";
-import { HIDEABLE_PAGES, getEffectiveHiddenPaths } from "@/lib/page-visibility";
+import { HIDEABLE_PAGES, UNLISTED_PAGES, getEffectiveHiddenPaths } from "@/lib/page-visibility";
 import { siteUrl } from "@/lib/site-url";
 import { getItineraries } from "@/lib/stores/itinerary-store";
 
@@ -22,14 +22,22 @@ export const dynamic = "force-dynamic";
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = siteUrl();
   const hidden = new Set(await getEffectiveHiddenPaths());
+  const unlisted = new Set(UNLISTED_PAGES);
+  // Two different reasons to leave a page out, and only one of them is about
+  // the page being reachable. Hidden → it would 404 a crawler. Unlisted → it
+  // answers 200 fine, we just do not advertise it (a QR-code landing page has
+  // no business in search results). `visible` still gates the detail-page
+  // blocks below, so an unlisted SECTION would keep listing its children —
+  // fine today, since /line has none.
   const visible = (path: string) => !hidden.has(path);
+  const listable = (path: string) => visible(path) && !unlisted.has(path);
 
   const entries: MetadataRoute.Sitemap = [
     { url: base, lastModified: new Date(), changeFrequency: "daily", priority: 1 },
   ];
 
   for (const { path } of HIDEABLE_PAGES) {
-    if (!visible(path)) continue;
+    if (!listable(path)) continue;
     entries.push({
       url: `${base}${path}`,
       lastModified: new Date(),

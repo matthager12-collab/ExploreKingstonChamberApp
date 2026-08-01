@@ -356,6 +356,11 @@ a parking-garage ticket) to hold their place. Facts in `BOARDING_PASS`:
   Lindvog Road NE** (~1 mile before the tollbooths). An overhead flashing-light advisory sign
   at **Barber Cutoff Road** (~1 mile farther west) signals when the system is active.
 - **Voids:** leave the line after pulling a pass and it's void — re-enter for a new one.
+  **The app deliberately does NOT state this.** It is recorded here because WSDOT published
+  it, but the Chamber confirmed (2026-07-31) the rule is not enforced in practice, and a
+  consequence we assert that nobody applies reads as a threat. The `voids` field was removed
+  from the boarding-pass record entirely; `tests/server/line-visibility.test.ts` asserts the
+  phrasing never reaches a rendered page. Do not reintroduce it from this entry.
 - **Current note (early July 2026):** the automated dispenser has been **down**, so a
   uniformed traffic-control officer is **handing passes out by hand at the Lindvog Road
   staging area**. This is the admin-editable `currentNote`.
