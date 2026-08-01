@@ -19,6 +19,7 @@ import { readAccessFacts } from "@/lib/schemas/access";
 import { ReportInaccurate } from "@/components/report-inaccurate";
 import { LocalBusinessJsonLd } from "@/components/json-ld";
 import { FeatureMap } from "@/components/feature-map";
+import { GetListedCallout } from "@/components/get-listed";
 
 export const metadata: Metadata = {
   title: "Eat & Drink",
@@ -212,20 +213,23 @@ export default async function EatPage() {
       ))}
 
       <Section>
-        <Callout
-          title={copyText(copy, "eat.callout.title")}
-        >
-          <p>
-            {copyText(copy, "eat.callout.body")}{" "}
-            <a
-              href={`mailto:${CHAMBER_EMAIL}?subject=Update%20my%20Visit%20Kingston%20listing`}
-              className="font-medium text-tide-deep underline decoration-seaglass underline-offset-2 hover:text-sound"
-            >
-              Update your listing through the Kingston Chamber
-            </a>
-            .
-          </p>
-        </Callout>
+        <div className="space-y-4">
+          <Callout
+            title={copyText(copy, "eat.callout.title")}
+          >
+            <p>
+              {copyText(copy, "eat.callout.body")}{" "}
+              <a
+                href={`mailto:${CHAMBER_EMAIL}?subject=Update%20my%20Visit%20Kingston%20listing`}
+                className="font-medium text-tide-deep underline decoration-seaglass underline-offset-2 hover:text-sound"
+              >
+                Update your listing through the Kingston Chamber
+              </a>
+              .
+            </p>
+          </Callout>
+          <GetListedCallout copy={copy} />
+        </div>
       </Section>
     </>
   );

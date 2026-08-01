@@ -4,6 +4,7 @@ import { AccessFactsBlock } from "@/components/access-facts";
 import { readAccessFacts } from "@/lib/schemas/access";
 import { getLodging } from "@/lib/stores/listing-stores";
 import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
+import { GetListedCallout } from "@/components/get-listed";
 import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
 import {
   PageHeader,
@@ -146,17 +147,9 @@ export default async function StayPage() {
             before you head out.
           </Callout>
 
-          <Callout title="Run a local inn, B&B, or rental?" tone="coral">
-            Chamber-member lodging gets listed here free. Send your property
-            name, a short description, and a booking link to{" "}
-            <a
-              href="mailto:info@kingstonchamber.com?subject=List%20my%20lodging%20on%20Visit%20Kingston"
-              className="font-medium text-tide-deep underline decoration-seaglass underline-offset-2 hover:text-sound"
-            >
-              info@kingstonchamber.com
-            </a>{" "}
-            and we&apos;ll take it from there.
-          </Callout>
+          {/* copy/get-listed-cta: was a hardcoded lodging-only email callout;
+              now the shared Chamber-editable get-listed CTA (email + phone). */}
+          <GetListedCallout copy={copy} />
         </div>
       </Section>
     </>
