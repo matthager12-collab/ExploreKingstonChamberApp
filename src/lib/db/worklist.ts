@@ -87,6 +87,13 @@ export function stripRequestContact(
       }),
     };
   }
+  if (type === "claim_request") {
+    // E17: same posture as privacy_request — the way to reach the requester
+    // is their PII and stays out of the immortal audit table; the open item
+    // keeps it until resolution so the Chamber can verify out-of-band.
+    const { contact: _omit, ...rest } = payload as { contact?: unknown };
+    return rest;
+  }
   return payload;
 }
 
@@ -155,6 +162,11 @@ export type CreateWorklistResult = {
 
 /** How a second submission folds into an already-active item, per type:
  *  - report_inaccurate: append the new messages, count = total messages;
+ *  - claim_request (E17): count increments and the requester fields update
+ *    to the latest request — the Chamber calls whoever asked most recently;
+ *    fields the repeat request omitted keep their prior values (the
+ *    superseded contact is gone for good: stripRequestContact keeps it out
+ *    of the audit snapshots too);
  *  - staleness: pure no-op (the sweep re-finds the same overdue record);
  *  - moderation (and the E11/E16 fixture types): the newest payload replaces
  *    the old — a member who edits twice before review means the second
@@ -170,6 +182,10 @@ function mergePayloads(
     const added = Array.isArray(incoming.messages) ? incoming.messages : [];
     const messages = [...prior, ...added];
     return { messages, count: messages.length };
+  }
+  if (type === "claim_request") {
+    const prior = typeof existing.count === "number" ? existing.count : 1;
+    return { ...existing, ...incoming, count: prior + 1 };
   }
   return incoming;
 }

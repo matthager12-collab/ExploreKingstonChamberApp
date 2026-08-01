@@ -1425,6 +1425,85 @@ export const COPY_BLOCKS = [
     fallback: "Parking on the Edmonds side — where a car can stay, and where it gets towed",
   },
   // =============== END edmonds.* (Edmonds-side parking, /parking) ===============
+
+  // ===== claim.* (E17 claim-listing disclosure on the /eat and /stay cards) =====
+  {
+    key: "claim.disclosure.label",
+    page: "Claim listing",
+    label: "Disclosure link text (collapsed state)",
+    fallback: "Own this business? Claim this listing",
+  },
+  {
+    key: "claim.form.intro",
+    page: "Claim listing",
+    label: "Form intro — what a request does (and does not do)",
+    multiline: true,
+    fallback:
+      "Tell us who you are and the Chamber will call the business's listed phone number to verify. Nothing on this page changes until then.",
+  },
+  {
+    key: "claim.form.name.label",
+    page: "Claim listing",
+    label: "Name field label",
+    fallback: "Your name",
+  },
+  {
+    key: "claim.form.contact.label",
+    page: "Claim listing",
+    label: "Contact field label",
+    fallback: "Phone number (or email)",
+  },
+  {
+    key: "claim.form.contact.hint",
+    page: "Claim listing",
+    label: "Contact field hint",
+    fallback: "Phone is best — the Chamber verifies claims by phone.",
+  },
+  {
+    key: "claim.form.message.label",
+    page: "Claim listing",
+    label: "Message field label (the field is optional)",
+    fallback: "Anything we should know",
+  },
+  {
+    key: "claim.form.optional",
+    page: "Claim listing",
+    label: "Marker shown beside the optional field's label",
+    fallback: "(optional)",
+  },
+  {
+    key: "claim.form.submit",
+    page: "Claim listing",
+    label: "Submit button",
+    fallback: "Send claim request",
+  },
+  {
+    key: "claim.form.sending",
+    page: "Claim listing",
+    label: "Submit button while the request is in flight",
+    fallback: "Sending…",
+  },
+  {
+    key: "claim.form.cancel",
+    page: "Claim listing",
+    label: "Cancel button",
+    fallback: "Cancel",
+  },
+  {
+    key: "claim.form.success",
+    page: "Claim listing",
+    label: "Success message (shown after the request is received)",
+    multiline: true,
+    fallback:
+      "Thanks — your request is with the Chamber. They'll reach out to verify before anything changes.",
+  },
+  {
+    key: "claim.form.error",
+    page: "Claim listing",
+    label: "Generic failure message",
+    fallback: "Could not send your request — please try again.",
+  },
+  // =============== END claim.* (claim-listing disclosure) ===============
 ] as const satisfies readonly CopyBlock[];
 
 /** Union of every registered copy key — a typo at a call site is a tsc error. */

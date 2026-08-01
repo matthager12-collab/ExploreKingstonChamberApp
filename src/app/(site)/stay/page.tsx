@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { Lodging } from "@/lib/types";
 import { AccessFactsBlock } from "@/components/access-facts";
+import { ClaimListing } from "@/components/claim-listing";
 import { readAccessFacts } from "@/lib/schemas/access";
 import { getLodging } from "@/lib/stores/listing-stores";
 import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
@@ -86,6 +87,8 @@ function LodgingCard({ place, photos }: { place: Lodging; photos: Record<string,
           subject={place.name}
         />
       )}
+      {/* E17 (M-10-03): the claim intake — a request grants nothing. */}
+      <ClaimListing store="lodging" id={place.id} subject={place.name} />
     </Card>
   );
 }
