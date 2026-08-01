@@ -78,6 +78,8 @@ const ID_RULES: Record<string, z.ZodType<string>> = {
   "external-events": externalKeyId,
   "event-overrides": externalKeyId,
   media: mediaNameId,
+  // site-photos ids are dotted slot keys ("home.hero"), same shape as site-copy.
+  "site-photos": copyKeyId,
 };
 
 export function idRuleFor(store: string): z.ZodType<string> {
@@ -150,6 +152,10 @@ export const STORE_SCHEMAS: Record<string, z.ZodType> = {
   // upload has to be possible in one pass, and the alt-text gate lives at
   // PLACEMENT time where the context that makes good alt text is known.
   media: z.looseObject({ id: mediaNameId, title: nonempty }),
+  // Which library photo fills a registered slot. `name` must be a media id —
+  // a slot pointing at anything else would render a broken image on a public
+  // page, so the choke point refuses it rather than the renderer coping.
+  "site-photos": z.looseObject({ id: copyKeyId, name: mediaNameId }),
 };
 
 /** Unknown stores validate permissively ({ id } only) with a warn-once —

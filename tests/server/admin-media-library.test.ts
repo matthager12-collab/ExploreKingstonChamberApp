@@ -121,6 +121,28 @@ describe("admin photo library", () => {
     expect(await page.locator(`text=${ALT}`).count()).toBe(1);
   });
 
+  it("places a photo on the home page, and resets it back to the default", async () => {
+    // The end-to-end claim of the whole feature: something chosen in admin
+    // actually changes what a visitor sees, with no deploy.
+    await page.goto(BASE_URL + "/admin/media", { waitUntil: "load" });
+    await page.locator('button:has-text("Choose photo"), button:has-text("Change photo")').first().click();
+    await page.locator('button:has(img[src^="/api/media/image"])').first().click();
+    await page.waitForSelector("text=Photo placed.", { timeout: 15_000 });
+
+    // The home page is ISR (revalidate 60), so assert against a fresh render
+    // rather than whatever the cache is holding.
+    const home = await context.request.get(BASE_URL + "/", {
+      headers: { "cache-control": "no-cache" },
+    });
+    expect(home.status()).toBe(200);
+    expect(await home.text()).toContain("/api/media/image");
+
+    // And "use the default" genuinely restores the shipped asset.
+    await page.goto(BASE_URL + "/admin/media", { waitUntil: "load" });
+    await page.locator('button:has-text("Use the default")').first().click();
+    await page.waitForSelector("text=Back to the default photo.", { timeout: 15_000 });
+  });
+
   it("removes a photo from the library", async () => {
     await page.goto(BASE_URL + "/admin/media", { waitUntil: "load" });
     const before = await page.locator('img[src^="/api/media/image"]').count();

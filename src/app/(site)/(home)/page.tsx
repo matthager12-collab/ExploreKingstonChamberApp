@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { getForecast } from "@/lib/weather";
@@ -14,8 +15,28 @@ import { NextFerries } from "@/components/next-ferries";
 import { SideSwitcher } from "@/components/side-switcher";
 import { getSide } from "@/lib/side-server";
 import { getFerryPredictionEnabled } from "@/lib/stores/ferry-prediction-store";
+import { getPhotoContext } from "@/lib/stores/photo-store";
+import { resolvePhoto } from "@/lib/photo-resolve";
+import type { PhotoSlotKey } from "@/lib/photo-slots";
 
 export const revalidate = 60;
+
+/**
+ * Override ONLY the share-preview image, from the admin-chosen share.og slot.
+ *
+ * Everything else about the card — title, description, twitter card type — is
+ * inherited from the root layout's static metadata and deliberately not
+ * repeated here. Scoped to this page on purpose: see the note in
+ * photo-slots.ts about why this must not move into the root layout.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const { overrides, library } = await getPhotoContext();
+  const og = resolvePhoto("share.og", overrides["share.og"], library);
+  return {
+    openGraph: { images: [{ url: og.src, alt: og.alt }] },
+    twitter: { images: [og.src] },
+  };
+}
 
 const features = [
   { href: "/ferry", title: "Ferry", blurb: "Sailings, live waits, walk-on tips", icon: "⛴️" },
@@ -41,7 +62,7 @@ function nextDeparture(
 }
 
 export default async function Home() {
-  const [ferry, forecast, tides, events, copy, hiddenPaths, side, predictionEnabled] =
+  const [ferry, forecast, tides, events, copy, hiddenPaths, side, predictionEnabled, photos] =
     await Promise.all([
       getFerryStatusSnapshot(),
       getForecast(2),
@@ -51,7 +72,12 @@ export default async function Home() {
       getEffectiveHiddenPaths(),
       getSide(),
       getFerryPredictionEnabled(),
+      getPhotoContext(),
     ]);
+  // Admin-chosen photos, resolved through the same helper the /admin/media
+  // preview uses — the editor and this page must never disagree about what a
+  // slot renders. An untouched slot resolves to the /brand asset below.
+  const photo = (key: PhotoSlotKey) => resolvePhoto(key, photos.overrides[key], photos.library);
   const fastFerry = ferry.fastFerry;
   // Admin-hidden pages drop out of the feature grid.
   const visibleFeatures = features.filter((f) => !hiddenPaths.includes(f.href));
@@ -74,9 +100,11 @@ export default async function Home() {
     <>
       {/* Hero — Coastal Elegance */}
       <div className="relative isolate min-h-[90vh] overflow-hidden text-white flex flex-col justify-between pb-8">
+        {/* home.hero is a DECORATIVE slot, so resolvePhoto always returns
+            alt="" — the headline below already says what this page is. */}
         <Image
-          src="/brand/photo-kingston-37.jpg"
-          alt=""
+          src={photo("home.hero").src}
+          alt={photo("home.hero").alt}
           fill
           preload
           sizes="100vw"
@@ -256,33 +284,26 @@ export default async function Home() {
           subtitle="Scenes from around town and the north Kitsap shore."
         >
           <div className="grid gap-3 sm:grid-cols-3">
-            {[
-              {
-                src: "/brand/photo-hansville-hero.jpg",
-                alt: "Point No Point lighthouse in Hansville with Puget Sound and the Cascades behind",
-              },
-              {
-                src: "/brand/photo-kingston-59.jpg",
-                alt: "Aerial view of Kingston's harbor and marina wrapped in evergreen forest",
-              },
-              {
-                src: "/brand/photo-kingston-harbor-35.jpg",
-                alt: "Coastal townhomes near the Kingston waterfront in warm evening light",
-              },
-            ].map((p) => (
-              <div
-                key={p.src}
-                className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-sand shadow-[0_1px_3px_rgba(34,51,77,0.08)]"
-              >
-                <Image
-                  src={p.src}
-                  alt={p.alt}
-                  fill
-                  sizes="(min-width: 640px) 33vw, 100vw"
-                  className="object-cover"
-                />
-              </div>
-            ))}
+            {/* Defaults and their descriptions live in photo-slots.ts now, so
+                "Reset to default" in the admin editor is truthful — the same
+                reason the copy registry owns the text fallbacks. */}
+            {(["home.strip.1", "home.strip.2", "home.strip.3"] as const).map((key) => {
+              const p = photo(key);
+              return (
+                <div
+                  key={key}
+                  className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-sand shadow-[0_1px_3px_rgba(34,51,77,0.08)]"
+                >
+                  <Image
+                    src={p.src}
+                    alt={p.alt}
+                    fill
+                    sizes="(min-width: 640px) 33vw, 100vw"
+                    className="object-cover"
+                  />
+                </div>
+              );
+            })}
           </div>
           <p className="mt-4 text-sm text-ink-soft">
             More photos, stories, and trip ideas at{" "}

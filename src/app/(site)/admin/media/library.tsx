@@ -29,7 +29,15 @@ function fmtBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function MediaLibrary({ initialItems }: { initialItems: MediaItem[] }) {
+export function MediaLibrary({
+  initialItems,
+  placements = {},
+}: {
+  initialItems: MediaItem[];
+  /** photo name → labels of the spots currently using it, for the remove
+   *  confirmation. Empty is fine; the grid just skips the warning. */
+  placements?: Record<string, string[]>;
+}) {
   const [items, setItems] = useState<MediaItem[]>(initialItems);
   const [msg, setMsg] = useState<Msg>(null);
   const [uploading, setUploading] = useState(false);
@@ -109,7 +117,16 @@ export function MediaLibrary({ initialItems }: { initialItems: MediaItem[] }) {
   }
 
   async function remove(item: MediaItem) {
-    if (!confirm(`Remove "${item.title}" from the library?`)) return;
+    // Naming the affected spots matters more than the confirmation itself: the
+    // consequence is a public page quietly reverting to its default photo, and
+    // "are you sure?" does not tell anyone that is about to happen.
+    const usedBy = placements[item.id] ?? [];
+    const warning = usedBy.length
+      ? `"${item.title}" is being used for ${usedBy.join(" and ")}. ` +
+        `Removing it sends ${usedBy.length === 1 ? "that spot" : "those spots"} back to the ` +
+        `default photo. Remove it anyway?`
+      : `Remove "${item.title}" from the library?`;
+    if (!confirm(warning)) return;
     const res = await fetch(`/api/admin/media?id=${encodeURIComponent(item.id)}`, {
       method: "DELETE",
     });
