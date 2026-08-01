@@ -144,6 +144,14 @@ export const MARKER_CATEGORIES = [
   { key: "coffee", label: "Coffee", emoji: "☕", color: "#8b5e34" },
   { key: "drink", label: "Drinks", emoji: "🍺", color: "#c99a2e" },
   { key: "shop", label: "Shop", emoji: "🛍️", color: "#7c4dbe" },
+  // The shopping map carries retail AND service businesses, and one 🛍️ for
+  // both would tell a visitor a nail salon sells things to take home. The
+  // split is what you leave with: `shop` = goods (that includes NAPA and
+  // T-Mobile), `services` = a service performed for you (salon, spa, tailor,
+  // laundry, storage). Colour is a second channel only — the emoji carries
+  // the distinction on its own, per the never-colour-alone rule below.
+  // #9c4a7a is 5.72:1 on the pin's white body (1.4.11 wants 3:1).
+  { key: "services", label: "Services", emoji: "✂️", color: "#9c4a7a" },
   { key: "lodging", label: "Lodging", emoji: "🛏️", color: "#324a6d" },
   { key: "parking", label: "Parking", emoji: "🅿️", color: "#2a7f8a" },
   { key: "restroom", label: "Restroom", emoji: "🚻", color: "#4a7c59" },
@@ -190,6 +198,11 @@ export const CATEGORY_LABEL_RANK: Record<string, number> = {
   shipwreck: 72, // the "Landmark" 📍 pin's category key is `shipwreck`, not `landmark`
   lodging: 60, event: 58, art: 55, info: 50,
   food: 50, coffee: 50, drink: 50, shop: 48,
+  // Just under `shop`: on the shopping map the two are drawn from the same
+  // dense downtown block, and when two chips collide the retail name is the
+  // one a browsing visitor is looking for. Still ≥45, so services labels
+  // appear at the same zoom 15 as shops rather than a step later.
+  services: 46,
   parking: 30, restroom: 25,
   // Practical basics (E27) rank below restroom so they declutter behind
   // landmarks. All sit under 45, so labelZoomThreshold() already holds them to
