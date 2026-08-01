@@ -2,9 +2,13 @@
 
 _Explore Kingston — July 2026._ How maps work across the app: a general,
 admin-editable **map CMS** (named views + drawn features + built-in data
-layers), a **parking-specific zone editor**, and three **specialized ferry
-maps**. One reusable component renders any named view anywhere; the Chamber
-builds and edits everything in the portal — no code, no redeploy.
+layers), a **parking-specific zone editor**, and two **specialized ferry
+maps** (plus the kiosk's deliberate non-slippy SVG map). One reusable component
+renders any named view anywhere; the Chamber builds and edits everything in the
+portal — no code, no redeploy. Every slippy map renders the **self-hosted
+vector basemap** (E31, [ADR-0006](adr/ADR-0006-self-hosted-vector-basemap.md)):
+Protomaps PMTiles on R2 behind `/api/map/tiles/kingston.pmtiles`, styled by
+`src/lib/map/basemap.ts`, drawn by MapLibre GL.
 
 Sibling docs: [ARCHITECTURE.md](ARCHITECTURE.md) (persistence seam, stores),
 [SDD.md](SDD.md), [DATA_SOURCES.md](DATA_SOURCES.md) (parking/street rule
@@ -23,8 +27,9 @@ provenance), [OPERATIONS.md](OPERATIONS.md).
 | Surface | What it is | Model | Public page | Admin editor |
 | --- | --- | --- | --- | --- |
 | **Map CMS** | General named views with drawn markers/lines/trails/areas + built-in data layers | `MapView` + `MapFeature` (`src/lib/map/types.ts`) | `/map` (switcher), embedded on `/eat` and `/parking` | `/admin/maps` (`MapBuilder`) |
-| **Parking zones** | Rich, structured parking dataset (rules, overnight, confidence, source notes) | `MapZone` (`src/lib/data/parking.ts`) | `/parking` (via the CMS), pulled in as the `parking-zones` built-in layer | `/admin/map` (`MapZoneEditor`) |
+| **Parking zones** | Rich, structured parking dataset (rules, curb sides, overnight, confidence, source notes) | `MapZone` (`src/lib/data/parking.ts`) | `/parking` (via the CMS), pulled in as the `parking-zones` built-in layer | `/admin/map` (`MapZoneEditor`) |
 | **Ferry maps** | Live vessel map + SR-104 boarding-pass map | hand-coded, no CMS | `/ferry` | none (code-defined) |
+| **Kiosk map** | Numbered-pin SVG drawn from our own coordinates — deliberately NOT a slippy map (offline-safe, no external anchors; see the header of `src/components/kiosk-map.tsx`) | hand-coded (E22) | `/kiosk/map` | none |
 
 The two systems interlock: the Map CMS can **include** parking zones and the
 street overlay as read-only built-in layers, so parking data lives in exactly
@@ -56,9 +61,11 @@ it in the store — see [ARCHITECTURE.md](ARCHITECTURE.md) for the seam):
 | `id`, `kind: FeatureKind`, `title` | `FeatureKind = "marker" \| "line" \| "trail" \| "area"` |
 | `views: string[]` | one or more `MapView` ids this feature shows on (a feature can live on several views) |
 | geometry | exactly one, matching `kind`: `point` (marker), `path` (line/trail), `polygon` (area) |
-| `category?` | marker icon category — a key into `MARKER_CATEGORIES` (16 icons: food, coffee, drink, shop, lodging, parking, restroom, viewpoint, beach, trailhead, park, art, event, landmark, info, star). Default icon is `info` |
+| `category?` | marker icon category — a key into `MARKER_CATEGORIES` (21 icons: food, coffee, drink, shop, lodging, parking, restroom, the E27 basics water/bench/picnic/shade/bin, viewpoint, beach, trailhead, park, art, event, shipwreck, info, star). Beware: the "Landmark" pin's **key** is `shipwreck`, not `landmark`. Default icon is `info` |
 | `color?` | hex stroke/fill for line/trail/area, or a marker tint override |
 | `notes?`, `link?` | popup body + a "Directions / Open" link |
+| `cost?: CostValue` | E27's free-vs-paid signal (`free` / `paid` / `free-and-paid` / `donation`, `src/lib/cost.ts`) — rendered as the `<CostBadge>` on finder rows (e.g. `/map/restrooms`). Editable in the builder since E31 P7 (issue #80) |
+| `label?: MapLabel` | per-feature on-map name-label overrides (short text, show, placement, ±priority) — see [MAP-LABELS.md](MAP-LABELS.md) |
 | `images?: string[]`, `imageUrl?` | stored image name(s); `imageUrl` is the legacy single-image field kept for back-compat, folded in by `featureImages()` |
 | `parking?: ParkingMeta` | when set, the feature is a parking area: color becomes automatic by `parking.type` and structured payment fields render in the popup |
 
@@ -138,15 +145,12 @@ Rendering details worth knowing:
   loads dynamically inside `useEffect` via `src/lib/map/maplibre.ts` (which
   registers the `pmtiles://` protocol once), deferred behind an
   IntersectionObserver until the map scrolls into view (perf budget). The base
-  style comes from `mapStyle()` in `src/lib/map/basemap.ts` — POI-free, fully
-  same-origin, with street-name labels only (USPS-abbreviated via the generated
-  table `src/lib/map/street-abbrevs.json`; regenerate with `npm run
-  tiles:abbrevs` whenever the tiles are rebuilt — the drift-guard test in
-  `tests/unit/map/street-abbrev-drift.test.ts` fails until you do). Markers are
-  HTML `Marker` elements (teardrops); lines/areas are GeoJSON sources batched
-  by render style. Because markers are DOM elements above the canvas, MapLibre's
-  symbol-collision engine cannot see them — street labels declutter against
-  each other, and markers simply draw over any label beneath them.
+  style comes from `mapStyle()` in `src/lib/map/basemap.ts` — see "The basemap"
+  below. Markers are HTML `Marker` elements (teardrops); lines/areas are
+  GeoJSON sources batched by render style. Because markers are DOM elements
+  above the canvas, MapLibre's symbol-collision engine cannot see them —
+  street labels declutter against each other, and markers simply draw over any
+  label beneath them.
 - **Colorway** ("Evergreen & Sound", [ADR-0007](adr/ADR-0007-map-colorway-and-overlay-palette.md)):
   the base is a LIGHT, desaturated family and the overlay a DARK, saturated one,
   so hue is free to carry meaning on both sides. `earth` and `building` are
@@ -157,6 +161,9 @@ Rendering details worth knowing:
   re-saturate the arterial** (`#e6dcc4` is the only warm sand that separates
   from the `park-and-ride-24h` badge). `basemap.test.ts` asserts no colours, so
   the ADR and review are the only guards here.
+- **On-map name labels** (chips + hand-rolled declutter, with per-feature admin
+  overrides) — the whole subsystem is documented in
+  [MAP-LABELS.md](MAP-LABELS.md).
 - **Auto-frame:** after drawing, the map fits bounds to the content it actually
   drew (overriding a stale center/zoom) — but only when the content spans ≤ 4 km
   and the view doesn't carry the wide `streets` overlay. A lone far pin (e.g.
@@ -314,6 +321,17 @@ paid / park-and-ride-24h / prohibited / load-zone / permit), `summary`
 (`yes` / `no` / `confirm-first`), `center: [lat,lng]`, optional
 `polygon: [lat,lng][]`, and optional `sourceUrl` / `sourceNote`.
 
+**Curb model (E31 phase 6).** A street-parking zone can carry
+`streetPaths: [lat,lng][][]` (one or more centre-line polylines, kept disjoint
+exactly as OSM splits them) plus a compass `curb` side (`both` / `east` /
+`west` / `north` / `south` — set ONLY where a source names the side). The
+public map renders these as **curb-hugging offset strokes** via MapLibre
+`line-offset`; `curbOffsetSigns()` in `src/lib/map/curb.ts` (pure,
+characterization-tested) converts the compass side into the right offset
+sign(s) for each polyline's direction. Unset curb = side unknown = one honest
+centre-line stroke. The legacy `parkingAreas` flat list is **gone** (retired in
+E31 phase 6; PR #78 had already established it was dead).
+
 Store: `src/lib/stores/parking-store.ts` (`getParkingZones`,
 `saveParkingZone`, `deleteParkingZone`) — seed+overlay under the
 `parking-zones` store name.
@@ -428,21 +446,65 @@ ferry-info. Static route/steps — no polling.
 
 ---
 
+## The basemap (every slippy map)
+
+`src/lib/map/basemap.ts` is the **single source of truth** for the base layer
+(E31, [ADR-0006](adr/ADR-0006-self-hosted-vector-basemap.md)): PMTiles source
+URL, attribution (OSM ODbL + Protomaps), and the hand-rolled MapLibre style.
+Facts worth knowing:
+
+- **Fully self-hosted.** Tiles stream from a private R2 bucket through the
+  same-origin range proxy `/api/map/tiles/kingston.pmtiles`
+  (`src/lib/map/tiles-store.ts`); street-name glyphs come from
+  `public/fonts` (Noto Sans, OFL). No third-party requests, no API keys. The
+  PMTiles build + refresh runbook is in
+  [OPERATIONS.md](OPERATIONS.md) ("Basemap vector tiles").
+- **No POI icons, structurally.** The style has no sprite, no `icon-image`,
+  and no `pois` source-layer, so no church symbol (or any POI icon) can ever
+  render — the guarantee is asserted by `src/lib/map/__tests__/basemap.test.ts`.
+  The only symbol layers are street-name TEXT (three `road-*` layers using
+  MapLibre's native label collision — see [MAP-LABELS.md](MAP-LABELS.md)).
+  Street names render USPS-abbreviated via `streetTextField()` and the
+  generated table `src/lib/map/street-abbrevs.json`; regenerate with
+  `npm run tiles:abbrevs` whenever the tiles are rebuilt — the drift-guard
+  test in `tests/unit/map/street-abbrev-drift.test.ts` fails until you do.
+- **Brand palette (E31 phase 7 structure, ADR-0007 values).** Every style
+  color is a named entry in the module's `PALETTE`, derived as *tints* of the
+  Tailwind brand tokens in `src/app/globals.css` (shell/sand → paper + land,
+  seaglass/tide → water, fern → greenery, warm sand → the highway accent,
+  ink/ink-soft → street names). The hex values are the owner-accepted
+  "Evergreen & Sound" colorway —
+  [ADR-0007](adr/ADR-0007-map-colorway-and-overlay-palette.md) is the
+  authority on every value (see the Colorway bullet under `<FeatureMap>` for
+  the load-bearing rules: label-contrast caps the greens, the arterial must
+  stay `#e6dcc4`). If a brand token changes, re-derive the palette by amending
+  the ADR rather than editing layer colors ad hoc.
+- **Dark map variant: deliberately deferred.** Investigated for the phase-7
+  "brand palette + dark mode" charter line (2026-07-31): the app has **no dark
+  theme anywhere** — no `prefers-color-scheme` handling, no theme toggle, no
+  Tailwind `dark:` variants (the `dark` style objects in `side-switcher.tsx`
+  et al. are tone presets for components sitting on navy fills), and static
+  PWA/kiosk `themeColor`s. A dark basemap with light UI chrome around it would
+  be a design incoherence, not a feature. **Ship a dark map style variant when
+  (and only when) the app grows a dark theme** — the vector base makes it a
+  second `PALETTE` in `basemap.ts`, which is exactly why the seam exists.
+- **Offline tiles (PWA).** The E31 offline slice landed on `main` via
+  **PR #141** (SW v5): the service worker precaches a small downtown archive
+  (`public/offline-tiles/kingston-downtown.pmtiles`, `OFFLINE_TILES_PATH` in
+  `basemap.ts`) and serves byte ranges from it when the network is gone, with
+  a real offline test in `tests/server/offline-map.test.ts`.
+  [PWA.md](PWA.md) is authoritative for offline behavior.
+
+---
+
 ## Limitations & debt
 
-- **`ParkingArea` / `Atm` are orphaned legacy types** in `src/lib/types.ts`. The
-  cash/ATM map was removed — `src/lib/data/atms.ts` is deleted and no code reads
-  the `Atm` type. Cash guidance now lives as a structured ferry-info `cash-tips`
-  record ("no ATM at the dock; nearest cash machines up in downtown Kingston"),
-  not on a map. `parking.ts` still exports a legacy `parkingAreas: ParkingArea[]`
-  flat list at the bottom of the file; **only `parkingZones: MapZone[]` is used**
-  by the live app (via `parking-store`). Both legacy shapes are candidates for
-  deletion.
-- **Stale code comments reference `components/town-map.tsx`, which no longer
-  exists** — `feature-map.tsx`, and both admin editors, cite it as the
-  dynamic-import / color-convention precedent. The precedent is real (the pattern
-  is shared) but the file was renamed/absorbed into `feature-map.tsx`; the
-  comments should be updated.
+- **`Atm` is an orphaned legacy type** in `src/lib/types.ts`. The cash/ATM map
+  was removed — `src/lib/data/atms.ts` is deleted and no code reads the `Atm`
+  type. Cash guidance now lives as a structured ferry-info `cash-tips` record
+  ("no ATM at the dock; nearest cash machines up in downtown Kingston"), not on
+  a map. (`ParkingArea` and the `parkingAreas` flat list are already gone —
+  retired by the E31 phase-6 curb-model work.)
 - **Two divergent parking color maps.** `feature-map.tsx` colors built-in
   parking *zones* by `ParkingRule` (`free-2hr`, `paid`, …); CMS parking
   *features* color by `ParkingType` (`free`, `paid`, …). They're kept visually

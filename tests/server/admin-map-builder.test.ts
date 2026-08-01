@@ -6,9 +6,13 @@
 // Guards here: the editor shell renders with no Leaflet/OSM remnants; a
 // no-touch save round-trips a trail's [lat,lng] open PATH byte-identically
 // (the LineString face of FR-EDIT-06); and the draw-marker → save → delete
-// loop hits the real admin API. Skips visibly when the tiles route has no
-// R2_TILES_* (keyless CI).
+// loop hits the real admin API. When the tiles route has no R2_TILES_*
+// (keyless CI), the committed fixture archive serves the tiles via route
+// interception instead, so the interactive tests run everywhere; the visible
+// skip remains only if the fixture is also missing.
 
+import { existsSync, readFileSync } from "fs";
+import { fileURLToPath } from "url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { BASE_URL } from "./config";
@@ -21,6 +25,7 @@ type Feature = {
   kind: string;
   title: string;
   views: string[];
+  cost?: string;
   point?: [number, number];
   path?: [number, number][];
   polygon?: [number, number][];
@@ -118,10 +123,36 @@ beforeAll(async () => {
     headers: { Range: "bytes=0-1023" },
   });
   tilesAvailable = probe.status() === 206 || probe.status() === 200;
+  // Local escape hatch (E31 P7): serve a kingston.pmtiles via route
+  // interception so the interactive tests run without R2_TILES_*. Defaults to
+  // the committed fixture (tests/fixtures/tiles/kingston.pmtiles, added by
+  // #135); PMTILES_FILE still overrides it, e.g. with a fresh prod download.
+  const pmtilesFile =
+    process.env.PMTILES_FILE ??
+    fileURLToPath(new URL("../fixtures/tiles/kingston.pmtiles", import.meta.url));
+  if (!tilesAvailable && existsSync(pmtilesFile)) {
+    const archive = readFileSync(pmtilesFile);
+    await context.route("**/api/map/tiles/*", async (route) => {
+      const m = /bytes=(\d+)-(\d+)?/.exec((await route.request().headerValue("range")) ?? "");
+      const start = m ? Number(m[1]) : 0;
+      const end = m?.[2] ? Math.min(Number(m[2]), archive.length - 1) : archive.length - 1;
+      await route.fulfill({
+        status: m ? 206 : 200,
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "Accept-Ranges": "bytes",
+          ...(m ? { "Content-Range": `bytes ${start}-${end}/${archive.length}` } : {}),
+          ETag: '"pmtiles-local-fixture"',
+        },
+        body: archive.subarray(start, end + 1),
+      });
+    });
+    tilesAvailable = true;
+  }
   if (!tilesAvailable) {
     console.warn(
       "[admin-map-builder] vector tiles unavailable (no R2_TILES_*) — interactive tests skip; " +
-        "run locally with tiles, and the E32 V-1 checklist covers the gap",
+        "run locally with tiles (or set PMTILES_FILE), and the E32 V-1 checklist covers the gap",
     );
   }
   // Opt into the builder's test hook (window.__vkDraw) so the suite can prove
@@ -330,6 +361,87 @@ describe("admin map builder (MapLibre + terra-draw)", () => {
       }
     } finally {
       if (pre) await putFeature(pre); // restore the seed geometry
+    }
+  });
+
+  // Issue #80: MapFeature.cost. The API whitelists it (E27), but the editor
+  // rebuilds its payload from the form draft, so the documented strip trap is
+  // the EDITOR forgetting the field — a save must not silently drop it.
+  it("round-trips cost at the API layer (runs keyless — no map needed)", async () => {
+    await page.goto(BASE_URL + "/admin/maps", { waitUntil: "load" });
+    const COST_ID = "e31p7-cost-api-spec";
+    try {
+      await putFeature({
+        id: COST_ID,
+        kind: "marker",
+        title: "Cost spec pin",
+        views: ["explore"],
+        cost: "donation",
+        point: [47.798, -122.498],
+      });
+      expect((await getFeature(COST_ID))?.cost).toBe("donation");
+      // An invalid value must be dropped, not stored.
+      await putFeature({
+        id: COST_ID,
+        kind: "marker",
+        title: "Cost spec pin",
+        views: ["explore"],
+        cost: "expensive",
+        point: [47.798, -122.498],
+      });
+      expect((await getFeature(COST_ID))?.cost).toBeUndefined();
+    } finally {
+      await page.evaluate(
+        (id) => fetch(`/api/admin/map-features?id=${encodeURIComponent(id)}`, { method: "DELETE" }),
+        COST_ID,
+      );
+    }
+  });
+
+  it("editor save preserves cost untouched, and the select can change it", async (ctx) => {
+    if (!tilesAvailable) return ctx.skip();
+    const COST_ID = "e31p7-cost-ui-spec";
+    const TITLE = "Cost UI spec pin";
+    try {
+      await openBuilder();
+      await putFeature({
+        id: COST_ID,
+        kind: "marker",
+        title: TITLE,
+        views: ["explore"],
+        cost: "free",
+        point: [47.796, -122.51],
+      });
+      // Select it in the builder (fresh load so the new feature is in the list).
+      await openBuilder();
+      await page.click('button:has-text("Explore Kingston")');
+      await page.click('button:has-text("Features (")');
+      await page.click(`li button:has-text("${TITLE}")`);
+      const title = page.locator(`input[value="${TITLE}"]`).first();
+      await title.waitFor({ timeout: 10_000 });
+      // .first(): the form body renders twice (overlay ≥lg + block <lg).
+      const costSelect = page.locator('label:has-text("Cost for visitors") select').first();
+      expect(await costSelect.inputValue()).toBe("free");
+
+      // STRIP TRAP: a save that never touches cost must keep it.
+      await title.focus();
+      await page.keyboard.press("End");
+      await page.keyboard.type("X");
+      await page.keyboard.press("Backspace");
+      await page.click('button:has-text("Save feature")');
+      await page.waitForSelector("text=Saved — live on the public map", { timeout: 10_000 });
+      expect((await getFeature(COST_ID))?.cost).toBe("free");
+
+      // And the control actually edits it.
+      await costSelect.selectOption("paid");
+      await page.click('button:has-text("Save feature")');
+      await page.waitForSelector("text=Saved — live on the public map", { timeout: 10_000 });
+      expect((await getFeature(COST_ID))?.cost).toBe("paid");
+    } finally {
+      await page.evaluate(
+        (id) => fetch(`/api/admin/map-features?id=${encodeURIComponent(id)}`, { method: "DELETE" }),
+        COST_ID,
+      );
     }
   });
 

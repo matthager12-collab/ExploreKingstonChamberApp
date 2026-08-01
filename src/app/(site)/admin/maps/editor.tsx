@@ -47,6 +47,7 @@ import {
   type LabelShow,
   type LabelDir,
 } from "@/lib/map/types";
+import { COST_LABELS, COST_VALUES, isCostValue } from "@/lib/cost";
 import { mapStyle, TILES_PMTILES_PATH } from "@/lib/map/basemap";
 import { loadMapLibre, pmtilesUrl } from "@/lib/map/maplibre";
 import { editorIdStrategy, loadTerraDraw } from "@/lib/map/terradraw";
@@ -128,6 +129,10 @@ type Draft = {
   kind: FeatureKind;
   title: string;
   category: string;
+  // E27's free-vs-paid signal (issue #80). "" = not stated. MUST round-trip
+  // through buildFeature: the API rebuilds each feature from the request body
+  // alone, so a draft that omitted `cost` would silently strip it on save.
+  cost: string;
   /** Chamber member — draws the marker with added emphasis. Markers only. */
   member: boolean;
   color: string;
@@ -156,6 +161,7 @@ function toDraft(f: MapFeature): Draft {
     kind: f.kind,
     title: f.title,
     category: f.category ?? "",
+    cost: f.cost ?? "",
     member: f.member === true,
     color: f.color ?? "",
     notes: f.notes ?? "",
@@ -253,16 +259,17 @@ const trailDash = (f: GeoJSONStoreFeatures): [number, number] | undefined =>
 /* Built-in context layer styling (kept in sync with feature-map.tsx)  */
 /* ------------------------------------------------------------------ */
 
+// Values are ADR-0007 §4 ("Evergreen & Sound" overlay half).
 const PARKING_RULE_COLORS: Record<string, string> = {
   "free-2hr": "#2e9e4f",
   "free-unrestricted": "#1E96C0",
   paid: "#7c4dbe",
-  "park-and-ride-24h": "#e8891d",
+  "park-and-ride-24h": "#8a4c22",
   prohibited: "#d43d3d",
-  "load-zone": "#f0b429",
-  permit: "#6b7280",
+  "load-zone": "#b8860b",
+  permit: "#7a7468",
 };
-const FALLBACK_PARKING_COLOR = "#6b7280";
+const FALLBACK_PARKING_COLOR = "#7a7468";
 
 function parkingColor(rule: string): string {
   return PARKING_RULE_COLORS[rule] ?? FALLBACK_PARKING_COLOR;
@@ -279,7 +286,7 @@ const STREET_COLORS: Record<StreetRule, string> = {
   "free-2hr": "#2e9e4f",
   "free-unrestricted": "#1E96C0",
   prohibited: "#d43d3d",
-  "ferry-holding": "#64748b",
+  "ferry-holding": "#3f5473", // ADR-0007: navy — no longer a near-twin of permit
   default: "#8b9aa8",
 };
 
@@ -1299,6 +1306,9 @@ export function MapBuilder({
       views: draft.views,
       ...(draft.notes.trim() ? { notes: draft.notes.trim() } : {}),
       ...(kind === "marker" && draft.category ? { category: draft.category } : {}),
+      // Deliberately not kind-gated: cost is valid on any feature, and gating
+      // here would strip an API-set value the moment a shape was re-saved.
+      ...(isCostValue(draft.cost) ? { cost: draft.cost } : {}),
       ...(kind === "marker" && draft.member ? { member: true } : {}),
       ...(label ? { label } : {}),
       // Parking color is automatic — don't persist a manual color alongside it.
@@ -1752,6 +1762,24 @@ export function MapBuilder({
         </Field>
       )}
 
+      {/* Cost to visitors (issue #80): the E27 free-vs-paid badge, e.g. on the
+          /map/restrooms finder rows. Offered for every kind — the field is
+          valid on any feature and hiding it would strip API-set values. */}
+      <Field label="Cost for visitors">
+        <select
+          className={INPUT}
+          value={draft.cost}
+          onChange={(e) => patchDraft({ cost: e.target.value })}
+        >
+          <option value="">— not stated —</option>
+          {COST_VALUES.map((v) => (
+            <option key={v} value={v}>
+              {COST_LABELS[v]}
+            </option>
+          ))}
+        </select>
+      </Field>
+
       {draft.kind === "marker" && (
         <label className="flex items-start gap-2 text-sm text-ink">
           <input
@@ -1846,7 +1874,7 @@ export function MapBuilder({
             <span
               aria-hidden
               className="h-9 w-12 rounded border border-sand"
-              style={{ background: parkingTypeInfo(draft.parkingType)?.color ?? "#6b7280" }}
+              style={{ background: parkingTypeInfo(draft.parkingType)?.color ?? "#7a7468" }}
             />
             <span className="text-xs text-ink-soft">Color: automatic by parking type</span>
           </span>

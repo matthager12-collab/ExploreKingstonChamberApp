@@ -295,14 +295,12 @@ Camera-list pages the seed points back to:
 | Source | URL | Access | Cost | Status in app |
 |---|---|---|---|---|
 | Google Maps URLs (deep links) | https://developers.google.com/maps/documentation/urls/get-started | No key, no signup; `api=1` param is **mandatory** | Free, unlimited | **wired** (`mapSearchUrl`/`mapDirectionsUrl` in `src/components/ui.tsx`) |
-| OSM raster tiles (Leaflet basemap) | https://tile.openstreetmap.org (currently) · policy: https://operations.osmfoundation.org/policies/tiles/ | Best-effort tile server, no key | Free (best-effort, no SLA) | **wired** — but see the debt note below |
-| Leaflet + Geoman | https://leafletjs.com · https://github.com/geoman-io/leaflet-geoman | `npm` deps, client components | Free (open source) | **wired** (admin polygon/feature editing at `/admin/map`, `/admin/maps`) |
-| OpenFreeMap / MapLibre / Protomaps (vector-tile swap targets) | https://openfreemap.org · https://maplibre.org · https://docs.protomaps.com | No-key vector tiles / static PMTiles | Free–low | planned (only if OSM raster proves inadequate) |
+| Self-hosted vector basemap (Protomaps PMTiles on R2 + MapLibre GL) | https://docs.protomaps.com · https://maplibre.org | OSM-derived PMTiles archive built by us, served from our private R2 bucket via the same-origin `/api/map/tiles` range proxy — **no external tile server, no key** | R2 storage pennies | **wired** (E31, [ADR-0006](adr/ADR-0006-self-hosted-vector-basemap.md)) — refresh runbook in [OPERATIONS.md](OPERATIONS.md); replaced the OSM raster + Leaflet/geoman stack, which is gone from the tree |
 
-The map CMS (`/map`, `/admin/maps`) and parking editor (`/admin/map`) render on Leaflet + OSM
-tiles; see [MAPS.md](MAPS.md). Google is used only for outbound deep links (free Street View
-deep links, no key) — the app's own curated place data avoids ever plotting Google Places on a
-non-Google map (a ToS trap).
+Every slippy map (the map CMS at `/map` + `/admin/maps`, the parking editor at `/admin/map`,
+the two ferry maps) renders the self-hosted vector base; see [MAPS.md](MAPS.md). Google is
+used only for outbound deep links (free Street View deep links, no key) — the app's own
+curated place data avoids ever plotting Google Places on a non-Google map (a ToS trap).
 
 ### Gotchas (load-bearing)
 
@@ -311,12 +309,11 @@ non-Google map (a ToS trap).
   with a card even for Embed — hard-cap quotas and restrict the key by HTTP referrer.
 - **Deep links:** omit `api=1` and Google silently ignores every parameter. URL-encode values;
   2,048-char limit; `travelmode=driving|walking|bicycling|transit`.
-- **OSM tiles are best-effort — and the app currently uses the one URL it shouldn't.** The
-  Leaflet basemaps hardcode `https://tile.openstreetmap.org/{z}/{x}/{y}.png` (e.g.
-  `ferry-vessel-map.tsx`). The OSMF tile policy explicitly discourages this for production
-  traffic; it can be throttled/withdrawn without notice. **Debt:** move the tile URL to a
-  single config constant and swap to OpenFreeMap / Protomaps-on-R2 / a MapTiler-Stadia free
-  key before traffic grows.
+- **Tile freshness is now our responsibility** (the flip side of self-hosting): the basemap
+  is only as current as the last PMTiles build. OSM-derived data drifts slowly — refresh
+  ~quarterly per the [OPERATIONS.md](OPERATIONS.md) runbook. (The old debt note here — the
+  Leaflet basemaps hardcoding `tile.openstreetmap.org` against OSMF policy — was resolved by
+  exactly the swap it prescribed: Protomaps-on-R2, E31.)
 
 ---
 

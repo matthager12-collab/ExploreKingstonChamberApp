@@ -2,8 +2,9 @@
 # The app is not live yet, so every frozen path below is TEMPORARILY unfrozen.
 # Each active entry is prefixed with '#THAW#', so both enforcers (PreToolUse hook
 # + CI check-frozen) parse it as a comment and the manifest reads as empty.
-# REFREEZE when the owner says so: strip the '#THAW# ' prefixes + delete this
-# banner (refreeze-frozen.mjs), or `git restore .agent-frozen` / `git revert` the PR.
+# REFREEZE when the owner says so — MANUALLY: strip the '#THAW# ' prefixes and
+# delete this banner. There is no refreeze script. Do NOT `git restore` this file
+# from a pre-E31 revision (see the REFREEZE NOTE below about retired entries).
 # =======================================================================
 
 # .agent-frozen — files agents must NOT modify without explicit human approval.
@@ -34,13 +35,11 @@
 #THAW# .github/workflows/ferry-observe.yml
 #THAW# .github/workflows/ferry-accuracy.yml
 
-# --- Audit-flagged monoliths (high blast radius; touch only with a chartered epic) ---
-# E22 moved the two geoman editors into the (site) route group. Pure `git mv`
-# renames — `git diff -M90%` reports R100 for both, i.e. zero content changed —
-# so the freeze is intact and only these two lines were repointed. The move
-# itself still trips check-frozen (a rename puts BOTH the old and the new path
-# in the changed set), which is why the E22 refactor PR carries the
-# 'frozen-change-approved' label: the label attests to the rename, not to an edit.
-#THAW# src/components/feature-map.tsx
-#THAW# src/app/(site)/admin/map/editor.tsx
-#THAW# src/app/(site)/admin/maps/editor.tsx
+# --- Audit-flagged monoliths: REMOVED by E31/E32 (charter AC 10) ---
+# The three map monoliths (src/components/feature-map.tsx and the two admin
+# map editors) were frozen as audit-flagged Leaflet-era files. E31/E32 — the
+# epic chartered to rewrite them — did exactly that (MapLibre + terra-draw,
+# ADR-0006), so their entries are permanently deleted, not merely thawed.
+# ⚠️ REFREEZE NOTE: when un-thawing this manifest, do NOT resurrect those three
+# paths (a `git restore` from a pre-E31 revision would). The rewritten files
+# are ordinary, characterization-tested code now.

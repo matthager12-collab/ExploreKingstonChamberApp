@@ -45,15 +45,15 @@ import { Badge } from "@/components/ui";
 /* ------------------------------------------------------------------ */
 
 // Same canvas colors as the public maps — they live on the map, not in the
-// page's token system.
+// page's token system. Values are ADR-0007 §4 ("Evergreen & Sound").
 const RULE_COLORS: Record<string, string> = {
   "free-2hr": "#2e9e4f",
   "free-unrestricted": "#1E96C0",
   paid: "#7c4dbe",
-  "park-and-ride-24h": "#e8891d",
+  "park-and-ride-24h": "#8a4c22",
   prohibited: "#d43d3d",
-  "load-zone": "#f0b429",
-  permit: "#6b7280",
+  "load-zone": "#b8860b",
+  permit: "#7a7468",
 };
 
 const RULES: ParkingRule[] = [
@@ -70,7 +70,7 @@ const INPUT =
   "w-full rounded-lg border border-sand bg-white px-3 py-2 text-sm text-ink focus:border-tide focus:outline-none";
 
 function ruleColor(rule: string): `#${string}` {
-  return (RULE_COLORS[rule] ?? "#6b7280") as `#${string}`;
+  return (RULE_COLORS[rule] ?? "#7a7468") as `#${string}`;
 }
 
 /** Rule color for a terra-draw feature (zone polygons carry `rule`). */
