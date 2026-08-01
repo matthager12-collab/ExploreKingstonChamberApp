@@ -232,6 +232,12 @@ The other runtime-only vars (`AUTH_SECRET`, `WSDOT_API_KEY`, `SETUP_TOKEN`,
 `DATA_DIR`) don't have this constraint — they're read on the server at request
 time.
 
+Two OPTIONAL vars belong to the E17 Qwick importer and normally stay unset:
+`QWICK_GRAPHQL_URL` and `QWICK_LICENSE_ID` override the checked-in defaults in
+`src/lib/import/qwick.ts`. They are not secrets (the vendor read was public),
+and with the vendor endpoint dead (2026-08-01) the importer runs from saved
+exports via `--fixture` anyway — see `docs/QWICK-DECOMMISSION.md`.
+
 ### 2d. Staging (E03)
 
 A second Render web service, `explore-kingston-staging`, is declared in the

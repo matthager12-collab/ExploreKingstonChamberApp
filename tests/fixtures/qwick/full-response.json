@@ -1,0 +1,88 @@
+{
+  "__comment": "Synthesized Qwick GraphQL envelope (E17). The vendor endpoint died before a live capture could be taken (node.qwickmedia.com stopped resolving by 2026-08-01), so this fixture encodes the bundle-recovered shape plus one row per policy bucket: a normalized-name match to the curated seed jaime-les-crepes, a phone-only match to sourdough-willys, an ambiguous upstream pair, a malformed (nameless) row, a plain new row, a promoted row, and an HTML-heavy description. Tests assert the exact bucketing.",
+  "data": {
+    "signByLicense": {
+      "DataCollection": {
+        "Data": [
+          {
+            "id": "qw-101",
+            "name": "J'aime Les Crêpes",
+            "description": "<p>Crepes near the <b>ferry</b> &amp; more</p>",
+            "qr": null,
+            "logo": "https://res.cloudinary.com/qwick/image/upload/v1/jaime-logo.png",
+            "listingImage": null,
+            "isPromoted": false,
+            "categories": ["Restaurants"],
+            "customCategories": [],
+            "phone": "360-297-5886",
+            "website": "https://www.jaimelescrepes.com"
+          },
+          {
+            "id": "qw-102",
+            "name": "Willy's Sourdough Pizza Co",
+            "description": "Pizza on a sourdough starter.",
+            "qr": null,
+            "logo": null,
+            "listingImage": null,
+            "isPromoted": false,
+            "categories": ["Dining"],
+            "customCategories": [],
+            "phone": "(360) 860-3933",
+            "website": null
+          },
+          {
+            "id": "qw-103",
+            "name": "Kingston Kayak Rentals",
+            "description": "Paddle the cove.",
+            "qr": null,
+            "logo": null,
+            "listingImage": null,
+            "isPromoted": false,
+            "categories": ["Recreation"],
+            "customCategories": ["Waterfront"],
+            "phone": "360-555-0142",
+            "website": "https://kingstonkayak.example.com"
+          },
+          {
+            "id": "qw-104",
+            "name": "Kingston Kayak Rentals",
+            "description": "Duplicate listing left behind by a vendor edit.",
+            "qr": null,
+            "logo": null,
+            "listingImage": null,
+            "isPromoted": false,
+            "categories": ["Recreation"],
+            "customCategories": [],
+            "phone": null,
+            "website": null
+          },
+          {
+            "id": "qw-105",
+            "description": "A row the vendor saved with no name at all.",
+            "qr": null,
+            "logo": null,
+            "listingImage": null,
+            "isPromoted": false,
+            "categories": [],
+            "customCategories": [],
+            "phone": null,
+            "website": null
+          },
+          {
+            "id": "qw-106",
+            "name": "The Filling Station Espresso",
+            "description": "<div>Drive-through <i>espresso</i> stand<br>Open early &#8212; closed Sundays &nbsp; <script>alert('x')</script></div>",
+            "qr": null,
+            "logo": null,
+            "listingImage": "https://res.cloudinary.com/qwick/image/upload/v1/filling-station.jpg",
+            "isPromoted": true,
+            "categories": ["Coffee"],
+            "customCategories": [],
+            "phone": "1-360-555-0173",
+            "website": "fillingstationespresso.example.com"
+          }
+        ]
+      }
+    }
+  }
+}
