@@ -47,6 +47,7 @@ import {
   type LabelShow,
   type LabelDir,
 } from "@/lib/map/types";
+import { COST_LABELS, COST_VALUES, isCostValue } from "@/lib/cost";
 import { mapStyle, TILES_PMTILES_PATH } from "@/lib/map/basemap";
 import { loadMapLibre, pmtilesUrl } from "@/lib/map/maplibre";
 import { editorIdStrategy, loadTerraDraw } from "@/lib/map/terradraw";
@@ -128,6 +129,10 @@ type Draft = {
   kind: FeatureKind;
   title: string;
   category: string;
+  // E27's free-vs-paid signal (issue #80). "" = not stated. MUST round-trip
+  // through buildFeature: the API rebuilds each feature from the request body
+  // alone, so a draft that omitted `cost` would silently strip it on save.
+  cost: string;
   color: string;
   notes: string;
   link: string;
@@ -154,6 +159,7 @@ function toDraft(f: MapFeature): Draft {
     kind: f.kind,
     title: f.title,
     category: f.category ?? "",
+    cost: f.cost ?? "",
     color: f.color ?? "",
     notes: f.notes ?? "",
     link: f.link ?? "",
@@ -1296,6 +1302,9 @@ export function MapBuilder({
       views: draft.views,
       ...(draft.notes.trim() ? { notes: draft.notes.trim() } : {}),
       ...(kind === "marker" && draft.category ? { category: draft.category } : {}),
+      // Deliberately not kind-gated: cost is valid on any feature, and gating
+      // here would strip an API-set value the moment a shape was re-saved.
+      ...(isCostValue(draft.cost) ? { cost: draft.cost } : {}),
       ...(label ? { label } : {}),
       // Parking color is automatic — don't persist a manual color alongside it.
       ...(!parking && draft.color ? { color: draft.color } : {}),
@@ -1747,6 +1756,24 @@ export function MapBuilder({
           </select>
         </Field>
       )}
+
+      {/* Cost to visitors (issue #80): the E27 free-vs-paid badge, e.g. on the
+          /map/restrooms finder rows. Offered for every kind — the field is
+          valid on any feature and hiding it would strip API-set values. */}
+      <Field label="Cost for visitors">
+        <select
+          className={INPUT}
+          value={draft.cost}
+          onChange={(e) => patchDraft({ cost: e.target.value })}
+        >
+          <option value="">— not stated —</option>
+          {COST_VALUES.map((v) => (
+            <option key={v} value={v}>
+              {COST_LABELS[v]}
+            </option>
+          ))}
+        </select>
+      </Field>
 
       {draft.kind === "marker" && (
         <div className="rounded-xl border border-sand bg-shell/40 p-3">
