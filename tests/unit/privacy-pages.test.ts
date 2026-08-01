@@ -50,6 +50,16 @@ describe("privacy page", () => {
     expect(html.toLowerCase()).toContain("withdraw");
   });
 
+  it("discloses the side switcher: user-initiated, on-device, only a one-word side is saved", () => {
+    // The side switcher's "use my location" button is the one location surface
+    // outside the consent card (nothing is transmitted), so the page must say
+    // it exists and what it does — silence here was the E11 open item.
+    expect(html).toContain("side switcher");
+    expect(html).toContain("use my location");
+    expect(html).toContain("one-word cookie");
+    expect(html.toLowerCase()).toContain("no coordinate ever leaves your device");
+  });
+
   it("does NOT overclaim: the hunt precise-location exception is disclosed, not contradicted", () => {
     // The blanket "never a coordinate" must be scoped — the page must also
     // disclose that scavenger-hunt check-ins keep precise location 12 months

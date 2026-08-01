@@ -6,18 +6,24 @@
 // components re-render for the new side — no full-page reload, so scroll and the
 // live ferry widget's polling survive.
 //
-// Location is opt-out: on a visitor's very first arrival we proactively ask the
-// browser for their location and set the side for them (see the mount effect).
-// We ask exactly once — a hand-picked side or a previous ask suppresses it, and
-// any denial/dismissal is remembered — so nobody gets nagged. The toggle and the
-// "use my location" button remain as the manual override.
+// Location is USER-INITIATED only (MHMDA consent floor, E11 follow-up):
+// geolocation runs solely when the visitor taps "use my location" — a one-shot
+// read, never on mount and never a watch. The tap is the affirmative act the
+// /privacy page promises. The coordinate is classified on the device by
+// sideFromLngLat and immediately discarded; the only thing that persists is
+// the binary kingston/edmonds choice in the vk-side cookie. No coordinate is
+// ever transmitted or stored, which is why this component is a reviewed
+// exemption in tests/unit/geolocation-consent-guard.test.ts rather than being
+// routed through the consent card (src/lib/privacy/consent.ts) that near-me
+// and the hunt use. tests/unit/side-switcher.test.tsx pins the
+// no-geolocation-on-mount behavior.
 //
 // `tone`: "dark" places light controls on the navy hero; "light" is the default
 // for pale backgrounds. All color comes from the design tokens.
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { SIDE_ASKED_COOKIE, SIDE_COOKIE, sideFromLngLat, type WaterSide } from "@/lib/side";
+import { SIDE_COOKIE, sideFromLngLat, type WaterSide } from "@/lib/side";
 
 type Tone = "light" | "dark";
 
@@ -57,17 +63,6 @@ function writeSide(side: WaterSide) {
   document.cookie = `${SIDE_COOKIE}=${side}; path=/; max-age=31536000; samesite=lax`;
 }
 
-function markAsked() {
-  document.cookie = `${SIDE_ASKED_COOKIE}=1; path=/; max-age=31536000; samesite=lax`;
-}
-
-function hasCookie(name: string) {
-  return (
-    typeof document !== "undefined" &&
-    document.cookie.split("; ").some((c) => c.startsWith(`${name}=`))
-  );
-}
-
 export function SideSwitcher({
   side,
   className = "",
@@ -82,59 +77,6 @@ export function SideSwitcher({
   const [pending, startTransition] = useTransition();
   const [locating, setLocating] = useState(false);
   const [note, setNote] = useState<string | null>(null);
-  const autoRan = useRef(false);
-
-  // Opt-out auto-detect. On first arrival — no hand-picked side and we've never
-  // asked — request location once. A granted position sets the side; a denial or
-  // dismissal is remembered (markAsked) so we never prompt again. StrictMode can
-  // double-invoke effects, so autoRan guards a single request per mount.
-  useEffect(() => {
-    if (autoRan.current) return;
-    autoRan.current = true;
-    if (typeof navigator === "undefined" || !navigator.geolocation) return;
-    if (hasCookie(SIDE_COOKIE) || hasCookie(SIDE_ASKED_COOKIE)) return;
-
-    const request = () => {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          markAsked();
-          const detected = sideFromLngLat(pos.coords.latitude, pos.coords.longitude);
-          if (detected && detected !== side) {
-            writeSide(detected);
-            setNote(
-              detected === "kingston"
-                ? "📍 You're on the Kingston side."
-                : "📍 You're on the Edmonds side.",
-            );
-            startTransition(() => router.refresh());
-          }
-        },
-        // Denied, dismissed, or unavailable — remember it and stay on the default.
-        () => markAsked(),
-        { timeout: 8000, maximumAge: 5 * 60_000 },
-      );
-    };
-
-    // Skip the native prompt if the browser already has a decision on file:
-    // "granted" resolves silently, "denied" means don't nag, "prompt" pops up.
-    const perms = navigator.permissions;
-    if (perms?.query) {
-      perms
-        .query({ name: "geolocation" as PermissionName })
-        .then((status) => {
-          if (status.state === "denied") {
-            markAsked();
-            return;
-          }
-          request();
-        })
-        .catch(request);
-    } else {
-      request();
-    }
-    // Runs once on mount; `side` here is the SSR default (no cookie yet).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   function choose(next: WaterSide) {
     setNote(null);
