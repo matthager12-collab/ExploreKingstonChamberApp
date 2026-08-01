@@ -600,3 +600,101 @@ describe("(c) admin resolutions", () => {
     expect(res.status).toBe(404);
   });
 });
+
+/* --------------------- (e) lodging listings (portal-lodging) --------------------- */
+//
+// PUT /api/portal/listing routes lodging ids into the lodging store with the
+// same moderation floor as restaurants: member writes hold (live record
+// untouched, proposal in the item payload), admin writes publish instantly,
+// and only the whitelisted fields (description / address / website /
+// bookingUrl / tags) can change — name and type stay Chamber-controlled.
+
+describe("(e) lodging listing PUT: member holds, admin publishes, whitelist enforced", () => {
+  const seedLodging = lodgingSeed[0];
+  const otherLodging = lodgingSeed[1];
+
+  it("404s an id in neither listing store", async () => {
+    asMember("anything");
+    const res = await listingPUT(
+      jsonReq("/api/portal/listing", "PUT", { id: "no-such-listing", description: "x" }),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("403s a member whose account is not linked to the lodging listing", async () => {
+    asMember("some-other-listing");
+    const res = await listingPUT(
+      jsonReq("/api/portal/listing", "PUT", { id: seedLodging.id, description: "x" }),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("member edit: live lodging untouched; open 'edit' item carries the proposal; name/type stay Chamber-controlled", async () => {
+    asMember(seedLodging.id);
+    const res = await listingPUT(
+      jsonReq("/api/portal/listing", "PUT", {
+        id: seedLodging.id,
+        description: "A fresh description, pending review",
+        bookingUrl: "https://book.example.com/rooms",
+        // Whitelist probes — a member must not be able to touch these:
+        name: "Renamed By Member",
+        type: "marina",
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()).pending).toBe(true);
+
+    // The live record keeps serving untouched.
+    const live = (await getLodging()).find((l) => l.id === seedLodging.id);
+    expect(live?.description).toBe(seedLodging.description);
+    expect(live?.bookingUrl).toBe(seedLodging.bookingUrl);
+
+    const items = await openModeration("lodging");
+    expect(items).toHaveLength(1);
+    expect(items[0].subjectId).toBe(seedLodging.id);
+    expect(items[0].payload).toMatchObject({ kind: "edit" });
+    const proposed = items[0].payload.proposed as Record<string, unknown>;
+    expect(proposed.description).toBe("A fresh description, pending review");
+    expect(proposed.bookingUrl).toBe("https://book.example.com/rooms");
+    expect(proposed.name).toBe(seedLodging.name);
+    expect(proposed.type).toBe(seedLodging.type);
+  });
+
+  it("rejects a malformed booking link with a 400 and holds nothing new", async () => {
+    asMember(seedLodging.id);
+    const res = await listingPUT(
+      jsonReq("/api/portal/listing", "PUT", { id: seedLodging.id, bookingUrl: "not-a-url" }),
+    );
+    expect(res.status).toBe(400);
+    expect(await openModeration("lodging")).toHaveLength(1); // still just the held edit
+  });
+
+  it("approve publishes the held lodging proposal", async () => {
+    const item = (await openModeration("lodging")).find((i) => i.subjectId === seedLodging.id);
+    expect(item).toBeDefined();
+    await approveModerationItem(item!, ADMIN);
+
+    const nowLive = (await getLodging()).find((l) => l.id === seedLodging.id);
+    expect(nowLive?.description).toBe("A fresh description, pending review");
+    expect(nowLive?.bookingUrl).toBe("https://book.example.com/rooms");
+    expect(nowLive?.name).toBe(seedLodging.name);
+  });
+
+  it("admin edit publishes instantly with no queue item", async () => {
+    asAdmin();
+    const res = await listingPUT(
+      jsonReq("/api/portal/listing", "PUT", {
+        id: otherLodging.id,
+        description: "Chamber-corrected description",
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()).pending).toBeUndefined();
+    expect((await getLodging()).find((l) => l.id === otherLodging.id)?.description).toBe(
+      "Chamber-corrected description",
+    );
+    expect(
+      (await openModeration("lodging")).filter((i) => i.subjectId === otherLodging.id),
+    ).toHaveLength(0);
+  });
+});
