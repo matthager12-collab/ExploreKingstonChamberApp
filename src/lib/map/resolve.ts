@@ -6,19 +6,10 @@
 // inlined — the client fetches the static /geo/street-parking.json directly.
 
 import type { ResolvedMapView } from "./types";
-import type { Restaurant } from "../types";
+import { restaurantCategory } from "./restaurant-category";
 import { getMapView, getFeaturesForView } from "../stores/map-store";
 import { getRestaurants } from "../stores/business-store";
 import { getParkingZones } from "../stores/parking-store";
-
-/** Pick a marker-palette category so coffee/bars get their own pin, not 🍽️. */
-function restaurantCategory(r: Restaurant): string {
-  const hay = `${r.cuisine} ${r.tags.join(" ")}`.toLowerCase();
-  if (/coffee|espresso|caf[eé]|bakery|muffin|matcha/.test(hay)) return "coffee";
-  if (/\b(bar|brew|brewery|taproom|pub|wine|beer|lounge|cocktail|jazz)\b/.test(hay))
-    return "drink";
-  return "food";
-}
 
 export async function resolveMapView(viewId: string): Promise<ResolvedMapView | null> {
   const view = await getMapView(viewId);
