@@ -403,9 +403,9 @@ Pure module. `reminderIcsUrl(dir, departs)` points the widget at `GET /api/ferry
 ## 7. Side-of-water mode
 
 Reframes the app for Kingston-side (default, "leaving Kingston") vs Edmonds-side ("getting to Kingston") visitors.
-- **`side.ts`** (client-safe): `WaterSide`, `SIDE_COOKIE = "vk-side"`, `SIDE_ASKED_COOKIE = "vk-side-asked"`, `SIDE_DIVIDE_LNG = -122.44`, and the pure classifier `sideFromLngLat(lat,lng)` (returns null outside the crossing box).
+- **`side.ts`** (client-safe): `WaterSide`, `SIDE_COOKIE = "vk-side"`, `SIDE_DIVIDE_LNG = -122.44`, and the pure classifier `sideFromLngLat(lat,lng)` (returns null outside the crossing box).
 - **`side-server.ts`**: `getSide()` reads `vk-side` (needs `next/headers`); defaults `"kingston"`. Server components render for the current side.
-- **`side-switcher.tsx`** (client): a segmented Kingston/Edmonds toggle + "use my location" button; writes the cookie and calls `router.refresh()` (no full reload — polling and scroll survive). **Opt-out**: on a visitor's first arrival it asks for location once and sets the side automatically; a hand-picked side or a prior ask (either cookie) suppresses the prompt forever.
+- **`side-switcher.tsx`** (client): a segmented Kingston/Edmonds toggle + "use my location" button; writes the cookie and calls `router.refresh()` (no full reload — polling and scroll survive). **User-initiated only** (MHMDA consent floor): geolocation runs solely on a "use my location" tap — one-shot, classified on-device, only the binary side cookie persists. The former first-visit opt-out auto-ask was removed before launch.
 
 ---
 

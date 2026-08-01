@@ -31,6 +31,7 @@ import {
 } from "@/lib/auth";
 import { getRestaurants } from "@/lib/stores/business-store";
 import { getCharities } from "@/lib/stores/charity-store";
+import { getLodging } from "@/lib/stores/listing-stores";
 
 export async function GET() {
   const denied = await requireRole("admin");
@@ -84,13 +85,19 @@ export async function POST(request: NextRequest) {
   const kind: OrgKind = role === "member-business" ? "business" : "nonprofit";
 
   if (linkedIds.length > 0) {
-    const records = kind === "business" ? await getRestaurants() : await getCharities();
+    // kind:"business" spans BOTH member-editable listing stores — restaurants
+    // and lodging — so a hotel or marina can be onboarded exactly like a
+    // restaurant. Ids the union does not contain are still rejected outright.
+    const records =
+      kind === "business"
+        ? [...(await getRestaurants()), ...(await getLodging())]
+        : await getCharities();
     const valid = new Set(records.map((r) => r.id));
     const unknown = linkedIds.filter((id) => !valid.has(id));
     if (unknown.length > 0) {
       return NextResponse.json(
         {
-          error: `unknown ${kind === "business" ? "restaurant" : "charity"} id(s): ${unknown.join(", ")}`,
+          error: `unknown ${kind === "business" ? "business" : "charity"} id(s): ${unknown.join(", ")}`,
         },
         { status: 400 },
       );

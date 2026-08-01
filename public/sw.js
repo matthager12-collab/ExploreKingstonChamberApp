@@ -32,7 +32,11 @@
 // navigations. The navigate() path now behaves differently per URL, so a
 // returning device drops the v2 caches wholesale rather than carrying entries
 // filled by the old logic forward.
-const VERSION = "v3";
+// v4: "/simple" and "/print" joined NAV_ALLOWLIST (issue #52, the E14
+// follow-up owed below since E13). No fetch-logic change, but SHELL_LIMIT is
+// derived from the allowlist length, so the v3 shell caches were trimmed
+// against a bound two entries smaller — dropped rather than carried forward.
+const VERSION = "v4";
 
 const SHELL_CACHE = `vk-shell-${VERSION}`; // HTML for allowlisted pages
 const STATIC_CACHE = `vk-static-${VERSION}`; // build output + brand images
@@ -49,13 +53,23 @@ const KIOSK_CACHE = `vk-kiosk-${VERSION}`; // HTML for the ferry-dock kiosk scre
 // "/webcams" and "/map" are absent too — both are useless offline and both are
 // heavy enough to blow the shell budget.
 //
-// OWED FOLLOW-UP (E14): add "/simple" and "/print" here once E14's low-bandwidth
-// and print routes land. They do not exist yet, and an allowlist entry for a
-// route that 404s caches the 404 — but they will be the two most offline-worth
-// pages in the app, so this list is wrong the moment they ship. The SHELL_LIMIT
-// slack below already covers both. tests/unit/sw-contract.test.ts asserts every
-// entry here resolves to a real page.tsx, so adding them early fails the build.
-const NAV_ALLOWLIST = ["/", "/ferry", "/eat", "/events", "/parking", "/about", "/offline"];
+// "/simple" and "/print" are E14's low-bandwidth and print routes — the two
+// most offline-worth pages in the app (issue #52). Both were verified live
+// (200, present in sitemap.xml) before being added, so the cached-404 trap
+// above does not apply, and the SHELL_LIMIT slack below already covered them.
+// tests/unit/sw-contract.test.ts asserts every entry here resolves to a real
+// page.tsx and that both stay in the list.
+const NAV_ALLOWLIST = [
+  "/",
+  "/ferry",
+  "/eat",
+  "/events",
+  "/parking",
+  "/about",
+  "/simple",
+  "/print",
+  "/offline",
+];
 
 // The ferry-dock kiosk's screens (E22). A SEPARATE list, with its own cache and
 // its own strategy, for three reasons that all bite if they share the shell's:

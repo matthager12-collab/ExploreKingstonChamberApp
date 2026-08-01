@@ -41,6 +41,15 @@ async function wsfFetch<T>(url: string, revalidateSeconds: number): Promise<T | 
   try {
     const res = await fetch(`${url}${url.includes("?") ? "&" : "?"}apiaccesscode=${API_KEY}`, {
       next: { revalidate: revalidateSeconds },
+      // A hung WSDOT response must not hold the dynamic /ferry render hostage
+      // (undici's default keeps a socket open ~5 minutes). On timeout the
+      // TimeoutError lands in the catch below → null → every caller takes the
+      // same fallback it already has for the no-key/unreachable case (bundled
+      // seasonal schedule, live:false). Note: passing any signal opts this
+      // call out of per-render fetch MEMOIZATION (bundled fetch.md) — fine
+      // here, because repeat same-URL reads are served by the persistent
+      // fetch cache (next.revalidate above), which a signal does not affect.
+      signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return null;
     return (await res.json()) as T;

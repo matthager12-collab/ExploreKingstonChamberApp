@@ -22,6 +22,7 @@ import {
 } from "@/lib/auth";
 import { getRestaurants } from "@/lib/stores/business-store";
 import { getCharities } from "@/lib/stores/charity-store";
+import { getLodging } from "@/lib/stores/listing-stores";
 import { PageHeader } from "@/components/ui";
 import { AccountsManager } from "./manager";
 
@@ -32,12 +33,13 @@ export default async function AccountsPage() {
   const user = await getSessionUser();
   if (user?.role !== "admin") redirect("/portal");
 
-  const [users, invites, orgs, restaurants, charities] = await Promise.all([
+  const [users, invites, orgs, restaurants, charities, lodging] = await Promise.all([
     listUsers(),
     listInvites(),
     listOrganizations(),
     getRestaurants(),
     getCharities(),
+    getLodging(),
   ]);
 
   return (
@@ -68,6 +70,7 @@ export default async function AccountsPage() {
         orgs={orgs.map((o) => ({ id: o.id, name: o.name, kind: o.kind }))}
         restaurants={restaurants.map((r) => ({ id: r.id, name: r.name }))}
         charities={charities.map((c) => ({ id: c.id, name: c.name }))}
+        lodging={lodging.map((l) => ({ id: l.id, name: l.name }))}
       />
       {/* E09: account history is metadata-only (who/what/when — bodies are
           stripped server-side for these stores) and restore is structurally

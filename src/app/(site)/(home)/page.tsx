@@ -7,7 +7,7 @@ import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
 import { getEffectiveHiddenPaths } from "@/lib/page-visibility";
 import { getFerryStatusSnapshot } from "@/lib/ferry-status";
 import { formatPacificDate, formatPacificTime, todayPacific } from "@/lib/time";
-import { Badge, Card, ExternalLink, Section, mapDirectionsUrl } from "@/components/ui";
+import { Badge, Card, ExternalLink, Section } from "@/components/ui";
 import { VisitorSurvey } from "@/components/visitor-survey";
 import { FerryLineInfo } from "@/components/ferry-line-info";
 import { NextFerries } from "@/components/next-ferries";

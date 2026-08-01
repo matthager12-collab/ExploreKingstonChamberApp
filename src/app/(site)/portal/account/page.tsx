@@ -11,6 +11,7 @@ import { getSessionUser } from "@/lib/auth";
 import { ROLE_LABELS, ROLE_TONES } from "@/lib/auth/roles";
 import { getRestaurants } from "@/lib/stores/business-store";
 import { getCharities } from "@/lib/stores/charity-store";
+import { getLodging } from "@/lib/stores/listing-stores";
 import { Badge, Card, PageHeader, Section } from "@/components/ui";
 import { AccountSettings } from "./settings";
 
@@ -22,10 +23,15 @@ export default async function AccountPage() {
   const user = await getSessionUser();
   if (!user) redirect("/portal");
 
-  const [restaurants, charities] = await Promise.all([getRestaurants(), getCharities()]);
+  const [restaurants, charities, lodging] = await Promise.all([
+    getRestaurants(),
+    getCharities(),
+    getLodging(),
+  ]);
   const nameById = new Map<string, string>();
   for (const r of restaurants) nameById.set(r.id, r.name);
   for (const c of charities) nameById.set(c.id, c.name);
+  for (const l of lodging) nameById.set(l.id, l.name);
   const linkedNames = user.editableIds.map((id: string) => nameById.get(id) ?? id);
 
   const createdLabel = user.createdAt.toLocaleDateString("en-US", {

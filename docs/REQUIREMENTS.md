@@ -152,10 +152,12 @@ link the authoritative source.
   do) vs *Edmonds side* (the visitor is across Puget Sound and cares about
   getting to Kingston). The geographic divide is longitude −122.44
   (`SIDE_DIVIDE_LNG`); a `vk-side` cookie persists the choice.
-- FR-1S.2 Ask location **once**, opt-out. On a first visit the app may prompt
-  for geolocation to auto-detect the side; a hand-picked side or a prior ask
-  (`vk-side-asked` cookie) suppresses the prompt forever — never nag. A visible
-  side-switcher lets the visitor override the detection at any time.
+- FR-1S.2 Location is **user-initiated only** (amended for the MHMDA consent
+  floor; the original opt-out first-visit auto-ask was removed before launch).
+  The app never requests geolocation on its own: the visible side-switcher's
+  "use my location" button performs a one-shot, on-device detection when
+  tapped, and a hand-picked side always wins. Only the binary side choice
+  (`vk-side` cookie) persists — no coordinate is transmitted or stored.
 - FR-1S.3 The classifier is client-safe and pure (`src/lib/side.ts`); the
   server-only cookie read lives in `src/lib/side-server.ts` so the framing
   works in both server and client components without a flash of the wrong side.

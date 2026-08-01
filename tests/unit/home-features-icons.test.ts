@@ -15,7 +15,9 @@ import fs from "fs";
 import path from "path";
 import { describe, expect, it } from "vitest";
 
-const PAGE = path.join(process.cwd(), "src", "app", "(site)", "page.tsx");
+// (home) is a route group (adds no URL segment): the home page moved there so
+// its instant-nav loading.tsx covers "/" alone — see hidden-page-404-guard.
+const PAGE = path.join(process.cwd(), "src", "app", "(site)", "(home)", "page.tsx");
 
 describe("home feature grid", () => {
   const source = fs.readFileSync(PAGE, "utf8");
