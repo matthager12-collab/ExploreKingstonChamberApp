@@ -1035,6 +1035,182 @@ export const COPY_BLOCKS = [
     fallback: "Scan to take this with you",
   },
 
+  // ══════════════════════ BEGIN /line (E33 — Line Lander) ══════════════════════
+  // Every visitor-facing sentence on /line. The reader is a stressed driver
+  // parked in the SR-104 line with kids in the back and one bar of signal —
+  // short sentences, no staff vocabulary, the E14 plain-language rules.
+  // Boarding-pass FACTS (what voids a pass, when it's required) are NOT here:
+  // they come from the ferry-info record at /admin/ferry-info, shared with
+  // /ferry so the two pages can never disagree.
+  {
+    key: "line.header.eyebrow",
+    page: "Ferry line (/line)",
+    label: "Header eyebrow",
+    fallback: "Waiting in the SR 104 ferry line",
+  },
+  {
+    key: "line.header.title",
+    page: "Ferry line (/line)",
+    label: "Page title",
+    fallback: "You're in the ferry line. Here's what matters.",
+  },
+  {
+    key: "line.header.intro",
+    page: "Ferry line (/line)",
+    label: "Intro sentence",
+    multiline: true,
+    fallback:
+      "Your boarding-pass status, the next boats, and what you can get from where you're parked — without losing your place in line.",
+  },
+  {
+    key: "line.note.title",
+    page: "Ferry line (/line)",
+    label: "Title above the Chamber's transient ferry-info notice (shown only when a notice is set)",
+    fallback: "Heads up right now",
+  },
+  {
+    key: "line.pass.title",
+    page: "Ferry line (/line)",
+    label: "Small heading above the boarding-pass status",
+    fallback: "Boarding pass",
+  },
+  {
+    key: "line.pass.on",
+    page: "Ferry line (/line)",
+    label: "Status sentence when the boarding-pass system is ON",
+    fallback: "The boarding-pass system is on right now — every car in line needs a pass.",
+  },
+  {
+    key: "line.pass.off",
+    page: "Ferry line (/line)",
+    label: "Status sentence when the boarding-pass system is OFF",
+    fallback: "The boarding-pass system is off right now — no pass needed at the moment.",
+  },
+  {
+    key: "line.stay.title",
+    page: "Ferry line (/line)",
+    label: "Title of the don't-leave-the-line warning (the page's most important block)",
+    fallback: "Stay in the line",
+  },
+  {
+    key: "line.boats.title",
+    page: "Ferry line (/line)",
+    label: "Next-boats section title",
+    fallback: "Next boats",
+  },
+  {
+    key: "line.boats.subtitle",
+    page: "Ferry line (/line)",
+    label: "Next-boats section subtitle",
+    fallback: "Live times for both directions. Updates every minute while you watch.",
+  },
+  {
+    key: "line.wait.label",
+    page: "Ferry line (/line)",
+    label: "Label in front of WSDOT's posted driver-wait note (shown only when one is posted)",
+    fallback: "Posted wait for drivers",
+  },
+  {
+    key: "line.wait.longLine",
+    page: "Ferry line (/line)",
+    label: "Extra note when the wait tops 2 hours (line past Barber Cutoff)",
+    multiline: true,
+    fallback:
+      "With a wait this long, the line usually reaches past Barber Cutoff Rd. Sending someone to join you? Tell them to come down SR 104 from Miller Bay Rd — not to U-turn into the line.",
+  },
+  {
+    key: "line.map.title",
+    page: "Ferry line (/line)",
+    label: "Map section title",
+    fallback: "How the line works",
+  },
+  {
+    key: "line.map.subtitle",
+    page: "Ferry line (/line)",
+    label: "Map section subtitle",
+    fallback: "The SR 104 boarding-pass system, mapped — sign, pass machine, tollbooths.",
+  },
+  {
+    key: "line.food.title",
+    page: "Ferry line (/line)",
+    label: "Food section title",
+    fallback: "Hungry? Order ahead",
+  },
+  {
+    key: "line.food.subtitle",
+    page: "Ferry line (/line)",
+    label: "Food section subtitle — sets the deep-link-only expectation",
+    multiline: true,
+    fallback:
+      "These Kingston kitchens are open right now. You order and pay with the restaurant directly — their website or their phone line, never through this app.",
+  },
+  {
+    key: "line.food.stayNote",
+    page: "Ferry line (/line)",
+    label: "Reminder above the food list that driving out for food voids the pass",
+    fallback: "Remember: if your car leaves the line, your boarding pass stops working.",
+  },
+  {
+    key: "line.food.empty",
+    page: "Ferry line (/line)",
+    label: "Shown when no restaurant with verified hours is open right now",
+    multiline: true,
+    fallback:
+      "No Kingston kitchen with verified hours is open right now. Check the Eat & Drink page for every place in town and when they open.",
+  },
+  {
+    key: "line.food.distanceNote",
+    page: "Ferry line (/line)",
+    label: "Small print under the food list about what the walk figures mean",
+    fallback:
+      "Walk times are from the ferry dock — for planning a pickup once you're parked at the terminal, not a walk from the middle of the line.",
+  },
+  {
+    key: "line.amenities.title",
+    page: "Ferry line (/line)",
+    label: "Restrooms section title",
+    fallback: "Need a restroom?",
+  },
+  {
+    key: "line.amenities.empty",
+    page: "Ferry line (/line)",
+    label: "The honest empty state: nothing walkable from the waiting stretch",
+    multiline: true,
+    fallback:
+      "Honestly: we know of no public restroom you can walk to from the line itself. The nearest public restrooms are at the dock — you'll reach them once you're through the tollbooths.",
+  },
+  {
+    key: "line.amenities.atDock",
+    page: "Ferry line (/line)",
+    label: "Heading over the list of restrooms at the dock",
+    fallback: "At the dock, once you're through the tollbooths",
+  },
+  {
+    key: "line.more.parkingTitle",
+    page: "Ferry line (/line)",
+    label: "Parking link-out title",
+    fallback: "Parking in Kingston",
+  },
+  {
+    key: "line.more.parking",
+    page: "Ferry line (/line)",
+    label: "Parking link-out sentence",
+    fallback: "Leaving the car in town and walking on instead? Lots, street rules, and how to pay.",
+  },
+  {
+    key: "line.more.ferryTitle",
+    page: "Ferry line (/line)",
+    label: "Ferry page link-out title",
+    fallback: "The full ferry page",
+  },
+  {
+    key: "line.more.ferry",
+    page: "Ferry line (/line)",
+    label: "Ferry page link-out sentence",
+    fallback: "Fares, the passenger-only fast ferry to Seattle, webcams, and live boat positions.",
+  },
+  // ═══════════════════════ END /line (E33 — Line Lander) ═══════════════════════
+
   // ================= "Get listed" CTAs (copy/get-listed-cta) =================
   // The door-is-open notice for businesses NOT on the site yet: a shared
   // callout at the bottom of /eat and /stay, plus the hint under the /portal

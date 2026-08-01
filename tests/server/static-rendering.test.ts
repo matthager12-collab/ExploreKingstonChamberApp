@@ -17,8 +17,12 @@ import { describe, expect, it } from "vitest";
 
 /** Routes that must stay statically prerendered. The public listing pages are
  *  the ISR-trap canaries; /simple and /print are E14's non-app fallbacks and
- *  the pages E13 wants to precache; /accessibility is the public commitment. */
-const MUST_BE_STATIC = ["/eat", "/stay", "/simple", "/print", "/accessibility"];
+ *  the pages E13 wants to precache; /accessibility is the public commitment.
+ *  /line (E33) is the strictest of all: its audience is parked on cellular in
+ *  SR-104's dead zone, so its whole design (assertPageVisibleStatic, hardcoded
+ *  side, no empirical-busyness read) exists to keep it in this list — while
+ *  hidden it prerenders as an ISR-cached 404, which still counts, and must. */
+const MUST_BE_STATIC = ["/eat", "/stay", "/simple", "/print", "/accessibility", "/line"];
 
 describe("static rendering", () => {
   it("keeps the public pages prerendered (no cookies() reachable from the root layout)", () => {

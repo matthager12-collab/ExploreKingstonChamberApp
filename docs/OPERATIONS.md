@@ -1524,3 +1524,12 @@ Yes / No / Partly / Not checked), plus notes, a verified-on date, and a source.
   files a moderation-queue item (§5). Nothing a visitor submits is published.
 - The venue-audit *programme* that would produce verified facts at scale is
   deliberately deferred — see `BACKLOG.md`.
+
+## 15. The SR-104 Line Lander (`/line`, E33)
+
+Ships DARK behind the same Admin → Site content toggle as every hideable page,
+but with one twist: while hidden it 404s for **admins too** (its perf floor
+forbids the session read the usual preview needs). Preview at `/line/preview`;
+flip procedure, sign/QR rules, and the honesty contract for its amenities
+block: **`docs/LINE-LANDER.md`**. Do not add `/line` to the service-worker
+allowlist while it is dark, and print no QR before the custom domain is live.

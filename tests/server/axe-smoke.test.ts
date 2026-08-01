@@ -45,7 +45,12 @@ const PAGES = [
 // Chamber flips it on. Scanning it is a launch gate, not a nicety: the business
 // coalition made kiosk accessibility a condition of go-live, and a wall-mounted
 // display in a public place is the one screen a visitor cannot work around.
-const ADMIN_PAGES = ["/admin/worklist", "/kiosk"];
+// E33 adds "/line/preview": /line ships dark AND static (its cookie-free gate
+// 404s everyone, admins included, while hidden — see page-visibility.tsx
+// assertPageVisibleStatic), so the preview route is the only scannable render
+// of the Line Lander until the Chamber flips it. Same markup, same chrome.
+// No baseline entry on purpose — zero tolerance from day one, like /kiosk.
+const ADMIN_PAGES = ["/admin/worklist", "/kiosk", "/line/preview"];
 const ALL_PAGES = [...PAGES, ...ADMIN_PAGES];
 const BASELINE_FILE = path.join(process.cwd(), "tests", "server", "axe-baseline.json");
 const UPDATE = process.env.AXE_UPDATE_BASELINE === "1";
