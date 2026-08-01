@@ -4,7 +4,9 @@
 // zone from a whitelist, so a field the handler doesn't know about is silently
 // WIPED by any save — including a save that only dragged a pin. This suite
 // saves a street zone back through the real API and proves `streetPaths` and
-// `curb` survive byte-identically, then proves clearing and validation work.
+// `curb` survive byte-identically, that a pre-phase-6 overlay record (no
+// street fields at all) reads back with the seeded geometry migrated in, and
+// that clearing and validation work.
 //
 // Pure API drive — no map, no tiles — so unlike the terra-draw editor spec it
 // runs everywhere, including keyless CI.
@@ -81,6 +83,25 @@ describe("admin parking API — curb model round-trip", () => {
       expect(post!.streetPaths).toEqual(pre!.streetPaths);
     } finally {
       await postZone(pre); // restore for later suites regardless
+    }
+  });
+
+  it("a pre-phase-6 overlay record reads back with the seeded street geometry merged in (AC 3 migration)", async () => {
+    // Before phase 6 the admin API's whitelist rebuild produced records with
+    // NO streetPaths/curb. Such a record overlays the seed whole-record, so
+    // without the store's read-time migration it would mask the new geometry
+    // forever. POSTing the street fields away reproduces that exact shape.
+    const pre = await getZone(ZONE_ID);
+    expect(pre).toBeDefined();
+    try {
+      const { streetPaths: _p, curb: _c, ...legacy } = pre!;
+      expect(await postZone({ ...legacy, name: "Washington Blvd loop (edited)" })).toBe(200);
+      const post = await getZone(ZONE_ID);
+      expect(post!.name).toBe("Washington Blvd loop (edited)"); // admin edit survives
+      expect(post!.streetPaths).toEqual(pre!.streetPaths); // seed geometry is back
+      expect(post!.curb).toBe("both"); // and so is the seeded side
+    } finally {
+      await postZone(pre);
     }
   });
 

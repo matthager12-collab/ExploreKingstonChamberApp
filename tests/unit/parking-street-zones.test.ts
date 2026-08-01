@@ -14,7 +14,8 @@
 import { readFileSync } from "fs";
 import path from "path";
 import { describe, expect, it } from "vitest";
-import { CURB_SIDES, parkingZones } from "@/lib/data/parking";
+import { CURB_SIDES, parkingZones, type MapZone } from "@/lib/data/parking";
+import { withSeedStreetGeometry } from "@/lib/stores/parking-store";
 
 const streetZones = parkingZones.filter((z) => z.streetPaths?.length);
 
@@ -126,6 +127,55 @@ describe("legacy parkingAreas stays retired", () => {
       "utf8",
     );
     expect(types).not.toContain("interface ParkingArea");
+  });
+});
+
+describe("overlay-record migration (withSeedStreetGeometry)", () => {
+  // The whole-record overlay merge means a zone saved BEFORE phase 6 has no
+  // streetPaths/curb and would mask the seeded geometry forever (the editor
+  // can't put paths back; delete is a tombstone, not reset-to-seed). The
+  // store migrates such records at read time — these pin the rules.
+  const loopSeed = parkingZones.find((z) => z.id === "street-washington-blvd-104-loop")!;
+
+  /** An overlay record the pre-phase-6 admin API produced: the whitelist
+   *  rebuild without the street fields, with an admin edit on top. */
+  const legacyRecord = (id: string): MapZone => {
+    const { streetPaths: _p, curb: _c, ...rest } = parkingZones.find((z) => z.id === id)!;
+    return { ...rest, name: "Edited by admin" };
+  };
+
+  it("backfills seed streetPaths AND curb into a pre-phase-6 record, keeping the admin edits", () => {
+    const migrated = withSeedStreetGeometry(legacyRecord(loopSeed.id));
+    expect(migrated.streetPaths).toEqual(loopSeed.streetPaths);
+    expect(migrated.curb).toBe("both");
+    expect(migrated.name).toBe("Edited by admin");
+  });
+
+  it("leaves a post-phase-6 record with a deliberately cleared curb alone (paths present, no curb)", () => {
+    const cleared: MapZone = { ...legacyRecord(loopSeed.id), streetPaths: loopSeed.streetPaths };
+    const out = withSeedStreetGeometry(cleared);
+    expect(out.curb).toBeUndefined();
+    expect(out.streetPaths).toBe(loopSeed.streetPaths); // untouched
+  });
+
+  it("never overwrites a record's own street geometry", () => {
+    const ownPaths: [number, number][][] = [[[47.797, -122.496], [47.798, -122.495]]];
+    const out = withSeedStreetGeometry({ ...legacyRecord(loopSeed.id), streetPaths: ownPaths });
+    expect(out.streetPaths).toBe(ownPaths);
+  });
+
+  it("is a no-op for lot zones and unknown ids", () => {
+    const lot = parkingZones.find((z) => z.id === "georges-corner-pr")!;
+    expect(withSeedStreetGeometry(lot)).toEqual(lot);
+    const custom: MapZone = { ...legacyRecord(loopSeed.id), id: "admin-made-zone" };
+    expect(withSeedStreetGeometry(custom)).toEqual(custom);
+  });
+
+  it("migrates every seeded street zone, not just the flagship", () => {
+    for (const z of streetZones) {
+      const migrated = withSeedStreetGeometry(legacyRecord(z.id));
+      expect(migrated.streetPaths, z.id).toEqual(z.streetPaths);
+    }
   });
 });
 

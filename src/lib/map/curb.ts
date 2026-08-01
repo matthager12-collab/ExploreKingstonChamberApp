@@ -42,6 +42,13 @@ const COMPASS: Record<Exclude<CurbSide, "both">, [number, number]> = {
  * +1 / −1 line-offset sign that puts the stroke on the requested compass side
  * of the polyline, or 0 when the request is ill-defined (degenerate path, or
  * the side is within ~18° of parallel to the street's overall bearing).
+ *
+ * Uses the path's OVERALL first-to-last bearing, so on a sharply L-shaped
+ * street a compass side could offset one leg toward the wrong curb. Inert
+ * today — the only seeded side is "both", which is direction-independent —
+ * and partly guarded: near-parallel requests refuse to the centre line above
+ * rather than guess. If an admin ever sets a compass side on an L-shaped
+ * street, split the zone's path at the corner instead.
  */
 export function compassOffsetSign(
   path: [number, number][],

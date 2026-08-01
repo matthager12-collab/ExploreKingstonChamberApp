@@ -16,7 +16,11 @@
 // in the page's token system, and are kept consistent with town-map.tsx.
 
 import { useEffect, useRef, useState } from "react";
-import type { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
+import type {
+  ExpressionSpecification,
+  Map as MapLibreMap,
+  Marker as MapLibreMarker,
+} from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {
   markerCategory,
@@ -783,9 +787,18 @@ export function FeatureMap({
         };
         const wirePopup = (layerId: string) => {
           map.on("click", layerId, (e) => {
+            // One popup per tap: wired layers can overlap (the invisible curb
+            // hit band over a centre stroke, fills under lines) and each
+            // layer's handler fires for the same click — without this guard a
+            // single tap would stack popups.
+            const oe = e.originalEvent as MouseEvent & { _fmPopupDone?: boolean };
+            if (oe._fmPopupDone) return;
             const f = e.features?.[0] as { properties?: { popup?: string } } | undefined;
             const html = f?.properties?.popup;
-            if (html) new maplibregl.Popup({ maxWidth: "240px" }).setLngLat(e.lngLat).setHTML(html).addTo(map);
+            if (html) {
+              oe._fmPopupDone = true;
+              new maplibregl.Popup({ maxWidth: "240px" }).setLngLat(e.lngLat).setHTML(html).addTo(map);
+            }
           });
           map.on("mouseenter", layerId, () => (map.getCanvas().style.cursor = "pointer"));
           map.on("mouseleave", layerId, () => (map.getCanvas().style.cursor = ""));
@@ -799,6 +812,16 @@ export function FeatureMap({
         }
         if (curbStrokes.length) {
           addGeo("fm-curbs", curbStrokes);
+          // Data-driven SIGN × zoom-driven magnitude. The zoom expression must
+          // be the top-level interpolate input, so the per-feature sign lives
+          // in the output terms. Shared by the visible stroke and its hit twin
+          // so the tap band tracks the drawn curb exactly.
+          const curbOffset: ExpressionSpecification = [
+            "interpolate", ["linear"], ["zoom"],
+            13, ["*", ["get", "offsetSign"], 1.5],
+            16, ["*", ["get", "offsetSign"], 4.5],
+            18, ["*", ["get", "offsetSign"], 10],
+          ];
           map.addLayer({
             id: "fm-curbs",
             type: "line",
@@ -809,18 +832,22 @@ export function FeatureMap({
               // Grow with zoom so the stroke reads as "this curb", not a road.
               "line-width": ["interpolate", ["linear"], ["zoom"], 13, 2.5, 16, 4, 18, 6],
               "line-opacity": 0.9,
-              // Data-driven SIGN × zoom-driven magnitude. The zoom expression
-              // must be the top-level interpolate input, so the per-feature
-              // sign lives in the output terms.
-              "line-offset": [
-                "interpolate", ["linear"], ["zoom"],
-                13, ["*", ["get", "offsetSign"], 1.5],
-                16, ["*", ["get", "offsetSign"], 4.5],
-                18, ["*", ["get", "offsetSign"], 10],
-              ],
+              "line-offset": curbOffset,
             },
           });
-          wirePopup("fm-curbs");
+          // Invisible fat twin of the stroke: the visible curb is only
+          // 2.5–6 px wide — a meaner tap target than the 7 px circles it
+          // replaced. Opacity-0 lines still hit-test, so popups + cursor are
+          // wired HERE and only here (wiring both layers would double-fire
+          // the click handler for one tap on the visible stroke).
+          map.addLayer({
+            id: "fm-curbs-hit",
+            type: "line",
+            source: "fm-curbs",
+            layout: { "line-cap": "round", "line-join": "round" },
+            paint: { "line-color": "#000", "line-opacity": 0, "line-width": 20, "line-offset": curbOffset },
+          });
+          wirePopup("fm-curbs-hit");
         }
         if (solidLines.length) {
           addGeo("fm-lines", solidLines);
@@ -974,7 +1001,7 @@ const PIN_CSS = `
   border-radius: 8px;
   background: #e8891d;
   color: #fff;
-  font: 800 12px/1.1 system-ui, -apple-system, sans-serif;
+  font: 800 0.75rem/1.1 system-ui, -apple-system, sans-serif;
   letter-spacing: .02em;
   border: 2px solid #fff;
   box-shadow: 0 2px 5px rgba(0,0,0,.35);
@@ -1041,7 +1068,7 @@ function LegendSwatch({ entry }: { entry: LegendEntry }) {
       return (
         <span
           aria-hidden
-          className="inline-block rounded-[5px] px-1 text-[9px] leading-[14px] font-extrabold text-white"
+          className="inline-block rounded-[5px] px-1 text-[0.5625rem] leading-[0.875rem] font-extrabold text-white"
           style={{ backgroundColor: entry.color }}
         >
           P&R
