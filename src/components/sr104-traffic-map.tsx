@@ -64,7 +64,7 @@ const STEPS: Step[] = [
     lng: LINE_TERMINAL[1],
     title: "Wait for green, then board",
     detail:
-      "When the terminal has space your light turns green — pull forward to the tollbooths. Leave the line and your pass is void.",
+      "When the terminal has space your light turns green — pull forward to the tollbooths and pay there.",
     color: "#16405e",
   },
 ];
@@ -87,7 +87,41 @@ function pinEl(): HTMLElement {
   return el;
 }
 
-export function Sr104TrafficMap({ height = "420px" }: { height?: string }) {
+function glyphEl(glyph: string): HTMLElement {
+  const el = document.createElement("div");
+  // Smaller than the numbered step markers on purpose: the boarding-pass steps
+  // are what this map is FOR, and food/restrooms are context around them.
+  el.style.cssText =
+    "font-size:17px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.45));cursor:pointer;";
+  el.textContent = glyph;
+  return el;
+}
+
+/** A place to draw alongside the boarding-pass steps. Plain serialisable data
+ *  so a server component can hand it straight to this client component. */
+export interface Sr104MapPin {
+  id: string;
+  title: string;
+  lat: number;
+  lng: number;
+  /** One line of context in the popup — walk time, hours, a provenance caveat. */
+  note?: string;
+}
+
+export function Sr104TrafficMap({
+  height = "420px",
+  food = [],
+  restrooms = [],
+}: {
+  height?: string;
+  /** Places to eat, drawn as 🍴. /line passes the same open-now, distance-ranked
+   *  rows the food list above it renders, so the map and the list can never
+   *  disagree about what is open. Empty on /ferry and /parking, where the map
+   *  is explaining the pass system rather than serving someone already parked. */
+  food?: Sr104MapPin[];
+  /** Restrooms, drawn as 🚻. Same reasoning as `food`. */
+  restrooms?: Sr104MapPin[];
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const resizeObsRef = useRef<ResizeObserver | null>(null);
@@ -154,6 +188,31 @@ export function Sr104TrafficMap({ height = "420px" }: { height?: string }) {
           )
           .addTo(map);
 
+        // Context pins: what is near the line, not part of the pass system.
+        // Drawn AFTER the numbered steps so a coincident step marker keeps the
+        // upper hand — the steps are what this map is for.
+        for (const [glyph, pins] of [
+          ["🍴", food],
+          ["🚻", restrooms],
+        ] as const) {
+          for (const p of pins) {
+            new maplibregl.Marker({ element: glyphEl(glyph), anchor: "center" })
+              .setLngLat([p.lng, p.lat])
+              .setPopup(
+                new maplibregl.Popup({ offset: 14, maxWidth: "240px" }).setHTML(
+                  `<div style="font-size:0.8rem;line-height:1.35;"><p style="margin:0;font-weight:600;">${glyph} ${esc(p.title)}</p>${
+                    p.note ? `<p style="margin:4px 0 0;">${esc(p.note)}</p>` : ""
+                  }</div>`,
+                ),
+              )
+              .addTo(map);
+          }
+        }
+
+        // Bounds stay on the ROUTE, deliberately: the pins cluster at the dock
+        // end, and one distant restaurant extending the box would zoom the
+        // boarding-pass system — the thing this map exists to show — down to
+        // nothing. Off-frame pins are still there when you pan.
         fit();
       });
 
@@ -193,6 +252,11 @@ export function Sr104TrafficMap({ height = "420px" }: { height?: string }) {
       mapRef.current?.remove();
       mapRef.current = null;
     };
+    // Build the map exactly once. `food` and `restrooms` are server-rendered
+    // props on a page with no client-side data fetching, so they never change
+    // after hydration; listing them would tear down and rebuild the whole map
+    // on every parent render for no gain.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -204,6 +268,21 @@ export function Sr104TrafficMap({ height = "420px" }: { height?: string }) {
         role="region"
         aria-label="Map of the SR 104 ferry boarding-pass system in Kingston"
       />
+      {/* Only when there is something to explain — /ferry and /parking pass no
+          pins and get no legend. Each entry names its count so an empty
+          category reads as "none mapped" rather than a glyph you hunt for. */}
+      {(food.length > 0 || restrooms.length > 0) && (
+        <p className="mt-2 text-xs text-ink">
+          Also on the map:{" "}
+          {[
+            food.length > 0 && `🍴 ${food.length} open now`,
+            restrooms.length > 0 && `🚻 ${restrooms.length} restrooms`,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+          . Tap a pin for details.
+        </p>
+      )}
       <ol className="mt-3 grid gap-2 sm:grid-cols-3">
         {STEPS.map((s) => (
           <li key={s.num} className="flex gap-2 rounded-xl bg-shell/70 p-3">

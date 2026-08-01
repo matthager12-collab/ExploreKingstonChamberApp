@@ -77,6 +77,9 @@ export interface Restaurant {
   walkMinutesFromFerry: number;
   /** Admin show/hide toggle: when true, dropped from /eat, near-me, and maps. */
   hidden?: boolean;
+  /** Explicit feature-map icon (Food/Coffee/Drinks). Absent = the classifier
+   *  guesses from cuisine/tags (src/lib/map/restaurant-category.ts). */
+  mapCategory?: "food" | "coffee" | "drink";
 }
 
 export interface Atm {

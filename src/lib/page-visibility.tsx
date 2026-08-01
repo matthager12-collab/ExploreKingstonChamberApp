@@ -53,7 +53,7 @@ export const HIDEABLE_PAGES: { path: string; label: string }[] = [
  *
  * `/line` (E33) is on it because the page ships dark until the physical QR
  * sign plan and the custom domain are settled (docs/LINE-LANDER.md) — and
- * because its whole subject is "what voids your boarding pass", which is
+ * because its whole subject is "do you need a boarding pass right now", which is
  * exactly the class of safety copy the fail-closed rationale above exists for.
  */
 export const DEFAULT_HIDDEN_PAGES: readonly string[] = ["/es", "/line"];

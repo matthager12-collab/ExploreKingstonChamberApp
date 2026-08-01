@@ -403,7 +403,7 @@ export const COPY_BLOCKS = [
     // E14 plain-language pass (NFR-04): this is the most consequence-heavy
     // instruction on the site. Was one 37-word sentence chaining four actions;
     // now one idea per sentence, and "void" is said in plain words.
-    fallback: "The overhead signs at **SR 104 and Barber Cutoff Rd** flash when Kingston's boarding-pass system is on. If they are flashing, follow the signs into the ferry lane. **Take a pass from the machine near Lindvog Rd.** Then wait for a green light before you drive up to the toll booths. Stay in the line the whole time. If you leave the line, your pass stops working.",
+    fallback: "The overhead signs at **SR 104 and Barber Cutoff Rd** flash when Kingston's boarding-pass system is on. If they are flashing, follow the signs into the ferry lane. **Take a pass from the machine near Lindvog Rd.** Then wait for a green light before you drive up to the toll booths.",
   },
   {
     key: "ferryLine.body2",
@@ -1053,7 +1053,7 @@ export const COPY_BLOCKS = [
   // Every visitor-facing sentence on /line. The reader is a stressed driver
   // parked in the SR-104 line with kids in the back and one bar of signal —
   // short sentences, no staff vocabulary, the E14 plain-language rules.
-  // Boarding-pass FACTS (what voids a pass, when it's required) are NOT here:
+  // Boarding-pass FACTS (when a pass is required, who is exempt) are NOT here:
   // they come from the ferry-info record at /admin/ferry-info, shared with
   // /ferry so the two pages can never disagree.
   {
@@ -1074,7 +1074,7 @@ export const COPY_BLOCKS = [
     label: "Intro sentence",
     multiline: true,
     fallback:
-      "Your boarding-pass status, the next boats, and what you can get from where you're parked — without losing your place in line.",
+      "Your boarding-pass status, the next boats, and what you can get from right where you're parked.",
   },
   {
     key: "line.note.title",
@@ -1101,10 +1101,10 @@ export const COPY_BLOCKS = [
     fallback: "The boarding-pass system is off right now — no pass needed at the moment.",
   },
   {
-    key: "line.stay.title",
+    key: "line.exempt.title",
     page: "Ferry line (/line)",
-    label: "Title of the don't-leave-the-line warning (the page's most important block)",
-    fallback: "Stay in the line",
+    label: "Title of the who's-exempt block (walk-ons, bikes, motorcycles)",
+    fallback: "Who doesn't need a pass",
   },
   {
     key: "line.boats.title",
@@ -1133,6 +1133,21 @@ export const COPY_BLOCKS = [
       "With a wait this long, the line usually reaches past Barber Cutoff Rd. Sending someone to join you? Tell them to come down SR 104 from Miller Bay Rd — not to U-turn into the line.",
   },
   {
+    key: "line.cams.title",
+    page: "Ferry line (/line)",
+    label: "Heading on the collapsed WSDOT camera box",
+    fallback: "📷 See the line right now",
+  },
+  {
+    key: "line.cams.blurb",
+    page: "Ferry line (/line)",
+    label: "Sub-line on the camera box — framed for someone already in the line",
+    multiline: true,
+    // Kept short on purpose: this sits beside the Show/Hide control, and a
+    // longer sentence wraps to four lines on a 375px phone and squeezes it.
+    fallback: "WSDOT cameras on SR 104 — find your spot, and see if it's moving.",
+  },
+  {
     key: "line.map.title",
     page: "Ferry line (/line)",
     label: "Map section title",
@@ -1143,6 +1158,20 @@ export const COPY_BLOCKS = [
     page: "Ferry line (/line)",
     label: "Map section subtitle",
     fallback: "The SR 104 boarding-pass system, mapped — sign, pass machine, tollbooths.",
+  },
+  {
+    key: "line.boat.title",
+    page: "Ferry line (/line)",
+    label: "Vessel-map section title",
+    fallback: "Where's the boat?",
+  },
+  {
+    key: "line.boat.subtitle",
+    page: "Ferry line (/line)",
+    label: "Vessel-map section subtitle",
+    multiline: true,
+    fallback:
+      "Live positions of the Edmonds–Kingston ferries. A boat still mid-Sound is a boat that has to dock and unload before it takes you.",
   },
   {
     key: "line.food.title",
@@ -1157,12 +1186,6 @@ export const COPY_BLOCKS = [
     multiline: true,
     fallback:
       "These Kingston kitchens are open right now. You order and pay with the restaurant directly — their website or their phone line, never through this app.",
-  },
-  {
-    key: "line.food.stayNote",
-    page: "Ferry line (/line)",
-    label: "Reminder above the food list that driving out for food voids the pass",
-    fallback: "Remember: if your car leaves the line, your boarding pass stops working.",
   },
   {
     key: "line.food.empty",
@@ -1191,13 +1214,16 @@ export const COPY_BLOCKS = [
     label: "The honest empty state: nothing walkable from the waiting stretch",
     multiline: true,
     fallback:
-      "Honestly: we know of no public restroom you can walk to from the line itself. The nearest public restrooms are at the dock — you'll reach them once you're through the tollbooths.",
+      "Honestly: we know of no public restroom you can walk to from the line itself. The nearest one is a portable toilet at the tollbooths, and there are permanent restrooms at the dock beyond it — you reach all of them by moving up in the line, not by walking.",
   },
   {
     key: "line.amenities.atDock",
     page: "Ferry line (/line)",
-    label: "Heading over the list of restrooms at the dock",
-    fallback: "At the dock, once you're through the tollbooths",
+    label: "Heading over the list of restrooms at the tollbooths and the dock",
+    // Says "from the tollbooths on" rather than "once you're through the
+    // tollbooths": the portable toilet is AT the booths, and a heading that
+    // puts it past them would send someone looking in the wrong place.
+    fallback: "From the tollbooths on",
   },
   {
     key: "line.more.parkingTitle",

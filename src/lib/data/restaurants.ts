@@ -142,6 +142,8 @@ export const restaurants: Restaurant[] = [
     hoursVerified: VERIFIED,
     priceLevel: 2,
     tags: ["pub", "beer", "seafood"],
+    // Owner feedback 2026-07-31: an eating place — Food pin, not Drinks.
+    mapCategory: "food",
     lat: 47.7974,
     lng: -122.497571,
     walkMinutesFromFerry: 2,
@@ -168,6 +170,8 @@ export const restaurants: Restaurant[] = [
     hoursVerified: VERIFIED,
     priceLevel: 2,
     tags: ["wine", "brunch", "date-night"],
+    // Owner feedback 2026-07-31: an eating place — Food pin, not Drinks.
+    mapCategory: "food",
     lat: 47.797325,
     lng: -122.497501,
     walkMinutesFromFerry: 2,
@@ -221,6 +225,8 @@ export const restaurants: Restaurant[] = [
     hoursVerified: VERIFIED,
     priceLevel: 2,
     tags: ["bar", "casual"],
+    // Owner feedback 2026-07-31: an eating place — Food pin, not Drinks.
+    mapCategory: "food",
     lat: 47.798363,
     lng: -122.497663,
     walkMinutesFromFerry: 4,

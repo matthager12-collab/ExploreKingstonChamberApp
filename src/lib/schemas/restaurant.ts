@@ -22,6 +22,9 @@ import {
 
 export const ORDERING_PLATFORMS = ["toast", "square", "doordash", "own-site", "phone-only"] as const;
 export const PRICE_LEVELS = [1, 2, 3] as const;
+/** Feature-map icon keys (MARKER_CATEGORIES): explicit override of the
+ *  cuisine/tags classifier in src/lib/map/restaurant-category.ts. */
+export const MAP_CATEGORIES = ["food", "coffee", "drink"] as const;
 
 export const restaurantSchema = z.object({
   id: idSchema,
@@ -65,6 +68,14 @@ export const restaurantSchema = z.object({
   // Only `true` survives; false/absent parse to an omitted key — parity with
   // the old `...(body.hidden ? { hidden: true } : {})`.
   hidden: z.preprocess((v) => (v ? true : undefined), z.boolean().optional()),
+  // Explicit map icon; empty/absent = keyword classifier decides (same
+  // optional-enum pattern as orderingPlatform above).
+  mapCategory: z.preprocess(
+    (v) => trimOrEmpty(v) || undefined,
+    z
+      .enum(MAP_CATEGORIES, `mapCategory must be one of: ${MAP_CATEGORIES.join(", ")}`)
+      .optional(),
+  ),
   // E27 (M-14-05 app slice). Note `cost` is deliberately NOT here: restaurants
   // are paid by nature and keep priceLevel as their money signal.
   ...accessFactsShape,
@@ -79,6 +90,20 @@ export const restaurantFields: FieldDef[] = [
     required: true,
     placeholder: "Pizza · Coffee & cafe · American pub",
     help: "The short line shown next to the price on the card.",
+  },
+  {
+    key: "mapCategory",
+    label: "Map icon",
+    kind: "select",
+    optional: true,
+    defaultValue: "",
+    options: [
+      { value: "", label: "Auto (guessed from cuisine + tags)" },
+      { value: "food", label: "Food 🍽️" },
+      { value: "coffee", label: "Coffee ☕" },
+      { value: "drink", label: "Drinks 🍺" },
+    ],
+    help: "The pin this listing gets on the food map. Auto guesses from the cuisine line and tags — set it explicitly when the guess is wrong (e.g. a pub that's really an eating place).",
   },
   {
     key: "description",

@@ -17,7 +17,51 @@ import {
 import { haversineMeters, walkMinutes } from "./geo";
 import { getOpenStatus } from "./hours";
 import type { MapFeature } from "./map/types";
-import type { Restaurant } from "./types";
+import type { Restaurant, Webcam } from "./types";
+
+/**
+ * The Kingston cameras in the order they answer a line-sitter's questions,
+ * front of the line first.
+ *
+ * The tollbooths lead because they are the only camera that answers "is it
+ * moving?" — that is the choke point cars actually pass through, so movement
+ * there is the signal. The terminal follows (what lies past the booths), then
+ * the run works BACK OUT SR 104 — reader boards, the pass dispenser at Lindvog,
+ * and finally Barber Cutoff a mile out — so a driver can trace from the booths
+ * down to wherever they are parked and find themselves.
+ *
+ * This is deliberately the reverse of the seed order, which runs outside-in
+ * (the order you'd meet the cameras driving toward the ferry). That order suits
+ * someone still approaching Kingston; /line's audience has already arrived.
+ */
+const LINE_CAM_ORDER: readonly string[] = [
+  "kingston-toll-booths",
+  "kingston-terminal",
+  "kingston-ferry-sign-east",
+  "kingston-ferry-sign-west",
+  "kingston-lindvog",
+  "kingston-barber",
+];
+
+/**
+ * The Kingston-side cameras, ordered for someone sitting in the line.
+ *
+ * Filters by the same id split /ferry and /webcams use — everyone reading
+ * /line is in the Kingston line, and an Edmonds camera would read as "your
+ * line" at a glance. A camera the Chamber adds later is unknown to
+ * LINE_CAM_ORDER and lands at the end in store order rather than vanishing or
+ * being silently reshuffled; Array#sort is stable, so their relative order
+ * holds.
+ */
+export function kingstonCamsFromLine(cams: Webcam[]): Webcam[] {
+  const rank = (id: string) => {
+    const i = LINE_CAM_ORDER.indexOf(id);
+    return i === -1 ? LINE_CAM_ORDER.length : i;
+  };
+  return cams
+    .filter((w) => !w.id.startsWith("edmonds-"))
+    .sort((a, b) => rank(a.id) - rank(b.id));
+}
 
 /** One open-now restaurant, ranked by straight-line distance to the line. */
 export interface LineFoodRow {
