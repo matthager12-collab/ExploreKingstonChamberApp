@@ -133,6 +133,8 @@ type Draft = {
   // through buildFeature: the API rebuilds each feature from the request body
   // alone, so a draft that omitted `cost` would silently strip it on save.
   cost: string;
+  /** Chamber member — draws the marker with added emphasis. Markers only. */
+  member: boolean;
   color: string;
   notes: string;
   link: string;
@@ -160,6 +162,7 @@ function toDraft(f: MapFeature): Draft {
     title: f.title,
     category: f.category ?? "",
     cost: f.cost ?? "",
+    member: f.member === true,
     color: f.color ?? "",
     notes: f.notes ?? "",
     link: f.link ?? "",
@@ -1305,6 +1308,7 @@ export function MapBuilder({
       // Deliberately not kind-gated: cost is valid on any feature, and gating
       // here would strip an API-set value the moment a shape was re-saved.
       ...(isCostValue(draft.cost) ? { cost: draft.cost } : {}),
+      ...(kind === "marker" && draft.member ? { member: true } : {}),
       ...(label ? { label } : {}),
       // Parking color is automatic — don't persist a manual color alongside it.
       ...(!parking && draft.color ? { color: draft.color } : {}),
@@ -1774,6 +1778,24 @@ export function MapBuilder({
           ))}
         </select>
       </Field>
+
+      {draft.kind === "marker" && (
+        <label className="flex items-start gap-2 text-sm text-ink">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={draft.member}
+            onChange={(e) => patchDraft({ member: e.target.checked })}
+          />
+          <span>
+            Chamber member
+            <span className="mt-0.5 block text-xs text-ink-soft">
+              Draws a larger pin with a blue ring so the location stands out. The icon
+              category still sets the pin&rsquo;s own colour.
+            </span>
+          </span>
+        </label>
+      )}
 
       {draft.kind === "marker" && (
         <div className="rounded-xl border border-sand bg-shell/40 p-3">

@@ -151,6 +151,16 @@ Rendering details worth knowing:
   above the canvas, MapLibre's symbol-collision engine cannot see them —
   street labels declutter against each other, and markers simply draw over any
   label beneath them.
+- **Colorway** ("Evergreen & Sound", [ADR-0007](adr/ADR-0007-map-colorway-and-overlay-palette.md)):
+  the base is a LIGHT, desaturated family and the overlay a DARK, saturated one,
+  so hue is free to carry meaning on both sides. `earth` and `building` are
+  deliberately achromatic — they are the two largest surfaces, and keeping them
+  neutral is what gives every overlay hue somewhere safe to sit. Two rules that
+  are load-bearing, not cosmetic: **don't deepen the greens** (`forest #b3cbad`
+  puts the worst text surface at 4.84:1, one step off failing AA), and **don't
+  re-saturate the arterial** (`#e6dcc4` is the only warm sand that separates
+  from the `park-and-ride-24h` badge). `basemap.test.ts` asserts no colours, so
+  the ADR and review are the only guards here.
 - **On-map name labels** (chips + hand-rolled declutter, with per-feature admin
   overrides) — the whole subsystem is documented in
   [MAP-LABELS.md](MAP-LABELS.md).
@@ -463,10 +473,12 @@ Facts worth knowing:
   `src/app/globals.css` (shell/sand → paper + land, seaglass/tide → water,
   fern → greenery, coral → the highway accent, ink/ink-soft → street names).
   If a brand token changes, re-derive the palette there rather than editing
-  layer colors ad hoc. Note: ADR-0007 ("Evergreen & Sound" map colorway, PR
-  #139, in flight) records an owner decision that supersedes these specific
-  tint *values* while keeping the `PALETTE` structure and the
-  derive-from-brand-tokens doctrine — the recolor lands as a follow-up.
+  layer colors ad hoc. Note:
+  [ADR-0007](adr/ADR-0007-map-colorway-and-overlay-palette.md) ("Evergreen &
+  Sound") records an owner decision that supersedes these specific tint
+  *values* while keeping the `PALETTE` structure and the
+  derive-from-brand-tokens doctrine — the recolor lands as a follow-up (see
+  the Colorway bullet under `<FeatureMap>` for the load-bearing rules).
 - **Dark map variant: deliberately deferred.** Investigated for the phase-7
   "brand palette + dark mode" charter line (2026-07-31): the app has **no dark
   theme anywhere** — no `prefers-color-scheme` handling, no theme toggle, no

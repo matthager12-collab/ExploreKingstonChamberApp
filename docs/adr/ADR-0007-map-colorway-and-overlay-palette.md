@@ -1,0 +1,162 @@
+# ADR-0007 — Map colorway ("Evergreen & Sound") and the overlay palette it requires
+
+## Status
+
+Accepted — records the 2026-07-31 owner decision. Supersedes the `PALETTE`
+**values** introduced by commit `8266f1c` ("E31 P7: brand-anchor the basemap
+palette") on the unmerged branch `e31-p7-style-close`; keeps that commit's
+**structure** and doctrine. ADR-0006's deferred list already reads "Brand
+palette (E31 phase 7): LANDED" — true on that branch, not yet on `main`.
+Evaluation that produced this decision, including rendered specimens:
+<https://claude.ai/code/artifact/bf677835-9d13-42ba-be40-bdb416fdfbee>
+
+## Context
+
+ADR-0006 made the base layer *data* — a hand-rolled MapLibre style in
+`src/lib/map/basemap.ts` — but left it wearing the stock Protomaps "light"
+flavour: warm-cream paper, agricultural greens, mustard arterials. That was a
+tileset default, never a decision, and it fails two jobs a basemap can fail
+independently:
+
+1. **It doesn't say "Kingston."** Flat beige land reads as a desert town. The
+   site's own copy calls Kingston a "harbor and marina wrapped in evergreen
+   forest"; the map showed neither.
+2. **It doesn't get out of the way of the data.** This is the measurable one.
+   The most saturated thing on the map was a road casing (highway `#f4c667`,
+   chroma 141) rather than the parking, ferry and trail overlays drawn on top,
+   and **none** of the seven base surfaces were achromatic — so every overlay
+   colour was arguing with a tinted fill somewhere.
+
+`8266f1c` addressed (1) and scoped itself explicitly to it: its comment says
+"the phase-6 look is kept; this pass only pulls temperature and saturation
+toward the brand." Measured against (2), it moved the wrong way on two counts —
+water grew *more* saturated (chroma 62 → 66), and warming the arterial toward
+coral moved it **closer** to the `park-and-ride-24h` badge it already muddled
+with (Δhue 9° → 5°). Peak base chroma fell 141 → 116; still the loudest thing
+on the map.
+
+Two constraints emerged from measuring, both non-obvious:
+
+- **Contrast ratio alone mis-ranks map layers.** A green line on blue water
+  reads fine at 2:1 — hue carries it. What kills a thematic overlay is
+  *same-hue plus small value step*. Judge overlay-against-base on hue, value
+  and chroma together, never on WCAG ratio alone. (WCAG ratio remains the right
+  and only test for *text*.)
+- **The `park-and-ride-24h` badge was over-constraining the basemap.** With it
+  at `#e8891d`, exactly one warm sand (`#e6dcc4`) clears it, and only on
+  lightness — no warm arterial escapes orange on hue. Escaping sideways fails
+  too: a green-grey arterial clears the badge but lands ΔL* 0.2 from parkland,
+  so the road merges into parks instead.
+
+That badge also carries a **WCAG failure**: `.fm-pr-pin` sets `color:#fff` on
+`#e8891d` = **2.62:1**, at 12px/800 — bold, but under the 18.66px that would
+make it WCAG "large text", so it needs 4.5:1.
+
+## Decision
+
+### 1. Keep the phase-7 structure, replace the values
+
+The named `PALETTE` constant, its derive-from-`globals.css`-tokens doctrine,
+and its "if a brand token changes, re-derive rather than edit ad hoc"
+instruction all stay. Only the hex values below change. Tints of the brand
+tokens remain correct — a basemap needs near-neutral surfaces the UI tokens are
+too saturated to supply.
+
+### 2. The base is a LIGHT family; the overlay is a DARK family
+
+The organising rule. Base surfaces stay light and desaturated; overlay colours
+stay dark and saturated. Hue is then free to carry meaning on both sides, which
+is what lets the land finally own green. Concretely: **the two largest surfaces
+(`earth`, `building`) become achromatic** (chroma 4 and 6), giving every
+overlay hue somewhere safe to land.
+
+```
+bg              #eef0ee    paper — marine-layer light, cooled off the cream
+earth           #e4e8e4    land — chroma 4, neutral ground
+forest          #b3cbad    fern-derived
+grassland       #c3d4bd
+farmland        #dad7c4
+landcover       #cdd6c8
+cemetery        #c9d2c4
+pedestrian      #e7e9e5
+greenspace      #aac4a4    parks/gardens
+water           #b5d2de    tide/seaglass family, quieted
+building        #d8ddd7    chroma 6, neutral
+buildingOutline #bfc6be
+highway         #e6dcc4    warm sand — NOT mustard, NOT coral-amber
+majorRoad       #eee7d6
+road            #ffffff
+path            #d6cfbd
+rail            #c6c2b4
+labelMinor      #59645d
+labelMain       #3f4b45
+```
+
+### 3. Land depth is capped by label contrast, not by the overlay
+
+`forest #b3cbad` puts the worst text surface at **4.84:1 — AA**. One step
+deeper (`#9bbd96`, true Douglas-fir) drops to 4.04:1 and fails. This colorway
+deliberately sits one step under that ceiling. **Do not deepen the greens
+without re-running text contrast on every surface.** If it reads too dark in
+daylight on a phone, the sanctioned fallback is `forest #cbdac5` /
+`greenspace #c4d5be` with everything else unchanged.
+
+### 4. Four overlay colours move — and free-parking green is NOT one of them
+
+In `feature-map.tsx` (whose comment says these conventions are *kept in sync
+with both admin editors*, so this is three files, not one):
+
+| key | from | to | why |
+| --- | --- | --- | --- |
+| `park-and-ride-24h` | `#e8891d` | `#8a4c22` | brand `coral-deep`; white text 2.62:1 → **6.69:1**, fixing the AA failure, and unpinning the arterial |
+| `load-zone` | `#f0b429` | `#b8860b` | the yellow fought the new sand arterial |
+| `ferry-holding` | `#64748b` | `#3f5473` | was a near-twin of `permit`; navy suits the ferry |
+| `permit` | `#6b7280` | `#7a7468` | warm taupe — the deliberate odd-one-out among the neutrals |
+
+**Unchanged: `free-2hr` green `#2e9e4f`, `free-unrestricted` cyan, `paid`
+purple, `prohibited` red, trail fern, route teal, boundary navy.**
+
+The owner offered to give up parking green so the land could own it. Measurement
+said the trade was unnecessary: land green and parking green separate on
+**saturation** (forest chroma 30 vs parking green 112, ΔC ≈ 82), not on hue, at
+every land depth tested. Recorded here so it is not re-litigated.
+
+Result: **zero confusable pairs inside the parking legend.** That is new — the
+shipped palette has two (`permit`/`ferry-holding`, and P&R orange against
+load-zone yellow).
+
+### 5. If the base ships without the overlay changes
+
+Keep the arterial at `#e6dcc4` exactly. It is the only warm sand that clears
+today's P&R orange, and only by lightness (ΔL* 22, on the threshold).
+
+## Consequences
+
+- `basemap.ts` remains the single place the base layer is defined; this is a
+  values-only change to `PALETTE` plus the label colours.
+- `basemap.test.ts` asserts layer ids, zoom ranges, the no-POI/no-sprite
+  guarantees and label fields — **it asserts no colours**, so the swap is
+  test-safe. Colour intent is therefore protected by this ADR and by review,
+  not by a test. Adding a chroma/contrast invariant test is open (below).
+- The P&R change fixes a live accessibility defect and should land regardless
+  of whether the colorway does.
+- Three files move together for the overlay half; confirm the admin-editor
+  scope before starting.
+- Peak base chroma 141 → 41; achromatic surfaces 0 → 2; coastline separation
+  8.3 → 9.1 L*. Worst text contrast moves 5.57:1 → 4.84:1 — still AA, and that
+  is the price of the evergreen; §3 is the guard on it.
+
+## Deferred (tracked, not silently dropped)
+
+- **A contrast/chroma invariant test.** The a11y suite has static invariant
+  tests; a basemap analogue (peak chroma ceiling, per-surface label-contrast
+  floor) would keep §2 and §3 from eroding. Not written.
+- **Dark map variant.** Still blocked on the app having any dark theme
+  (ADR-0006). This colorway is the light `PALETTE`; a dark one is a second.
+- **`sr104-traffic-map` / `ferry-vessel-map` overlay colours** were not audited
+  against the new base — only `feature-map`'s conventions were.
+- **Per-kind road widths.** The style comment in `basemap.ts` notes MapLibre
+  forbids mixing `["zoom"]` with `["get","kind"]` in one interpolate, so roads
+  are differentiated by colour at a uniform width. A quieter arterial leans
+  harder on that missing width hierarchy; separate line layers per kind is the
+  real fix.

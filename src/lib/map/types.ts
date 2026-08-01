@@ -55,6 +55,17 @@ export interface MapFeature {
    *  text CostBadge. Distinct from `parking` metadata's own free/paid taxonomy
    *  below — see src/lib/cost.ts for why the two are kept apart. */
   cost?: CostValue;
+  /** Chamber member: draws the marker with added emphasis (a brand-tide outer
+   *  ring and a slightly larger pin) so member locations read first.
+   *
+   *  Deliberately a SEPARATE visual channel from `category`, which owns the
+   *  pin's inner ring colour — membership adds a ring, it never repaints the
+   *  category one, so both stay readable at once. Equally deliberate: member
+   *  emphasis is ADDITIVE. Non-members are drawn exactly as before, because
+   *  dimming them would degrade the tourism map to make the same point.
+   *
+   *  Markers only; ignored for line/trail/area. */
+  member?: boolean;
   /** Hex color for line/trail/area stroke+fill, or a marker tint override. */
   color?: string;
   /** Relative image path served by /api/map/image?p=… */

@@ -157,6 +157,9 @@ export async function POST(request: NextRequest) {
   // rebuilds each feature from known fields only. The frozen /admin/maps editor
   // has no control for it yet, so today it round-trips seed + API values.
   const cost = isCostValue(body.cost) ? body.cost : undefined;
+  // Same reasoning as `cost` above: this route rebuilds each feature from known
+  // fields only, so a field absent here is dropped on the admin's first save.
+  const member = body.member === true ? true : undefined;
   const color =
     typeof body.color === "string" && /^#[0-9a-f]{6}$/i.test(body.color.trim())
       ? body.color.trim()
@@ -247,6 +250,7 @@ export async function POST(request: NextRequest) {
     ...(label ? { label } : {}),
     ...(category ? { category } : {}),
     ...(cost ? { cost } : {}),
+    ...(member ? { member } : {}),
     ...(color ? { color } : {}),
     ...(imageUrl ? { imageUrl } : {}),
     ...(images.length ? { images } : {}),
