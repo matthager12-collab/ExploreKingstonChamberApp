@@ -16,6 +16,7 @@
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { DomainDef, FieldDef, GenericRecord } from "@/lib/schemas/form";
+import { mediaUrl, type MediaItem } from "@/lib/media/refs";
 import { Badge, Card } from "@/components/ui";
 import { Provenance } from "@/components/admin/provenance";
 import { RecordHistory } from "@/components/admin/record-history";
@@ -36,7 +37,7 @@ function slugify(text: string): string {
 /** Record field → editable string/boolean per the field kind. */
 function toDraftValue(field: FieldDef, value: unknown): string | boolean {
   if (field.kind === "checkbox") return Boolean(value);
-  if (field.kind === "csv-tags") {
+  if (field.kind === "csv-tags" || field.kind === "photos") {
     return Array.isArray(value) ? (value as unknown[]).map(String).join(", ") : "";
   }
   if (value == null) return field.defaultValue ?? "";
@@ -100,7 +101,7 @@ function buildRecord(domain: DomainDef, draft: Draft): BuildResult {
       continue;
     }
     const text = typeof raw === "string" ? raw.trim() : "";
-    if (f.kind === "csv-tags") {
+    if (f.kind === "csv-tags" || f.kind === "photos") {
       record[f.key] = text
         .split(",")
         .map((t) => t.trim())
@@ -176,10 +177,16 @@ export function RecordEditor({
   domains,
   initial,
   seedIds,
+  photoLibrary = [],
 }: {
   domains: DomainDef[];
   initial: Record<string, GenericRecord[]>;
   seedIds: Record<string, string[]>;
+  /** The media library, for any domain carrying a "photos" field. Passed in by
+   *  the page rather than fetched here so this component stays store-free —
+   *  it is a client component and media-store is server-only. Defaults to
+   *  empty, so domains without photo fields need not supply it. */
+  photoLibrary?: MediaItem[];
 }) {
   const router = useRouter();
   const [records, setRecords] = useState<Record<string, GenericRecord[]>>(() =>
@@ -357,6 +364,16 @@ export function RecordEditor({
       );
     }
     const value = typeof raw === "string" ? raw : "";
+    if (f.kind === "photos") {
+      return (
+        <PhotoField
+          value={value}
+          library={photoLibrary}
+          describedBy={describedBy}
+          onChange={(next) => patchValue(f.key, next)}
+        />
+      );
+    }
     if (f.kind === "textarea") {
       return (
         <textarea
@@ -643,6 +660,133 @@ export function RecordEditor({
         >
           {message?.text}
         </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Photo picker for a "photos" field — an ordered list of media-library names.
+ *
+ * ORDER IS MEANINGFUL: the first photo is the card image on /eat and /stay, so
+ * the control offers "Make first" rather than only add/remove. A picker that
+ * could not reorder would force someone to remove and re-add three photos to
+ * change which one a listing leads with.
+ *
+ * The value is the same comma-joined string csv-tags uses, so every save path
+ * in this editor keeps working untouched.
+ */
+function PhotoField({
+  value,
+  library,
+  describedBy,
+  onChange,
+}: {
+  value: string;
+  library: MediaItem[];
+  describedBy?: string;
+  onChange: (next: string) => void;
+}) {
+  const [picking, setPicking] = useState(false);
+  const names = value.split(",").map((n) => n.trim()).filter(Boolean);
+  const byId = new Map(library.map((m) => [m.id, m]));
+  const set = (next: string[]) => onChange(next.join(", "));
+
+  if (library.length === 0) {
+    return (
+      <p className="text-sm text-ink-soft" id={describedBy}>
+        No photos in the library yet. Add some under Photos, then come back and
+        they&apos;ll be selectable here.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-3" aria-describedby={describedBy}>
+      {names.length > 0 && (
+        <ul className="flex flex-wrap gap-3">
+          {names.map((name, i) => {
+            const item = byId.get(name);
+            return (
+              <li key={name} className="w-32">
+                {/* eslint-disable-next-line @next/next/no-img-element -- admin
+                    thumbnail of an arbitrary-dimension photo; next/image would
+                    need width/height the library does not store. */}
+                <img
+                  src={mediaUrl(name)}
+                  alt=""
+                  className="h-20 w-32 rounded border border-sand object-cover"
+                  loading="lazy"
+                />
+                <p className="truncate text-xs text-ink-soft">
+                  {item?.title ?? name}
+                </p>
+                {/* A listing photo with no description is a real gap: unlike a
+                    slot, there is no shipped alt to fall back on here. */}
+                {item && !item.alt.trim() && (
+                  <p className="text-xs text-coral-deep">Needs a description</p>
+                )}
+                <div className="flex gap-1 pt-1">
+                  {i > 0 && (
+                    <button
+                      type="button"
+                      className="text-xs font-semibold underline"
+                      onClick={() => set([name, ...names.filter((n) => n !== name)])}
+                    >
+                      Make first
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="text-xs font-semibold underline"
+                    onClick={() => set(names.filter((n) => n !== name))}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <button
+        type="button"
+        className="rounded-full bg-sand px-4 py-2 text-sm font-semibold text-ink"
+        onClick={() => setPicking((p) => !p)}
+      >
+        {picking ? "Close" : names.length ? "Add another photo" : "Add a photo"}
+      </button>
+      {picking && (
+        <ul className="grid grid-cols-4 gap-2 border-t border-sand pt-3 sm:grid-cols-6">
+          {library.map((item) => {
+            const chosen = names.includes(item.id);
+            return (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  className="block w-full text-left"
+                  onClick={() =>
+                    set(chosen ? names.filter((n) => n !== item.id) : [...names, item.id])
+                  }
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element -- see above */}
+                  <img
+                    src={mediaUrl(item.id)}
+                    alt=""
+                    className={`h-14 w-full rounded object-cover ${
+                      chosen ? "ring-2 ring-tide-deep" : "border border-sand"
+                    }`}
+                    loading="lazy"
+                  />
+                  <span className="mt-1 block truncate text-xs text-ink-soft">
+                    {chosen ? "✓ " : ""}
+                    {item.title}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </div>
   );

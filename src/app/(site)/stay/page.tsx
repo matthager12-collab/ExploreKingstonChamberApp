@@ -5,6 +5,9 @@ import { readAccessFacts } from "@/lib/schemas/access";
 import { getLodging } from "@/lib/stores/listing-stores";
 import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
 import { GetListedCallout } from "@/components/get-listed";
+import { ListingPhoto } from "@/components/listing-photo";
+import { getMediaItems } from "@/lib/stores/media-store";
+import type { MediaItem } from "@/lib/media/refs";
 import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
 import {
   PageHeader,
@@ -44,11 +47,12 @@ const typeMeta: Record<
   marina: { label: "Marina", tone: "coral" },
 };
 
-function LodgingCard({ place }: { place: Lodging }) {
+function LodgingCard({ place, photos }: { place: Lodging; photos: Record<string, MediaItem> }) {
   const meta = typeMeta[place.type];
   const accessFacts = readAccessFacts(place);
   return (
     <Card className="flex flex-col gap-3">
+      <ListingPhoto images={place.images} library={photos} />
       <div className="flex items-start justify-between gap-3">
         <h3 className="text-lg font-semibold text-sound-deep">{place.name}</h3>
         <Badge tone={meta.tone}>{meta.label}</Badge>
@@ -88,7 +92,13 @@ function LodgingCard({ place }: { place: Lodging }) {
 
 export default async function StayPage() {
   const hiddenPreview = await assertPageVisible("/stay");
-  const [lodging, copy] = await Promise.all([getLodging(), getCopyOverrides()]);
+  const [lodging, copy, mediaItems] = await Promise.all([
+    getLodging(),
+    getCopyOverrides(),
+    getMediaItems(),
+  ]);
+  // Card photos resolve their alt text from the library — see /eat.
+  const photos = Object.fromEntries(mediaItems.map((m) => [m.id, m]));
   return (
     <>
       {hiddenPreview && <HiddenPageBanner />}
@@ -104,7 +114,7 @@ export default async function StayPage() {
       >
         <div className="grid gap-4 sm:grid-cols-2">
           {lodging.map((place) => (
-            <LodgingCard key={place.id} place={place} />
+            <LodgingCard key={place.id} place={place} photos={photos} />
           ))}
         </div>
       </Section>

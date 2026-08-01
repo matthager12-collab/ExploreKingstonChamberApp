@@ -10,6 +10,7 @@ import {
   idSchema,
   optionalTrimmed,
   requiredTrimmed,
+  photosSchema,
   tagsSchema,
   trimOrEmpty,
   trimmedText,
@@ -29,6 +30,7 @@ export const lodgingSchema = z.object({
   website: httpUrlOptional("website"),
   bookingUrl: httpUrlOptional("bookingUrl"),
   tags: tagsSchema,
+  images: photosSchema,
   // E27 (M-14-05 app slice): declared once in ./access, inherited by both the
   // admin form and this route's validation.
   ...accessFactsShape,
@@ -77,6 +79,14 @@ export const lodgingFields: FieldDef[] = [
     kind: "csv-tags",
     wide: true,
     placeholder: "Waterfront, Dining on site, About 10 min drive",
+  },
+  {
+    key: "images",
+    label: "Photos",
+    kind: "photos",
+    wide: true,
+    optional: true,
+    help: "The first photo is the one shown on the card. Pick from the shared photo library — add new ones under Photos.",
   },
   ...accessFactsFields,
 ];

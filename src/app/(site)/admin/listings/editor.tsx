@@ -13,6 +13,7 @@ import { restaurantFields, restaurantSchema } from "@/lib/schemas/restaurant";
 import { lodgingFields, lodgingSchema } from "@/lib/schemas/lodging";
 import { webcamFields, webcamSchema } from "@/lib/schemas/webcam";
 import { RecordEditor } from "@/components/admin/record-editor";
+import type { MediaItem } from "@/lib/media/refs";
 
 type DomainKey = "restaurants" | "lodging" | "webcams";
 
@@ -46,15 +47,20 @@ const DOMAINS: DomainDef[] = [
 export function ListingsEditor({
   initial,
   seedIds,
+  photoLibrary,
 }: {
   initial: { restaurants: Restaurant[]; lodging: Lodging[]; webcams: Webcam[] };
   seedIds: Record<DomainKey, string[]>;
+  /** Read server-side by the page — media-store is server-only, and this is a
+   *  client component. Feeds the "photos" field on restaurants and lodging. */
+  photoLibrary: MediaItem[];
 }) {
   return (
     <RecordEditor
       domains={DOMAINS}
       initial={initial as unknown as Record<string, GenericRecord[]>}
       seedIds={seedIds}
+      photoLibrary={photoLibrary}
     />
   );
 }

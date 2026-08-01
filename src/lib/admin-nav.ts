@@ -54,6 +54,14 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     capability: "manage-site",
   },
   {
+    id: "media",
+    href: "/admin/media",
+    title: "Photos",
+    navLabel: "Photos",
+    blurb: "Upload photos once, then use them on the home page, kiosk, and listings.",
+    capability: "manage-site",
+  },
+  {
     id: "listings",
     href: "/admin/listings",
     title: "Restaurants, lodging & webcams",

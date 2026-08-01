@@ -28,58 +28,27 @@ import {
 } from "@/lib/kiosk/policy";
 
 /**
- * Attract-loop photography. Local files only — a kiosk fetches nothing offsite.
+ * Attract-loop photography now comes from the shared photo library: the slots
+ * are registered in src/lib/photo-slots.ts (kiosk.attract.1-5), resolved by the
+ * server layout, and handed down as the `attractPhotos` prop — the same route
+ * the attract copy already takes, and for the same reason (this is a client
+ * component and cannot read the overlay store).
  *
- * SWAPPING THESE FOR PROPER AERIALS is a one-line-per-photo change: drop files
- * into public/brand/ and edit this list. What to shoot for, because a kiosk is
- * not a web page:
+ * Everything still local: /api/media/<name> is same-origin, so the "a kiosk
+ * fetches nothing offsite" rule holds.
  *
- *   - WIDE AND HIGH. The panel is portrait 1080x1920 and read from several feet
- *     away by someone walking past. Zoomed-out water-and-treeline frames read at
- *     that distance; a close-up of a storefront does not.
- *   - PORTRAIT-TOLERANT. object-cover crops a landscape frame hard to fill a
- *     9:16 stage. A subject sitting dead-centre survives that; one along the
- *     left edge gets cut off.
- *   - DARK OR CALM ALONG THE BOTTOM THIRD. The headline and prompt sit there
- *     over a navy scrim, and a bright, busy lower third fights them.
- *   - SIZED FOR A MINI PC. Convert to WebP at roughly 1080x1920 and keep each
- *     file under ~300KB. photo-heritage-park.webp is 1.2MB, which is five times
- *     what it needs to be — E15 already learned this lesson on the home hero,
- *     where a 445KB JPEG was the whole LCP problem.
- *   - REAL ALT TEXT. It is not decorative here: the attract overlay is the
- *     kiosk's landmark, and the a11y gate scans this screen.
+ * The shooting guidance that used to live here — wide and high, portrait
+ * tolerant, calm dark bottom third, under ~300KB, real alt text — moved into
+ * each slot's `help` so the person choosing the photo reads it while choosing,
+ * instead of it sitting in a file they will never open.
  *
- * The list is deliberately ordered — the first one is `priority` and is what a
- * visitor sees on a cold boot, so it should be the best frame.
+ * ORDER IS STILL DELIBERATE. The first frame is `priority` and is what a cold
+ * boot puts on the glass.
  */
-// From the Chamber's own marketing library, cropped to the 9:16 stage and
-// converted to WebP (each under 300KB, down from 5-13MB originals).
-//
-// ORDER IS DELIBERATE. The first frame is `priority` and is what a cold boot
-// puts on the glass, so it is the calmest and widest of the set — and its dark
-// water fills the bottom third, which is where the headline sits.
-const ATTRACT_PHOTOS = [
-  {
-    src: "/brand/kiosk-pier.webp",
-    alt: "The sun setting over Puget Sound beyond the Kingston pier",
-  },
-  {
-    src: "/brand/kiosk-canoe.webp",
-    alt: "The bow of a canoe on calm water, looking toward a wooded shoreline",
-  },
-  {
-    src: "/brand/kiosk-ferry.webp",
-    alt: "A Washington State ferry crossing the sound, seen through trees above the terminal",
-  },
-  {
-    src: "/brand/kiosk-lighthouse.webp",
-    alt: "Point No Point lighthouse above the driftwood and rocks of the beach",
-  },
-  {
-    src: "/brand/kiosk-green.webp",
-    alt: "Families on the lawn at the Village Green under a big summer sky",
-  },
-];
+export interface AttractPhoto {
+  src: string;
+  alt: string;
+}
 /** Seconds each attract photo holds before cross-fading to the next. */
 const ATTRACT_PHOTO_MS = 8_000;
 
@@ -113,6 +82,7 @@ export function KioskShell({
   adminPreview,
   attractTitle,
   attractPrompt,
+  attractPhotos,
   children,
 }: {
   idleSeconds: number;
@@ -120,6 +90,8 @@ export function KioskShell({
   /** Resolved from the copy registry by the server layout — see (kiosk)/layout.tsx. */
   attractTitle: string;
   attractPrompt: string;
+  /** Resolved from the photo slots by the same layout, in display order. */
+  attractPhotos: AttractPhoto[];
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -269,13 +241,18 @@ export function KioskShell({
 
   /* ── attract photo rotation ─────────────────────────────────────────── */
 
+  const photoCount = attractPhotos.length;
+
   useEffect(() => {
-    if (!attract) return;
+    if (!attract || photoCount === 0) return;
     // Only ticks while the overlay is up. This IS the burn-in defence: the
     // attract state has to be genuinely moving content, not a held frame.
-    const id = setInterval(() => setPhoto((p) => (p + 1) % ATTRACT_PHOTOS.length), ATTRACT_PHOTO_MS);
+    const id = setInterval(() => setPhoto((p) => (p + 1) % photoCount), ATTRACT_PHOTO_MS);
     return () => clearInterval(id);
-  }, [attract]);
+    // photoCount, not attractPhotos — the prop is a fresh array every render,
+    // so depending on it would tear down and restart the timer constantly and
+    // the loop would never actually advance.
+  }, [attract, photoCount]);
 
   /* ── input lockdown (JS half) ───────────────────────────────────────── */
 
@@ -422,10 +399,15 @@ export function KioskShell({
           aria-label="Touch to explore Kingston"
           className="absolute inset-0 z-50 flex cursor-none flex-col items-center justify-end overflow-hidden bg-sound-deep pb-40"
         >
-          {ATTRACT_PHOTOS.map((p, i) => (
+          {attractPhotos.map((p, i) => (
             <Image
               key={p.src}
               src={p.src}
+              // Intentionally empty: this whole overlay is one button carrying
+              // aria-label="Touch to explore Kingston", and an aria-label
+              // overrides its contents — a description here would be dropped by
+              // assistive tech anyway. The slots are registered decorative to
+              // match, so the admin picker never asks for one.
               alt=""
               fill
               // Only the first is priority: the rest are pulled in behind the

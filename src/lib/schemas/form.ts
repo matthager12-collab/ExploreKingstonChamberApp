@@ -5,7 +5,19 @@
 
 import type { z } from "zod";
 
-export type FieldKind = "text" | "textarea" | "number" | "select" | "checkbox" | "csv-tags";
+// "photos" holds an ordered list of media-library names. It SERIALISES exactly
+// like csv-tags (array on the record, comma-joined in the draft) and differs
+// only in how it renders — a picker rather than a text box. Reusing the
+// serialisation is deliberate: a second array representation in the draft model
+// would be a second thing to get wrong on every save path.
+export type FieldKind =
+  | "text"
+  | "textarea"
+  | "number"
+  | "select"
+  | "checkbox"
+  | "csv-tags"
+  | "photos";
 
 /** One record as the editor sees it — id plus whatever the domain's type holds. */
 export type GenericRecord = { id: string } & Record<string, unknown>;
