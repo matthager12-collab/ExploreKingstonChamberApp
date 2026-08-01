@@ -12,8 +12,9 @@
 // geometry in layers, not per-object like Leaflet). On-map name labels keep the
 // bespoke greedy declutter, rewired to MapLibre's project()/getBounds().
 //
-// Colors on the map canvas are intentionally hex — they live on the tiles, not
-// in the page's token system, and are kept consistent with town-map.tsx.
+// Colors on the map canvas are intentionally hex — they live on the canvas, not
+// in the page's token system. Parking colors are kept in sync BY HAND with the
+// two admin editors (see docs/MAPS.md "Two divergent parking color maps").
 
 import { useEffect, useRef, useState } from "react";
 import type {
@@ -37,7 +38,7 @@ import { TILES_PMTILES_PATH, mapStyle } from "@/lib/map/basemap";
 import { loadMapLibre, pmtilesUrl } from "@/lib/map/maplibre";
 import { curbOffsetSigns } from "@/lib/map/curb";
 
-// ---- shared color conventions (kept in sync with town-map.tsx) ----
+// ---- shared color conventions (kept in sync with both admin editors) ----
 
 const PARKING_RULE_COLORS: Record<string, string> = {
   "free-2hr": "#2e9e4f",

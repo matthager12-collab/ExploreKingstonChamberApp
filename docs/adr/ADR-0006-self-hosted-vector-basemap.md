@@ -65,8 +65,23 @@ app), and retiring the unmaintained-feeling Leaflet+geoman editor stack.
 
 ## Deferred (tracked, not silently dropped)
 
-- **Curb model** (E31 phase 6): `MapZone` curb side + rule, `line-offset`
-  rendering, `parkingAreas` retirement.
-- **Polish** (E31 phase 7): brand palette/dark mode, MapLibre-native label
-  collision (retiring part of `docs/MAP-LABELS.md`'s custom declutter), PWA
-  offline PMTiles precache, self-hosted glyph labels.
+Status update, 2026-07-31 — everything deferred at minting has since landed or
+been decided:
+
+- **Curb model** (E31 phase 6): LANDED — `MapZone` `streetPaths` + compass
+  `curb`, `line-offset` curb strokes (`src/lib/map/curb.ts`), `parkingAreas`
+  retired (PR #129).
+- **Self-hosted glyph labels**: LANDED — street names render from
+  `public/fonts` glyphs with MapLibre-native collision (PR #116, densified in
+  PR #128; the style remains sprite-free/POI-free, so the no-church guarantee
+  holds).
+- **Brand palette** (E31 phase 7): LANDED — `basemap.ts` colors are a named
+  `PALETTE` derived from the globals.css brand tokens.
+- **Dark mode**: DECIDED-DEFERRED — the app has no dark theme anywhere, so a
+  dark map variant waits for one; decision recorded in `docs/MAPS.md` ("The
+  basemap"). The vector base makes it a second `PALETTE` when wanted.
+- **Label collision**: RESOLVED as a division of labor — native symbol
+  collision for street names, the hand-rolled chip declutter (deliberately
+  kept) for feature labels; `docs/MAP-LABELS.md` rewritten as-built.
+- **PWA offline PMTiles precache**: in its own E31 phase-7 PR (service-worker
+  slice), separate from the style/close-out PR.
