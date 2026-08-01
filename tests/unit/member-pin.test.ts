@@ -115,11 +115,76 @@ describe("member ring clears WCAG 1.4.11 on every basemap surface", () => {
     });
   }
 
+  it("also styles the matched member building, from the same constant", () => {
+    // One colour for both member tiers — pin ring and building highlight.
+    expect(MAP).toMatch(/"fill-color": MEMBER_RING/);
+    expect(MAP).toMatch(/"line-color": MEMBER_RING/);
+  });
+
   it("rejects both brand cyan tokens, which is why a derived shade is used", () => {
     // Regression guard. Both are tempting "just use the token" edits, and both
     // fail — on different surfaces, which is why the loop above checks all of
     // them rather than a single representative fill.
     expect(contrast("#1E96C0", BASE_SURFACES.water)).toBeLessThan(3); // --color-tide
     expect(contrast("#16758f", BASE_SURFACES.greenspace)).toBeLessThan(3); // --color-tide-deep
+  });
+});
+
+describe('"member built" — the highlighted building cannot read as water', () => {
+  const ring = MAP.match(/const MEMBER_RING = "(#[0-9a-fA-F]{6})"/)?.[1] ?? "";
+  const opacity = Number(MAP.match(/const MEMBER_BUILDING_OPACITY = ([\d.]+);/)?.[1]);
+
+  /** src-over composite of the translucent highlight on the plain building. */
+  const composite = (fg: string, a: number, bg: string) => {
+    const [f, b] = [hex(fg), hex(bg)];
+    return (
+      "#" +
+      [0, 1, 2]
+        .map((i) => Math.round(a * f[i] + (1 - a) * b[i]).toString(16).padStart(2, "0"))
+        .join("")
+    );
+  };
+  const lstar = (h: string) => {
+    const y = lum(h);
+    return y <= 216 / 24389 ? (y * 24389) / 27 : Math.cbrt(y) * 116 - 16;
+  };
+
+  it("declares the opacity as a named constant", () => {
+    expect(opacity).toBeGreaterThan(0);
+  });
+
+  it("stays clear of the water fill in lightness", () => {
+    // THE failure mode: a translucent blue building at too low an opacity
+    // lands on the water's lightness and reads as a pond. 8 L* is the floor.
+    const fill = composite(ring, opacity, BASE_SURFACES.buildings);
+    expect(Math.abs(lstar(fill) - lstar(BASE_SURFACES.water))).toBeGreaterThanOrEqual(8);
+  });
+
+  it("is still distinguishable from a plain neighbouring building", () => {
+    const fill = composite(ring, opacity, BASE_SURFACES.buildings);
+    expect(contrast(fill, BASE_SURFACES.buildings)).toBeGreaterThanOrEqual(1.35);
+  });
+
+  it("keeps its own outline visible on top of it", () => {
+    const fill = composite(ring, opacity, BASE_SURFACES.buildings);
+    expect(contrast(ring, fill)).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('"member built" degrades quietly when there is no footprint', () => {
+  it("guards on the basemap buildings layer existing", () => {
+    expect(MAP).toMatch(/memberPts\.length && map\.getLayer\("buildings"\)/);
+  });
+
+  it("draws under roads, not over them", () => {
+    expect(MAP).toMatch(/map\.getLayer\("roads"\) \? "roads" : undefined/);
+  });
+
+  it("re-runs as tiles come into view, since queries only see rendered tiles", () => {
+    expect(MAP).toMatch(/map\.on\("idle", syncMemberBuildings\)/);
+  });
+
+  it("skips off-screen points rather than querying blind", () => {
+    expect(MAP).toMatch(/p\.x < 0 \|\| p\.y < 0 \|\| p\.x > width \|\| p\.y > height/);
   });
 });

@@ -133,6 +133,17 @@ function streetLineStyle(rule: StreetRule): { width: number; opacity: number; da
  *  palette moves, that test fails rather than the contrast quietly rotting. */
 const MEMBER_RING = "#136680";
 
+/** Fill opacity for a matched member building — the "member built" tier against
+ *  the basemap's neutral "built" fill.
+ *
+ *  0.32 is not a taste value. Below it the composite drifts into the water
+ *  fill's lightness and a highlighted building starts reading as a pond
+ *  (at 0.25 it is only 6.8 L* off `#b5d2de`); 0.32 composites to `#99b7bb`,
+ *  10.1 L* clear of water and 1.55:1 against a plain neighbouring building,
+ *  while keeping the `MEMBER_RING` outline at 3.04:1 on its own fill. Raising
+ *  it is safe; lowering it is not. */
+const MEMBER_BUILDING_OPACITY = 0.32;
+
 const BOUNDARY_COLOR = "#324A6D";
 const LINE_COLOR = "#2a7f8a";
 const TRAIL_COLOR = "#4a7c59";
@@ -812,6 +823,82 @@ export function FeatureMap({
           } catch {
             // Overlay is progressive enhancement — the base map still works.
           }
+        }
+
+        // ---- member buildings ------------------------------------------
+        // "Built" vs "member built". The basemap's buildings come from our
+        // OSM-derived PMTiles, which carry no membership attribute, so a
+        // member's footprint cannot be styled from the tile data. Instead we
+        // ask the renderer what building is under each member's point and copy
+        // that polygon into our own GeoJSON source.
+        //
+        // Deliberately best-effort, and it degrades to nothing visible:
+        //  - queryRenderedFeatures only sees CURRENTLY RENDERED tiles, so this
+        //    re-runs on move/zoom and fills in footprints as they come into
+        //    view. Matches are cached; a building already found stays found.
+        //  - the basemap's buildings layer is minzoom 13, so below that there
+        //    is nothing to match and no highlight appears.
+        //  - where OSM has no footprint (or the point sits on a park), there is
+        //    simply no match. The pin's member ring still marks the location,
+        //    which is why this can fail quietly without losing information.
+        //  - returned geometry is tile-clipped, so a building straddling a tile
+        //    boundary can highlight as a partial polygon.
+        const memberPts = view.features.filter(
+          (f): f is MapFeature & { point: [number, number] } =>
+            f.kind === "marker" && f.member === true && Array.isArray(f.point),
+        );
+        if (memberPts.length && map.getLayer("buildings")) {
+          const matched = new Map<string, GeoJSON.Feature>();
+          map.addSource("fm-member-buildings", {
+            type: "geojson",
+            data: { type: "FeatureCollection", features: [] },
+          });
+          // Under roads/labels, over the plain buildings fill.
+          const beforeId = map.getLayer("roads") ? "roads" : undefined;
+          map.addLayer(
+            {
+              id: "fm-member-buildings",
+              type: "fill",
+              source: "fm-member-buildings",
+              paint: { "fill-color": MEMBER_RING, "fill-opacity": MEMBER_BUILDING_OPACITY },
+            },
+            beforeId,
+          );
+          map.addLayer(
+            {
+              id: "fm-member-buildings-outline",
+              type: "line",
+              source: "fm-member-buildings",
+              paint: { "line-color": MEMBER_RING, "line-width": 1.5 },
+            },
+            beforeId,
+          );
+
+          const syncMemberBuildings = () => {
+            if (cancelled || !map.getLayer("buildings")) return;
+            const { width, height } = map.getCanvas();
+            let added = false;
+            for (const f of memberPts) {
+              if (matched.has(f.id)) continue;
+              const p = map.project(toLngLat(f.point));
+              // Off-screen points have no rendered tile to query.
+              if (p.x < 0 || p.y < 0 || p.x > width || p.y > height) continue;
+              const hit = map.queryRenderedFeatures(p, { layers: ["buildings"] })[0];
+              if (!hit?.geometry) continue;
+              matched.set(f.id, { type: "Feature", properties: {}, geometry: hit.geometry });
+              added = true;
+            }
+            if (!added) return;
+            const src = map.getSource("fm-member-buildings");
+            if (src && "setData" in src) {
+              (src as maplibregl.GeoJSONSource).setData({
+                type: "FeatureCollection",
+                features: [...matched.values()],
+              });
+            }
+          };
+          syncMemberBuildings();
+          map.on("idle", syncMemberBuildings);
         }
 
         // Add geometry sources + layers (fills under lines under circles).
