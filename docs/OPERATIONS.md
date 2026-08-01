@@ -1088,16 +1088,37 @@ brew install pmtiles                 # once, if not present
 set -a; . ./.env.local; set +a       # load R2_TILES_* (or run in CI with env set)
 node scripts/build-tiles.mjs         # newest Protomaps build -> extract Kingston bbox -> R2
 # node scripts/build-tiles.mjs --dry-run   # extract only, no upload
+node scripts/build-tiles.mjs --offline    # ALSO refresh the PWA's offline slice (below)
 ```
 
 The bbox is the only knob (`BBOX` in the script); widen it there if the map ever
 needs Hansville / Point No Point / Indianola.
 
+**The offline slice** (E31 Phase 7). `--offline` extracts a second, SMALL
+archive — downtown + the ferry dock + the SR-104 holding approach, zoom ≤ 15,
+~1.0 MB — into `public/offline-tiles/kingston-downtown.pmtiles`. It is a
+repo-committed static file (no R2), precached by the service worker so the
+maps keep a base layer with no signal (PWA.md §6). Two rules when refreshing
+it, both enforced or documented:
+
+- **Bump `VERSION` in `public/sw.js` in the same PR.** The worker serves the
+  slice cache-first under a stable URL; without the bump, already-installed
+  devices keep the old bytes forever (PWA.md §3.1).
+- **Respect the byte budget.** `tests/unit/sw-contract.test.ts` fails the
+  build if the file passes 2 MB — this downloads to every visitor's phone at
+  install, so growing it (wider bbox, deeper zoom) is an owner decision, not a
+  refresh side effect.
+
 **Verify:**
 
 ```bash
 curl -I -H 'Range: bytes=0-0' https://<host>/api/map/tiles/kingston.pmtiles   # expect: HTTP 206 + Content-Range
+curl -I https://<host>/offline-tiles/kingston-downtown.pmtiles                # expect: HTTP 200 (static file)
 ```
+
+(Offline range serving for the slice happens inside the service worker, not at
+the server — the honest end-to-end check is `tests/server/offline-map.test.ts`,
+which kills its server and asserts tiles still render.)
 
 ### Ferry busyness forecast — seasonal recalibration
 

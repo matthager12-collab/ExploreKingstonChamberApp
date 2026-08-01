@@ -8,8 +8,9 @@ Lindvog Rd dispenser, reached by a QR code on a physical roadside sign.
 200 to anyone with the URL. It is deliberately not advertised — no nav link, no
 sitemap entry, `noindex` on the page — because its framing ("you're in the
 line") is wrong for anyone who is not, and it would compete with /ferry for
-queries /ferry should win. The QR/sign slice (4) and the service-worker slice
-(5) still wait for the custom domain.
+queries /ferry should win. The QR/sign slice (4) still waits for the custom
+domain; the service-worker half of slice 5 landed with E31 Phase 7's `v5`
+worker (flip-procedure step 4 below).
 
 Owner: `vk/line-lander`. Geometry: `vk/ferry-line-geometry`
 (src/lib/ferry-line-geometry.ts — polyline + `distanceToLineMeters` /
@@ -44,9 +45,10 @@ lives at `/line/preview` instead. Details: `src/lib/page-visibility.tsx`.
 
 ## Flip procedure — ALREADY DONE (2026-08-01). Kept as the record and the recipe
 
-The page is live. Steps 1–3 below have happened; step 4 (service worker +
-Lighthouse URL set) has not. Re-read this before flipping any other
-default-hidden page, and before flipping /line back.
+The page is live. Steps 1–4 below have all happened — step 4 (service worker +
+Lighthouse URL set) landed with E31 Phase 7's `v5` worker, same day. Re-read
+this before flipping any other default-hidden page, and before flipping /line
+back.
 
 1. Someone who knows the highway reads the page at `/line/preview` — the
    amenity block especially (Open question 2) — before anything goes public.
@@ -64,7 +66,17 @@ default-hidden page, and before flipping /line back.
    0.85/4300 floors can't be measured by CI while `/line` 404s in the CI
    build, so until this lands the floor is inferred (real ISR, no dynamic
    APIs, deferred map), not measured.
+   **DONE 2026-08-01, with E31 Phase 7's `v5` worker (same day as the flip):**
+   `/line` is in `NAV_ALLOWLIST`, pinned by `tests/unit/sw-contract.test.ts`,
+   and the Lighthouse floor is **measured** — CI seeds the `hidden:false`
+   record into its throwaway Postgres and polls the ISR entry to a 200 before
+   `lhci` runs (`.github/workflows/ci.yml`, "Seed /line live for Lighthouse"),
+   because a fresh database would otherwise 404 the page and the run would
+   measure the 404.
 5. Re-hide = the same toggle. The page 404s again within the same window.
+   (The SW's `navigate()` caches only 200s, so a re-hidden `/line` stops being
+   re-cached; a device that already holds a copy keeps it while offline until
+   the next successful online load or a `VERSION` bump — PWA.md §7.)
 
 ## Perf floor (hard — this is the page's reason to exist)
 
@@ -139,3 +151,6 @@ forever.
   (Open question 1).
 - Slice 5: flip + SW allowlist follow-up PR (incl. `/line` into the
   `.lighthouserc.json` URL set) + analytics sanity in /admin/ops.
+  **Flip + SW allowlist + measured Lighthouse floor: DONE 2026-08-01** (flip
+  procedure step 4 above has the details). Still open from slice 5: the
+  analytics sanity pass in /admin/ops once real QR traffic exists.

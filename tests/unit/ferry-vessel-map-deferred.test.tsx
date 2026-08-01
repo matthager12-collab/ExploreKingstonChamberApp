@@ -62,10 +62,15 @@ vi.mock("@/lib/map/maplibre", () => ({
     NavigationControl: class {},
   }),
   pmtilesUrl: (p: string) => p,
+  // E31 Phase 7: the component asks the helper for its archive URL (online
+  // path vs the precached offline slice). jsdom has no real network either
+  // way — a fixed string is fine here.
+  basemapArchiveUrl: () => "/api/map/tiles/kingston.pmtiles",
 }));
 
 vi.mock("@/lib/map/basemap", () => ({
   TILES_PMTILES_PATH: "/api/map/tiles/kingston.pmtiles",
+  OFFLINE_TILES_PATH: "/offline-tiles/kingston-downtown.pmtiles",
   mapStyle: () => ({}),
 }));
 

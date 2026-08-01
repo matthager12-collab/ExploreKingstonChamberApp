@@ -24,8 +24,8 @@ import {
   LINE_FLASHING_SIGN,
   LINE_TERMINAL,
 } from "@/lib/ferry-line-geometry";
-import { TILES_PMTILES_PATH, mapStyle } from "@/lib/map/basemap";
-import { loadMapLibre, pmtilesUrl } from "@/lib/map/maplibre";
+import { mapStyle } from "@/lib/map/basemap";
+import { basemapArchiveUrl, loadMapLibre } from "@/lib/map/maplibre";
 
 const WSDOT_POST =
   "https://wsdotblog.blogspot.com/2026/04/smoother-sailing-in-kingston-new-sr-104.html";
@@ -139,7 +139,7 @@ export function Sr104TrafficMap({
       const coords = HOLDING_ROUTE.map(([lat, lng]) => [lng, lat] as [number, number]);
       const map = new maplibregl.Map({
         container: containerRef.current,
-        style: mapStyle(pmtilesUrl(TILES_PMTILES_PATH)),
+        style: mapStyle(basemapArchiveUrl()),
         center: [-122.505, 47.803],
         zoom: 12.5,
         scrollZoom: false,

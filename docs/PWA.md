@@ -24,20 +24,21 @@ and do not store on a device).
 Read `public/sw.js` top to bottom — the `fetch` handler's branch **order is a
 security property**, not a style choice, and the file says so at each branch.
 This table is that handler, in order. The worker's own numbered comments only
-run 1–6: rows 3 and 4 are a single branch in code (the ferry carve-out is
+run 1–7: rows 3 and 4 are a single branch in code (the ferry carve-out is
 nested *inside* the deny check), and rows 5 and 6 are a single `navigate()`
 call that decides internally whether the path is allowlisted.
 
 | # | Route class | Strategy | Cache | Bound | Staleness label |
 |---|---|---|---|---|---|
 | 1 | Any non-`GET` | Not intercepted — no `respondWith` | — | — | n/a — writes belong to the outbox (§4), never to a cache layer |
-| 2 | Cross-origin `GET` (WSDOT, map tiles, fonts) | Not intercepted | — | — | n/a — third parties keep their own caching rules |
-| 3 | `/admin/*`, `/portal/*`, `/api/*` | **Never cached** — one exact-path exception, row 4. Passes through untouched | — | — | n/a |
+| 2 | Cross-origin `GET` (WSDOT, fonts CDNs, embeds) | Not intercepted | — | — | n/a — third parties keep their own caching rules |
+| 3 | `/admin/*`, `/portal/*`, `/api/*` | **Never cached** — one exact-path exception, row 4. Passes through untouched (including `/api/map/tiles/*`, the **online** basemap) | — | — | n/a |
 | 4 | `GET /api/ferry/status` (exact string equality, nested inside branch 3) | Network-first; `cache.put` only when `res.ok` | `vk-data-*` | 1 entry | Cached copy is stamped `X-SW-Fetched-At`; the live copy is not. Both boards read that header and render the amber line: *"Offline — saved times as of H:MM. Not live; confirm at wsdot.wa.gov/ferries when you're back online."* Two-way wording and a date qualifier — see below the table |
-| 5 | Navigation (`request.mode === "navigate"`) to a path in `NAV_ALLOWLIST` | Network-first; `cache.put` only when `res.status === 200 && !res.redirected` | `vk-shell-*` | 11 entries, FIFO | `<OfflineBanner/>` (`src/components/pwa.tsx`): *"You're offline — showing saved info from H:MM."*, or the time-less *"You're offline — showing saved info."* when the timestamp fails the honesty gate (§7) |
+| 5 | Navigation (`request.mode === "navigate"`) to a path in `NAV_ALLOWLIST` | Network-first; `cache.put` only when `res.status === 200 && !res.redirected` | `vk-shell-*` | 12 entries, FIFO | `<OfflineBanner/>` (`src/components/pwa.tsx`): *"You're offline — showing saved info from H:MM."*, or the time-less *"You're offline — showing saved info."* when the timestamp fails the honesty gate (§7) |
 | 6 | Any other same-origin navigation | Network-first, **never cached**. On failure: saved copy → `/offline` → a plain-text 503 | — | — | `/offline` says it in prose; the banner's time clause is suppressed on that **document**, wherever it is served from (§7) |
-| 7 | `/_next/static/*`, `/brand/*`, and `/_next/image?url=/brand/…` **only** | Cache-first | `vk-static-*` | 80 entries, FIFO | None needed for `/_next/static/*` — content-hashed and immutable. `/brand/*` is not: its urls are stable, and cache-first means no revalidation, so a **replaced** logo or icon reaches an already-visited device only on a `VERSION` bump (§3.1) |
-| 8 | Everything else same-origin `GET` (e.g. `/manifest.webmanifest`, `/geo/*.json`) | Not intercepted | — | — | n/a. `/manifest.webmanifest` *is* warmed into the static cache at install, but no fetch branch ever reads it back — §2 |
+| 7 | `GET /offline-tiles/kingston-downtown.pmtiles` (exact pathname) | **The worker as range server** (E31 Phase 7): slices the requested byte range out of the precached archive and answers `206` + `Content-Range` itself, because pmtiles reads byte ranges and CacheStorage does not speak `Range` — a cached full-body `200` is exactly the response the pmtiles client rejects. Cache-first; re-downloads the whole file on a miss. Only maps that already decided they are offline request this path (`basemapArchiveUrl()`, `src/lib/map/maplibre.ts`) | `vk-tiles-*` | 1 entry (~1.0 MB) | None — basemap geometry has no freshness story a visitor can act on; the archive refreshes with the quarterly tile build (§3.1, `VERSION` bump required) |
+| 8 | `/_next/static/*`, `/brand/*`, `/fonts/*`, and `/_next/image?url=/brand/…` **only** | Cache-first | `vk-static-*` | 80 entries, FIFO | None needed for `/_next/static/*` — content-hashed and immutable. `/brand/*` and `/fonts/*` are not: their urls are stable, and cache-first means no revalidation, so a **replaced** logo, icon or glyph set reaches an already-visited device only on a `VERSION` bump (§3.1). `/fonts/*` is the MapLibre street-name glyph set — runtime-cached so any glyph range seen online renders offline, with one carve-out: an **unreachable** glyph range answers an empty `200` glyph set instead of rejecting, because MapLibre's worker aborts the *whole vector tile* (geometry included) on a failed glyph fetch — one missing `.pbf` offline would blank the entire offline basemap. Blank labels, live map. Every other static asset still fails exactly as it would with no worker installed |
+| 9 | Everything else same-origin `GET` (e.g. `/manifest.webmanifest`, `/geo/*.json`) | Not intercepted | — | — | n/a. `/manifest.webmanifest` *is* warmed into the static cache at install, but no fetch branch ever reads it back — §2 |
 
 **The amber ferry label has two wordings, and the difference is a promise.**
 Both boards (`src/app/(site)/ferry/ferry-board.tsx` and `src/components/next-ferries.tsx`)
@@ -68,14 +69,17 @@ morning.
 `/events` would swallow `/events/suggest` (which renders an admin preview of
 unpublished events); a prefix on `/ferry` would swallow `/ferry/plan`. Today it
 is `/`, `/ferry`, `/eat`, `/events`, `/parking`, `/about`, `/simple`, `/print`,
-`/offline` (`/simple` and `/print` joined in v4 — issue #52, the E14
-follow-up).
+`/line`, `/offline` (`/simple` and `/print` joined in v4 — issue #52, the E14
+follow-up; `/line` joined in v5 the day the Chamber flipped it live —
+2026-08-01, E33 slice 5 — its audience is by definition sitting in the SR-104
+holding line on a thin signal).
 
 Three routes are **deliberately absent** and `tests/unit/sw-contract.test.ts`
 fails the build if any of them is added: `/ferry/plan` (the prediction flag
 defaults off with no seed record, so it `notFound()`s for every visitor today —
 allowlisting it would cache a 404), `/webcams` and `/map` (useless offline and
-heavy enough to blow the shell budget; tiles are the deferred NFR-97 item, §6).
+heavy enough to blow the shell budget; the maps' offline story is the
+precached basemap slice — row 7 and §6 — not a cached `/map` document).
 
 Branch 3 must precede 4–7 because `/api/hunts/photo` serves **admin-only
 moderation photos** with an image destination, and `/api/map/image` and
@@ -87,7 +91,7 @@ device — normal in a ferry town. The same-file exact-equality carve-out for
 match would make every offline retry write to the database. The contract test
 greps for that prefix form and fails on it.
 
-**Row 7's `/_next/image` rule is a decoded query check, not a prefix — and that
+**Row 8's `/_next/image` rule is a decoded query check, not a prefix — and that
 is a privacy decision, not tidiness.** Every `<Image>` in the app uses Next's
 default loader, so the wire request for the logo is really
 `/_next/image?url=%2Fbrand%2Flogo-…png&w=1920&q=75`: pathname `/_next/image`,
@@ -109,14 +113,15 @@ Naming scheme: **`vk-<role>-<VERSION>`**. Every cache name ends with the
 version string, and `activate` deletes every cache that starts with `vk-` and
 does **not** end with `-${VERSION}`. The `vk-` prefix guard matters — this
 origin also hosts caches this app did not create, and deleting those would be
-someone else's outage. `VERSION` is **`"v4"`** today, so the live names are
-`vk-shell-v4`, `vk-static-v4`, `vk-data-v4`, `vk-kiosk-v4`.
+someone else's outage. `VERSION` is **`"v5"`** today, so the live names are
+`vk-shell-v5`, `vk-static-v5`, `vk-data-v5`, `vk-kiosk-v5`, `vk-tiles-v5`.
 
 | Cache | Holds | Cap | Eviction |
 |---|---|---|---|
-| `vk-shell-*` | The single `PRECACHE` entry (`/offline`), then one HTML entry per allowlisted path | `SHELL_LIMIT` = `NAV_ALLOWLIST.length + 2` = **11** | FIFO `trim()` after every write |
-| `vk-static-*` | `/_next/static/*`, `/brand/*`, optimizer-served brand imagery (`/_next/image?url=/brand/…`), and the three `PRECACHE_STATIC` entries warmed at install: `/manifest.webmanifest`, `/brand/icon-192.png`, `/brand/icon-512.png` | `STATIC_LIMIT` = **80** | FIFO `trim()` after every write |
+| `vk-shell-*` | The single `PRECACHE` entry (`/offline`), then one HTML entry per allowlisted path | `SHELL_LIMIT` = `NAV_ALLOWLIST.length + 2` = **12** | FIFO `trim()` after every write |
+| `vk-static-*` | `/_next/static/*`, `/brand/*`, `/fonts/*` (map glyphs), optimizer-served brand imagery (`/_next/image?url=/brand/…`), and the four `PRECACHE_STATIC` entries warmed at install: `/manifest.webmanifest`, `/brand/icon-192.png`, `/brand/icon-512.png`, and `/fonts/Noto Sans Regular/0-255.pbf` (the Basic Latin glyph range — the one file the downtown street labels need offline; measured, not guessed) | `STATIC_LIMIT` = **80** | FIFO `trim()` after every write |
 | `vk-data-*` | Exactly one entry, keyed `/api/ferry/status` | **1**, by construction (fixed key) | Overwritten by every successful poll |
+| `vk-tiles-*` | Exactly one entry: the offline basemap slice (`/offline-tiles/kingston-downtown.pmtiles`, **~1.0 MB** — downtown + ferry dock + the SR-104 holding approach, zoom ≤ 15), precached at install (`PRECACHE_TILES`) and byte-budgeted by `tests/unit/sw-contract.test.ts` | **1**, by construction (fixed key) | Replaced only by a `VERSION` bump (§3.1 — the file is cache-first under a stable URL) |
 
 The footprint is **bounded by construction** — that is M-18-04 / T&L NFR-97's
 "measurable, evictable footprint" half, and it is why every cap is a named
@@ -135,9 +140,12 @@ Notes that are load-bearing:
   precached entries, being the oldest by definition, are first in line for
   eviction. Parking the icons there would have put the one asset we cannot
   afford to lose (`/offline`) at the front of the queue. With the list at one,
-  the shell budget is a budget for the allowlist and nothing else: nine
-  allowlisted pathnames (`/offline` is one of them) against a cap of eleven, so
-  **ordinary browsing can never evict the offline fallback**.
+  the shell budget is a budget for the allowlist and nothing else: ten
+  allowlisted pathnames (`/offline` is one of them) against a cap of twelve, so
+  **ordinary browsing can never evict the offline fallback**. The basemap
+  slice lives in its own single-entry cache (`PRECACHE_TILES` → `vk-tiles-*`)
+  for the same reason — a 1 MB binary in the shell queue would both distort
+  the HTML budget and sit first in line for eviction.
 - **The install icons and the manifest are precached into the *static* cache**
   (`PRECACHE_STATIC`), which is where the `/brand/` fetch branch reads the icons
   back from anyway. Two of the manifest's three icons are warmed this way; the
@@ -175,11 +183,14 @@ invalidation.** There is no other lever.
    for every tab to close.
 3. Bump it whenever the caching *strategy* changes. You do **not** need to bump
    it for ordinary app deploys — `/_next/static/*` is content-hashed, and shell
-   HTML is network-first, so a normal release refreshes itself. The one deploy
-   that **does** need a bump is a **brand-asset replacement** — a new logo,
-   hero, or install icon at the same url. Those are cache-first with no
-   revalidation (§1 row 7), so a device that has already visited keeps serving
-   the old bytes until its `vk-static-*` cache is dropped.
+   HTML is network-first, so a normal release refreshes itself. The deploys
+   that **do** need a bump are **stable-url asset replacements**: a new logo,
+   hero, install icon or glyph set at the same url (cache-first with no
+   revalidation, §1 row 8), and a **refreshed offline basemap slice**
+   (`node scripts/build-tiles.mjs --offline` — the quarterly tile refresh,
+   OPERATIONS.md §7). All of those keep serving the old bytes to an
+   already-visited device until its `vk-static-*` / `vk-tiles-*` cache is
+   dropped, and the bump is the only drop lever.
 
 Two defences already sit in front of a stale worker, and both matter:
 
@@ -455,14 +466,29 @@ value.
 
 ## 6. Deferred / out of scope
 
-**Offline map tiles for a Kingston bounding box.** This is the remaining half
-of T&L NFR-97 (the bounded-cache requirement; E13 delivered the "measurable,
-evictable footprint" half — §2). It is deliberately not built because it needs
-a **size-disclosure UX** first: an explicit, up-front "this will download ~N MB"
-consent step, a defined bounding box, a visible footprint the visitor can
-evict, and **no silent background prefetch**. Shipping tiles without that would
-violate the very requirement it is meant to satisfy. `/map` and `/webcams` are
-excluded from `NAV_ALLOWLIST` for the same reason.
+**Offline map tiles (the remaining half of T&L NFR-97) — RESOLVED for the
+basemap by E31 Phase 7 (charter AC 9), still deferred for anything bigger.**
+When this section was written the app's
+maps were third-party raster tiles: an offline map meant prefetching *hundreds*
+of tiles of unbounded total size from someone else's server, which is why it
+demanded a **size-disclosure UX** (an up-front "~N MB" consent step, a visible
+evictable footprint, no silent background prefetch) before it could exist.
+E31's self-hosted vector migration changed the shape of the problem: the whole
+offline basemap is now **one same-origin static file of ~1.0 MB** —
+`/offline-tiles/kingston-downtown.pmtiles`, downtown + the ferry dock + the
+SR-104 holding approach at zoom ≤ 15 — precached at install into the
+single-entry `vk-tiles-*` cache (§2), byte-budgeted by
+`tests/unit/sw-contract.test.ts` (hard fail at 2 MB), and served back as real
+`206` byte ranges by the worker itself (§1 row 7). That is comparable to the
+imagery the worker already precaches, so it rides the install like the icons
+do rather than gating on a consent step. What **stays deferred behind the
+original size-disclosure reasoning** is anything that no longer fits "one
+small file": a wider bbox, deeper zoom, or visitor-chosen areas. Growing the
+slice past its test-pinned budget is an ask-Mat decision, not a refresh side
+effect. `/map` and `/webcams` remain outside `NAV_ALLOWLIST` (their documents
+are heavy and near-useless offline); the offline basemap serves the map
+embedded in the allowlisted `/parking` page and any other MapLibre surface a
+visitor reloads offline.
 
 **Web push / VAPID / notification permission flows — E21 owns all of it.**
 `public/sw.js` has no `push` listener and no `PushManager` reference, and the
