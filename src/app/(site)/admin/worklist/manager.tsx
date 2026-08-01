@@ -131,10 +131,12 @@ const TYPE_LABELS: Record<WorklistType, string> = {
   staleness: "Re-verify",
   report_inaccurate: "Reports",
   privacy_request: "Privacy",
+  claim_request: "Claims",
 };
 
 const TYPE_ORDER: WorklistType[] = [
   "moderation",
+  "claim_request",
   "report_inaccurate",
   "staleness",
   "sync_conflict",

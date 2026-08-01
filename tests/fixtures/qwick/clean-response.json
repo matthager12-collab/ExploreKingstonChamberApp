@@ -1,0 +1,50 @@
+{
+  "__comment": "Quarantine-free variant of full-response.json (E17): the ambiguous pair and the nameless row removed. The CLI exits 0 on this fixture and 2 on the full one — asserted by test.",
+  "data": {
+    "signByLicense": {
+      "DataCollection": {
+        "Data": [
+          {
+            "id": "qw-101",
+            "name": "J'aime Les Crêpes",
+            "description": "<p>Crepes near the <b>ferry</b> &amp; more</p>",
+            "qr": null,
+            "logo": "https://res.cloudinary.com/qwick/image/upload/v1/jaime-logo.png",
+            "listingImage": null,
+            "isPromoted": false,
+            "categories": ["Restaurants"],
+            "customCategories": [],
+            "phone": "360-297-5886",
+            "website": "https://www.jaimelescrepes.com"
+          },
+          {
+            "id": "qw-103",
+            "name": "Kingston Kayak Rentals",
+            "description": "Paddle the cove.",
+            "qr": null,
+            "logo": null,
+            "listingImage": null,
+            "isPromoted": false,
+            "categories": ["Recreation"],
+            "customCategories": ["Waterfront"],
+            "phone": "360-555-0142",
+            "website": "https://kingstonkayak.example.com"
+          },
+          {
+            "id": "qw-106",
+            "name": "The Filling Station Espresso",
+            "description": "Drive-through espresso stand.",
+            "qr": null,
+            "logo": null,
+            "listingImage": null,
+            "isPromoted": true,
+            "categories": ["Coffee"],
+            "customCategories": [],
+            "phone": "1-360-555-0173",
+            "website": "fillingstationespresso.example.com"
+          }
+        ]
+      }
+    }
+  }
+}
