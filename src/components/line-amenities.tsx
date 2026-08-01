@@ -2,15 +2,15 @@
 //
 // The honest answer to "is there a restroom near me?" for a car parked west of
 // Lindvog Rd. Purely data-driven over the sourced amenities layer (M-19-03 —
-// every pin traces to a published source): with today's data nothing is
-// walkable from the waiting stretch, so the block leads with the honest empty
-// state instead of a cheerful list of dock restrooms two miles away. If the
-// Chamber maps a genuinely walkable amenity at /admin/maps it appears here
-// with no deploy.
+// every pin traces to a source). If the Chamber maps a genuinely walkable
+// amenity at /admin/maps it appears here with no deploy — which is exactly how
+// the current one arrived.
 //
-// TODO(E33 Open question 2): the "nothing until the terminal" claim needs
-// Chamber ground-truth for the stretch west of Lindvog. The wording is a copy
-// key so it can be corrected the moment someone who knows the highway reads it.
+// E33 Open question 2 is ANSWERED (2026-08-01): the Chamber confirmed a
+// portable toilet at the boarding-pass dispenser west of Lindvog Rd. It is the
+// first amenity ever to land in the `walkable` half, so this block no longer
+// leads with the empty state — the empty branch is kept because the split is
+// data-driven and a future data change could empty it again.
 
 import type { LineAmenitySplit } from "@/lib/line-lander";
 import { markerCategory } from "@/lib/map/types";
@@ -62,7 +62,21 @@ export function LineAmenities({
   return (
     <Card>
       {split.walkable.length > 0 ? (
-        <AmenityList rows={split.walkable} fromLine />
+        <div>
+          {/* Heading + note only exist on this branch. Until the portable toilet
+              at the pass dispenser was mapped (Aug 2026) this list was always
+              empty, so "~N min from the line" had never actually rendered —
+              and unlabelled it reads as "N min from ME" to someone parked a
+              mile back at Barber Cutoff. The note says what it is measured
+              from. */}
+          <h3 className="text-sm font-semibold text-sound-deep">
+            {copyText(copy, "line.amenities.walkableTitle")}
+          </h3>
+          <AmenityList rows={split.walkable} fromLine />
+          <p className="mt-2 text-xs text-ink-soft">
+            {copyText(copy, "line.amenities.walkableNote")}
+          </p>
+        </div>
       ) : (
         <p className="text-ink">{copyText(copy, "line.amenities.empty")}</p>
       )}

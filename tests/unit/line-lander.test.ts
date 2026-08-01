@@ -137,22 +137,25 @@ describe("splitAmenitiesFromLine", () => {
   });
 });
 
-describe("the shipped seed vs the honest empty state (Open question 2)", () => {
-  it("maps NO amenity walkable from the waiting stretch — /line leads with the empty state", () => {
+describe("the shipped seed (Open question 2, ANSWERED 2026-08-01)", () => {
+  it("maps exactly one amenity walkable from the waiting stretch: the dispenser toilet", () => {
+    // This test used to assert `walkable` was EMPTY, and told whoever broke it
+    // to update the empty-state copy and the epic doc if the amenity was real.
+    // The Chamber confirmed one is: a portable toilet at the boarding-pass
+    // dispenser west of Lindvog Rd. That is on the waiting stretch, so the
+    // honest answer flipped from "nothing" to "this one".
     const split = splitAmenitiesFromLine(mapFeatures);
-    expect(
-      split.walkable,
-      "A seeded amenity now counts as walkable from the SR-104 waiting stretch. " +
-        "If it is real and verified (M-19-03), update /line's amenities empty-state " +
-        "copy and the LINE-LANDER doc; this is the epic's Open question 2 being answered.",
-    ).toEqual([]);
-    // Every sourced restroom from the tollbooths on. The portable toilet at the
-    // booths belongs here rather than in `walkable`: it sits at the FRONT of the
-    // line, so a driver parked west of the dispenser reaches it by moving up,
-    // not by walking — which is exactly the distinction this split encodes.
+    expect(split.walkable.map((r) => r.feature.id)).toEqual(["restroom-dispenser-portable"]);
+    // Distance ~0 because the dispenser IS the eastern end of the stretch. The
+    // rendered figure is floored at 1 minute by walkMinutes, never a bare "0".
+    expect(split.walkable[0].lineMeters).toBeLessThan(50);
+    expect(split.walkable[0].lineWalkMinutes).toBeGreaterThanOrEqual(1);
+    // The two dock restrooms, and only those. The dispenser toilet must NOT
+    // appear here — it is on the waiting stretch, not past the tollbooths, and
+    // listing it under "at the dock" would send someone to the wrong end of a
+    // mile of highway.
     expect(split.atTerminal.map((r) => r.feature.id).sort()).toEqual([
       "restroom-boat-launch",
-      "restroom-tollbooth-portable",
       "restroom-waterfront-promenade",
     ]);
   });

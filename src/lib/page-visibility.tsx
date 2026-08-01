@@ -33,7 +33,8 @@ export const HIDEABLE_PAGES: { path: string; label: string }[] = [
   { path: "/print", label: "Printable one-pager" },
   // E14 — the Spanish essentials page. SHIPS DARK: see DEFAULT_HIDDEN_PAGES.
   { path: "/es", label: "Kingston en español" },
-  // E33 — the SR-104 line lander. SHIPS DARK: see DEFAULT_HIDDEN_PAGES.
+  // E33 — the SR-104 line lander. Live since 2026-08-01, but UNLISTED: public
+  // to anyone with the URL, kept out of search (see UNLISTED_PAGES).
   { path: "/line", label: "Ferry line (SR-104)" },
 ];
 
@@ -51,12 +52,39 @@ export const HIDEABLE_PAGES: { path: string; label: string }[] = [
  * safety copy: a fresh database, a restored backup, or a wiped store all leave
  * it dark rather than publishing unreviewed instructions about ferry lines.
  *
- * `/line` (E33) is on it because the page ships dark until the physical QR
- * sign plan and the custom domain are settled (docs/LINE-LANDER.md) — and
- * because its whole subject is "do you need a boarding pass right now", which is
- * exactly the class of safety copy the fail-closed rationale above exists for.
+ * `/line` (E33) WAS on this list because it shipped dark. It went live on
+ * 2026-08-01 and now has an explicit `hidden: false` record, so this entry no
+ * longer gates anything day to day — it is a RESTORE-SAFETY NET. If that record
+ * is ever lost (a backup restore, a wiped store, a fresh database) /line falls
+ * back to 404 rather than silently republishing itself, which is the right
+ * default for a page whose subject is "do you need a boarding pass right now".
+ *
+ * DO NOT remove `/line` from this list as a tidy-up. With no record present,
+ * removing it flips the page from fail-closed to PUBLIC BY DEFAULT — the exact
+ * opposite of the intent. It is unadvertised, not un-public: see UNLISTED_PAGES.
  */
 export const DEFAULT_HIDDEN_PAGES: readonly string[] = ["/es", "/line"];
+
+/**
+ * Public pages that must not be ADVERTISED to search engines, even when
+ * visible. Distinct from hidden: these answer 200 to anyone with the URL.
+ *
+ * `/line` is reached by QR code from a physical roadside sign on SR 104. It is
+ * meant to be found by someone sitting in the ferry line, not by a search for
+ * "Kingston ferry" — its whole framing ("you're in the line") is wrong for
+ * anyone else, and it would compete with /ferry for the queries /ferry should
+ * win.
+ *
+ * Two mechanisms, and they are not interchangeable:
+ *   - listed here  → dropped from sitemap.xml (stop advertising it), and
+ *   - `robots: { index: false }` on the page itself (stop indexing it).
+ *
+ * Deliberately NOT a robots.txt `Disallow`. Disallow blocks CRAWLING, so the
+ * crawler never fetches the page, never sees the noindex, and Google can still
+ * list a bare URL it learned from an inbound link. "Crawlable + noindex" is the
+ * combination that actually keeps a page out of results.
+ */
+export const UNLISTED_PAGES: readonly string[] = ["/line"];
 
 /**
  * The paths a visitor must not see, from the raw store rows: everything with

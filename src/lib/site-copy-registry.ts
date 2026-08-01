@@ -1209,21 +1209,36 @@ export const COPY_BLOCKS = [
     fallback: "Need a restroom?",
   },
   {
+    key: "line.amenities.walkableTitle",
+    page: "Ferry line (/line)",
+    label: "Heading over restrooms that ARE reachable from the waiting stretch",
+    fallback: "On the line itself",
+  },
+  {
+    key: "line.amenities.walkableNote",
+    page: "Ferry line (/line)",
+    label: "Explains what the walk figures are measured FROM — they are not from you",
+    multiline: true,
+    // The distance is to the nearest point of the waiting stretch, which is
+    // where the app knows the line is — not where the reader is sitting in it.
+    // Without this, "~1 min from the line" reads as "~1 min from me" to someone
+    // parked a mile back at Barber Cutoff.
+    fallback:
+      "Walk times are to the nearest point of the line, not to your car — if you're further back on SR 104, it's further for you.",
+  },
+  {
     key: "line.amenities.empty",
     page: "Ferry line (/line)",
     label: "The honest empty state: nothing walkable from the waiting stretch",
     multiline: true,
     fallback:
-      "Honestly: we know of no public restroom you can walk to from the line itself. The nearest one is a portable toilet at the tollbooths, and there are permanent restrooms at the dock beyond it — you reach all of them by moving up in the line, not by walking.",
+      "Honestly: we know of no public restroom you can walk to from the line itself. The nearest ones are at the dock — you'll reach them once you're through the tollbooths.",
   },
   {
     key: "line.amenities.atDock",
     page: "Ferry line (/line)",
-    label: "Heading over the list of restrooms at the tollbooths and the dock",
-    // Says "from the tollbooths on" rather than "once you're through the
-    // tollbooths": the portable toilet is AT the booths, and a heading that
-    // puts it past them would send someone looking in the wrong place.
-    fallback: "From the tollbooths on",
+    label: "Heading over the list of restrooms at the dock",
+    fallback: "At the dock, once you're through the tollbooths",
   },
   {
     key: "line.more.parkingTitle",

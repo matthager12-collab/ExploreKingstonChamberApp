@@ -96,6 +96,29 @@ describe("sitemap.xml", () => {
     expect(urls).not.toContain("https://app.explorekingstonwa.com/es");
   });
 
+  it("omits an UNLISTED page even when it is explicitly visible (/line)", async () => {
+    // Distinct from the /es case above, and the distinction is the whole point:
+    // /es is omitted because it would 404. /line answers 200 — it is public,
+    // reachable, and deliberately unadvertised, because entry is the QR code on
+    // the physical SR-104 sign. Flipping it visible must NOT put it in search.
+    const sitemap = (await import("@/app/sitemap")).default;
+    const { setPageHidden } = await import("@/lib/stores/site-store");
+
+    await setPageHidden("/line", false, { actor: "test", source: "admin" });
+
+    const urls = (await sitemap()).map((e) => e.url);
+    expect(
+      urls,
+      "/line is visible AND in the sitemap — an unlisted page leaked into search",
+    ).not.toContain("https://app.explorekingstonwa.com/line");
+    // The flip really did take, so the assertion above is not passing because
+    // the page happens to be hidden.
+    const { getEffectiveHiddenPaths } = await import("@/lib/page-visibility");
+    expect(await getEffectiveHiddenPaths()).not.toContain("/line");
+    // And a normal visible page is still listed — the filter is not over-broad.
+    expect(urls).toContain("https://app.explorekingstonwa.com/ferry");
+  });
+
   it("drops a page — and its detail URLs — as soon as an admin hides it", async () => {
     const sitemap = (await import("@/app/sitemap")).default;
     const { setPageHidden } = await import("@/lib/stores/site-store");
