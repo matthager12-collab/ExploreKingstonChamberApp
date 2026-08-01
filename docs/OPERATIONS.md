@@ -939,6 +939,30 @@ midnight** — no timer, no DST edge case. `"auto"` clears it immediately (rever
 to the estimate). The widget, `/ferry`, and the "get in the ferry line" nav all
 read the *effective* verdict, so they stay consistent.
 
+### Import the Qwick listings (E17)
+
+The legacy kiosk's ~166 business listings import into the **directory** domain
+as invisible drafts. The vendor API is dead (2026-08-01 — see
+`docs/QWICK-DECOMMISSION.md`), so runs use a saved export file:
+
+```
+npm run import:qwick -- --dry-run --fixture <export.json>   # ALWAYS first
+npm run import:qwick -- --apply --fixture <export.json>     # prints DB host, asks to confirm
+```
+
+1. **Read the dry-run plan before applying.** `create` rows become invisible
+   drafts in the Directory tab of `/admin/listings`; `match … (local wins)`
+   means the row is one of our curated/claimed listings — the importer will
+   never touch it, and any listed field diffs are for you to hand-verify;
+   `QUARANTINE` rows need a human decision and block a clean exit (the CLI
+   exits 2) — re-run after resolving, or accept each one consciously.
+2. Nothing an import writes is ever public: records land `status='draft'`,
+   and publishing is a deliberate per-record decision, not part of importing.
+3. Re-runs are safe by construction (alias memory + precedence law +
+   idempotency are CI-tested); an unchanged re-run writes nothing.
+4. Reports persist as `import_run` rows; every record write is audited as
+   actor `import:qwick`.
+
 ---
 
 ## 5b. Scheduled jobs — the complete inventory
