@@ -1,15 +1,22 @@
-// Instant navigation feedback for every public page — the fix for the "dead
-// click": / and /ferry are dynamic (per-request via cookies()), and per the
-// bundled Next docs a dynamic route's prefetch is SKIPPED entirely unless a
-// loading.tsx exists (01-getting-started/04-linking-and-navigating.md §Prefetching),
-// so tapping a nav link gave zero feedback until the full server response
-// arrived. With this file, the (site) layout + this skeleton are partially
+// The shared instant-navigation skeleton, rendered by the scoped loading.tsx
+// files ((site)/(home) and (site)/ferry) — the fix for the "dead click": those
+// routes are dynamic (per-request via cookies()), and per the bundled Next
+// docs a dynamic route's prefetch is SKIPPED entirely unless a loading.tsx
+// exists (01-getting-started/04-linking-and-navigating.md §Prefetching), so
+// tapping a nav link gave zero feedback until the full server response
+// arrived. With a loading boundary, the layout + this skeleton are partially
 // prefetched and paint immediately while the page streams in.
 //
-// Placement: loading.tsx wraps page.js AND every nested segment below it in a
-// Suspense boundary (03-api-reference/03-file-conventions/loading.md), and
-// route groups add no URL segment — so this one file at (site) level covers
-// /, /ferry, /eat, /events, … every public route without its own loading file.
+// ── WHY THE loading.tsx FILES ARE SCOPED, NOT ONE (site)/loading.tsx ──────
+// A loading boundary starts the response streaming as soon as its fallback
+// renders, and streaming pins the HTTP status at 200 — a notFound() thrown
+// inside the page after that point can only stream the not-found BODY, never
+// set a 404 status (bundled loading.md §"Status Codes"). The E14 floor for
+// the ships-dark /es page asserts a real HTTP 404
+// (tests/server/es-accessibility.test.ts), so /es — and hideable pages in
+// general — must stay OUTSIDE any loading boundary. Hence per-segment
+// loading.tsx files exactly where the dead click hurts, not a group-wide one.
+// tests/unit/hidden-page-404-guard.test.ts enforces this placement rule.
 //
 // Server component, zero client JS, no data reads — anything async here would
 // delay the very fallback that exists to be instant.
@@ -33,7 +40,7 @@ function GhostCard() {
   );
 }
 
-export default function Loading() {
+export function RouteLoadingSkeleton() {
   return (
     <div role="status" className="animate-pulse motion-reduce:animate-none">
       <span className="sr-only">Loading page</span>
