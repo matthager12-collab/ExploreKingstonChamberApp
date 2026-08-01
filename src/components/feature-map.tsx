@@ -1160,11 +1160,24 @@ export function FeatureMap({
 
     // Defer the ~200 KB MapLibre engine (heavy: ~950 ms init on a throttled CPU)
     // until the map is genuinely in view. A NEGATIVE rootMargin means it must be
-    // ~200 px inside the viewport before loading, so a map that sits below a
-    // page's fold (e.g. the "food map" section on /eat) never loads during the
-    // initial paint — keeping it out of the Lighthouse perf budget — while a map
-    // that fills the viewport from the top (the dedicated /map, /parking pages)
-    // still loads immediately.
+    // well inside the viewport before loading, so a map that sits below a page's
+    // fold (e.g. the "food map" section on /eat) never loads during the initial
+    // paint — keeping it out of the Lighthouse perf budget — while a map that
+    // fills the viewport from the top (the dedicated /map, /parking pages) still
+    // loads immediately.
+    //
+    // The inset MUST be a PERCENTAGE, and it must be vertical-only. A fixed
+    // "-200px" shorthand applies to all four sides, and a root shrunk by 200 px
+    // on both left AND right collapses to zero width on any viewport under
+    // 400 CSS px — every non-Max iPhone (375 / 390 / 393). WebKit then reports
+    // isIntersecting: false forever, so init() never ran and the map rendered as
+    // an empty bordered box on iOS; Blink papers over it by clamping the root to
+    // zero width and still intersecting, which is why this survived desktop and
+    // Chromium CI. Percentages are resolved against the root's own dimensions,
+    // so -25% can never invert the box no matter how small the viewport gets —
+    // including a phone in LANDSCAPE (~320 px tall), where even a vertical-only
+    // "-200px 0px" would collapse the same way. On a typical phone viewport 25%
+    // lands at ~165 px, close to the original 200 px intent.
     if (typeof IntersectionObserver === "undefined") {
       void init();
     } else {
@@ -1175,7 +1188,7 @@ export function FeatureMap({
             void init();
           }
         },
-        { rootMargin: "-200px" },
+        { rootMargin: "-25% 0px" },
       );
       io.observe(container);
       cleanupIo = () => io.disconnect();
