@@ -10,6 +10,13 @@
     "measures production would fail on someone else's traffic spike and would",
     "block a PR for a reason the author cannot act on.",
     "",
+    "/line joined the URL set when the page went live (E33 slice 5, 2026-08-01).",
+    "It ships dark (404 until an explicit hidden:false record), so the CI job",
+    "seeds that record into the throwaway Postgres and polls the ISR entry to a",
+    "200 BEFORE lhci runs — see the 'Warm the standalone server caches' step in",
+    ".github/workflows/ci.yml. Without the seed this URL would measure the 404",
+    "page, and the /line floor would be inferred again instead of measured.",
+    "",
     "numberOfRuns 5 + median aggregation because Lighthouse is noisy in CI.",
     "Flakiness is handled by taking the median, NOT by loosening the budget.",
     "Was 3; raised to 5 (2026-07-31) with the CI cache-warmup step. Measured",
@@ -33,7 +40,8 @@
         "http://127.0.0.1:3000/",
         "http://127.0.0.1:3000/ferry",
         "http://127.0.0.1:3000/eat",
-        "http://127.0.0.1:3000/events"
+        "http://127.0.0.1:3000/events",
+        "http://127.0.0.1:3000/line"
       ],
       "numberOfRuns": 5,
       "settings": {

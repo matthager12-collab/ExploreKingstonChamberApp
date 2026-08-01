@@ -23,8 +23,8 @@ import { useEffect, useRef, useState } from "react";
 import type { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { VesselPosition } from "@/lib/wsf";
-import { TILES_PMTILES_PATH, mapStyle } from "@/lib/map/basemap";
-import { loadMapLibre, pmtilesUrl } from "@/lib/map/maplibre";
+import { mapStyle } from "@/lib/map/basemap";
+import { basemapArchiveUrl, loadMapLibre } from "@/lib/map/maplibre";
 import { formatPacificTime } from "@/lib/time";
 
 const EDMONDS = { lat: 47.8125, lng: -122.3829, name: "Edmonds" };
@@ -160,7 +160,7 @@ export function FerryVesselMap({
 
       const map = new maplibregl.Map({
         container: containerRef.current,
-        style: mapStyle(pmtilesUrl(TILES_PMTILES_PATH)),
+        style: mapStyle(basemapArchiveUrl()),
         center: [-122.44, 47.804],
         zoom: 10.5,
         scrollZoom: false,

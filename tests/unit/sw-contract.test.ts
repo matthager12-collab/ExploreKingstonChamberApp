@@ -15,12 +15,13 @@
 // `expect(src).not.toContain("sync")` fails on the word "async", which is why
 // the table below matches call sites and globals rather than words.
 
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { candidatePageFiles, resolvesToPage } from "../helpers/app-routes";
 import { KIOSK_SCREEN_IDS } from "@/lib/kiosk/screens";
+import { OFFLINE_TILES_PATH } from "@/lib/map/basemap";
 
 const ROOT = process.cwd();
 const SRC = readFileSync(path.join(ROOT, "public/sw.js"), "utf8");
@@ -55,6 +56,11 @@ const PRECACHE = IS_KILL_SWITCH ? [] : stringArray("PRECACHE");
 // FIRST `const NAME = [...]`, so this only works because the two allowlists have
 // distinct names rather than one being a prefix of the other.
 const KIOSK_NAV_ALLOWLIST = IS_KILL_SWITCH ? ["/kiosk"] : stringArray("KIOSK_NAV_ALLOWLIST");
+// E31 Phase 7 — the cache-first static set (the tiles precache is asserted on
+// its source form below: `PRECACHE_TILES = [OFFLINE_TILES_PATH]` carries no
+// string literal for stringArray to scrape, and that indirection is the point —
+// one literal in the file, reused everywhere).
+const STATIC_PREFIXES = IS_KILL_SWITCH ? [] : stringArray("STATIC_PREFIXES");
 
 // Named so a red build names the rule that tripped, not just a line number.
 const FORBIDDEN: { name: string; re: RegExp }[] = [
@@ -186,6 +192,14 @@ describe.skipIf(IS_KILL_SWITCH)("public/sw.js allowlists", () => {
     expect(NAV_ALLOWLIST).toContain("/print");
   });
 
+  it("allowlists the SR-104 line lander (E33 slice 5)", () => {
+    // /line's audience is BY DEFINITION sitting in the ferry holding line on a
+    // thin signal; it joined the allowlist the day the Chamber flipped it live
+    // (2026-08-01). Pinned so a future trim cannot quietly drop the one page
+    // whose whole reason to exist is that spot's connectivity.
+    expect(NAV_ALLOWLIST).toContain("/line");
+  });
+
   // The strongest rule in this file, and the one that would have caught both
   // /ferry/plan and a missing /offline automatically: a cached 404 outlives the
   // deploy that caused it, so a dead allowlist entry must be a red build.
@@ -282,5 +296,115 @@ describe.skipIf(IS_KILL_SWITCH)("public/sw.js allowlists", () => {
       resolvesToPage(route),
       `${route} matched no page.tsx — looked in:\n  ${candidatePageFiles(route).join("\n  ")}`,
     ).toBe(true);
+  });
+});
+
+// E31 Phase 7 (charter AC 9): the precached offline basemap slice, and the
+// byte-serving branch that makes a cached PMTiles archive actually readable —
+// pmtiles fetches byte ranges, and a cached full-body 200 is NOT range
+// service, it is the exact response the pmtiles client rejects as "backend
+// doesn't support byte serving". Everything here is source-text guarding, same
+// as the rest of this file; the end-to-end proof (reload a map page with the
+// server dead, tiles render) lives in tests/server/offline-map.test.ts.
+describe.skipIf(IS_KILL_SWITCH)("public/sw.js offline basemap", () => {
+  // Byte budget, not vibes: this file downloads to every visitor's device at
+  // worker install. ~1.02 MB as committed (downtown bbox, maxzoom 15). The cap
+  // leaves room for quarterly OSM drift but fails the build long before the
+  // precache becomes the multi-MB silent download docs/PWA.md §6 forbade; a
+  // bigger offline map is an ask-Mat decision, not a refresh side effect. The
+  // floor catches truncation, an LFS pointer, or an accidentally-emptied file.
+  const BUDGET_BYTES = 2_000_000;
+  const FLOOR_BYTES = 100_000;
+
+  it("hardcodes the same path the map clients import", () => {
+    // public/sw.js cannot import TS, so the path lives twice: once in
+    // src/lib/map/basemap.ts (what basemapArchiveUrl() requests offline) and
+    // once in the worker (what serves it). Drift = the map asks for a file the
+    // worker never precached, and offline tiles die silently.
+    const scraped = SRC.match(/const OFFLINE_TILES_PATH\s*=\s*"([^"]+)"/);
+    expect(scraped, "public/sw.js no longer declares OFFLINE_TILES_PATH").not.toBeNull();
+    expect(scraped![1]).toBe(OFFLINE_TILES_PATH);
+  });
+
+  it("ships a real PMTiles archive at that path, within budget", () => {
+    const file = path.join(ROOT, "public", OFFLINE_TILES_PATH.replace(/^\//, ""));
+    const size = statSync(file).size;
+    expect(size).toBeGreaterThan(FLOOR_BYTES);
+    expect(size).toBeLessThan(BUDGET_BYTES);
+    // Spec v3 magic: the first seven bytes read "PMTiles". Catches a truncated
+    // download, a Git-LFS pointer file, or an HTML error page saved as .pmtiles.
+    const magic = readFileSync(file).subarray(0, 7).toString("latin1");
+    expect(magic).toBe("PMTiles");
+  });
+
+  it("precaches the slice into its own cache, never the shell budget", () => {
+    // Exactly one entry, spelled via the shared constant — the worker keeps a
+    // single path literal that both the precache and the fetch branch reuse.
+    expect(SRC).toMatch(/const PRECACHE_TILES\s*=\s*\[\s*OFFLINE_TILES_PATH\s*\]/);
+    expect(SRC).toMatch(/PRECACHE_TILES\.map\(\s*\(url\)\s*=>\s*tiles\.add\(url\)\.catch\(/);
+    // The shell cache is FIFO-trimmed against SHELL_LIMIT; a 1 MB binary
+    // parked there would sit first in line for eviction AND distort the HTML
+    // budget. Same reasoning that keeps the icons out of PRECACHE.
+    expect(PRECACHE).not.toContain(OFFLINE_TILES_PATH);
+    expect(SRC).toMatch(/vk-tiles-/);
+  });
+
+  it("keeps the offline slice off the private prefixes and out of prefix matching", () => {
+    // The slice must stay a plain public static file: /api is (and stays) a
+    // deny prefix, so an offline archive under /api could never be served.
+    for (const prefix of NAV_DENY_PREFIXES) {
+      expect(OFFLINE_TILES_PATH.startsWith(prefix)).toBe(false);
+    }
+    // Exact-equality match only, same rule as FERRY_STATUS_PATH: a prefix on
+    // /offline-tiles would swallow any future sibling file unreviewed.
+    expect(SRC).toMatch(/url\.pathname\s*===\s*OFFLINE_TILES_PATH/);
+    expect(SRC).not.toMatch(/startsWith\(\s*["']\/offline-tiles/);
+  });
+
+  it("serves honest ranges: 206 + Content-Range, 416 with total size, no ETag", () => {
+    const start = SRC.indexOf("async function offlineTiles");
+    expect(start, "public/sw.js no longer defines offlineTiles").toBeGreaterThan(0);
+    const end = SRC.indexOf("\nasync function ", start + 1);
+    const body = SRC.slice(start, end > start ? end : undefined);
+    // The whole point of the branch: sliced bodies with real range headers.
+    expect(body).toMatch(/status:\s*206/);
+    expect(body).toMatch(/["']Content-Range["']/);
+    expect(body).toMatch(/["']Content-Length["']/);
+    // Unsatisfiable ranges answer 416 with the total (`bytes */size`) so the
+    // pmtiles 416-recovery path can re-request correctly.
+    expect(body).toMatch(/status:\s*416/);
+    expect(body).toMatch(/bytes \*\//);
+    // NO ETag on assembled slices: pmtiles treats a changed strong ETag between
+    // reads as archive corruption and force-reloads. Setting one here is how
+    // that failure mode would be manufactured.
+    expect(body).not.toMatch(/["']ETag["']\s*:/i);
+  });
+
+  it("caches the map glyphs so offline street names can render", () => {
+    // Cache-first for every range seen online, plus the one precached range
+    // the downtown labels actually use (ASCII street names → Basic Latin).
+    expect(STATIC_PREFIXES).toContain("/fonts/");
+    const PRECACHE_STATIC = stringArray("PRECACHE_STATIC");
+    expect(PRECACHE_STATIC).toContain("/fonts/Noto Sans Regular/0-255.pbf");
+    // …and the file must exist, or install precaches a 404 into the glyph slot.
+    expect(statSync(path.join(ROOT, "public/fonts/Noto Sans Regular/0-255.pbf")).size).toBeGreaterThan(
+      1_000,
+    );
+  });
+
+  it("degrades a failed offline glyph fetch to an empty set, never a dead tile", () => {
+    // MapLibre's worker aborts the WHOLE vector tile when a glyph fetch
+    // rejects — geometry included, not just labels. Measured during this
+    // epic's offline proof: one missing .pbf blanked every offline tile. The
+    // worker therefore answers an unreachable /fonts/ request with an empty
+    // 200 glyph set (valid protobuf, zero glyphs): blank street names, live
+    // basemap. The fallback must stay scoped to /fonts/ — every other static
+    // asset keeps failing exactly as it would with no worker installed.
+    const start = SRC.indexOf("async function staticAsset");
+    const end = SRC.indexOf("\nasync function ", start + 1);
+    const body = SRC.slice(start, end > start ? end : undefined);
+    expect(body).toMatch(/startsWith\(\s*["']\/fonts\/["']\s*\)/);
+    expect(body).toMatch(/["']application\/x-protobuf["']/);
+    expect(body).toMatch(/throw err/); // non-fonts failures still propagate
   });
 });

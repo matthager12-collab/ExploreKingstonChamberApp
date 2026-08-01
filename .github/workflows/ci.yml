@@ -88,6 +88,23 @@ jobs:
       # assertion — it makes the lab measure the steady state prod actually
       # serves (a long-running warm server), instead of sometimes measuring
       # weather.gov's latency from a GitHub runner.
+      # /line ships dark by DEFAULT (DEFAULT_HIDDEN_PAGES): a fresh database has
+      # no site-pages record, so the standalone server 404s it and Lighthouse
+      # would measure the 404 page — an "inferred" floor wearing a measured
+      # floor's name. Seed the same { id: "/line", hidden: false } record the
+      # Admin -> Site content toggle writes (prod flipped it live 2026-08-01),
+      # directly in SQL like global-setup.ts seeds the admin user. Runs BEFORE
+      # the warmup server boots so the warmup can also revalidate the
+      # build-baked ISR 404 into a real 200 (below).
+      - name: Seed /line live for Lighthouse (it ships dark by default)
+        env:
+          PGPASSWORD: ci
+        run: |
+          psql -h 127.0.0.1 -U postgres -d postgres -v ON_ERROR_STOP=1 -c \
+            "INSERT INTO record (store, id, doc, status, source)
+             VALUES ('site-pages', '/line', '{\"id\": \"/line\", \"hidden\": false}', 'live', 'seed')
+             ON CONFLICT (store, id) DO UPDATE
+             SET doc = EXCLUDED.doc, deleted = false, status = 'live', updated_at = now();"
       - name: Warm the standalone server caches for Lighthouse
         env:
           DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
@@ -106,6 +123,22 @@ jobs:
           for u in / /ferry /eat /events; do
             curl -sf -m 90 -o /dev/null "http://127.0.0.1:3000$u" || echo "warmup fetch failed for $u (non-fatal)"
           done
+          # /line: the build baked an ISR 404 (no DB at build time), and that
+          # entry persists on disk into the server lhci boots. Each request
+          # triggers a background revalidation against the record seeded above,
+          # so poll until the 200 lands — THIS is what turns the /line floor
+          # from inferred into measured. Hard-fail if it never flips: lhci
+          # would otherwise "pass" against the 404 page.
+          code=""
+          for i in $(seq 1 60); do
+            code=$(curl -s -m 90 -o /dev/null -w "%{http_code}" "http://127.0.0.1:3000/line" || true)
+            [ "$code" = "200" ] && break
+            sleep 2
+          done
+          if [ "$code" != "200" ]; then
+            echo "/line never revalidated to 200 (last: $code) — the Lighthouse run would measure a 404" >&2
+            exit 1
+          fi
           # Warm the image-optimizer cache for the "/" hero (the LCP element).
           # The page curls above never request /_next/image, so lhci run #1
           # still paid the sharp transform (~600-700ms in the lhr artifacts)

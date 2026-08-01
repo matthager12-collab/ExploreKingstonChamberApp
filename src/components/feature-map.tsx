@@ -33,8 +33,8 @@ import {
   type LabelShow,
   type LabelDir,
 } from "@/lib/map/types";
-import { TILES_PMTILES_PATH, mapStyle } from "@/lib/map/basemap";
-import { loadMapLibre, pmtilesUrl } from "@/lib/map/maplibre";
+import { mapStyle } from "@/lib/map/basemap";
+import { basemapArchiveUrl, loadMapLibre } from "@/lib/map/maplibre";
 import { curbOffsetSigns } from "@/lib/map/curb";
 
 // ---- shared color conventions (kept in sync with town-map.tsx) ----
@@ -436,7 +436,7 @@ export function FeatureMap({
 
       const map = new maplibregl.Map({
         container: containerRef.current,
-        style: mapStyle(pmtilesUrl(TILES_PMTILES_PATH)),
+        style: mapStyle(basemapArchiveUrl()),
         center: [view.view.center[1], view.view.center[0]],
         zoom: view.view.zoom,
         scrollZoom: false, // don't hijack page scroll; pinch/± still zoom
