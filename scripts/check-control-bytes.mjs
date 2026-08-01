@@ -49,6 +49,8 @@ const BINARY_EXTENSIONS = new Set([
   "avif", "bmp", "gif", "heic", "heif", "ico", "jpeg", "jpg", "png", "webp",
   // fonts (pbf = protobuf-encoded SDF glyph ranges, the map's street-name font)
   "eot", "otf", "pbf", "ttf", "woff", "woff2",
+  // map tile archives (the served-basemap fixture the abbreviation drift guard reads)
+  "pmtiles",
   // documents
   "docx", "pdf", "pptx", "xlsx",
   // archives, media, compiled output
