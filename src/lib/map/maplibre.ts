@@ -4,6 +4,8 @@
 // imported here (never at module scope in a shared file) so nothing server-side
 // pulls in code that touches `window`.
 
+import { OFFLINE_TILES_PATH, TILES_PMTILES_PATH } from "./basemap";
+
 let registered = false;
 
 /** Load the MapLibre namespace with the pmtiles:// protocol registered once.
@@ -23,4 +25,25 @@ export async function loadMapLibre(): Promise<typeof import("maplibre-gl")> {
  *  basemap.ts. */
 export function pmtilesUrl(path: string): string {
   return new URL(path, location.origin).href;
+}
+
+/** The archive URL a PUBLIC map should read at init (E31 Phase 7).
+ *
+ *  Online: the full R2-proxied archive. Offline (`navigator.onLine === false`
+ *  at init — the reload-while-offline case the PWA promises): the small
+ *  downtown slice the service worker precached, whose byte ranges the worker
+ *  serves from CacheStorage. The check runs ONCE, at map construction; a
+ *  network that drops mid-session keeps the online archive (already-loaded
+ *  tiles stay on screen, new areas go base-less until a reload), and a network
+ *  that RETURNS after an offline init keeps the slice until a reload. Both are
+ *  deliberate: swapping a style's source mid-flight re-fetches the world for
+ *  an edge nobody is standing in.
+ *
+ *  navigator.onLine's known weakness is false POSITIVES (LTE with no data
+ *  reads as online). That fails toward the normal online path — never toward
+ *  serving the slice to a connected visitor — so it is safe as the only
+ *  signal. */
+export function basemapArchiveUrl(): string {
+  const offline = typeof navigator !== "undefined" && navigator.onLine === false;
+  return pmtilesUrl(offline ? OFFLINE_TILES_PATH : TILES_PMTILES_PATH);
 }

@@ -14,6 +14,14 @@ import streetAbbrevs from "./street-abbrevs.json";
 /** Same-origin path to the self-hosted vector tiles (the E31 Phase 2 route). */
 export const TILES_PMTILES_PATH = "/api/map/tiles/kingston.pmtiles";
 
+/** Same-origin path to the SMALL offline slice (downtown bbox, z≤15) that the
+ *  service worker precaches for the PWA (E31 Phase 7, charter AC 9). A static
+ *  file under public/, rebuilt by `node scripts/build-tiles.mjs --offline`.
+ *  public/sw.js hardcodes this same string (it cannot import TS) and serves
+ *  byte ranges from its cached copy when the network is gone;
+ *  tests/unit/sw-contract.test.ts fails the build if the two ever drift. */
+export const OFFLINE_TILES_PATH = "/offline-tiles/kingston-downtown.pmtiles";
+
 // Road `kind` values that get street-name labels. The union is also what
 // scripts/derive-street-abbrevs.ts scans when it regenerates the abbreviation
 // table, so the table and the label filters can never disagree on eligibility.

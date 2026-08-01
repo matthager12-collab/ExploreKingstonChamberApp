@@ -36,12 +36,19 @@
 // follow-up owed below since E13). No fetch-logic change, but SHELL_LIMIT is
 // derived from the allowlist length, so the v3 shell caches were trimmed
 // against a bound two entries smaller — dropped rather than carried forward.
-const VERSION = "v4";
+// v5: E31 Phase 7 + the line lander going public. "/line" joined NAV_ALLOWLIST
+// (slice 5 — the page went live 2026-08-01), "/fonts/" joined STATIC_PREFIXES
+// (map glyphs, so street names a visitor has already seen render offline), and
+// the vk-tiles cache + the offline-basemap range branch below are NEW fetch
+// logic no v4 worker ever ran — so v4 caches are dropped wholesale rather than
+// carried forward.
+const VERSION = "v5";
 
 const SHELL_CACHE = `vk-shell-${VERSION}`; // HTML for allowlisted pages
 const STATIC_CACHE = `vk-static-${VERSION}`; // build output + brand images
 const DATA_CACHE = `vk-data-${VERSION}`; // exactly one ferry snapshot
 const KIOSK_CACHE = `vk-kiosk-${VERSION}`; // HTML for the ferry-dock kiosk screens
+const TILES_CACHE = `vk-tiles-${VERSION}`; // exactly one offline basemap slice
 
 // Exact-pathname membership ONLY — never a prefix match. A prefix on "/events"
 // would swallow /events/suggest (which renders an admin preview of unpublished
@@ -59,6 +66,15 @@ const KIOSK_CACHE = `vk-kiosk-${VERSION}`; // HTML for the ferry-dock kiosk scre
 // above does not apply, and the SHELL_LIMIT slack below already covered them.
 // tests/unit/sw-contract.test.ts asserts every entry here resolves to a real
 // page.tsx and that both stay in the list.
+//
+// "/line" is E33's SR-104 line lander — a page whose whole audience is sitting
+// in the ferry holding line on one bar of signal, i.e. the most offline-shaped
+// route in the app. It ships DARK by default (404 until the Chamber's explicit
+// hidden:false record), so it could not join this list until the flip; it went
+// live 2026-08-01 and was verified 200 before being added (the cached-404 trap
+// above). If the Chamber ever re-hides it, the navigate() 200-only guard stops
+// NEW copies being cached; a copy already on a device goes stale-until-evicted,
+// same as any other admin-hidden allowlisted page.
 const NAV_ALLOWLIST = [
   "/",
   "/ferry",
@@ -68,6 +84,7 @@ const NAV_ALLOWLIST = [
   "/about",
   "/simple",
   "/print",
+  "/line",
   "/offline",
 ];
 
@@ -129,18 +146,54 @@ const PRECACHE_STATIC = [
   "/manifest.webmanifest",
   "/brand/icon-192.png",
   "/brand/icon-512.png",
+  // v5: the Basic Latin glyph range for the map's street names (76 KB). Every
+  // downtown street name is ASCII, so this ONE file of the 256-range set is
+  // what the offline basemap's label layers ask for — measured, not guessed:
+  // the offline-map proof run requested exactly this range and nothing else.
+  // Without it a cold-installed device that never viewed a map online would
+  // lose its labels offline (the fonts fallback in staticAsset keeps the
+  // TILES alive either way). FIFO eviction can push it out of the static
+  // cache eventually; the same fallback bounds that damage to blank labels.
+  "/fonts/Noto Sans Regular/0-255.pbf",
 ];
 
-// Content-hashed build output and brand imagery: safe to serve cache-first.
+// The PWA's offline basemap (E31 Phase 7, charter AC 9): ONE small PMTiles
+// slice — downtown Kingston + the ferry dock + the SR-104 holding-line
+// approach, zoom capped at the archive's native 15 — precached at install into
+// its own cache so the maps still have a base layer with no signal. It is a
+// static file in public/ (~1.0 MB, rebuilt by `scripts/build-tiles.mjs
+// --offline`), NOT the R2-proxied full archive: /api is a deny prefix above
+// and stays one. The path string must equal OFFLINE_TILES_PATH in
+// src/lib/map/basemap.ts (this file cannot import TS);
+// tests/unit/sw-contract.test.ts fails the build if they drift, if the file
+// goes missing, or if it outgrows its byte budget.
 //
-// Note what these two prefixes do NOT cover: the logo and the home hero. Every
+// Replacing the slice's CONTENT (a quarterly refresh) requires a VERSION bump:
+// it is served cache-first below under a stable URL, so an already-installed
+// device keeps the old bytes until its vk-tiles-* cache is dropped — the same
+// rule as a /brand asset swap (docs/PWA.md §3.1).
+const OFFLINE_TILES_PATH = "/offline-tiles/kingston-downtown.pmtiles";
+const PRECACHE_TILES = [OFFLINE_TILES_PATH];
+
+// Content-hashed build output, brand imagery, and (v5) the map glyph ranges:
+// safe to serve cache-first.
+//
+// "/fonts/" is the MapLibre street-name glyph set (public/fonts, Noto Sans,
+// OFL — see mapStyle() in src/lib/map/basemap.ts). The files are immutable in
+// practice (a font swap is a VERSION-bump event, same as /brand), and caching
+// them on first fetch is what lets an offline map keep its street names for
+// any glyph range the visitor's browsing already pulled. Deliberately runtime-
+// cached rather than precached: the full set is dozens of files and the map
+// only ever asks for the handful its labels need.
+//
+// Note what these prefixes do NOT cover: the logo and the home hero. Every
 // <Image> in the app uses Next's default loader, so the wire request for
 // /brand/logo-explore-kingston-primary.png is really
 // /_next/image?url=%2Fbrand%2Flogo-explore-kingston-primary.png&w=1920&q=75 —
 // pathname "/_next/image", which matches neither prefix. Those are handled by
 // the optimizer rule below. Only the CSS background texture and the manifest
 // icons are ever requested at /brand/ directly.
-const STATIC_PREFIXES = ["/_next/static/", "/brand/"];
+const STATIC_PREFIXES = ["/_next/static/", "/brand/", "/fonts/"];
 
 // Next's image optimizer, and the one rule in this file that deliberately is
 // NOT a pathname prefix. The reason is privacy, not tidiness:
@@ -190,17 +243,22 @@ const KIOSK_LIMIT = KIOSK_NAV_ALLOWLIST.length + 2;
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
-      const [shell, static_] = await Promise.all([
+      const [shell, static_, tiles] = await Promise.all([
         caches.open(SHELL_CACHE),
         caches.open(STATIC_CACHE),
+        caches.open(TILES_CACHE),
       ]);
       // Per-entry cache.add, never the atomic bulk form: that one rejects as a
       // whole, so a single missing asset kills the install and the worker
       // SILENTLY never activates — no error anywhere a volunteer would look.
       // A missing icon should cost us one icon, not the entire offline story.
+      // The tiles slice rides the same rule: a phone too full for ~1 MB of map
+      // loses the offline BASEMAP, not the offline APP (offlineTiles() below
+      // also retries the download on demand).
       await Promise.all([
         ...PRECACHE.map((url) => shell.add(url).catch(() => {})),
         ...PRECACHE_STATIC.map((url) => static_.add(url).catch(() => {})),
+        ...PRECACHE_TILES.map((url) => tiles.add(url).catch(() => {})),
       ]);
       // Take over as soon as the download finishes rather than waiting for
       // every tab to close. Paired with clients.claim() below.
@@ -270,15 +328,33 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 5. Immutable build output and brand images: cache-first. The second test is
-  //    the optimizer-served brand imagery — see isBrandImage above for why it
-  //    is a decoded query check and not another entry in STATIC_PREFIXES.
+  // 5. The offline basemap slice (E31 Phase 7), matched by EXACT pathname.
+  //    pmtiles reads BYTE RANGES, and CacheStorage does not speak Range: a
+  //    cached full response answers a `Range: bytes=131072-131327` request
+  //    with all ~1 MB and status 200, which the pmtiles client must reject
+  //    (a 200 whose Content-Length exceeds the requested length is its
+  //    "backend doesn't do byte serving" error). So this branch does the byte
+  //    serving itself: offlineTiles() slices the requested range out of the
+  //    cached archive and answers an honest 206 + Content-Range. Only map
+  //    clients that already decided they are offline request this path (see
+  //    basemapArchiveUrl() in src/lib/map/maplibre.ts); online maps read the
+  //    full R2 archive through /api/map/tiles, which branch 3 passes through
+  //    untouched like every other /api path.
+  if (url.pathname === OFFLINE_TILES_PATH) {
+    event.respondWith(offlineTiles(request));
+    return;
+  }
+
+  // 6. Immutable build output, brand images and map glyphs: cache-first. The
+  //    second test is the optimizer-served brand imagery — see isBrandImage
+  //    above for why it is a decoded query check and not another entry in
+  //    STATIC_PREFIXES.
   if (STATIC_PREFIXES.some((prefix) => url.pathname.startsWith(prefix)) || isBrandImage(url)) {
     event.respondWith(staticAsset(event, request));
     return;
   }
 
-  // 6. Everything else falls through with no respondWith — the browser's own
+  // 7. Everything else falls through with no respondWith — the browser's own
   //    default handling, exactly as if this worker did not exist.
 });
 
@@ -444,9 +520,27 @@ async function staticAsset(event, request) {
   // url/w/q in the query string, and that query string IS its identity.
   const hit = await cache.match(request);
   if (hit) return hit;
-  // No catch: if the NETWORK throws we let it, so a missing subresource fails
-  // exactly the way it would with no worker installed.
-  const res = await fetch(request);
+  // Almost no catch: if the NETWORK throws we let it, so a missing subresource
+  // fails exactly the way it would with no worker installed. The ONE exception
+  // (v5) is a map glyph range: MapLibre's worker aborts the ENTIRE vector tile
+  // when a glyph fetch rejects — not just its labels — so one uncached glyph
+  // range offline would blank the whole offline basemap (measured in the
+  // offline-map proof: every tile died on one missing .pbf). An empty glyph
+  // set is a valid response the parser accepts as zero glyphs: that street's
+  // name goes blank, the geometry lives. Never cached — the next online visit
+  // must fetch the real file.
+  let res;
+  try {
+    res = await fetch(request);
+  } catch (err) {
+    if (new URL(request.url).pathname.startsWith("/fonts/")) {
+      return new Response(new ArrayBuffer(0), {
+        status: 200,
+        headers: { "Content-Type": "application/x-protobuf" },
+      });
+    }
+    throw err;
+  }
   if (res.status === 200) {
     // Fire-and-forget for a sharper reason than in navigate(): an awaited
     // cache.put that rejects takes the promise handed to respondWith down with
@@ -457,6 +551,104 @@ async function staticAsset(event, request) {
     saveInBackground(event, STATIC_CACHE, STATIC_LIMIT, request, res.clone());
   }
   return res;
+}
+
+/**
+ * The offline basemap's decoded bytes, resolved once per worker lifetime.
+ *
+ * Cache-first against the install-time precache; on a miss (quota at install,
+ * a device that cleared storage) it re-downloads the WHOLE archive — never a
+ * forwarded Range — because this function's one job is to hold the complete
+ * bytes that offlineTiles() slices locally. The promise is memoized so a map
+ * load's burst of range requests decodes the ~1 MB body once, not per tile;
+ * a failure clears the memo so the next request can retry.
+ */
+let offlineTilesBuffer = null;
+
+function readOfflineTiles() {
+  if (!offlineTilesBuffer) {
+    offlineTilesBuffer = (async () => {
+      const cache = await caches.open(TILES_CACHE);
+      let res = await cache.match(OFFLINE_TILES_PATH);
+      if (!res) {
+        res = await fetch(OFFLINE_TILES_PATH);
+        if (res.status !== 200) throw new Error(`offline tiles unavailable (${res.status})`);
+        // Best-effort save for the next worker boot; a full disk must cost the
+        // save, never the map the visitor is looking at right now.
+        try {
+          await cache.put(OFFLINE_TILES_PATH, res.clone());
+        } catch {
+          // QuotaExceededError — serve from the network copy this once.
+        }
+      }
+      return await res.arrayBuffer();
+    })().catch((err) => {
+      offlineTilesBuffer = null;
+      throw err;
+    });
+  }
+  return offlineTilesBuffer;
+}
+
+/**
+ * Byte serving for the offline basemap slice — the worker AS the range server.
+ *
+ * The headers on the sliced responses are deliberately minimal, and one
+ * omission is load-bearing: NO ETag. pmtiles' FetchSource remembers the strong
+ * ETag from its first read and treats any later mismatch as "the archive
+ * changed under me" (throws, forces a reload). Responses assembled here from a
+ * cached body must stay ETag-silent so that failure mode cannot be
+ * manufactured out of header drift.
+ *
+ * Range support is exactly what the pmtiles client emits — a single
+ * `bytes=start-end` (or open-ended `bytes=start-`) — and nothing more.
+ * Suffix ranges (`bytes=-500`) and multipart ranges answer 416, with a
+ * Content-Range naming the total size in the star-slash form the client's
+ * 416-recovery path expects.
+ */
+async function offlineTiles(request) {
+  let buf;
+  try {
+    buf = await readOfflineTiles();
+  } catch {
+    // Nothing precached and no network: the map client gets a failed source
+    // request and renders its background — the same honest nothing it would
+    // have shown with no worker installed.
+    return new Response(null, { status: 503 });
+  }
+  const size = buf.byteLength;
+  const rangeHeader = request.headers.get("range");
+  if (!rangeHeader) {
+    return new Response(buf, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/octet-stream",
+        "Content-Length": String(size),
+        "Accept-Ranges": "bytes",
+      },
+    });
+  }
+  const m = /^bytes=(\d+)-(\d*)$/.exec(rangeHeader);
+  const start = m ? Number(m[1]) : NaN;
+  const end = m ? (m[2] === "" ? size - 1 : Math.min(Number(m[2]), size - 1)) : NaN;
+  if (!m || Number.isNaN(start) || start > end || start >= size) {
+    return new Response(null, {
+      status: 416,
+      headers: { "Content-Range": `bytes */${size}` },
+    });
+  }
+  // ArrayBuffer.slice copies, and the Response constructor snapshots its
+  // BufferSource — the memoized buffer is never handed out by reference.
+  const body = buf.slice(start, end + 1);
+  return new Response(body, {
+    status: 206,
+    headers: {
+      "Content-Type": "application/octet-stream",
+      "Content-Range": `bytes ${start}-${end}/${size}`,
+      "Content-Length": String(body.byteLength),
+      "Accept-Ranges": "bytes",
+    },
+  });
 }
 
 /**
