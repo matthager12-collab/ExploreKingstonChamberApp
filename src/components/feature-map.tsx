@@ -31,6 +31,7 @@ import {
 } from "@/lib/map/types";
 import { TILES_PMTILES_PATH, mapStyle } from "@/lib/map/basemap";
 import { loadMapLibre, pmtilesUrl } from "@/lib/map/maplibre";
+import { curbOffsetSigns } from "@/lib/map/curb";
 
 // ---- shared color conventions (kept in sync with town-map.tsx) ----
 
@@ -57,6 +58,15 @@ const PARKING_RULE_LABELS: Record<string, string> = {
   prohibited: "No parking",
   "load-zone": "Load zone",
   permit: "Permit parking",
+};
+
+/** Popup wording for a zone's known curb side (E31 phase 6). */
+const CURB_LABELS: Record<string, string> = {
+  both: "both sides of the street",
+  east: "the east side of the street",
+  west: "the west side of the street",
+  north: "the north side of the street",
+  south: "the south side of the street",
 };
 
 type StreetRule =
@@ -186,6 +196,17 @@ function labelBoxesOverlap(a: LabelBox, b: LabelBox): boolean {
   return !(a.x1 + 2 < b.x0 || a.x0 - 2 > b.x1 || a.y1 + 2 < b.y0 || a.y0 - 2 > b.y1);
 }
 
+/** Distinct park-&-ride badge (E31 phase 6): the two Kitsap Transit lots are
+ *  the "leave the car here" answer, so they get a labelled chip instead of an
+ *  anonymous circle. Anchor "center". */
+function prPinEl(): HTMLElement {
+  const el = document.createElement("div");
+  el.className = "fm-pr-pin";
+  el.textContent = "P&R";
+  el.setAttribute("aria-hidden", "true");
+  return el;
+}
+
 /** Rounded teardrop pin element: an emoji chip on a white pin with a colored
  *  ring. MapLibre positions it with anchor "bottom" (the rotate puts the sharp
  *  tip at bottom-center), so there is no translate here (unlike the Leaflet
@@ -301,7 +322,7 @@ interface LegendEntry {
   key: string;
   label: string;
   color: string;
-  shape: "pin" | "line" | "dash" | "swatch" | "dot";
+  shape: "pin" | "line" | "dash" | "swatch" | "dot" | "pr";
   emoji?: string;
 }
 
@@ -417,6 +438,12 @@ export function FeatureMap({
         scrollZoom: false, // don't hijack page scroll; pinch/± still zoom
       });
       mapRef.current = map;
+      // Test-only hook (the editor's __vkDraw pattern): screenshot/verify
+      // drives need a map handle to frame deterministic views. Inert unless
+      // the harness set the flag before load.
+      if ((window as unknown as { __vkTestHooks?: boolean }).__vkTestHooks) {
+        ((window as unknown as { __vkMaps?: MapLibreMap[] }).__vkMaps ??= []).push(map);
+      }
       // Leaflet showed +/- buttons by default; with scrollZoom off they are the
       // only mouse way to zoom, so MapLibre needs them added explicitly.
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
@@ -569,6 +596,9 @@ export function FeatureMap({
       const dashedLines: ReturnType<typeof lineFeature>[] = [];
       const fills: ReturnType<typeof polyFeature>[] = [];
       const circles: { lngLat: LngLat; color: string; popup: string }[] = [];
+      // Street-parking curb strokes (E31 phase 6): rendered in their own layer
+      // because line-offset places each stroke against the correct curb.
+      const curbStrokes: ReturnType<typeof lineFeature>[] = [];
 
       const parkingLegend = (
         f: MapFeature,
@@ -635,10 +665,62 @@ export function FeatureMap({
       // ---- built-ins: parking zones ----
       for (const z of view.builtins.parkingZones ?? []) {
         const color = parkingColor(z.rule);
+        const curbRow = z.curb && CURB_LABELS[z.curb]
+          ? `<p style="margin:4px 0 0;font-weight:600;color:${color};">Applies to ${esc(CURB_LABELS[z.curb])}</p>`
+          : "";
         const popup = `<div style="font-size:0.8rem;line-height:1.35;max-width:230px;">
           <p style="margin:0;font-weight:600;font-size:0.95rem;">${esc(z.name)}</p>
           <p style="margin:4px 0 0;">${esc(z.summary)}</p>
+          ${curbRow}
         </div>`;
+
+        if (z.rule === "park-and-ride-24h") {
+          // The "leave the car here" lots: a distinct P&R badge + an early,
+          // high-priority name label instead of an anonymous circle.
+          new maplibregl.Marker({ element: prPinEl(), anchor: "center" })
+            .setLngLat(toLngLat(z.center))
+            // Smaller offset than markerPopup(): the badge is center-anchored,
+            // not a 34px teardrop.
+            .setPopup(new maplibregl.Popup({ offset: [0, -18], maxWidth: "240px" }).setHTML(popup))
+            .addTo(map);
+          pts.push(toLngLat(z.center));
+          addLabel(
+            toLngLat(z.center),
+            resolveLabel({
+              title: z.name,
+              // Identity, not repetition: the badge already says P&R.
+              label: { text: z.name.replace(/\s*park\s*&\s*ride$/i, ""), priority: 45 },
+            }),
+          );
+          addLegend({
+            key: "parking-pr",
+            label: "Park & ride — leave the car, ride the bus",
+            color: parkingColor(z.rule),
+            shape: "pr",
+          });
+          continue;
+        }
+
+        if (z.streetPaths && z.streetPaths.length > 0) {
+          // Street zone (E31 phase 6): curb-hugging offset strokes replace the
+          // old centre pin. Unknown side = one centre-line stroke (honesty
+          // rule); "both" = a stroke against each curb.
+          for (const path of z.streetPaths) {
+            if (path.length < 2) continue;
+            for (const sign of curbOffsetSigns(path, z.curb)) {
+              curbStrokes.push(lineFeature(path, { color, popup, offsetSign: sign }));
+            }
+            path.forEach((p) => pts.push(toLngLat(p)));
+          }
+          addLegend({
+            key: `parking-street-${z.rule}`,
+            label: `Street: ${PARKING_RULE_LABELS[z.rule] ?? z.rule}`,
+            color,
+            shape: "line",
+          });
+          continue;
+        }
+
         if (z.polygon && z.polygon.length >= 3) {
           fills.push(polyFeature(z.polygon, { color, popup, opacity: 0.35 }));
         } else {
@@ -714,6 +796,31 @@ export function FeatureMap({
           map.addLayer({ id: "fm-fills", type: "fill", source: "fm-fills", paint: { "fill-color": ["get", "color"], "fill-opacity": ["coalesce", ["get", "opacity"], 0.22] } });
           map.addLayer({ id: "fm-fills-outline", type: "line", source: "fm-fills", paint: { "line-color": ["get", "color"], "line-width": 2 } });
           wirePopup("fm-fills");
+        }
+        if (curbStrokes.length) {
+          addGeo("fm-curbs", curbStrokes);
+          map.addLayer({
+            id: "fm-curbs",
+            type: "line",
+            source: "fm-curbs",
+            layout: { "line-cap": "round", "line-join": "round" },
+            paint: {
+              "line-color": ["get", "color"],
+              // Grow with zoom so the stroke reads as "this curb", not a road.
+              "line-width": ["interpolate", ["linear"], ["zoom"], 13, 2.5, 16, 4, 18, 6],
+              "line-opacity": 0.9,
+              // Data-driven SIGN × zoom-driven magnitude. The zoom expression
+              // must be the top-level interpolate input, so the per-feature
+              // sign lives in the output terms.
+              "line-offset": [
+                "interpolate", ["linear"], ["zoom"],
+                13, ["*", ["get", "offsetSign"], 1.5],
+                16, ["*", ["get", "offsetSign"], 4.5],
+                18, ["*", ["get", "offsetSign"], 10],
+              ],
+            },
+          });
+          wirePopup("fm-curbs");
         }
         if (solidLines.length) {
           addGeo("fm-lines", solidLines);
@@ -861,6 +968,18 @@ export function FeatureMap({
 
 const PIN_CSS = `
 .feature-pin { background: transparent; border: none; }
+.fm-pr-pin {
+  display: inline-block;
+  padding: 3px 7px;
+  border-radius: 8px;
+  background: #e8891d;
+  color: #fff;
+  font: 800 12px/1.1 system-ui, -apple-system, sans-serif;
+  letter-spacing: .02em;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 5px rgba(0,0,0,.35);
+  cursor: pointer;
+}
 .fm-label-wrap { background: transparent; border: none; }
 .fm-label {
   position: absolute;
@@ -917,6 +1036,16 @@ function LegendSwatch({ entry }: { entry: LegendEntry }) {
           className="inline-block h-3 w-3 rounded-full ring-2 ring-white"
           style={{ backgroundColor: entry.color }}
         />
+      );
+    case "pr":
+      return (
+        <span
+          aria-hidden
+          className="inline-block rounded-[5px] px-1 text-[9px] leading-[14px] font-extrabold text-white"
+          style={{ backgroundColor: entry.color }}
+        >
+          P&R
+        </span>
       );
     default:
       return (

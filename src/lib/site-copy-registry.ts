@@ -208,6 +208,20 @@ export const COPY_BLOCKS = [
     fallback:
       "The Chamber keeps this parking map up to date. Tap any lot to see what kind it is, who owns it, how to pay, and how long you can stay. The color of each lot shows its parking type.",
   },
+  {
+    key: "parking.pr.title",
+    page: "Parking",
+    label: "Park & ride section title",
+    fallback: "Leave the car here",
+  },
+  {
+    key: "parking.pr.subtitle",
+    page: "Parking",
+    label: "Park & ride section subtitle",
+    multiline: true,
+    fallback:
+      "Two free park-and-ride lots skip the downtown parking hunt: leave the car and ride a Kitsap Transit bus to the ferry. Both are marked with the orange P&R badge on the map. Day use only — 24 hours max.",
+  },
 
   // ----------------------------------------------------------- /webcams
   {

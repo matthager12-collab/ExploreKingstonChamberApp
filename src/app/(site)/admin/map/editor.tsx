@@ -27,7 +27,13 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
 import type { GeoJSONStoreFeatures, TerraDraw } from "terra-draw";
-import { RULE_LABELS, type MapZone, type ParkingRule } from "@/lib/data/parking";
+import {
+  CURB_SIDES,
+  RULE_LABELS,
+  type CurbSide,
+  type MapZone,
+  type ParkingRule,
+} from "@/lib/data/parking";
 import { mapStyle, TILES_PMTILES_PATH } from "@/lib/map/basemap";
 import { loadMapLibre, pmtilesUrl } from "@/lib/map/maplibre";
 import { editorIdStrategy, loadTerraDraw } from "@/lib/map/terradraw";
@@ -93,6 +99,8 @@ type Draft = {
   details: string;
   overnight: MapZone["overnight"];
   confidence: MapZone["confidence"];
+  /** "" = side unknown (renders the centre line). Street zones only. */
+  curb: CurbSide | "";
 };
 
 function toDraft(zone: MapZone): Draft {
@@ -103,8 +111,17 @@ function toDraft(zone: MapZone): Draft {
     details: zone.details,
     overnight: zone.overnight,
     confidence: zone.confidence,
+    curb: zone.curb ?? "",
   };
 }
+
+const CURB_OPTION_LABELS: Record<CurbSide, string> = {
+  both: "Both sides of the street",
+  east: "East side only",
+  west: "West side only",
+  north: "North side only",
+  south: "South side only",
+};
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -182,6 +199,33 @@ export function MapZoneEditor({ initialZones }: { initialZones: MapZone[] }) {
   }
 
   /* ---------------- imperative layer management ---------------- */
+
+  /** Street zones as a read-only GeoJSON underlay (E31 phase 6): their
+   *  geometry is OSM centre-line data, not a drawable shape, so the editor
+   *  shows it dashed for reference — the curb field is what an admin edits. */
+  function streetUnderlayData(): GeoJSON.FeatureCollection {
+    return {
+      type: "FeatureCollection",
+      features: zonesRef.current.flatMap((z) =>
+        (z.streetPaths ?? []).map((path) => ({
+          type: "Feature" as const,
+          properties: { color: ruleColor(z.rule) },
+          geometry: {
+            type: "LineString" as const,
+            coordinates: path.map((p) => [p[1], p[0]]),
+          },
+        })),
+      ),
+    };
+  }
+
+  function refreshStreetUnderlay() {
+    const map = mapRef.current;
+    const src = map?.getSource("pe-streets") as
+      | { setData: (d: GeoJSON.FeatureCollection) => void }
+      | undefined;
+    src?.setData(streetUnderlayData());
+  }
 
   function pinEl(zone: MapZone, selected: boolean): HTMLDivElement {
     const wrap = document.createElement("div");
@@ -473,6 +517,20 @@ export function MapZoneEditor({ initialZones }: { initialZones: MapZone[] }) {
           }
         });
 
+        map.addSource("pe-streets", { type: "geojson", data: streetUnderlayData() });
+        map.addLayer({
+          id: "pe-streets",
+          type: "line",
+          source: "pe-streets",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-color": ["get", "color"],
+            "line-width": 3,
+            "line-opacity": 0.55,
+            "line-dasharray": [2, 2],
+          },
+        });
+
         for (const zone of zonesRef.current) addZoneToMap(zone);
         setMapReady(true);
       });
@@ -601,6 +659,9 @@ export function MapZoneEditor({ initialZones }: { initialZones: MapZone[] }) {
       details: draft.details.trim(),
       overnight: draft.overnight,
       confidence: draft.confidence,
+      // Explicit so CLEARING the side persists: undefined is dropped by
+      // JSON.stringify, and the API rebuild then omits curb entirely.
+      curb: draft.curb === "" ? undefined : draft.curb,
       center,
       ...(polygon ? { polygon } : {}),
     };
@@ -637,6 +698,7 @@ export function MapZoneEditor({ initialZones }: { initialZones: MapZone[] }) {
       removeZoneFromMap(saved.id);
       addZoneToMap(saved);
       setEditing(saved.id, saved, true);
+      refreshStreetUnderlay(); // rule recolor / curb change on a street zone
 
       setDraft(toDraft(saved));
       setDirty(false);
@@ -819,6 +881,29 @@ export function MapZoneEditor({ initialZones }: { initialZones: MapZone[] }) {
                 />
               </Field>
             </div>
+
+            {selectedZone.streetPaths?.length ? (
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <Field label="Curb side (which side of the street the rule covers)">
+                  <select
+                    className={INPUT}
+                    value={draft.curb}
+                    onChange={(e) => patchDraft({ curb: e.target.value as CurbSide | "" })}
+                  >
+                    <option value="">Unknown — draw on the centre line</option>
+                    {CURB_SIDES.map((s) => (
+                      <option key={s} value={s}>
+                        {CURB_OPTION_LABELS[s]}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <p className="self-end text-xs text-ink-soft">
+                  Street zone: the dashed line is the OSM street centre line and is not
+                  drag-editable. Pick a side only after checking the signs on the ground.
+                </p>
+              </div>
+            ) : null}
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <Field label="Overnight">

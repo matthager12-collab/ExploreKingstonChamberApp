@@ -10,6 +10,7 @@ import { FeatureMap } from "@/components/feature-map";
 import { freeOrPaidFromRule, parkingRuleLabel } from "@/lib/map/parking-labels";
 import { CostBadge } from "@/components/cost-badge";
 import { resolveMapView } from "@/lib/map/resolve";
+import { getParkingZones } from "@/lib/stores/parking-store";
 import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
 import { getFerryInfo } from "@/lib/stores/ferry-info-store";
 import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
@@ -34,6 +35,11 @@ export default async function ParkingPage() {
   const parkingMap = await resolveMapView("parking-cash");
   const copy = await getCopyOverrides();
   const ferryInfo = await getFerryInfo();
+  // E31 phase 6 — the park & rides get their own callout. Merged store, not
+  // the seed import, so admin edits (routes, rules, names) show here too.
+  const parkAndRides = (await getParkingZones()).filter(
+    (z) => z.rule === "park-and-ride-24h",
+  );
 
   return (
     <>
@@ -105,6 +111,52 @@ export default async function ParkingPage() {
           </div>
         )}
       </Section>
+
+      {/* E31 phase 6 — the owner ask: call out the park & rides specifically.
+          They are the "leave the car here" answer for anyone who doesn't need
+          the car on the other side, so they get their own section instead of
+          being two rows lost in the lot list. */}
+      {parkAndRides.length > 0 && (
+        <Section
+          title={copyText(copy, "parking.pr.title")}
+          subtitle={copyText(copy, "parking.pr.subtitle")}
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
+            {parkAndRides.map((z) => (
+              <Card key={z.id}>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span
+                    aria-hidden
+                    className="inline-block rounded-md px-1.5 py-0.5 text-[0.6875rem] font-extrabold text-white"
+                    style={{ backgroundColor: "#e8891d" }}
+                  >
+                    P&R
+                  </span>
+                  <h3 className="text-base font-semibold text-ink">{z.name}</h3>
+                  {(() => {
+                    const cost = freeOrPaidFromRule(z.rule);
+                    return cost ? <CostBadge cost={cost} /> : null;
+                  })()}
+                </div>
+                <p className="mt-2 text-sm text-ink">{z.summary}</p>
+                <p className="mt-2 text-sm text-ink-soft">{z.details}</p>
+                {z.sourceUrl && (
+                  <p className="mt-3">
+                    <a
+                      href={z.sourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex min-h-[44px] items-center text-sm font-semibold text-tide-deep underline"
+                    >
+                      Kitsap Transit park &amp; ride details →
+                    </a>
+                  </p>
+                )}
+              </Card>
+            ))}
+          </div>
+        </Section>
+      )}
 
       <Section title="Before you park for the ferry">
         <Callout title="The line of cars on SR 104 is the ferry queue — not parking" tone="coral">

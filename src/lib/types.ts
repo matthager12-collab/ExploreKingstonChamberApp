@@ -79,18 +79,6 @@ export interface Restaurant {
   hidden?: boolean;
 }
 
-export interface ParkingArea {
-  id: string;
-  name: string;
-  type: "lot" | "street" | "ferry-holding";
-  address: string;
-  rates: string;
-  timeLimit?: string;
-  notes?: string;
-  lat: number;
-  lng: number;
-}
-
 export interface Atm {
   id: string;
   name: string;

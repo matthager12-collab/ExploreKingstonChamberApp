@@ -10,6 +10,7 @@
 // admin edits overlay them in .data/stores (see map-store.ts).
 
 import type { CostValue } from "@/lib/cost";
+import type { CurbSide } from "@/lib/data/parking";
 
 export type FeatureKind = "marker" | "line" | "trail" | "area";
 
@@ -260,6 +261,10 @@ export interface ResolvedMapView {
       summary: string;
       center: [number, number];
       polygon?: [number, number][];
+      /** Street centre-line polyline(s) — the zone renders as curb strokes. */
+      streetPaths?: [number, number][][];
+      /** Curb side the rule applies to (E31 phase 6); unset = side unknown. */
+      curb?: CurbSide;
     }[];
     streets?: boolean; // client fetches /geo/street-parking.json itself when true
   };
