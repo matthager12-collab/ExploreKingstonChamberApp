@@ -1034,6 +1034,37 @@ export const COPY_BLOCKS = [
     label: "Caption above the QR codes that hand a page to the visitor's phone",
     fallback: "Scan to take this with you",
   },
+
+  // ================= "Get listed" CTAs (copy/get-listed-cta) =================
+  // The door-is-open notice for businesses NOT on the site yet: a shared
+  // callout at the bottom of /eat and /stay, plus the hint under the /portal
+  // sign-in form (src/components/get-listed.tsx). The Chamber email and phone
+  // these CTAs render come from the contact.email.address / contact.phone.*
+  // blocks above, so contact details stay editable in exactly one place.
+  {
+    key: "getListed.callout.title",
+    page: "Get listed (shared callout, /eat + /stay)",
+    label: "Callout title",
+    fallback: "Run a Kingston business?",
+  },
+  {
+    key: "getListed.callout.body",
+    page: "Get listed (shared callout, /eat + /stay)",
+    label: "Callout body (the Chamber email and phone links are appended after)",
+    multiline: true,
+    fallback:
+      "Listings on this site are free for Kingston businesses — restaurants, lodging, shops, and services. One message to the Chamber is all it takes.",
+  },
+  {
+    key: "portal.login.noAccount",
+    page: "Portal (/portal)",
+    label:
+      "Hint under the sign-in form for businesses without an account (the Chamber email and phone links are appended after)",
+    multiline: true,
+    fallback:
+      "Run a Kingston business and don't have an account yet? Portal invite codes come from the Kingston Chamber.",
+  },
+  // =============== end "Get listed" CTAs (copy/get-listed-cta) ===============
 ] as const satisfies readonly CopyBlock[];
 
 /** Union of every registered copy key — a typo at a call site is a tsc error. */

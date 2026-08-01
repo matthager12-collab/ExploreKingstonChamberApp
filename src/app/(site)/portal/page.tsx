@@ -4,7 +4,9 @@ import { redirect } from "next/navigation";
 import { getSessionUser, hasAnyUsers } from "@/lib/auth";
 import { ROLE_LABELS } from "@/lib/auth/roles";
 import { adminNavFor } from "@/lib/admin-nav";
+import { getCopyOverrides } from "@/lib/stores/site-store";
 import { Callout, Card, PageHeader, Section } from "@/components/ui";
+import { PortalInviteHint } from "@/components/get-listed";
 import { LoginForm, LogoutButton } from "./forms";
 
 export const metadata: Metadata = { title: "Portal" };
@@ -15,6 +17,9 @@ export default async function PortalPage() {
 
   const user = await getSessionUser();
   if (!user) {
+    // copy/get-listed-cta: the no-account hint under the form is
+    // Chamber-editable, so the login branch needs the copy overlay too.
+    const copy = await getCopyOverrides();
     return (
       <>
         <PageHeader
@@ -24,6 +29,7 @@ export default async function PortalPage() {
         />
         <Section>
           <LoginForm />
+          <PortalInviteHint copy={copy} />
         </Section>
       </>
     );
