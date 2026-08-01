@@ -42,11 +42,16 @@ whole premise of /line is a cache hit on cellular, so it uses
 `assertPageVisibleStatic` (cookie-free, 404s admins too) and the preview
 lives at `/line/preview` instead. Details: `src/lib/page-visibility.tsx`.
 
-## Flip procedure (go-live is slice 5 — do not flip before the sign plan)
+## Flip procedure — ALREADY DONE (2026-08-01). Kept as the record and the recipe
+
+The page is live. Steps 1–3 below have happened; step 4 (service worker +
+Lighthouse URL set) has not. Re-read this before flipping any other
+default-hidden page, and before flipping /line back.
 
 1. Someone who knows the highway reads the page at `/line/preview` — the
-   amenity empty state especially (Open question 2) — before anything goes
-   public.
+   amenity block especially (Open question 2) — before anything goes public.
+   *This is what caught the portable toilet, and then caught it being pinned at
+   the wrong end of the line.*
 2. Admin → Site content → "Ferry line (SR-104)" → unhide. That writes
    `{ id: "/line", hidden: false }` — a runtime data change, no deploy,
    audited.
@@ -88,16 +93,36 @@ lives at `/line/preview` instead. Details: `src/lib/page-visibility.tsx`.
   against the LINE, not against the visitor.
 - No UGC.
 
-## Amenity truth block (Open question 2 — OPEN)
+## Amenity truth block (Open question 2 — ANSWERED 2026-08-01)
 
-The "no restroom walkable from the line" empty state is data-driven over the
-sourced amenities layer (M-19-03) with a 10-straight-line-minute threshold
-(`WALKABLE_FROM_LINE_MAX_MIN`). It still needs Chamber ground-truth for the
-stretch west of Lindvog. If a real walkable amenity is verified: add it at
-Admin → Maps (amenities view) — it appears on /line with no deploy — and
-update the `line.amenities.empty` copy. A unit test
-(tests/unit/line-lander.test.ts) pins the seed to the empty state so the
-decision is always conscious.
+The block is data-driven over the sourced amenities layer (M-19-03) with a
+10-straight-line-minute threshold (`WALKABLE_FROM_LINE_MAX_MIN`).
+
+It shipped leading with the honest empty state — "no restroom walkable from the
+line" — pending Chamber ground-truth for the stretch west of Lindvog. **That
+ground-truth arrived:** the Chamber confirmed a **portable toilet at the
+boarding-pass dispenser** (step 2 of the pass system, just west of Lindvog Rd),
+seeded as `restroom-dispenser-portable`. The dispenser is the eastern end of
+`LINE_WEST_OF_DISPENSER`, so its distance to the waiting stretch is ~0 and it is
+the first amenity ever to land in the `walkable` half.
+
+Consequences, all live:
+
+- the empty state no longer renders; the `walkable` branch does. Its heading and
+  note (`line.amenities.walkableTitle` / `.walkableNote`) were added at the same
+  time, because that branch had **never rendered before** — an unlabelled
+  "~1 min from the line" reads as "~1 min from *me*" to a driver parked a mile
+  back at Barber Cutoff. The note says the figure is measured to the nearest
+  point of the line, not to their car.
+- `line.amenities.empty` is kept and reworded: the split is data-driven, so a
+  future data change could empty it again.
+- the unit test now pins the seed to *exactly this one* walkable amenity, and
+  asserts the dispenser toilet does **not** appear in the at-the-dock list.
+
+Note the earlier miss: it was first seeded at the **tollbooths**, which put it in
+`atTerminal` and left the empty state intact. The Chamber corrected the location
+to the dispenser, which is what flipped the answer — the pin's position, not the
+threshold, is what decides this.
 
 ## Attribution (decided in slice 4)
 

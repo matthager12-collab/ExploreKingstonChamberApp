@@ -96,21 +96,26 @@ export const mapFeatures: MapFeature[] = [
     point: [47.796418, -122.499288],
   },
   {
-    id: "restroom-tollbooth-portable",
+    id: "restroom-dispenser-portable",
     kind: "marker",
-    title: "Portable toilet — SR 104 tollbooths",
+    title: "Portable toilet — SR 104 pass dispenser",
     // Provenance, same standard as the two above: this one is Chamber-reported
     // rather than read off a published map, and a portable unit is not a fixed
     // building — it can be moved or removed without anyone updating a source.
     // Both facts belong in the note a visitor reads before walking to it.
     notes:
-      "A portable toilet at the SR 104 tollbooths, at the front of the ferry holding line. Reported by the Kingston Chamber (July 2026) and pinned at the tollbooth location — not field-checked, and portable units get moved, so treat the pin as approximate.",
+      "A portable toilet at the boarding-pass dispenser on SR 104 just west of Lindvog Rd — step 2 of the pass system, the machine every vehicle stops at. Reported by the Kingston Chamber (August 2026); not field-checked, and portable units get moved, so treat the pin as approximate.",
     category: "restroom",
     cost: "free",
     views: ["amenities"],
-    // LINE_TERMINAL in lib/ferry-line-geometry. Not imported: this seed is
+    // LINE_DISPENSER in lib/ferry-line-geometry. Not imported: this seed is
     // plain data and must not depend on the geometry module, but the two are
     // the same spot by intent — keep them together if either moves.
-    point: [47.7959, -122.4961],
+    //
+    // Being AT the dispenser is what makes this the first amenity to land in
+    // the amenity split's `walkable` half: the dispenser is the eastern end of
+    // LINE_WEST_OF_DISPENSER, so its distance to the waiting stretch is ~0.
+    // That answers E33's Open question 2 — see docs/LINE-LANDER.md.
+    point: [47.8033, -122.5045],
   },
 ];
