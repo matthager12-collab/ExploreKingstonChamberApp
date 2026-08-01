@@ -36,6 +36,7 @@ import {
 } from "@/lib/map/types";
 import { mapStyle } from "@/lib/map/basemap";
 import { basemapArchiveUrl, loadMapLibre } from "@/lib/map/maplibre";
+import { fixMarkerA11y } from "@/lib/map/marker-a11y";
 import { curbOffsetSigns } from "@/lib/map/curb";
 
 // ---- shared color conventions (kept in sync with both admin editors) ----
@@ -239,7 +240,8 @@ function prPinEl(): HTMLElement {
   const el = document.createElement("div");
   el.className = "fm-pr-pin";
   el.textContent = "P&R";
-  el.setAttribute("aria-hidden", "true");
+  // No aria-hidden here: this element gets role="img" + the lot's name via
+  // fixMarkerA11y() after addTo(), and that aria-label supersedes the inner text.
   return el;
 }
 
@@ -491,6 +493,11 @@ export function FeatureMap({
         scrollZoom: false, // don't hijack page scroll; pinch/± still zoom
       });
       mapRef.current = map;
+      // MapLibre names every canvas region "Map"; two maps on one page then
+      // fail axe's landmark-unique (seen on /ferry and /line, which render the
+      // vessel map and the SR-104 map together). Each map component sets its
+      // own canvas name so the landmarks stay distinguishable.
+      map.getCanvas().setAttribute("aria-label", "Kingston map");
       // Test-only hook (the editor's __vkDraw pattern): screenshot/verify
       // drives need a map handle to frame deterministic views. Inert unless
       // the harness set the flag before load.
@@ -528,6 +535,8 @@ export function FeatureMap({
         const marker = new maplibregl.Marker({ element: wrap, anchor: "center" })
           .setLngLat(lngLat)
           .addTo(map);
+        // The chip only repeats the name its pin already announces.
+        fixMarkerA11y(marker, null);
         labelMarkersRef.current.push(marker);
         labelsRef.current.push({
           el: chip,
@@ -671,10 +680,11 @@ export function FeatureMap({
         if (f.kind === "marker" && f.point) {
           const cat = markerCategory(f.category);
           const ring = featureColor(f, cat.color);
-          new maplibregl.Marker({ element: pinEl(cat.emoji, ring, f.member === true), anchor: "bottom" })
+          const featureMarker = new maplibregl.Marker({ element: pinEl(cat.emoji, ring, f.member === true), anchor: "bottom" })
             .setLngLat(toLngLat(f.point))
             .setPopup(markerPopup(featurePopupHtml(f)))
             .addTo(map);
+          fixMarkerA11y(featureMarker, f.title);
           pts.push(toLngLat(f.point));
           addLabel(
             toLngLat(f.point),
@@ -706,10 +716,11 @@ export function FeatureMap({
       // ---- built-ins: restaurants (category-aware pins) ----
       for (const r of view.builtins.restaurants ?? []) {
         const cat = markerCategory(r.category);
-        new maplibregl.Marker({ element: pinEl(cat.emoji, cat.color), anchor: "bottom" })
+        const restaurantMarker = new maplibregl.Marker({ element: pinEl(cat.emoji, cat.color), anchor: "bottom" })
           .setLngLat([r.lng, r.lat])
           .setPopup(markerPopup(restaurantPopupHtml(r)))
           .addTo(map);
+        fixMarkerA11y(restaurantMarker, r.name);
         pts.push([r.lng, r.lat]);
         addLabel([r.lng, r.lat], resolveLabel({ title: r.label?.text ?? r.name, category: r.category }));
         addLegend({ key: `builtin-restaurant-${cat.key}`, label: cat.label, color: cat.color, shape: "pin", emoji: cat.emoji });
@@ -730,12 +741,13 @@ export function FeatureMap({
         if (z.rule === "park-and-ride-24h") {
           // The "leave the car here" lots: a distinct P&R badge + an early,
           // high-priority name label instead of an anonymous circle.
-          new maplibregl.Marker({ element: prPinEl(), anchor: "center" })
+          const prMarker = new maplibregl.Marker({ element: prPinEl(), anchor: "center" })
             .setLngLat(toLngLat(z.center))
             // Smaller offset than markerPopup(): the badge is center-anchored,
             // not a 34px teardrop.
             .setPopup(new maplibregl.Popup({ offset: [0, -18], maxWidth: "240px" }).setHTML(popup))
             .addTo(map);
+          fixMarkerA11y(prMarker, z.name);
           pts.push(toLngLat(z.center));
           addLabel(
             toLngLat(z.center),
@@ -1213,8 +1225,17 @@ function LegendSwatch({ entry }: { entry: LegendEntry }) {
 }
 
 function MapLegend({ entries }: { entries: LegendEntry[] }) {
+  // tabindex + name: with enough entries (prod's parking view at 390px) the
+  // max-h-28 list actually scrolls, and a scrollable region with no focusable
+  // content is unreachable by keyboard (axe scrollable-region-focusable,
+  // serious). The class list is load-bearing — globals.css keys an E14
+  // contrast override on `ul.max-h-28.overflow-y-auto.text-ink-soft`.
   return (
-    <ul className="mt-3 flex max-h-28 flex-wrap gap-x-4 gap-y-2 overflow-y-auto text-sm text-ink-soft">
+    <ul
+      tabIndex={0}
+      aria-label="Map legend"
+      className="mt-3 flex max-h-28 flex-wrap gap-x-4 gap-y-2 overflow-y-auto text-sm text-ink-soft"
+    >
       {entries.map((e) => (
         <li key={e.key} className="flex items-center gap-1.5">
           <LegendSwatch entry={e} />

@@ -47,9 +47,12 @@ export default async function ItinerariesPage() {
                     <Badge tone="coral">{it.duration}</Badge>
                     <Badge tone={mode.tone}>{mode.label}</Badge>
                   </div>
-                  <h3 className="mt-3 text-xl font-semibold text-sound-deep group-hover:text-tide-deep">
+                  {/* h2, not h3: the cards sit in an untitled <Section>, so
+                      there is no h2 between them and the page h1 (axe:
+                      heading-order). Visual size is carried by the classes. */}
+                  <h2 className="mt-3 text-xl font-semibold text-sound-deep group-hover:text-tide-deep">
                     {it.title}
-                  </h3>
+                  </h2>
                   <p className="mt-2 flex-1 text-sm text-ink-soft">{it.tagline}</p>
                   <div className="mt-4 flex flex-wrap gap-1.5">
                     {it.audience.map((tag) => (

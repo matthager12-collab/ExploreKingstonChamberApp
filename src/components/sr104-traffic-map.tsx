@@ -26,6 +26,7 @@ import {
 } from "@/lib/ferry-line-geometry";
 import { mapStyle } from "@/lib/map/basemap";
 import { basemapArchiveUrl, loadMapLibre } from "@/lib/map/maplibre";
+import { fixMarkerA11y } from "@/lib/map/marker-a11y";
 
 const WSDOT_POST =
   "https://wsdotblog.blogspot.com/2026/04/smoother-sailing-in-kingston-new-sr-104.html";
@@ -145,6 +146,9 @@ export function Sr104TrafficMap({
         scrollZoom: false,
       });
       mapRef.current = map;
+      // Unique canvas name — MapLibre's default "Map" collides with the
+      // vessel map's canvas on /ferry and /line (axe landmark-unique).
+      map.getCanvas().setAttribute("aria-label", "SR 104 boarding-pass line map");
       // Leaflet showed +/- buttons by default; with scrollZoom off they are the
       // only mouse way to zoom, so MapLibre needs them added explicitly.
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
@@ -167,7 +171,7 @@ export function Sr104TrafficMap({
         map.addLayer({ id: "route-line", type: "line", source: "route", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#d96b4f", "line-width": 5 } });
 
         for (const s of STEPS) {
-          new maplibregl.Marker({ element: stepEl(s.num, s.color), anchor: "center" })
+          const stepMarker = new maplibregl.Marker({ element: stepEl(s.num, s.color), anchor: "center" })
             .setLngLat([s.lng, s.lat])
             .setPopup(
               new maplibregl.Popup({ offset: 16, maxWidth: "240px" }).setHTML(
@@ -175,11 +179,12 @@ export function Sr104TrafficMap({
               ),
             )
             .addTo(map);
+          fixMarkerA11y(stepMarker, `${s.num}. ${s.title}`);
         }
 
         // Staging point — where the "Get in the ferry line" button sends drivers
         // when the pass is on (the west end of the SR-104 line).
-        new maplibregl.Marker({ element: pinEl(), anchor: "bottom" })
+        const stagingMarker = new maplibregl.Marker({ element: pinEl(), anchor: "bottom" })
           .setLngLat([FERRY_LINE_STAGING.lng, FERRY_LINE_STAGING.lat])
           .setPopup(
             new maplibregl.Popup({ offset: 20, maxWidth: "240px" }).setHTML(
@@ -187,6 +192,7 @@ export function Sr104TrafficMap({
             ),
           )
           .addTo(map);
+        fixMarkerA11y(stagingMarker, "Join the ferry line here");
 
         // Context pins: what is near the line, not part of the pass system.
         // Drawn AFTER the numbered steps so a coincident step marker keeps the
@@ -196,7 +202,7 @@ export function Sr104TrafficMap({
           ["🚻", restrooms],
         ] as const) {
           for (const p of pins) {
-            new maplibregl.Marker({ element: glyphEl(glyph), anchor: "center" })
+            const glyphMarker = new maplibregl.Marker({ element: glyphEl(glyph), anchor: "center" })
               .setLngLat([p.lng, p.lat])
               .setPopup(
                 new maplibregl.Popup({ offset: 14, maxWidth: "240px" }).setHTML(
@@ -206,6 +212,7 @@ export function Sr104TrafficMap({
                 ),
               )
               .addTo(map);
+            fixMarkerA11y(glyphMarker, p.title);
           }
         }
 

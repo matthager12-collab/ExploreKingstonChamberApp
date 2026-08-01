@@ -22,6 +22,14 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 
 class FakeMarker {
+  private el: HTMLElement;
+  constructor(opts?: { element?: HTMLElement }) {
+    this.el = opts?.element ?? document.createElement("div");
+  }
+  // fixMarkerA11y() reads the element after addTo(); mirror real maplibre.
+  getElement() {
+    return this.el;
+  }
   setLngLat() {
     return this;
   }
@@ -47,6 +55,10 @@ vi.mock("@/lib/map/maplibre", () => ({
       fitBounds() {}
       resize() {}
       remove() {}
+      // The component names the canvas region (axe landmark-unique fix).
+      getCanvas() {
+        return document.createElement("canvas");
+      }
     },
     Marker: FakeMarker,
     Popup: class {

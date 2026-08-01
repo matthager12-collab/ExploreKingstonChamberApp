@@ -7,8 +7,8 @@
 
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { PageHeader, Section } from "@/components/ui";
+import { NotFoundBody } from "@/components/not-found-body";
 import { getSailingSpace, getSailingsForDate, getValidDateRange } from "@/lib/wsf";
 import { getEmpiricalBusyness } from "@/lib/stores/ferry-observations";
 import { getFerryPredictionAccess } from "@/lib/stores/ferry-prediction-store";
@@ -58,9 +58,18 @@ export default async function FerryPlanPage() {
   const hiddenPreview = await assertPageVisible("/ferry");
 
   // The prediction feature ships OFF for visitors while it's being validated.
-  // Admins still get a preview; everyone else gets a clean 404.
+  // Admins still get a preview; everyone else gets the 404 body.
+  //
+  // Rendered inline rather than via notFound(): this route is dynamic (the
+  // admin-preview check reads cookies), so Next flushes the site shell before
+  // the gate resolves, and a late notFound() streams the root not-found UI —
+  // chrome and all — NESTED inside the already-sent <main>. Anonymous visitors
+  // got HTTP 200 with two <main id="main">s, two navs and two footers (axe:
+  // landmark-no-duplicate-main / landmark-main-is-top-level / landmark-unique;
+  // 2026-08 launch sweep). src/app/not-found.tsx documents this exact escape
+  // hatch: "render the 404 body from the page instead of calling notFound()".
   const prediction = await getFerryPredictionAccess();
-  if (!prediction.enabled && !prediction.adminPreview) notFound();
+  if (!prediction.enabled && !prediction.adminPreview) return <NotFoundBody />;
 
   const today = todayPacific();
 
