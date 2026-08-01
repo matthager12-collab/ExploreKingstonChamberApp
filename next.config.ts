@@ -4,6 +4,12 @@ const nextConfig: NextConfig = {
   // Emit a self-contained server bundle (.next/standalone) so the production
   // Docker image ships only the files it needs — see Dockerfile / docs/DEPLOY.md.
   output: "standalone",
+  // NOTE (2026-08-01, perf/home-lcp-headroom): experimental.inlineCss was
+  // measured here and REJECTED. It removes the stylesheet request, but the
+  // document grew 26KB → 64KB transfer (the RSC flight payload embeds the CSS
+  // text a second time for client-side navigation), and simulated mobile FCP
+  // regressed 905ms → 1004ms while LCP barely moved. Don't re-try it without
+  // re-measuring.
   // The default `x-powered-by: Next.js` leaks the framework on every response
   // for zero benefit — drop it.
   poweredByHeader: false,
