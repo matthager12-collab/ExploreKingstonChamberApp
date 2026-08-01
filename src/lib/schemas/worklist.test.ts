@@ -6,6 +6,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  claimRequestPayloadSchema,
   moderationPayloadSchema,
   privacyRequestPayloadSchema,
   reportInaccuratePayloadSchema,
@@ -181,15 +182,47 @@ describe("validateWorklistPayload + vocabularies", () => {
     expect(WORKLIST_RESOLUTIONS.moderation).toEqual(["approved", "rejected", "taken_down"]);
     expect(WORKLIST_RESOLUTIONS.staleness).toEqual(["verified", "archived"]);
     expect(WORKLIST_RESOLUTIONS.report_inaccurate).toEqual(["fixed", "dismissed"]);
+    expect(WORKLIST_RESOLUTIONS.claim_request).toEqual(["invited", "rejected", "duplicate"]);
   });
 
-  it("type and state vocabularies are the five/four the DB CHECKs mirror", () => {
+  it("claim_request payload (E17): name + one contact, message capped, count ≥ 1 — and no location fields ever", () => {
+    const valid = {
+      store: "restaurants",
+      id: "jaime-les-crepes",
+      contactName: "Pat Owner",
+      contact: "360-555-0100",
+      count: 1,
+    };
+    expect(() => validateWorklistPayload("claim_request", valid)).not.toThrow();
+    expect(() => validateWorklistPayload("claim_request", { ...valid, contact: "" })).toThrow(
+      /a way to reach you/,
+    );
+    expect(() =>
+      validateWorklistPayload("claim_request", { ...valid, message: "x".repeat(1001) }),
+    ).toThrow();
+    expect(() => validateWorklistPayload("claim_request", { ...valid, count: 0 })).toThrow();
+    // Data-minimization floor: the shape must never grow location fields.
+    const shape = claimRequestPayloadSchema.shape;
+    expect(Object.keys(shape)).toEqual([
+      "store",
+      "id",
+      "businessName",
+      "contactName",
+      "contact",
+      "message",
+      "count",
+    ]);
+  });
+
+  it("type and state vocabularies are the six/four the DB CHECKs mirror", () => {
     expect([...WORKLIST_TYPES]).toEqual([
       "moderation",
       "sync_conflict",
       "staleness",
       "report_inaccurate",
       "privacy_request",
+      // E17: claim_request joined in migration 0008 (CHECK extended there).
+      "claim_request",
     ]);
     expect([...WORKLIST_STATES]).toEqual(["open", "in_progress", "resolved", "dismissed"]);
   });

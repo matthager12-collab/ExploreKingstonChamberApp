@@ -527,6 +527,25 @@ authority. The survey is anonymous (zip-code micro-survey, method = Informal Sur
 - The full statutory / grant-cycle detail lives with the Chamber action items below and in the
   earlier research; the LTAC grant window (2027 funds) is **Oct 1–30, 2026**.
 
+## 13. Qwick Tourist kiosk listings (E17 — source retired mid-import)
+
+The Chamber's legacy touchscreen kiosk (vendor: Qwick Media Inc., Burnaby BC) held ~166
+business listings, readable without auth via Apollo GraphQL at
+`https://node.qwickmedia.com/graphql` (`signByLicense(licenseId)` → `DataCollection.Data`;
+Kingston licenseId `ea8ac2ea-b34c-4ced-8f39-d208ce71babf`).
+
+- **Status: the endpoint is DEAD (verified 2026-08-01).** Both `node.qwickmedia.com` and
+  `cms.qwicktourist.com` stopped resolving (Heroku DNS targets gone); the vendor — delisted
+  from the CSE in 2020 — appears defunct. The July 2026 166-listing export was not retained;
+  recovery options are in `docs/QWICK-DECOMMISSION.md`.
+- **Importer:** `npm run import:qwick` (`src/lib/import/qwick.ts`) — dry-run by default,
+  fixture-driven (`--fixture <export.json>`), dedupe/claim-precedence enforced, everything
+  lands as invisible `draft` directory records. Config consts `QWICK_GRAPHQL_URL` /
+  `QWICK_LICENSE_ID` (env-overridable, not secrets — the read was public).
+- **Never**: render the vendor's Cloudinary image URLs publicly, or let `isPromoted`
+  influence placement (CI-gated in `tests/unit/qwick-guards.test.ts`).
+- Retirement plan + licence/renewal posture: `docs/QWICK-DECOMMISSION.md`.
+
 ---
 
 ## Action items for the Chamber

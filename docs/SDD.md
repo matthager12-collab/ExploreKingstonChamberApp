@@ -581,6 +581,9 @@ Pure. `getOpenStatus(weekly, now)`: (1) Pacific wall clock via `Intl.formatToPar
 ### 12.7 Street-parking overlay — `scripts/gen-street-parking.py`
 Offline pipeline → `public/geo/street-parking.json` (segments classified free-2hr/free-unrestricted/prohibited/ferry-holding/default, plus a UGA boundary). Overpass highways ∩ Census CDP point-in-ring; exact-name rules then per-street midpoint thresholds; rules trace to the 2015/2016 county study. `feature-map.tsx`/town map fetch it at runtime so the JS bundle stays lean (fetch failure → base map still works). Regeneration is manual; the JSON is committed.
 
+### 12.8 Listings import — precedence policy (E17)
+`src/lib/import/qwick.ts` (one module, fixture-driven; vendor API dead 2026-08-01). New content domain **directory** (store name in the E05 `record` table; strict schema; no public surface). Two operational tables: **`listing_alias`** — the persistent memory of dedupe decisions, `UNIQUE (source, external_id)` → `(subject_store, subject_id)`, source-generic for E16 reuse — and **`import_run`** — per-run mode/stats/full bucketed report. `planQwickImport` is pure: alias-hit → match (normalized name, then phone digits, then website host, across restaurants/lodging/charities/directory incl. seeds and tombstones) → ambiguous ⇒ quarantine → the **precedence law**: a record is importer-writable only when `source='import' ∧ updated_by='import:qwick' ∧ owner_org_id IS NULL ∧ NOT deleted`; everything else is local-wins report-only (admin edits/publishes flip `updated_by`, so protection is automatic). New rows land as `status='draft'` in directory; upstream deletions are report-only; re-runs are idempotent (audit-count asserted). CI gates: no GraphQL mutation, no cloudinary render, no `isPromoted` outside the import layer (`tests/unit/qwick-guards.test.ts`).
+
 ---
 
 ## 13. Security posture & pre-public hardening remaining
