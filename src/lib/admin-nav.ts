@@ -120,6 +120,14 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     capability: "manage-accounts",
   },
   {
+    id: "claims",
+    href: "/admin/claims",
+    title: "Claims console",
+    navLabel: "Claims",
+    blurb: "See which listings are claimed, and invite the owners who haven't.",
+    capability: "manage-accounts",
+  },
+  {
     id: "worklist",
     href: "/admin/worklist",
     title: "Worklist / moderation",

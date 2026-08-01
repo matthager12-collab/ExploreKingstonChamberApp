@@ -38,6 +38,20 @@ export function privacyRequestPayload(over: Record<string, unknown> = {}) {
   return { requestKind: "access", contact: "visitor@example.test", ...over };
 }
 
+/** E17 claim intake — the shape claimRequestPayloadSchema accepts. */
+export function claimRequestPayload(over: Record<string, unknown> = {}) {
+  return {
+    store: "restaurants",
+    id: "the-grub-hut",
+    businessName: "The Grub Hut",
+    contactName: "Pat Owner",
+    contact: "pat@grubhut.test",
+    message: "That's my restaurant — I'd like to keep the hours current.",
+    count: 1,
+    ...over,
+  };
+}
+
 export function syncConflictItem(over: Partial<CreateWorklistInput> = {}): CreateWorklistInput {
   return {
     type: "sync_conflict",
