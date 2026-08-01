@@ -138,9 +138,15 @@ Rendering details worth knowing:
   loads dynamically inside `useEffect` via `src/lib/map/maplibre.ts` (which
   registers the `pmtiles://` protocol once), deferred behind an
   IntersectionObserver until the map scrolls into view (perf budget). The base
-  style comes from `mapStyle()` in `src/lib/map/basemap.ts` — label-free,
-  POI-free, fully same-origin. Markers are HTML `Marker` elements (teardrops);
-  lines/areas are GeoJSON sources batched by render style.
+  style comes from `mapStyle()` in `src/lib/map/basemap.ts` — POI-free, fully
+  same-origin, with street-name labels only (USPS-abbreviated via the generated
+  table `src/lib/map/street-abbrevs.json`; regenerate with `npm run
+  tiles:abbrevs` whenever the tiles are rebuilt — the drift-guard test in
+  `tests/unit/map/street-abbrev-drift.test.ts` fails until you do). Markers are
+  HTML `Marker` elements (teardrops); lines/areas are GeoJSON sources batched
+  by render style. Because markers are DOM elements above the canvas, MapLibre's
+  symbol-collision engine cannot see them — street labels declutter against
+  each other, and markers simply draw over any label beneath them.
 - **Auto-frame:** after drawing, the map fits bounds to the content it actually
   drew (overriding a stale center/zoom) — but only when the content spans ≤ 4 km
   and the view doesn't carry the wide `streets` overlay. A lone far pin (e.g.
