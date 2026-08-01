@@ -10,15 +10,19 @@
 // linkedIds are validated against the real stores, so a typo'd or malicious
 // id can never pre-grant edit rights over a listing created later. For
 // kind:"business" the valid universe is restaurants ∪ lodging (portal-lodging,
-// PR #124) — one universe for BOTH writers, route and script alike.
+// PR #124) ∪ directory (E17; drafts included — imported drafts are what gets
+// claimed) — one universe for BOTH writers, route and script alike. E17 also
+// refuses at mint time any linked record that already carries owner_org_id.
 
 // Submodule imports, not the "@/lib/auth" barrel: the barrel re-exports
 // session.ts (next/headers), which a plain-Node script cannot load.
 // identity.ts is explicitly request-scope-free for exactly this use.
-import { AuthError, createInvite, type InviteRow } from "@/lib/auth/identity";
+import { AuthError, createInvite, getOrg, type InviteRow } from "@/lib/auth/identity";
 import { ROLES, type OrgKind, type Role } from "@/lib/auth/roles";
+import { findOwnedLinkedRecords, OwnershipConflictError } from "@/lib/ownership";
 import { getRestaurants } from "@/lib/stores/business-store";
 import { getCharities } from "@/lib/stores/charity-store";
+import { getDirectoryListingsAdmin } from "@/lib/stores/directory-store";
 import { getLodging } from "@/lib/stores/listing-stores";
 
 /** The untrusted request shape — exactly what the route reads out of JSON. */
@@ -65,18 +69,41 @@ export async function mintInvite(
   const kind: OrgKind = role === "member-business" ? "business" : "nonprofit";
 
   if (linkedIds.length > 0) {
-    // kind:"business" spans BOTH member-editable listing stores — restaurants
-    // and lodging — so a hotel or marina can be onboarded exactly like a
-    // restaurant. Ids the union does not contain are still rejected outright.
+    // kind:"business" spans the member-editable listing stores — restaurants,
+    // lodging, and (E17) the directory — so a hotel, marina, or imported
+    // directory listing can be onboarded exactly like a restaurant. The
+    // directory is read through its ADMIN getter on purpose: imported records
+    // sit as drafts, and drafts are precisely what gets claimed. Ids the
+    // union does not contain are still rejected outright.
     const records =
       kind === "business"
-        ? [...(await getRestaurants()), ...(await getLodging())]
+        ? [
+            ...(await getRestaurants()),
+            ...(await getLodging()),
+            ...(await getDirectoryListingsAdmin()),
+          ]
         : await getCharities();
     const valid = new Set(records.map((r) => r.id));
     const unknown = linkedIds.filter((id) => !valid.has(id));
     if (unknown.length > 0) {
       throw new AuthError(
         `unknown ${kind === "business" ? "business" : "charity"} id(s): ${unknown.join(", ")}`,
+      );
+    }
+
+    // E17 mint-time refusal: a record an org already owns must not be minted
+    // into a second claim. Named so the admin knows who holds it; the route
+    // maps OwnershipConflictError to a 409.
+    const owned = await findOwnedLinkedRecords(kind, linkedIds);
+    if (owned.length > 0) {
+      const parts = await Promise.all(
+        owned.map(async (o) => {
+          const org = await getOrg(o.ownerOrgId);
+          return `${o.id} is already claimed by ${org?.name ?? o.ownerOrgId}`;
+        }),
+      );
+      throw new OwnershipConflictError(
+        `${parts.join("; ")} — revoke that organization's claim first, or invite this person into it instead.`,
       );
     }
   }
