@@ -20,6 +20,9 @@ import { ReportInaccurate } from "@/components/report-inaccurate";
 import { LocalBusinessJsonLd } from "@/components/json-ld";
 import { FeatureMap } from "@/components/feature-map";
 import { GetListedCallout } from "@/components/get-listed";
+import { ListingPhoto } from "@/components/listing-photo";
+import { getMediaItems } from "@/lib/stores/media-store";
+import type { MediaItem } from "@/lib/media/refs";
 
 export const metadata: Metadata = {
   title: "Eat & Drink",
@@ -58,7 +61,7 @@ function telHref(phone: string): string {
 const buttonBase =
   "inline-flex items-center rounded-full px-3.5 py-1.5 text-sm font-semibold";
 
-function RestaurantCard({ r }: { r: Restaurant }) {
+function RestaurantCard({ r, photos }: { r: Restaurant; photos: Record<string, MediaItem> }) {
   const mapUrl = mapSearchUrl(`${r.name} Kingston WA`);
   const accessFacts = readAccessFacts(r);
   const menuHref = r.menuUrl ?? r.website;
@@ -69,6 +72,7 @@ function RestaurantCard({ r }: { r: Restaurant }) {
   return (
     <Card className="flex flex-col">
       <LocalBusinessJsonLd restaurant={r} />
+      <ListingPhoto images={r.images} library={photos} />
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h3 className="text-lg font-semibold text-sound-deep">{r.name}</h3>
         <p className="text-sm text-ink-soft">
@@ -154,7 +158,14 @@ export const revalidate = 60;
 
 export default async function EatPage() {
   const hiddenPreview = await assertPageVisible("/eat");
-  const [allRestaurants, copy] = await Promise.all([getRestaurants(), getCopyOverrides()]);
+  const [allRestaurants, copy, mediaItems] = await Promise.all([
+    getRestaurants(),
+    getCopyOverrides(),
+    getMediaItems(),
+  ]);
+  // Card photos resolve their alt text from the library, so the cards need it.
+  // A build/revalidate-time read on a prerendered page, not a per-request one.
+  const photos = Object.fromEntries(mediaItems.map((m) => [m.id, m]));
   // Admins can hide a vendor from the public page via the listings workbench.
   const restaurants = allRestaurants.filter((r) => !r.hidden);
   const sorted = [...restaurants].sort(
@@ -206,7 +217,7 @@ export default async function EatPage() {
         <Section key={g.title} title={g.title} subtitle={g.subtitle}>
           <div className="grid gap-4 sm:grid-cols-2">
             {g.items.map((r) => (
-              <RestaurantCard key={r.id} r={r} />
+              <RestaurantCard key={r.id} r={r} photos={photos} />
             ))}
           </div>
         </Section>

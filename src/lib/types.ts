@@ -72,6 +72,9 @@ export interface Restaurant {
   hoursVerified?: string;
   priceLevel: 1 | 2 | 3;
   tags: string[];
+  /** Photo-library names, in display order; the first is the card image.
+   *  Empty or absent means the card renders without a photo (E-media). */
+  images?: string[];
   lat: number;
   lng: number;
   walkMinutesFromFerry: number;
@@ -115,6 +118,9 @@ export interface Lodging {
   website?: string;
   bookingUrl?: string;
   tags: string[];
+  /** Photo-library names, in display order; the first is the card image.
+   *  Empty or absent means the card renders without a photo (E-media). */
+  images?: string[];
 }
 
 export type EventCategory =

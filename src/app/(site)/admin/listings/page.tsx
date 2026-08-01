@@ -10,6 +10,7 @@ import { restaurants as restaurantSeed } from "@/lib/data/restaurants";
 import { lodging as lodgingSeed } from "@/lib/data/lodging";
 import { webcams as webcamSeed } from "@/lib/data/webcams";
 import { PageHeader, Section } from "@/components/ui";
+import { getMediaItems } from "@/lib/stores/media-store";
 import { ListingsEditor } from "./editor";
 
 export const dynamic = "force-dynamic";
@@ -22,10 +23,11 @@ export const metadata: Metadata = {
 export default async function AdminListingsPage() {
   // Admin read (E08): includes pending/draft records with status surfaced —
   // once members submit work, the reviewers must be able to see it.
-  const [restaurants, lodging, webcams] = await Promise.all([
+  const [restaurants, lodging, webcams, photoLibrary] = await Promise.all([
     getRestaurantsAdmin(),
     getLodgingAdmin(),
     getWebcamsAdmin(),
+    getMediaItems(),
   ]);
 
   return (
@@ -40,6 +42,7 @@ export default async function AdminListingsPage() {
         subtitle="Pick a tab, then a record to edit — or add a new one. Plain and to the point: every field maps straight onto what visitors see. Restaurants can be hidden and shown again with the checkbox; deleting removes them."
       >
         <ListingsEditor
+          photoLibrary={photoLibrary}
           initial={{ restaurants, lodging, webcams }}
           seedIds={{
             restaurants: restaurantSeed.map((r) => r.id),

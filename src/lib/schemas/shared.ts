@@ -150,3 +150,29 @@ export const isoDateSchema = z.preprocess(
 export function firstZodMessage(error: z.ZodError): string {
   return error.issues[0]?.message ?? "Invalid record";
 }
+
+/**
+ * An ordered list of media-library photo names ("<sha1>.<ext>").
+ *
+ * Unknown entries are DROPPED rather than rejected. A listing must not become
+ * unsaveable because a photo it referenced was removed from the library —
+ * the editor would then refuse every save until someone hand-edited the
+ * record, on a form that gives them no way to see the bad value. Dropping is
+ * self-healing: the next save cleans it up.
+ *
+ * The name shape is duplicated from media/refs.MEDIA_NAME_RE on purpose;
+ * importing it here would pull the media module into every domain schema.
+ */
+export const photosSchema = z.preprocess((v) => {
+  const names = Array.isArray(v)
+    ? v.filter(
+        (n): n is string =>
+          typeof n === "string" && /^[a-f0-9]{8,}\.(jpg|jpeg|png|webp|gif)$/i.test(n.trim()),
+      )
+    : [];
+  // undefined, not [] — an empty list is OMITTED from the record rather than
+  // stored as an empty array, matching how the editor drops empty optionals.
+  // It is also what makes the inferred type line up with `images?: string[]`
+  // (see type-parity.ts: fix the schema, not the interface).
+  return names.length > 0 ? names : undefined;
+}, z.array(z.string()).optional());
