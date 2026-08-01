@@ -34,7 +34,7 @@ import {
  * the attract copy already takes, and for the same reason (this is a client
  * component and cannot read the overlay store).
  *
- * Everything still local: /api/media/image is same-origin, so the "a kiosk
+ * Everything still local: /api/media/<name> is same-origin, so the "a kiosk
  * fetches nothing offsite" rule holds.
  *
  * The shooting guidance that used to live here — wide and high, portrait

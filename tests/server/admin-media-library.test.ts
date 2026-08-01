@@ -65,8 +65,12 @@ describe("admin photo library", () => {
 
     // The uploaded photo is rendered from the proxy route, never from a bucket
     // URL — the private-R2 posture depends on that being the only read path.
-    const src = await page.locator('img[src^="/api/media/image"]').first().getAttribute("src");
-    expect(src).toMatch(/^\/api\/media\/image\?p=[a-f0-9]{16}\.jpg$/);
+    const src = await page.locator('img[src^="/api/media/"]').first().getAttribute("src");
+    // Path segment, no query string — next/image refuses a local src carrying
+    // one, and the page rendering it 500s. Pinned here so the shape cannot
+    // drift back; see api/media/[name]/route.ts.
+    expect(src).toMatch(/^\/api\/media\/[a-f0-9]{16}\.jpg$/);
+    expect(src).not.toContain("?");
 
     // Alt is empty until someone writes one, and the UI says so rather than
     // letting an undescribed photo look finished.
@@ -110,12 +114,12 @@ describe("admin photo library", () => {
 
   it("re-uploading the same file does not create a second tile", async () => {
     await page.goto(BASE_URL + "/admin/media", { waitUntil: "load" });
-    const before = await page.locator('img[src^="/api/media/image"]').count();
+    const before = await page.locator('img[src^="/api/media/"]').count();
 
     await page.setInputFiles('input[type="file"]', FIXTURE);
     await page.waitForSelector("text=/1 photo added|1 photos added/", { timeout: 20_000 });
 
-    expect(await page.locator('img[src^="/api/media/image"]').count()).toBe(before);
+    expect(await page.locator('img[src^="/api/media/"]').count()).toBe(before);
     // The description written above must still be there — a re-upload that
     // blanked it would quietly undo accessibility work.
     expect(await page.locator(`text=${ALT}`).count()).toBe(1);
@@ -126,7 +130,7 @@ describe("admin photo library", () => {
     // actually changes what a visitor sees, with no deploy.
     await page.goto(BASE_URL + "/admin/media", { waitUntil: "load" });
     await page.locator('button:has-text("Choose photo"), button:has-text("Change photo")').first().click();
-    await page.locator('button:has(img[src^="/api/media/image"])').first().click();
+    await page.locator('button:has(img[src^="/api/media/"])').first().click();
     await page.waitForSelector("text=Photo placed.", { timeout: 15_000 });
 
     // The home page is ISR (revalidate 60), so assert against a fresh render
@@ -135,7 +139,7 @@ describe("admin photo library", () => {
       headers: { "cache-control": "no-cache" },
     });
     expect(home.status()).toBe(200);
-    expect(await home.text()).toContain("/api/media/image");
+    expect(await home.text()).toContain("/api/media/");
 
     // And "use the default" genuinely restores the shipped asset.
     await page.goto(BASE_URL + "/admin/media", { waitUntil: "load" });
@@ -145,12 +149,12 @@ describe("admin photo library", () => {
 
   it("removes a photo from the library", async () => {
     await page.goto(BASE_URL + "/admin/media", { waitUntil: "load" });
-    const before = await page.locator('img[src^="/api/media/image"]').count();
+    const before = await page.locator('img[src^="/api/media/"]').count();
 
     await page.locator('button:has-text("Remove")').first().click();
     await page.waitForSelector("text=Removed from the library", { timeout: 15_000 });
 
-    expect(await page.locator('img[src^="/api/media/image"]').count()).toBe(before - 1);
+    expect(await page.locator('img[src^="/api/media/"]').count()).toBe(before - 1);
   });
 });
 

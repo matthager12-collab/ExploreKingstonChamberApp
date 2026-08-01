@@ -114,7 +114,17 @@ export default async function setup() {
   });
   let childLog = "";
   child.stdout?.on("data", (d) => (childLog += String(d)));
-  child.stderr?.on("data", (d) => (childLog += String(d)));
+  child.stderr?.on("data", (d) => {
+    const s = String(d);
+    childLog += s;
+    // FORWARD THE SERVER'S OWN ERRORS. childLog is only ever printed when the
+    // server fails to BOOT, so anything it throws while SERVING a request was
+    // invisible — a page 500 showed up as a bare "expected 500 to be 200" with
+    // no cause, which cost a full CI round trip to diagnose (the answer was
+    // next/image rejecting a query-string src). Errors only, not all stdout:
+    // the point is to surface the cause, not to bury it in request logs.
+    if (/⨯|Error:|Unhandled/.test(s)) process.stderr.write(`[server] ${s}`);
+  });
   let exitCode: number | null = null;
   child.on("exit", (code) => (exitCode = code));
 

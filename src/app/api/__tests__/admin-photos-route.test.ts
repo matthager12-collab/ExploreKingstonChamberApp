@@ -77,7 +77,7 @@ describe("POST /api/admin/photos", () => {
 
     // The resolved src must go through the proxy, never a bucket URL.
     const resolved = resolvePhoto("home.strip.1", data.overrides["home.strip.1"], data.library);
-    expect(resolved.src).toBe(`/api/media/image?p=${photoId}`);
+    expect(resolved.src).toBe(`/api/media/${photoId}`);
   });
 
   it("stores per-slot alt text, and blank alt clears it rather than pinning an empty string", async () => {

@@ -33,7 +33,7 @@ describe("resolvePhoto — which image renders", () => {
   it("serves an override through the media proxy, never a bucket URL", () => {
     const i = item();
     const got = resolvePhoto("home.strip.1", { name: i.id }, library(i));
-    expect(got.src).toBe(`/api/media/image?p=${i.id}`);
+    expect(got.src).toBe(`/api/media/${i.id}`);
   });
 
   it("falls back when the override points at a photo no longer in the library", () => {
@@ -120,7 +120,7 @@ describe("kiosk attract loop", () => {
   it("resolves an admin-chosen photo but never leaves the stage blank", () => {
     const i = item();
     expect(resolvePhoto("kiosk.attract.1", { name: i.id }, library(i)).src).toBe(
-      `/api/media/image?p=${i.id}`,
+      `/api/media/${i.id}`,
     );
     // A dangling reference falls back rather than rendering nothing — a blank
     // panel at the ferry dock is the failure mode that actually matters here.

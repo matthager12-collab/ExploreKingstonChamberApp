@@ -65,8 +65,15 @@ export function isMediaName(value: unknown): value is string {
   return typeof value === "string" && MEDIA_NAME_RE.test(value);
 }
 
-/** Public URL for a stored name — the one way any surface should reference a
- *  library photo, so the private-bucket proxy stays the only read path. */
+/**
+ * Public URL for a stored name — the one way any surface should reference a
+ * library photo, so the private-bucket proxy stays the only read path.
+ *
+ * A PATH SEGMENT, deliberately, not `?p=<name>`: next/image rejects a local src
+ * with a query string unless images.localPatterns allows it, and the page
+ * rendering such an image 500s. See the note in api/media/[name]/route.ts.
+ * Anything that changes this shape must keep it query-free.
+ */
 export function mediaUrl(name: string): string {
-  return `/api/media/image?p=${encodeURIComponent(name)}`;
+  return `/api/media/${encodeURIComponent(name)}`;
 }
