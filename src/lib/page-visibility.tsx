@@ -33,6 +33,8 @@ export const HIDEABLE_PAGES: { path: string; label: string }[] = [
   { path: "/print", label: "Printable one-pager" },
   // E14 — the Spanish essentials page. SHIPS DARK: see DEFAULT_HIDDEN_PAGES.
   { path: "/es", label: "Kingston en español" },
+  // E33 — the SR-104 line lander. SHIPS DARK: see DEFAULT_HIDDEN_PAGES.
+  { path: "/line", label: "Ferry line (SR-104)" },
 ];
 
 /**
@@ -48,8 +50,13 @@ export const HIDEABLE_PAGES: { path: string; label: string }[] = [
  * "Accessibility & language"). Fail-closed is the only correct default for
  * safety copy: a fresh database, a restored backup, or a wiped store all leave
  * it dark rather than publishing unreviewed instructions about ferry lines.
+ *
+ * `/line` (E33) is on it because the page ships dark until the physical QR
+ * sign plan and the custom domain are settled (docs/LINE-LANDER.md) — and
+ * because its whole subject is "what voids your boarding pass", which is
+ * exactly the class of safety copy the fail-closed rationale above exists for.
  */
-export const DEFAULT_HIDDEN_PAGES: readonly string[] = ["/es"];
+export const DEFAULT_HIDDEN_PAGES: readonly string[] = ["/es", "/line"];
 
 /**
  * The paths a visitor must not see, from the raw store rows: everything with
@@ -85,6 +92,30 @@ export async function assertPageVisible(path: string): Promise<boolean> {
   const user = await getSessionUser();
   if (user?.role === "admin") return true;
   notFound();
+}
+
+/**
+ * E33 — the ISR-safe variant of assertPageVisible: hidden → notFound() for
+ * EVERYONE, admins included. No session read, ever.
+ *
+ * WHY IT EXISTS. assertPageVisible's admin pass-through calls getSessionUser()
+ * → cookies() on the hidden branch. `next build` prerenders with an empty
+ * store (db/records.ts buildingWithoutDb), so a DEFAULT_HIDDEN_PAGES route is
+ * hidden AT BUILD TIME — the cookies() read fires during the prerender and
+ * marks the whole route dynamic, which makes `export const revalidate` inert
+ * forever (the /ferry trap, memory `visit-kingston-ferry-perf`; /es accepts
+ * on-demand rendering for exactly this reason). A page whose perf floor
+ * requires real ISR cannot afford that, so this gate trades the in-place admin
+ * preview away: the prerender bakes a plain 404 while hidden, and revalidation
+ * re-runs the check so an admin's `hidden: false` record flips the route live
+ * within the revalidate window — still a runtime data change, no deploy.
+ *
+ * Admin preview for such a page lives on a sibling admin-gated route instead
+ * (e.g. /line/preview), which is free to be dynamic.
+ */
+export async function assertPageVisibleStatic(path: string): Promise<void> {
+  const hidden = await getEffectiveHiddenPaths();
+  if (hidden.includes(path)) notFound();
 }
 
 /**

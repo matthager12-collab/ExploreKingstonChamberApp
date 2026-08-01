@@ -15,35 +15,20 @@ import { useEffect, useRef } from "react";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { FERRY_LINE_STAGING } from "@/lib/ferry-line";
+// E33: the holding-lane polyline + step locations moved to the pure geometry
+// lib so server pages (/line) can measure distances against the line without
+// importing this MapLibre client component. Same coordinates, one owner.
+import {
+  HOLDING_ROUTE,
+  LINE_DISPENSER,
+  LINE_FLASHING_SIGN,
+  LINE_TERMINAL,
+} from "@/lib/ferry-line-geometry";
 import { TILES_PMTILES_PATH, mapStyle } from "@/lib/map/basemap";
 import { loadMapLibre, pmtilesUrl } from "@/lib/map/maplibre";
 
 const WSDOT_POST =
   "https://wsdotblog.blogspot.com/2026/04/smoother-sailing-in-kingston-new-sr-104.html";
-
-// The ferry holding-lane path along SR 104, ordered terminal → Barber Cutoff
-// (traffic flows the other way: in from the west, down to the dock). [lat, lng].
-const HOLDING_ROUTE: [number, number][] = [
-  [47.7959, -122.4961], // terminal / tollbooths
-  [47.7967, -122.4966],
-  [47.797, -122.4969],
-  [47.7976, -122.4974],
-  [47.7985, -122.498],
-  [47.799, -122.4983],
-  [47.7996, -122.4984],
-  [47.8003, -122.4986],
-  [47.8012, -122.4998],
-  [47.8014, -122.5004],
-  [47.802, -122.5017],
-  [47.8027, -122.5034],
-  [47.8029, -122.504],
-  [47.8033, -122.5045], // pass dispenser (Lindvog Rd)
-  [47.8039, -122.5064],
-  [47.8049, -122.5091],
-  [47.8079, -122.5166],
-  [47.8085, -122.518], // flashing sign (Barber Cutoff Rd)
-  [47.809, -122.5192],
-];
 
 interface Step {
   num: number;
@@ -57,8 +42,8 @@ interface Step {
 const STEPS: Step[] = [
   {
     num: 1,
-    lat: 47.8085,
-    lng: -122.518,
+    lat: LINE_FLASHING_SIGN[0],
+    lng: LINE_FLASHING_SIGN[1],
     title: "Watch for the flashing sign",
     detail:
       "SR 104 & Barber Cutoff Rd. When the overhead lights are flashing, the boarding-pass system is active.",
@@ -66,8 +51,8 @@ const STEPS: Step[] = [
   },
   {
     num: 2,
-    lat: 47.8033,
-    lng: -122.5045,
+    lat: LINE_DISPENSER[0],
+    lng: LINE_DISPENSER[1],
     title: "Take a boarding pass",
     detail:
       "Follow the signal into the designated ferry lane and stop at the automated dispenser near Lindvog Rd.",
@@ -75,8 +60,8 @@ const STEPS: Step[] = [
   },
   {
     num: 3,
-    lat: 47.7959,
-    lng: -122.4961,
+    lat: LINE_TERMINAL[0],
+    lng: LINE_TERMINAL[1],
     title: "Wait for green, then board",
     detail:
       "When the terminal has space your light turns green — pull forward to the tollbooths. Leave the line and your pass is void.",
