@@ -16,6 +16,43 @@ export const VECTOR_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · <a href="https://protomaps.com">Protomaps</a>';
 
 /**
+ * Brand-anchored basemap palette (E31 phase 7). Derived from the Tailwind
+ * brand tokens in src/app/globals.css — TINTS of the tokens, not the raw
+ * values, because a basemap needs near-neutral surfaces the UI tokens are too
+ * saturated to provide. The phase-6 look is kept; this pass only pulls
+ * temperature and saturation toward the brand:
+ *
+ *   shell #fbfcfd / sand #e4e4e0 → paper + land (cooled from the old cream)
+ *   seaglass #b7e0f2 / tide #1e96c0 → water (Puget Sound reads as the brand blue)
+ *   fern #4a7c59 → greenery tints (less yellow than the old OSM-ish greens)
+ *   coral #a85c28 → the warm highway/major-road accent (rustier, less mustard)
+ *   ink #20262e / ink-soft #6b7683 → street-name text (slate, not olive)
+ *
+ * If a brand token changes, re-derive these rather than editing ad hoc.
+ */
+const PALETTE = {
+  bg: "#f2f2ed", // paper behind/beyond the tiled area (halo color too)
+  earth: "#e7e5dc", // land
+  water: "#aad7ec", // seaglass-leaning
+  forest: "#c9dcc6",
+  grassland: "#d3e2d1",
+  farmland: "#e3e1d2",
+  landcover: "#d8dfd4",
+  cemetery: "#dbe0d4",
+  pedestrian: "#edebe2",
+  greenspace: "#c3dac2", // parks/gardens in the landuse layer
+  building: "#ddd8c9",
+  buildingOutline: "#c4bca8",
+  highway: "#eec27a", // coral-warmed amber (was mustard #f4c667)
+  majorRoad: "#f5d99e",
+  road: "#ffffff",
+  path: "#e4dcc9",
+  rail: "#c8c2b2",
+  labelMinor: "#5d6570", // ink-soft, darkened for canvas contrast
+  labelMain: "#444c57", // toward ink
+} as const;
+
+/**
  * MapLibre base style for the self-hosted Kingston vector tiles (ADR-0006).
  *
  * Fully self-hosted: tiles come from our same-origin `/api/map/tiles` route
@@ -36,30 +73,30 @@ export function mapStyle(pmtilesUrl: string): StyleSpecification {
       kingston: { type: "vector", url: `pmtiles://${pmtilesUrl}`, attribution: VECTOR_ATTRIBUTION },
     },
     layers: [
-      { id: "bg", type: "background", paint: { "background-color": "#f4f1ea" } },
-      { id: "earth", type: "fill", source: "kingston", "source-layer": "earth", paint: { "fill-color": "#e8e3d7" } },
+      { id: "bg", type: "background", paint: { "background-color": PALETTE.bg } },
+      { id: "earth", type: "fill", source: "kingston", "source-layer": "earth", paint: { "fill-color": PALETTE.earth } },
       {
         id: "landcover", type: "fill", source: "kingston", "source-layer": "landcover",
         paint: {
-          "fill-color": ["match", ["get", "kind"], "forest", "#cfe0bf", "grassland", "#d9e7c9", "farmland", "#e7e3c9", "#dde3d0"],
+          "fill-color": ["match", ["get", "kind"], "forest", PALETTE.forest, "grassland", PALETTE.grassland, "farmland", PALETTE.farmland, PALETTE.landcover],
           "fill-opacity": 0.55,
         },
       },
       {
         id: "landuse", type: "fill", source: "kingston", "source-layer": "landuse",
         filter: ["match", ["get", "kind"], ["park", "forest", "wood", "grass", "recreation_ground", "nature_reserve", "meadow", "cemetery", "pedestrian", "garden", "village_green", "farmland"], true, false],
-        paint: { "fill-color": ["match", ["get", "kind"], "cemetery", "#dfe3d0", "pedestrian", "#efe9dc", "#c9e0b6"], "fill-opacity": 0.7 },
+        paint: { "fill-color": ["match", ["get", "kind"], "cemetery", PALETTE.cemetery, "pedestrian", PALETTE.pedestrian, PALETTE.greenspace], "fill-opacity": 0.7 },
       },
-      { id: "water", type: "fill", source: "kingston", "source-layer": "water", paint: { "fill-color": "#a6d3e4" } },
+      { id: "water", type: "fill", source: "kingston", "source-layer": "water", paint: { "fill-color": PALETTE.water } },
       {
         id: "buildings", type: "fill", source: "kingston", "source-layer": "buildings", minzoom: 13,
-        paint: { "fill-color": "#dbd2ba", "fill-outline-color": "#c2b697", "fill-opacity": 1 },
+        paint: { "fill-color": PALETTE.building, "fill-outline-color": PALETTE.buildingOutline, "fill-opacity": 1 },
       },
       {
         id: "roads", type: "line", source: "kingston", "source-layer": "roads",
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
-          "line-color": ["match", ["get", "kind"], "highway", "#f4c667", "major_road", "#ffd98a", "medium_road", "#ffffff", "minor_road", "#ffffff", "path", "#e6d9bd", "rail", "#cabfa6", "#ffffff"],
+          "line-color": ["match", ["get", "kind"], "highway", PALETTE.highway, "major_road", PALETTE.majorRoad, "medium_road", PALETTE.road, "minor_road", PALETTE.road, "path", PALETTE.path, "rail", PALETTE.rail, PALETTE.road],
           // Pure zoom interpolation (uniform width): the MapLibre style spec
           // forbids mixing ["zoom"] with feature data (["get","kind"]) inside one
           // interpolate. Roads are differentiated by colour above; per-kind width
@@ -98,8 +135,8 @@ export function mapStyle(pmtilesUrl: string): StyleSpecification {
           "text-padding": 20,
         },
         paint: {
-          "text-color": "#5b5b50",
-          "text-halo-color": "#f4f1ea",
+          "text-color": PALETTE.labelMinor,
+          "text-halo-color": PALETTE.bg,
           "text-halo-width": 1.3,
         },
       },
@@ -121,8 +158,8 @@ export function mapStyle(pmtilesUrl: string): StyleSpecification {
           "text-padding": 1,
         },
         paint: {
-          "text-color": "#5b5b50",
-          "text-halo-color": "#f4f1ea",
+          "text-color": PALETTE.labelMinor,
+          "text-halo-color": PALETTE.bg,
           "text-halo-width": 1.3,
         },
       },
@@ -144,8 +181,8 @@ export function mapStyle(pmtilesUrl: string): StyleSpecification {
           "text-padding": 1,
         },
         paint: {
-          "text-color": "#4a4a40",
-          "text-halo-color": "#f4f1ea",
+          "text-color": PALETTE.labelMain,
+          "text-halo-color": PALETTE.bg,
           "text-halo-width": 1.4,
         },
       },
