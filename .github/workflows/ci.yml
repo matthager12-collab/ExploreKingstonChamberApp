@@ -100,8 +100,20 @@ jobs:
             curl -sf http://127.0.0.1:3000/api/health >/dev/null && break
             sleep 1
           done
+          # -m 90 bounds every warmup curl: getForecast/getTodaysTides have no
+          # fetch timeout, the routes stream, and an unbounded curl on a hung
+          # upstream would burn the job to its timeout-minutes kill.
           for u in / /ferry /eat /events; do
-            curl -sf -o /dev/null "http://127.0.0.1:3000$u" || echo "warmup fetch failed for $u (non-fatal)"
+            curl -sf -m 90 -o /dev/null "http://127.0.0.1:3000$u" || echo "warmup fetch failed for $u (non-fatal)"
+          done
+          # Warm the image-optimizer cache for the "/" hero (the LCP element).
+          # The page curls above never request /_next/image, so lhci run #1
+          # still paid the sharp transform (~600-700ms in the lhr artifacts)
+          # and drew a 0.58 outlier into the 5-run median (CI run 30683564959:
+          # all values 0.58, 0.88, 0.84, 0.86, 0.84). Widths cover the
+          # Lighthouse mobile emulation (390 @ 2x -> 828) plus neighbors.
+          for w in 750 828 1080; do
+            curl -sf -m 90 -o /dev/null "http://127.0.0.1:3000/_next/image?url=%2Fbrand%2Fphoto-kingston-37.jpg&w=$w&q=75" || echo "hero warmup failed for w=$w (non-fatal)"
           done
           # Best-effort teardown: a warmup server that already crashed must not
           # fail the step — lhci boots its own server either way, worst case cold.

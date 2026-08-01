@@ -14,7 +14,10 @@
 // to a fail-closed page. This failed in CI the first time someone added a
 // well-meaning (site)/loading.tsx; this guard turns that server-suite failure
 // into an instant unit failure with the reason attached. The instant-nav
-// skeletons live in scoped segments instead: (site)/(home) and (site)/ferry.
+// skeleton lives in a scoped segment instead: (site)/ferry. ((site)/(home)
+// briefly had one too; removed 2026-08-01 — its ~250ms stream-delay cost on /
+// equaled the Lighthouse LCP floor margin exactly, and home's direct loads
+// never used it. See PR #131.)
 //
 // The segment chains are DERIVED from DEFAULT_HIDDEN_PAGES, not hardcoded:
 // if a future fail-closed page lands under a segment that already carries a
@@ -101,7 +104,8 @@ describe("hidden-page 404 floor vs loading.tsx placement", () => {
     // If these move, re-run this suite mentally against the new shape —
     // this guard is only meaningful while the skeletons live in scoped segments.
     for (const p of [
-      path.join("src", "app", "(site)", "(home)", "loading.tsx"),
+      // (site)/(home)/loading.tsx was removed 2026-08-01 (PR #131): its
+      // ~250ms stream delay on / equaled the Lighthouse LCP floor margin.
       path.join("src", "app", "(site)", "ferry", "loading.tsx"),
     ]) {
       expect(fs.existsSync(path.join(process.cwd(), p)), `${p} is missing`).toBe(true);
