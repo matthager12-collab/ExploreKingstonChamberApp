@@ -1,15 +1,23 @@
 // Admin API for the forecast-accuracy panel on /admin/ferry-info.
 //
-// GET  — admin: { latest, history } (the recorded accuracy snapshots).
+// GET  — admin: { latest, history, daily } — the recorded accuracy snapshots
+//        plus the per-day series behind the trend chart.
 // POST — admin: runs the backtest now and records a fresh snapshot, then returns
-//        { latest, history }. Lets staff validate on demand instead of waiting
-//        for the daily cron.
+//        the same shape. Lets staff validate on demand instead of waiting for
+//        the daily cron.
+//
+// `daily` is recomputed from the observation log rather than read from the
+// stored history, which is cumulative and gappy — see computeDailyAccuracy.
 //
 // 401 signed out · 403 signed in but not admin.
 
 import { NextResponse } from "next/server";
 import { getSessionUser, requireAdmin } from "@/lib/auth";
-import { getAccuracy, recordAccuracySnapshot } from "@/lib/stores/ferry-observations";
+import {
+  computeDailyAccuracy,
+  getAccuracy,
+  recordAccuracySnapshot,
+} from "@/lib/stores/ferry-observations";
 import { RecordValidationError } from "@/lib/db/store-schemas";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +25,8 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const denied = await requireAdmin();
   if (denied) return denied;
-  return NextResponse.json(await getAccuracy());
+  const [accuracy, daily] = await Promise.all([getAccuracy(), computeDailyAccuracy()]);
+  return NextResponse.json({ ...accuracy, daily });
 }
 
 export async function POST() {
@@ -33,5 +42,11 @@ export async function POST() {
     }
     throw err;
   }
-  return NextResponse.json({ ok: true, ...(await getAccuracy()) });
+  // force: the operator just asked for a fresh test, so a cached series would
+  // misrepresent what the button did.
+  const [accuracy, daily] = await Promise.all([
+    getAccuracy(),
+    computeDailyAccuracy({ force: true }),
+  ]);
+  return NextResponse.json({ ok: true, ...accuracy, daily });
 }

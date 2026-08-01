@@ -66,6 +66,9 @@ export interface EmpiricalResult {
 let lastRecordAt = 0;
 let writesSincePrune = 0;
 let aggCache: { at: number; value: EmpiricalResult } | null = null;
+// Declared up here with its sibling (not beside computeDailyAccuracy, which is
+// defined much further down) so recordSailingSpaceSnapshot can clear it.
+let dailyCache: { at: number; value: DailyAccuracyPoint[] } | null = null;
 
 function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
@@ -150,6 +153,7 @@ export async function recordSailingSpaceSnapshot(
   }
 
   aggCache = null; // fresh data — let the next read recompute
+  dailyCache = null; // ditto for the admin trend series
   if (++writesSincePrune >= PRUNE_EVERY) {
     writesSincePrune = 0;
     void prune(now).catch(() => {});
@@ -331,6 +335,121 @@ export async function getAccuracy(): Promise<{ latest: AccuracyMetrics | null; h
   const rows = await readMerged<AccuracyRecord>(ACCURACY_STORE, []);
   const rec = rows.find((r) => r.id === ACCURACY_ID);
   return { latest: rec?.latest ?? null, history: rec?.history ?? [] };
+}
+
+// ---- Daily accuracy series (the admin trend chart) -------------------------
+//
+// `history` above is CUMULATIVE by construction: every run re-scans the whole
+// retention window, so snapshot k is a running average over every observation
+// logged so far. That converges hard — past ~10k observations a fresh day can
+// only move the mean a percent or two — so the stored series flattens out and
+// stops being able to answer the one question a trend is for: "is it getting
+// better?". It's also unevenly spaced (the daily cron and ad-hoc "Run test now"
+// clicks both append) and gappy (a missed cron leaves no row at all).
+//
+// So the chart is computed straight from the observation log instead: one scan,
+// bucketed by the sailing's Pacific DEPARTURE day — the day whose sailings are
+// being graded — which yields a gap-free per-day series AND an exactly
+// consistent running cumulative. Both backfill the full retention window
+// immediately, so the chart is useful the first time it renders.
+
+/** One Pacific day's backtest result, plus the running total through that day. */
+export interface DailyAccuracyPoint {
+  /** Pacific day of the sailings graded, "YYYY-MM-DD". */
+  date: string;
+  /** Sailing observations graded on this day. */
+  n: number;
+  /** This day's OWN mean absolute error, 0–100. The signal the trend is for. */
+  mae: number;
+  /** This day's own mean(predicted − observed). */
+  bias: number;
+  /** This day's own exact-level agreement, 0–1. */
+  levelMatchRate: number;
+  /** This day's own within-one-level agreement, 0–1. */
+  within1Rate: number;
+  /** Running values over every day through this one — the shape the stored
+   *  `history` snapshots trace. Derived from summed errors rather than by
+   *  averaging the daily means, so it matches the backtest exactly. */
+  cumulative: { n: number; mae: number; bias: number; levelMatchRate: number };
+}
+
+/** Per-day running sums. Sums (not means) so the cumulative is exact. */
+interface DayBucket {
+  n: number;
+  sumAbs: number;
+  sumBias: number;
+  exact: number;
+  within1: number;
+}
+
+/**
+ * Per-day accuracy across the retention window, oldest day first, plus the
+ * running cumulative through each day. Same scan and same scoring as
+ * computeAccuracy() — heuristic-only predictions, so it stays an honest
+ * out-of-sample test — just bucketed by day instead of folded into one number.
+ * Cached like the empirical table; the observe cron clears it on new data.
+ * `force` skips the cache — for the admin's explicit "run the test now", where
+ * a result up to CACHE_TTL_MS stale would misrepresent what the button did.
+ */
+export async function computeDailyAccuracy(opts?: { force?: boolean }): Promise<DailyAccuracyPoint[]> {
+  if (!opts?.force && dailyCache && Date.now() - dailyCache.at < CACHE_TTL_MS) return dailyCache.value;
+
+  const observations = await readObservations();
+  const byDay = new Map<string, DayBucket>();
+
+  for (const o of observations) {
+    if (!(typeof o.max === "number" && o.max > 0 && typeof o.driveUp === "number" && o.driveUp >= 0)) {
+      continue;
+    }
+    const at = pacificParts(o.departs);
+    const observed = Math.round(clamp01(1 - o.driveUp / o.max) * 100);
+    const predicted = scoreAt(at.date, at.minutes, o.dir); // heuristic only, as above
+    const err = predicted - observed;
+
+    let b = byDay.get(at.date);
+    if (!b) {
+      b = { n: 0, sumAbs: 0, sumBias: 0, exact: 0, within1: 0 };
+      byDay.set(at.date, b);
+    }
+    b.n += 1;
+    b.sumAbs += Math.abs(err);
+    b.sumBias += err;
+    const pi = LEVEL_ORDER.indexOf(scoreToLevel(predicted));
+    const oi = LEVEL_ORDER.indexOf(scoreToLevel(observed));
+    if (pi === oi) b.exact += 1;
+    if (Math.abs(pi - oi) <= 1) b.within1 += 1;
+  }
+
+  // ISO dates sort lexicographically, so a plain string compare is chronological.
+  let cumN = 0;
+  let cumAbs = 0;
+  let cumBias = 0;
+  let cumExact = 0;
+  const series = [...byDay.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, b]): DailyAccuracyPoint => {
+      cumN += b.n;
+      cumAbs += b.sumAbs;
+      cumBias += b.sumBias;
+      cumExact += b.exact;
+      return {
+        date,
+        n: b.n,
+        mae: round1(b.sumAbs / b.n), // b.n > 0: a bucket only exists once a row landed in it
+        bias: round1(b.sumBias / b.n),
+        levelMatchRate: Math.round((b.exact / b.n) * 100) / 100,
+        within1Rate: Math.round((b.within1 / b.n) * 100) / 100,
+        cumulative: {
+          n: cumN,
+          mae: round1(cumAbs / cumN),
+          bias: round1(cumBias / cumN),
+          levelMatchRate: Math.round((cumExact / cumN) * 100) / 100,
+        },
+      };
+    });
+
+  dailyCache = { at: Date.now(), value: series };
+  return series;
 }
 
 /** ISO timestamp of the most recent logged observation, or null when the
