@@ -61,7 +61,7 @@ it in the store — see [ARCHITECTURE.md](ARCHITECTURE.md) for the seam):
 | `id`, `kind: FeatureKind`, `title` | `FeatureKind = "marker" \| "line" \| "trail" \| "area"` |
 | `views: string[]` | one or more `MapView` ids this feature shows on (a feature can live on several views) |
 | geometry | exactly one, matching `kind`: `point` (marker), `path` (line/trail), `polygon` (area) |
-| `category?` | marker icon category — a key into `MARKER_CATEGORIES` (16 icons: food, coffee, drink, shop, lodging, parking, restroom, viewpoint, beach, trailhead, park, art, event, landmark, info, star). Default icon is `info` |
+| `category?` | marker icon category — a key into `MARKER_CATEGORIES` (21 icons: food, coffee, drink, shop, lodging, parking, restroom, the E27 basics water/bench/picnic/shade/bin, viewpoint, beach, trailhead, park, art, event, shipwreck, info, star). Beware: the "Landmark" pin's **key** is `shipwreck`, not `landmark`. Default icon is `info` |
 | `color?` | hex stroke/fill for line/trail/area, or a marker tint override |
 | `notes?`, `link?` | popup body + a "Directions / Open" link |
 | `cost?: CostValue` | E27's free-vs-paid signal (`free` / `paid` / `free-and-paid` / `donation`, `src/lib/cost.ts`) — rendered as the `<CostBadge>` on finder rows (e.g. `/map/restrooms`). Editable in the builder since E31 P7 (issue #80) |
@@ -463,7 +463,10 @@ Facts worth knowing:
   `src/app/globals.css` (shell/sand → paper + land, seaglass/tide → water,
   fern → greenery, coral → the highway accent, ink/ink-soft → street names).
   If a brand token changes, re-derive the palette there rather than editing
-  layer colors ad hoc.
+  layer colors ad hoc. Note: ADR-0007 ("Evergreen & Sound" map colorway, PR
+  #139, in flight) records an owner decision that supersedes these specific
+  tint *values* while keeping the `PALETTE` structure and the
+  derive-from-brand-tokens doctrine — the recolor lands as a follow-up.
 - **Dark map variant: deliberately deferred.** Investigated for the phase-7
   "brand palette + dark mode" charter line (2026-07-31): the app has **no dark
   theme anywhere** — no `prefers-color-scheme` handling, no theme toggle, no
@@ -474,9 +477,10 @@ Facts worth knowing:
   (and only when) the app grows a dark theme** — the vector base makes it a
   second `PALETTE` in `basemap.ts`, which is exactly why the seam exists.
 - **Offline tiles (PWA).** The E31 offline slice — precaching the PMTiles
-  archive for the E13 PWA so the map renders without a network — ships as its
-  own PR alongside this doc's phase-7 changes; [PWA.md](PWA.md) is authoritative
-  for offline behavior.
+  archive for the E13 PWA so the map renders without a network — is **in
+  progress on a sibling branch (`e31-p7-offline-sw`); no PR exists yet**, and
+  E31's offline acceptance criterion stays open until that slice lands with a
+  real offline test. [PWA.md](PWA.md) is authoritative for offline behavior.
 
 ---
 

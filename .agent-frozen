@@ -2,8 +2,9 @@
 # The app is not live yet, so every frozen path below is TEMPORARILY unfrozen.
 # Each active entry is prefixed with '#THAW#', so both enforcers (PreToolUse hook
 # + CI check-frozen) parse it as a comment and the manifest reads as empty.
-# REFREEZE when the owner says so: strip the '#THAW# ' prefixes + delete this
-# banner (refreeze-frozen.mjs), or `git restore .agent-frozen` / `git revert` the PR.
+# REFREEZE when the owner says so — MANUALLY: strip the '#THAW# ' prefixes and
+# delete this banner. There is no refreeze script. Do NOT `git restore` this file
+# from a pre-E31 revision (see the REFREEZE NOTE below about retired entries).
 # =======================================================================
 
 # .agent-frozen — files agents must NOT modify without explicit human approval.
