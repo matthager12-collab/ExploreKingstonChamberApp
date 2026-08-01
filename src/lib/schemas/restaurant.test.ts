@@ -72,6 +72,15 @@ describe("restaurantSchema", () => {
     }
   });
 
+  it("parses mapCategory as an optional enum (empty string = absent)", () => {
+    expect(restaurantSchema.parse({ ...valid, mapCategory: "food" }).mapCategory).toBe("food");
+    const json = JSON.parse(JSON.stringify(restaurantSchema.parse({ ...valid, mapCategory: "" })));
+    expect(Object.hasOwn(json, "mapCategory")).toBe(false);
+    expect(errorOf({ ...valid, mapCategory: "beer-garden" })).toBe(
+      "mapCategory must be one of: food, coffee, drink",
+    );
+  });
+
   it("only `true` survives for hidden", () => {
     expect(restaurantSchema.parse({ ...valid, hidden: true }).hidden).toBe(true);
     const json = JSON.parse(JSON.stringify(restaurantSchema.parse({ ...valid, hidden: false })));
