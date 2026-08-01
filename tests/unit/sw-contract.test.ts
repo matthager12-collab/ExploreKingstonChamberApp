@@ -177,6 +177,15 @@ describe.skipIf(IS_KILL_SWITCH)("public/sw.js allowlists", () => {
     expect(NAV_ALLOWLIST).not.toContain("/map");
   });
 
+  it("allowlists the low-bandwidth and print pages (#52)", () => {
+    // E14's /simple and /print exist for the low-connectivity, old-phone
+    // audience — the most offline-critical surfaces in the app. Their absence
+    // was the allowlist's one known gap (the E13/E14 seam issue #52 tracked);
+    // this pins the fix so a future trim cannot quietly reopen it.
+    expect(NAV_ALLOWLIST).toContain("/simple");
+    expect(NAV_ALLOWLIST).toContain("/print");
+  });
+
   // The strongest rule in this file, and the one that would have caught both
   // /ferry/plan and a missing /offline automatically: a cached 404 outlives the
   // deploy that caused it, so a dead allowlist entry must be a red build.
