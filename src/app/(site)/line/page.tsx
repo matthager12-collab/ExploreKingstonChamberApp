@@ -25,7 +25,7 @@ export const revalidate = 60;
 export const metadata: Metadata = {
   title: "Ferry line (SR-104)",
   description:
-    "Waiting in the SR-104 ferry line at Kingston? Boarding-pass status right now, what voids your pass, the next boats, and food you can order from the line.",
+    "Waiting in the SR-104 ferry line at Kingston? Boarding-pass status right now, the next boats, live cameras on the line, and food you can order from where you're parked.",
 };
 
 export default async function LinePage() {

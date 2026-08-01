@@ -64,7 +64,7 @@ const STEPS: Step[] = [
     lng: LINE_TERMINAL[1],
     title: "Wait for green, then board",
     detail:
-      "When the terminal has space your light turns green — pull forward to the tollbooths. Leave the line and your pass is void.",
+      "When the terminal has space your light turns green — pull forward to the tollbooths and pay there.",
     color: "#16405e",
   },
 ];

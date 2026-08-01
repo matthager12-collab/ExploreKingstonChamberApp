@@ -389,7 +389,7 @@ export const COPY_BLOCKS = [
     // E14 plain-language pass (NFR-04): this is the most consequence-heavy
     // instruction on the site. Was one 37-word sentence chaining four actions;
     // now one idea per sentence, and "void" is said in plain words.
-    fallback: "The overhead signs at **SR 104 and Barber Cutoff Rd** flash when Kingston's boarding-pass system is on. If they are flashing, follow the signs into the ferry lane. **Take a pass from the machine near Lindvog Rd.** Then wait for a green light before you drive up to the toll booths. Stay in the line the whole time. If you leave the line, your pass stops working.",
+    fallback: "The overhead signs at **SR 104 and Barber Cutoff Rd** flash when Kingston's boarding-pass system is on. If they are flashing, follow the signs into the ferry lane. **Take a pass from the machine near Lindvog Rd.** Then wait for a green light before you drive up to the toll booths.",
   },
   {
     key: "ferryLine.body2",
@@ -1039,7 +1039,7 @@ export const COPY_BLOCKS = [
   // Every visitor-facing sentence on /line. The reader is a stressed driver
   // parked in the SR-104 line with kids in the back and one bar of signal —
   // short sentences, no staff vocabulary, the E14 plain-language rules.
-  // Boarding-pass FACTS (what voids a pass, when it's required) are NOT here:
+  // Boarding-pass FACTS (when a pass is required, who is exempt) are NOT here:
   // they come from the ferry-info record at /admin/ferry-info, shared with
   // /ferry so the two pages can never disagree.
   {
@@ -1060,7 +1060,7 @@ export const COPY_BLOCKS = [
     label: "Intro sentence",
     multiline: true,
     fallback:
-      "Your boarding-pass status, the next boats, and what you can get from where you're parked — without losing your place in line.",
+      "Your boarding-pass status, the next boats, and what you can get from right where you're parked.",
   },
   {
     key: "line.note.title",
@@ -1087,10 +1087,10 @@ export const COPY_BLOCKS = [
     fallback: "The boarding-pass system is off right now — no pass needed at the moment.",
   },
   {
-    key: "line.stay.title",
+    key: "line.exempt.title",
     page: "Ferry line (/line)",
-    label: "Title of the don't-leave-the-line warning (the page's most important block)",
-    fallback: "Stay in the line",
+    label: "Title of the who's-exempt block (walk-ons, bikes, motorcycles)",
+    fallback: "Who doesn't need a pass",
   },
   {
     key: "line.boats.title",
@@ -1172,12 +1172,6 @@ export const COPY_BLOCKS = [
     multiline: true,
     fallback:
       "These Kingston kitchens are open right now. You order and pay with the restaurant directly — their website or their phone line, never through this app.",
-  },
-  {
-    key: "line.food.stayNote",
-    page: "Ferry line (/line)",
-    label: "Reminder above the food list that driving out for food voids the pass",
-    fallback: "Remember: if your car leaves the line, your boarding pass stops working.",
   },
   {
     key: "line.food.empty",

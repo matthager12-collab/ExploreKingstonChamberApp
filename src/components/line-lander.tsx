@@ -1,7 +1,7 @@
 // E33 — the Line Lander body: everything a driver parked in the SR-104 ferry
-// line needs, in the order they need it (boarding pass → don't leave the line
-// → next boats → wait context → cameras → food → restrooms → map → where's the
-// boat → link-outs).
+// line needs, in the order they need it (boarding pass → who's exempt → next
+// boats → wait context → cameras → food → restrooms → map → where's the boat →
+// link-outs).
 //
 // Shared by /line (the real ISR page) and /line/preview (the admin preview),
 // so the Chamber signs off on EXACTLY the bytes visitors will get.
@@ -140,13 +140,17 @@ export async function LineLander() {
           <p className="mt-2 text-sm text-ink">{bp.whenRequired}</p>
         </div>
 
-        {/* THE block — the one fact that saves someone's afternoon. Wording is
-            the Chamber-editable boarding-pass record (/admin/ferry-info), the
-            same source /ferry quotes, so the two pages can never disagree
-            about what voids a pass. */}
-        <Callout tone="coral" title={copyText(copy, "line.stay.title")}>
-          <p>{bp.voids}</p>
-          <p className="mt-2">{bp.exempt}</p>
+        {/* Who does not need a pass at all. Wording is the Chamber-editable
+            boarding-pass record (/admin/ferry-info), the same source /ferry
+            quotes, so the two pages can never disagree.
+
+            This block used to lead with bp.voids ("leave the line and your pass
+            is void"). That rule is not enforced, so the app no longer states it
+            anywhere and the field is gone from the record entirely — see
+            BoardingPass in lib/data/ferry-info.ts. Tone dropped from coral to
+            neutral with it: what is left is a helpful exemption, not a warning. */}
+        <Callout title={copyText(copy, "line.exempt.title")}>
+          <p>{bp.exempt}</p>
         </Callout>
       </div>
 

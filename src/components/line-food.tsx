@@ -38,9 +38,9 @@ export function LineFood({
 
   return (
     <div>
-      <p className="mb-3 text-sm font-medium text-coral-deep">
-        {copyText(copy, "line.food.stayNote")}
-      </p>
+      {/* No "leaving the line voids your pass" reminder here any more: that rule
+          is not enforced, so the app does not state it (see BoardingPass in
+          lib/data/ferry-info.ts). The list stands on its own. */}
       <ul className="grid gap-4 sm:grid-cols-2">
         {rows.map(({ restaurant: r }) => (
           <li key={r.id}>

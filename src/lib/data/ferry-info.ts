@@ -30,12 +30,19 @@ export interface FerryPayment {
   freeLegNote: string;
 }
 
+// NOTE: there is deliberately no `voids` field. The app used to carry a
+// "leave the line and your pass is void" paragraph here and quote it on /line,
+// /ferry, /parking, /simple and /es. That rule is NOT enforced in practice, so
+// the app does not state it — a consequence we assert but nobody applies reads
+// as a threat, and it is the kind of claim a stressed driver acts on. The
+// exemption below (who does not need a pass at all) is a different, verifiable
+// fact and stays. Removed 2026-07-31 at the Chamber's direction; do not
+// reintroduce the field without them asking for it.
 export interface BoardingPass {
   summary: string;
   whenRequired: string;
   where: string;
   how: string[];
-  voids: string;
   exempt: string;
   currentNote: string;
 }
@@ -173,8 +180,6 @@ export const BOARDING_PASS = {
     "Wait in line; when the terminal has space, your signal turns green.",
     "Move up to the tollbooth and pay (card or ORCA).",
   ] as string[],
-  voids:
-    "If you leave the line after taking a pass, the pass is void — you have to re-enter and pull a new one. Showing up at the tollbooth without a valid pass during system hours sends you back to the end of the line. So don't duck out for coffee once you're in line.",
   exempt:
     "The system manages the vehicle line only, so foot passengers just walk on — walk-ons, cyclists, motorcycles, and medical-priority-pass holders never need a boarding pass.",
   // Transient operational notice — ships EMPTY on purpose. Both render sites

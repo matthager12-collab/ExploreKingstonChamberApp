@@ -118,8 +118,7 @@ export default async function ParkingPage() {
           <p className="mt-2">
             In the busy season, from 8 am to 8 pm, watch for the flashing sign at Barber Cutoff
             Rd. Follow that lane. Take a boarding pass from the machine near Lindvog Rd. Then
-            wait for a green light before you drive up to the toll booths. Stay in the line — if
-            you leave it, your pass stops working.
+            wait for a green light before you drive up to the toll booths.
           </p>
           <p className="mt-2">
             Only dropping someone off or picking them up? Do not join the line. Stay in the right
