@@ -26,6 +26,7 @@ import type { VesselPosition } from "@/lib/wsf";
 import { mapStyle } from "@/lib/map/basemap";
 import { basemapArchiveUrl, loadMapLibre } from "@/lib/map/maplibre";
 import { fixMarkerA11y } from "@/lib/map/marker-a11y";
+import { MapTouchLockOverlay, useMapTouchLock } from "@/components/map-touch-lock";
 import { formatPacificTime } from "@/lib/time";
 
 const EDMONDS = { lat: 47.8125, lng: -122.3829, name: "Edmonds" };
@@ -124,6 +125,7 @@ export function FerryVesselMap({
   const maplibreRef = useRef<typeof import("maplibre-gl") | null>(null);
   const vesselMarkersRef = useRef<MapLibreMarker[]>([]);
   const resizeObsRef = useRef<ResizeObserver | null>(null);
+  const touchLock = useMapTouchLock();
   const [data, setData] = useState<VesselData>(initial ?? NO_VESSELS);
   // Only true in the no-`initial` mode, and only until the first fetch settles.
   // Without it the caption would claim the WSDOT feed is down during the normal
@@ -176,6 +178,10 @@ export function FerryVesselMap({
       // Leaflet showed +/- buttons by default; with scrollZoom off they are the
       // only mouse way to zoom, so MapLibre needs them added explicitly.
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+      // scrollZoom:false only governs the mouse wheel. On touch, dragPan is what
+      // eats the page's vertical swipes, so this map has to be tapped before it
+      // takes over panning — /ferry and /line both put it mid-page.
+      touchLock.applyTo(map);
 
       // Build via extend so corner order does not matter (the two-arg
       // constructor needs sw/ne and silently inverts if they are swapped).
@@ -289,13 +295,16 @@ export function FerryVesselMap({
 
   return (
     <div>
-      <div
-        ref={containerRef}
-        style={{ height }}
-        className="relative z-0 w-full overflow-hidden rounded-2xl border border-sand"
-        role="region"
-        aria-label="Live map of the Edmonds–Kingston ferries"
-      />
+      <div className="relative">
+        <div
+          ref={containerRef}
+          style={{ height }}
+          className="relative z-0 w-full overflow-hidden rounded-2xl border border-sand"
+          role="region"
+          aria-label="Live map of the Edmonds–Kingston ferries"
+        />
+        {touchLock.locked && <MapTouchLockOverlay onUnlock={touchLock.unlock} />}
+      </div>
       <p className="mt-2 text-xs text-ink">
         {awaitingFirst
           ? "Finding the boats… "

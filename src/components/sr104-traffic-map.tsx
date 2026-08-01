@@ -27,6 +27,7 @@ import {
 import { mapStyle } from "@/lib/map/basemap";
 import { basemapArchiveUrl, loadMapLibre } from "@/lib/map/maplibre";
 import { fixMarkerA11y } from "@/lib/map/marker-a11y";
+import { MapTouchLockOverlay, useMapTouchLock } from "@/components/map-touch-lock";
 
 const WSDOT_POST =
   "https://wsdotblog.blogspot.com/2026/04/smoother-sailing-in-kingston-new-sr-104.html";
@@ -126,6 +127,7 @@ export function Sr104TrafficMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const resizeObsRef = useRef<ResizeObserver | null>(null);
+  const touchLock = useMapTouchLock();
 
   useEffect(() => {
     let cancelled = false;
@@ -152,6 +154,11 @@ export function Sr104TrafficMap({
       // Leaflet showed +/- buttons by default; with scrollZoom off they are the
       // only mouse way to zoom, so MapLibre needs them added explicitly.
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+      // scrollZoom:false only governs the mouse wheel. On touch, dragPan is what
+      // eats the page's vertical swipes, so this map has to be tapped before it
+      // takes over panning — /line puts it mid-page, where scrolling past it has
+      // to keep working.
+      touchLock.applyTo(map);
 
       const fit = () =>
         map.fitBounds(
@@ -268,13 +275,16 @@ export function Sr104TrafficMap({
 
   return (
     <div>
-      <div
-        ref={containerRef}
-        style={{ height }}
-        className="relative z-0 w-full overflow-hidden rounded-2xl border border-sand"
-        role="region"
-        aria-label="Map of the SR 104 ferry boarding-pass system in Kingston"
-      />
+      <div className="relative">
+        <div
+          ref={containerRef}
+          style={{ height }}
+          className="relative z-0 w-full overflow-hidden rounded-2xl border border-sand"
+          role="region"
+          aria-label="Map of the SR 104 ferry boarding-pass system in Kingston"
+        />
+        {touchLock.locked && <MapTouchLockOverlay onUnlock={touchLock.unlock} />}
+      </div>
       {/* Only when there is something to explain — /ferry and /parking pass no
           pins and get no legend. Each entry names its count so an empty
           category reads as "none mapped" rather than a glyph you hunt for. */}
