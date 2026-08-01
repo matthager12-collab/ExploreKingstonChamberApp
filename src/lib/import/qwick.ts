@@ -24,11 +24,14 @@
 // tests/unit/qwick-guards.test.ts), and no vendor auth/session code path
 // exists here — the read was public by design.
 
-import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 
-import { getDb } from "../db/client";
-import { importRun, listingAlias } from "../db/import-schema";
+import {
+  insertAlias,
+  insertImportRunRow,
+  listAliases,
+  listImportRunRows,
+} from "../db/import-store";
 import { readRecordRows, writeRecord, type RecordStatus } from "../db/records";
 import { validateRecord } from "../db/store-schemas";
 import { charities as charitySeed } from "../data/charities";
@@ -607,8 +610,7 @@ export async function readLocalRecords(): Promise<LocalRecord[]> {
 }
 
 export async function readAliases(): Promise<AliasRecord[]> {
-  const db = getDb();
-  const rows = await db.select().from(listingAlias);
+  const rows = await listAliases(IMPORT_SOURCE);
   return rows.map((r) => ({
     source: r.source,
     externalId: r.externalId,
@@ -629,19 +631,13 @@ async function persistRun(
   runBy: string,
   plan: QwickPlan,
 ): Promise<string> {
-  const db = getDb();
-  const [row] = await db
-    .insert(importRun)
-    .values({
-      source: IMPORT_SOURCE,
-      mode,
-      finishedAt: new Date(),
-      runBy,
-      stats: planStats(plan),
-      report: plan as unknown as Record<string, unknown>,
-    })
-    .returning({ id: importRun.id });
-  return row.id;
+  return insertImportRunRow({
+    source: IMPORT_SOURCE,
+    mode,
+    runBy,
+    stats: planStats(plan),
+    report: plan as unknown as Record<string, unknown>,
+  });
 }
 
 /** Dry-run persistence: ONLY the import_run row (mode 'dry_run'). */
@@ -666,7 +662,6 @@ export async function applyQwickPlan(
     validateRecord(entry.store, entry.record as unknown as Record<string, unknown>);
   }
 
-  const db = getDb();
   for (const entry of plan.created) {
     await writeRecord("directory", entry.record, {
       actor: principal,
@@ -675,16 +670,13 @@ export async function applyQwickPlan(
       externalId: entry.externalId,
       action: "import",
     });
-    await db
-      .insert(listingAlias)
-      .values({
-        source: IMPORT_SOURCE,
-        externalId: entry.externalId,
-        subjectStore: "directory",
-        subjectId: entry.record.id,
-        createdBy: principal,
-      })
-      .onConflictDoNothing();
+    await insertAlias({
+      source: IMPORT_SOURCE,
+      externalId: entry.externalId,
+      subjectStore: "directory",
+      subjectId: entry.record.id,
+      createdBy: principal,
+    });
   }
   for (const entry of plan.updated) {
     await writeRecord(entry.store, entry.record, {
@@ -699,27 +691,18 @@ export async function applyQwickPlan(
   }
   for (const entry of plan.matched) {
     if (!entry.aliasNew) continue;
-    await db
-      .insert(listingAlias)
-      .values({
-        source: IMPORT_SOURCE,
-        externalId: entry.externalId,
-        subjectStore: entry.store,
-        subjectId: entry.id,
-        createdBy: principal,
-      })
-      .onConflictDoNothing();
+    await insertAlias({
+      source: IMPORT_SOURCE,
+      externalId: entry.externalId,
+      subjectStore: entry.store,
+      subjectId: entry.id,
+      createdBy: principal,
+    });
   }
   return { runId: await persistRun("apply", principal, plan), stats: planStats(plan) };
 }
 
 /** Past runs, newest first — the history read the admin surface lists. */
 export async function listImportRuns(limit = 20) {
-  const db = getDb();
-  return db
-    .select()
-    .from(importRun)
-    .where(eq(importRun.source, IMPORT_SOURCE))
-    .orderBy(desc(importRun.startedAt))
-    .limit(limit);
+  return listImportRunRows(IMPORT_SOURCE, limit);
 }
