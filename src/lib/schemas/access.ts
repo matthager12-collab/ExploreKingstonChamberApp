@@ -22,7 +22,7 @@
 
 import { z } from "zod";
 import type { FieldDef } from "./form";
-import { isoDateSchema, optionalTrimmed, trimOrEmpty } from "./shared";
+import { optionalTrimmed, trimOrEmpty } from "./shared";
 
 /** Deliberately four-valued: "partial" and "unknown" are different facts, and
  *  collapsing them into a boolean is how a half-accessible venue gets
@@ -55,8 +55,22 @@ export const accessFactsShape = {
   accessibleRestroom: answer(),
   accessibleParking: answer(),
   accessNotes: optionalTrimmed(),
-  /** ISO date the Chamber last checked these facts in person. */
-  accessVerifiedOn: isoDateSchema.optional(),
+  /**
+   * ISO date the Chamber last checked these facts in person.
+   *
+   * NOT `isoDateSchema.optional()`, which looks right and is not: that schema
+   * is `z.preprocess(trimOrEmpty, …regex)`, and `.optional()` only short-circuits
+   * on `undefined`. The editor sends "" for an untouched text field, `.optional()`
+   * lets it through, trimOrEmpty keeps it "", and the regex then rejects it —
+   * so leaving this optional field BLANK made the whole record unsaveable, with
+   * the error pointing at a field the user never touched. Blank has to mean
+   * "nobody has checked", so the empty case is mapped to undefined BEFORE the
+   * regex ever sees it.
+   */
+  accessVerifiedOn: z.preprocess(
+    (v) => trimOrEmpty(v) || undefined,
+    z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be a date in YYYY-MM-DD format").optional(),
+  ),
   /** Who/what the facts came from, e.g. "Chamber walk-through, July 2026". */
   accessSource: optionalTrimmed(),
 };

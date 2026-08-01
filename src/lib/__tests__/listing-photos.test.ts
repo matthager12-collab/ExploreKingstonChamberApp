@@ -81,3 +81,29 @@ describe("the editor field", () => {
     }
   });
 });
+
+describe("saving a listing with untouched optional fields (regression)", () => {
+  // Found while verifying listing photos in a browser: the save was rejected
+  // with "Access facts verified on: must be a date in YYYY-MM-DD format" on a
+  // field nobody had typed in. The editor sends "" for an untouched text field,
+  // and `isoDateSchema.optional()` only short-circuits on `undefined` — so a
+  // BLANK optional date made the whole record unsaveable. That blocked every
+  // restaurant and lodging save through the workbench.
+  it("accepts a blank optional access-verified date", () => {
+    for (const blank of [undefined, "", "   "]) {
+      const parsed = restaurantSchema.safeParse(restaurant({ accessVerifiedOn: blank }));
+      expect(parsed.success, `blank date ${JSON.stringify(blank)} must be allowed`).toBe(true);
+      if (parsed.success) expect(parsed.data.accessVerifiedOn).toBeUndefined();
+    }
+  });
+
+  it("still rejects a real but malformed date", () => {
+    const parsed = restaurantSchema.safeParse(restaurant({ accessVerifiedOn: "07/19/2026" }));
+    expect(parsed.success).toBe(false);
+  });
+
+  it("still accepts a well-formed one", () => {
+    const parsed = restaurantSchema.parse(restaurant({ accessVerifiedOn: "2026-07-19" }));
+    expect(parsed.accessVerifiedOn).toBe("2026-07-19");
+  });
+});
