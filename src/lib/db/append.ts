@@ -7,7 +7,7 @@
 
 import "server-only";
 
-import { asc, count, sql } from "drizzle-orm";
+import { asc, count, gte, sql } from "drizzle-orm";
 
 import { getDb } from "./client";
 import { analyticsEvent, ferryObservation, surveyResponse } from "./schema";
@@ -40,11 +40,19 @@ export async function appendFerryObservation(obs: unknown): Promise<void> {
   await getDb().insert(ferryObservation).values({ obs });
 }
 
-export async function readFerryObservations<T>(): Promise<T[]> {
-  const rows = await getDb()
-    .select({ obs: ferryObservation.obs })
-    .from(ferryObservation)
-    .orderBy(asc(ferryObservation.ts));
+/**
+ * Read logged ferry observations, oldest first. `sinceIso` (optional) bounds
+ * the scan to rows appended at/after that instant — retention pruning only
+ * runs every ~48 writes, so the table can overshoot the 90-day window when
+ * crons stall; the busyness aggregator passes its retention cutoff so it never
+ * pays for rows pruning will delete anyway. Omitting it reads the full log
+ * (the accuracy backtest's behavior, unchanged).
+ */
+export async function readFerryObservations<T>(sinceIso?: string): Promise<T[]> {
+  const base = getDb().select({ obs: ferryObservation.obs }).from(ferryObservation);
+  const rows = await (sinceIso ? base.where(gte(ferryObservation.ts, new Date(sinceIso))) : base).orderBy(
+    asc(ferryObservation.ts),
+  );
   return rows.map((r) => r.obs as T);
 }
 
