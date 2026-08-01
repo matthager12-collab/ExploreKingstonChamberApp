@@ -24,6 +24,9 @@
 import fs from "fs";
 import path from "path";
 import { describe, expect, it } from "vitest";
+import { webcams as webcamSeed } from "@/lib/data/webcams";
+import { kingstonCamsFromLine } from "@/lib/line-lander";
+import type { Webcam } from "@/lib/types";
 
 const LANDER = path.join(process.cwd(), "src", "components", "line-lander.tsx");
 const source = fs.readFileSync(LANDER, "utf8");
@@ -69,11 +72,12 @@ describe("/line vessel map — the ISR window must survive it", () => {
 });
 
 describe("/line webcams — Kingston side only", () => {
-  it("filters the merged store down to the near side", () => {
-    // Same id split /ferry and /webcams use. Everyone reading /line is in the
-    // Kingston line; Edmonds cameras would be noise at best and would read as
-    // "your line" at worst.
-    expect(code).toContain('!w.id.startsWith("edmonds-")');
+  it("selects and orders through the pure lib, not inline in the component", () => {
+    // The filter+order lives in src/lib/line-lander.ts so it can be tested
+    // against real fixtures (see the kingstonCamsFromLine describe below)
+    // rather than only grepped for here.
+    expect(code).toContain("kingstonCamsFromLine(cams)");
+    expect(code).not.toContain('.filter((w) => !w.id.startsWith("edmonds-"))');
   });
 
   it("reads the merged store, never the seed array", () => {
@@ -88,6 +92,68 @@ describe("/line webcams — Kingston side only", () => {
     // would hand someone in a dead zone a 404.
     expect(code).toContain("webcamsPageVisible");
     expect(code).toContain('hiddenPaths.includes("/webcams")');
+  });
+});
+
+describe("kingstonCamsFromLine — front of the line first", () => {
+  const cam = (id: string): Webcam => ({
+    id,
+    name: id,
+    location: id,
+    imageUrl: `https://images.wsdot.wa.gov/${id}.jpg`,
+    sourceUrl: "https://wsdot.wa.gov/",
+    source: "WSDOT",
+    refreshSeconds: 60,
+  });
+
+  it("drops every Edmonds camera", () => {
+    const out = kingstonCamsFromLine(webcamSeed);
+    expect(out.length).toBeGreaterThan(0);
+    expect(out.every((w) => !w.id.startsWith("edmonds-"))).toBe(true);
+  });
+
+  it("leads with the tollbooths — the one camera that shows movement", () => {
+    // This is the whole point of the reorder: a driver's first question is
+    // "is it moving?", and the booths are the choke point that answers it.
+    expect(kingstonCamsFromLine(webcamSeed)[0].id).toBe("kingston-toll-booths");
+  });
+
+  it("orders the shipped seed front-of-line to back-of-line", () => {
+    // Pins the SHIPPED cameras, not just the comparator — if someone adds or
+    // renames a seed camera this test says so rather than silently reordering.
+    expect(kingstonCamsFromLine(webcamSeed).map((w) => w.id)).toEqual([
+      "kingston-toll-booths",
+      "kingston-terminal",
+      "kingston-ferry-sign-east",
+      "kingston-ferry-sign-west",
+      "kingston-lindvog",
+      "kingston-barber",
+    ]);
+  });
+
+  it("reverses the seed's outside-in order rather than coincidentally matching it", () => {
+    // Guards against the comparator quietly becoming a no-op.
+    const seedOrder = webcamSeed.filter((w) => !w.id.startsWith("edmonds-")).map((w) => w.id);
+    expect(kingstonCamsFromLine(webcamSeed).map((w) => w.id)).not.toEqual(seedOrder);
+  });
+
+  it("keeps a Chamber-added camera instead of dropping it, in store order at the end", () => {
+    // Unknown ids must not vanish — getWebcams() merges admin additions, and a
+    // camera the Chamber maps has to appear somewhere.
+    const withExtras = [cam("kingston-new-lot"), ...webcamSeed, cam("kingston-another")];
+    const out = kingstonCamsFromLine(withExtras).map((w) => w.id);
+    expect(out).toContain("kingston-new-lot");
+    expect(out).toContain("kingston-another");
+    expect(out.slice(-2)).toEqual(["kingston-new-lot", "kingston-another"]);
+  });
+
+  it("does not mutate the caller's array", () => {
+    // sort() is in-place; filter() must stay upstream of it or getWebcams()'
+    // cached value would be reordered for every other consumer.
+    const input = [...webcamSeed];
+    const before = input.map((w) => w.id);
+    kingstonCamsFromLine(input);
+    expect(input.map((w) => w.id)).toEqual(before);
   });
 });
 

@@ -42,7 +42,7 @@ import { Sr104TrafficMap } from "@/components/sr104-traffic-map";
 import { Callout, PageHeader, Section } from "@/components/ui";
 import { lineBacksPastBarberCutoff, parseWaitHours } from "@/lib/ferry-line";
 import { getFerryStatusSnapshot } from "@/lib/ferry-status";
-import { openFoodFromLine, splitAmenitiesFromLine } from "@/lib/line-lander";
+import { kingstonCamsFromLine, openFoodFromLine, splitAmenitiesFromLine } from "@/lib/line-lander";
 import { getEffectiveHiddenPaths } from "@/lib/page-visibility";
 import { getRestaurants } from "@/lib/stores/business-store";
 import { getFerryInfo } from "@/lib/stores/ferry-info-store";
@@ -99,9 +99,9 @@ export async function LineLander() {
   const food = openFoodFromLine(restaurants);
   const amenities = splitAmenitiesFromLine(amenityFeatures);
   const serverNow = new Date().toISOString();
-  // Kingston-side cameras only, by the same id split /ferry and /webcams use.
-  // No side variable to consult here — that is the point of this page.
-  const kingstonCams = cams.filter((w) => !w.id.startsWith("edmonds-"));
+  // Kingston-side cameras, ordered front-of-line-first (tollbooths lead — see
+  // the lib). No side variable to consult here; that is the point of this page.
+  const kingstonCams = kingstonCamsFromLine(cams);
   const webcamsPageVisible = !hiddenPaths.includes("/webcams");
 
   return (
