@@ -78,7 +78,9 @@ async function checkSeeds(): Promise<boolean> {
   const { webcams } = await import("../src/lib/data/webcams");
   const { itineraries } = await import("../src/lib/data/itineraries");
   const { events } = await import("../src/lib/data/events");
-  const seedSets = { restaurants, lodging, webcams, itineraries, events } as const;
+  // E17 directory ships no git seed — every record lives in the overlay.
+  const directory: never[] = [];
+  const seedSets = { restaurants, lodging, webcams, itineraries, events, directory } as const;
   const failures: Failure[] = [];
   console.log("\n=== git seeds (src/lib/data) ===");
   for (const domain of DOMAINS) {

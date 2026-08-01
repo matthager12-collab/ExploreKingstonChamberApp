@@ -91,6 +91,10 @@ const nonempty = z.string().min(1);
 /** One schema per store name (every store in the E05 table). */
 export const STORE_SCHEMAS: Record<string, z.ZodType> = {
   restaurants: DOMAIN_SCHEMAS.restaurants,
+  // E17 directory domain: strict from birth — the store is new (nothing to
+  // grandfather) and its writers are the importer + admin editor, both of
+  // which already validate with this exact schema.
+  directory: DOMAIN_SCHEMAS.directory,
   events: z.looseObject({ id: entityId, title: nonempty, start: nonempty }),
   charities: z.looseObject({ id: entityId, name: nonempty }),
   "volunteer-needs": z.looseObject({ id: entityId, title: nonempty, date: nonempty }),

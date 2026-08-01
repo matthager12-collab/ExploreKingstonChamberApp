@@ -41,4 +41,7 @@ export const STALENESS_DEFAULTS: Record<string, number> = {
   webcams: 180,
   charities: 180,
   itineraries: 365,
+  // E17 directory listings: import-seeded contact details, reviewed yearly.
+  // Only live rows enter the sweep, so the imported draft pile costs nothing.
+  directory: 365,
 };

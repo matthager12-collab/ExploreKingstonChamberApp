@@ -276,7 +276,10 @@ export function RecordEditor({
         return { ...all, [domain.key]: nextList };
       });
       setDraft(recordToDraft(domain, saved));
-      setMessage({ kind: "ok", text: `Saved — live on ${domain.publicPath}` });
+      setMessage({
+        kind: "ok",
+        text: domain.publicPath ? `Saved — live on ${domain.publicPath}` : "Saved",
+      });
       router.refresh();
     } catch {
       setMessage({ kind: "error", text: "Could not reach the server — try again." });
@@ -440,16 +443,23 @@ export function RecordEditor({
       <Card>
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm text-ink-soft">
-            {list.length} {domain.label.toLowerCase()} record{list.length === 1 ? "" : "s"} —
-            live on{" "}
-            <a
-              href={domain.publicPath}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-medium text-tide-deep underline decoration-seaglass underline-offset-2 hover:text-sound"
-            >
-              {domain.publicPath}
-            </a>
+            {list.length} {domain.label.toLowerCase()} record{list.length === 1 ? "" : "s"}
+            {domain.publicPath ? (
+              <>
+                {" "}
+                — live on{" "}
+                <a
+                  href={domain.publicPath}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-tide-deep underline decoration-seaglass underline-offset-2 hover:text-sound"
+                >
+                  {domain.publicPath}
+                </a>
+              </>
+            ) : (
+              <> — admin-only (no public page yet)</>
+            )}
           </p>
           <button
             type="button"

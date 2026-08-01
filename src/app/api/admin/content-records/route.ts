@@ -36,8 +36,14 @@ import {
   getRestaurantsAdmin,
   saveRestaurant,
 } from "@/lib/stores/business-store";
+import {
+  deleteDirectoryListing,
+  getDirectoryListingsAdmin,
+  saveDirectoryListing,
+} from "@/lib/stores/directory-store";
 import { RecordValidationError } from "@/lib/db/store-schemas";
 import {
+  directoryListingSchema,
   findItinerarySlugClash,
   firstZodMessage,
   itinerarySchema,
@@ -49,7 +55,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const DOMAINS = ["itineraries", "lodging", "webcams", "restaurants"] as const;
+const DOMAINS = ["itineraries", "lodging", "webcams", "restaurants", "directory"] as const;
 type Domain = (typeof DOMAINS)[number];
 
 function bad(error: string): NextResponse {
@@ -77,7 +83,9 @@ export async function GET(request: NextRequest) {
         ? await getLodgingAdmin()
         : domain === "webcams"
           ? await getWebcamsAdmin()
-          : await getRestaurantsAdmin();
+          : domain === "directory"
+            ? await getDirectoryListingsAdmin()
+            : await getRestaurantsAdmin();
 
   return NextResponse.json({ records });
 }
@@ -124,6 +132,28 @@ export async function POST(request: NextRequest) {
       await saveLodging(parsed.data, meta);
       return NextResponse.json({ ok: true, record: parsed.data });
     }
+    if (domain === "directory") {
+      const parsed = directoryListingSchema.safeParse(raw);
+      if (!parsed.success) return bad(firstZodMessage(parsed.error));
+      const record = parsed.data;
+      const existing = (await getDirectoryListingsAdmin()).find(
+        (r) => r.id === record.id,
+      );
+      // The form doesn't carry import provenance — carry the stored values
+      // over so an admin edit never wipes them (mirrors the restaurant
+      // structured-hours carry-over above).
+      if (existing?.sourceCategories) record.sourceCategories = existing.sourceCategories;
+      if (existing?.sourceImages) record.sourceImages = existing.sourceImages;
+      // Unlike the other domains, draft is this store's NORMAL state (the
+      // imported pile). Preserve the record's status on edit — publishing is
+      // an explicit decision, not a side effect of fixing a typo. New
+      // admin-created records publish directly (E08 admin semantics).
+      await saveDirectoryListing(record, {
+        ...meta,
+        status: existing?.status ?? "live",
+      });
+      return NextResponse.json({ ok: true, record });
+    }
     if (domain === "restaurants") {
       // The form can't edit structured hours, and this endpoint has never read
       // them from the request — drop them before validation, then carry the
@@ -168,7 +198,9 @@ export async function DELETE(request: NextRequest) {
         ? await getLodgingAdmin()
         : domain === "webcams"
           ? await getWebcamsAdmin()
-          : await getRestaurantsAdmin();
+          : domain === "directory"
+            ? await getDirectoryListingsAdmin()
+            : await getRestaurantsAdmin();
   if (!records.some((r) => r.id === id)) {
     return NextResponse.json({ error: "Record not found" }, { status: 404 });
   }
@@ -178,6 +210,7 @@ export async function DELETE(request: NextRequest) {
     if (domain === "itineraries") await deleteItinerary(id, meta);
     else if (domain === "lodging") await deleteLodging(id, meta);
     else if (domain === "webcams") await deleteWebcam(id, meta);
+    else if (domain === "directory") await deleteDirectoryListing(id, meta);
     else await deleteRestaurant(id, meta);
   } catch (err) {
     if (err instanceof RecordValidationError) return bad(err.message);

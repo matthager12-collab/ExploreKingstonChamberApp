@@ -97,6 +97,24 @@ export interface Atm {
   notes?: string;
 }
 
+/** Imported / hand-created directory listing (E17) — businesses outside the
+ *  curated restaurant/lodging/charity domains. Admin-and-owner-facing only:
+ *  no public surface renders this domain yet (E17 non-goal). */
+export interface DirectoryListing {
+  id: string;
+  name: string;
+  category: "eat" | "stay" | "shop" | "services" | "activities" | "community" | "other";
+  description: string;
+  address?: string;
+  phone?: string;
+  website?: string;
+  tags: string[];
+  /** Import provenance: raw upstream category strings, verbatim. */
+  sourceCategories?: string[];
+  /** Import provenance: vendor image URLs — never rendered publicly. */
+  sourceImages?: { logo?: string; listingImage?: string };
+}
+
 export interface Lodging {
   id: string;
   name: string;
