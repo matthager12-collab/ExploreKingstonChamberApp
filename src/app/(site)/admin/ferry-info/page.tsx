@@ -13,7 +13,7 @@ import {
   getFerryPredictionEnabled,
   getFerryPredictionSetting,
 } from "@/lib/stores/ferry-prediction-store";
-import { getAccuracy } from "@/lib/stores/ferry-observations";
+import { computeDailyAccuracy, getAccuracy } from "@/lib/stores/ferry-observations";
 import { getBoardingPassStatus } from "@/lib/wsf";
 import { PageHeader, Section } from "@/components/ui";
 import { FerryInfoEditor } from "./editor";
@@ -29,16 +29,19 @@ export const metadata: Metadata = {
 };
 
 export default async function AdminFerryInfoPage() {
-  const [info, override, effective, predEnabled, predSetting, accuracy] = await Promise.all([
+  const [info, override, effective, predEnabled, predSetting, accuracy, daily] = await Promise.all([
     getFerryInfo(),
     getBoardingPassOverride(),
     getEffectiveBoardingPass(),
     getFerryPredictionEnabled(),
     getFerryPredictionSetting(),
     getAccuracy(),
+    // Per-day trend for the chart. Its own scan of the observation log, but
+    // module-cached for 10 min and this page is admin-only + force-dynamic.
+    computeDailyAccuracy(),
   ]);
   const boardingPass = { estimate: getBoardingPassStatus(), override, effective };
-  const prediction = { enabled: predEnabled, setting: predSetting, accuracy };
+  const prediction = { enabled: predEnabled, setting: predSetting, accuracy, daily };
 
   return (
     <>
