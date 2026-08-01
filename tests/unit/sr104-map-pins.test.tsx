@@ -36,8 +36,15 @@ vi.mock("@/lib/map/maplibre", () => {
   }
   class Marker {
     private rec: RecordedMarker;
+    private el: HTMLElement;
     constructor(opts: { element?: HTMLElement }) {
       this.rec = { glyph: opts.element?.textContent ?? "", lngLat: [0, 0], html: "" };
+      this.el = opts.element ?? document.createElement("div");
+    }
+    // fixMarkerA11y() reads the element after addTo() (real maplibre stamps
+    // aria-label there); the stub needs the same surface.
+    getElement() {
+      return this.el;
     }
     setLngLat(ll: [number, number]) {
       this.rec.lngLat = ll;
@@ -65,6 +72,10 @@ vi.mock("@/lib/map/maplibre", () => {
         fitBounds() {}
         resize() {}
         remove() {}
+        // The component names the canvas region (axe landmark-unique fix).
+        getCanvas() {
+          return document.createElement("canvas");
+        }
       },
       Marker,
       Popup,

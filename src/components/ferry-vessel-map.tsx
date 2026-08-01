@@ -25,6 +25,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import type { VesselPosition } from "@/lib/wsf";
 import { mapStyle } from "@/lib/map/basemap";
 import { basemapArchiveUrl, loadMapLibre } from "@/lib/map/maplibre";
+import { fixMarkerA11y } from "@/lib/map/marker-a11y";
 import { formatPacificTime } from "@/lib/time";
 
 const EDMONDS = { lat: 47.8125, lng: -122.3829, name: "Edmonds" };
@@ -138,12 +139,15 @@ export function FerryVesselMap({
     const map = mapRef.current;
     if (!maplibregl || !map) return;
     for (const m of vesselMarkersRef.current) m.remove();
-    vesselMarkersRef.current = data.vessels.map((v) =>
-      new maplibregl.Marker({ element: vesselEl(v), anchor: "center", rotation: v.heading })
+    vesselMarkersRef.current = data.vessels.map((v) => {
+      const m = new maplibregl.Marker({ element: vesselEl(v), anchor: "center", rotation: v.heading })
         .setLngLat([v.lng, v.lat])
         .setPopup(new maplibregl.Popup({ offset: 14, maxWidth: "220px" }).setHTML(vesselPopup(v)))
-        .addTo(map),
-    );
+        .addTo(map);
+      // Restores vesselEl()'s name — addTo() clobbers it (see fixMarkerA11y).
+      fixMarkerA11y(m, `Ferry ${v.name}`);
+      return m;
+    });
   }
 
   // ---- init map once, deferred until it scrolls into view (perf budget) ----
@@ -166,6 +170,9 @@ export function FerryVesselMap({
         scrollZoom: false,
       });
       mapRef.current = map;
+      // Unique canvas name — MapLibre's default "Map" collides with the
+      // SR-104 map's canvas on /ferry and /line (axe landmark-unique).
+      map.getCanvas().setAttribute("aria-label", "Edmonds–Kingston vessel positions");
       // Leaflet showed +/- buttons by default; with scrollZoom off they are the
       // only mouse way to zoom, so MapLibre needs them added explicitly.
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
@@ -186,7 +193,8 @@ export function FerryVesselMap({
         map.addLayer({ id: "crossing", type: "line", source: "crossing", paint: { "line-color": "#16405e", "line-width": 2, "line-opacity": 0.4, "line-dasharray": [2, 3] } });
         // Terminal markers (static, non-interactive).
         for (const t of [EDMONDS, KINGSTON]) {
-          new maplibregl.Marker({ element: terminalEl(t.name), anchor: "left" }).setLngLat([t.lng, t.lat]).addTo(map);
+          const m = new maplibregl.Marker({ element: terminalEl(t.name), anchor: "left" }).setLngLat([t.lng, t.lat]).addTo(map);
+          fixMarkerA11y(m, `${t.name} ferry terminal`);
         }
         renderVessels();
         fit();
