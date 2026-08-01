@@ -104,6 +104,32 @@ export async function LineLander() {
   const kingstonCams = kingstonCamsFromLine(cams);
   const webcamsPageVisible = !hiddenPaths.includes("/webcams");
 
+  // Pins for the boarding-pass map, built from the SAME rows the food list and
+  // the restroom block above it render — so the map cannot show a kitchen the
+  // list calls closed, or a restroom the list does not know about.
+  const foodPins = food.map(({ restaurant: r, lineWalkMinutes }) => ({
+    id: r.id,
+    title: r.name,
+    lat: r.lat,
+    lng: r.lng,
+    note: `About ${lineWalkMinutes} min walk from the line.`,
+  }));
+  // Both halves of the split: the tollbooth portable and the two dock
+  // restrooms. The split matters for the honesty block's wording, not for
+  // where a pin belongs on a map.
+  const restroomPins = [...amenities.walkable, ...amenities.atTerminal]
+    .filter((row) => row.feature.category === "restroom")
+    .map((row) => ({
+      id: row.feature.id,
+      title: row.feature.title,
+      lat: row.lat,
+      lng: row.lng,
+      // The provenance caveat travels with the pin. These locations are read
+      // off a Port map or Chamber-reported, not field-checked, and someone
+      // deciding whether to leave their car deserves to know that.
+      note: row.feature.notes,
+    }));
+
   return (
     <>
       <PageHeader
@@ -213,7 +239,7 @@ export async function LineLander() {
         title={copyText(copy, "line.map.title")}
         subtitle={copyText(copy, "line.map.subtitle")}
       >
-        <Sr104TrafficMap />
+        <Sr104TrafficMap food={foodPins} restrooms={restroomPins} />
       </Section>
 
       {/* Sits next to the other map on purpose. Both defer MapLibre behind an

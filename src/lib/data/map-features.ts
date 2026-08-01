@@ -95,4 +95,22 @@ export const mapFeatures: MapFeature[] = [
     views: ["amenities"],
     point: [47.796418, -122.499288],
   },
+  {
+    id: "restroom-tollbooth-portable",
+    kind: "marker",
+    title: "Portable toilet — SR 104 tollbooths",
+    // Provenance, same standard as the two above: this one is Chamber-reported
+    // rather than read off a published map, and a portable unit is not a fixed
+    // building — it can be moved or removed without anyone updating a source.
+    // Both facts belong in the note a visitor reads before walking to it.
+    notes:
+      "A portable toilet at the SR 104 tollbooths, at the front of the ferry holding line. Reported by the Kingston Chamber (July 2026) and pinned at the tollbooth location — not field-checked, and portable units get moved, so treat the pin as approximate.",
+    category: "restroom",
+    cost: "free",
+    views: ["amenities"],
+    // LINE_TERMINAL in lib/ferry-line-geometry. Not imported: this seed is
+    // plain data and must not depend on the geometry module, but the two are
+    // the same spot by intent — keep them together if either moves.
+    point: [47.7959, -122.4961],
+  },
 ];

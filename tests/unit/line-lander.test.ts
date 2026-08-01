@@ -146,9 +146,13 @@ describe("the shipped seed vs the honest empty state (Open question 2)", () => {
         "If it is real and verified (M-19-03), update /line's amenities empty-state " +
         "copy and the LINE-LANDER doc; this is the epic's Open question 2 being answered.",
     ).toEqual([]);
-    // Both sourced dock restrooms should surface in the at-the-dock list.
+    // Every sourced restroom from the tollbooths on. The portable toilet at the
+    // booths belongs here rather than in `walkable`: it sits at the FRONT of the
+    // line, so a driver parked west of the dispenser reaches it by moving up,
+    // not by walking — which is exactly the distinction this split encodes.
     expect(split.atTerminal.map((r) => r.feature.id).sort()).toEqual([
       "restroom-boat-launch",
+      "restroom-tollbooth-portable",
       "restroom-waterfront-promenade",
     ]);
   });

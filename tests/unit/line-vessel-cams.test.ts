@@ -157,6 +157,41 @@ describe("kingstonCamsFromLine — front of the line first", () => {
   });
 });
 
+describe("the boarding-pass map's context pins", () => {
+  it("feeds the map food and restrooms on /line", () => {
+    expect(code).toContain("<Sr104TrafficMap food={foodPins} restrooms={restroomPins} />");
+  });
+
+  it("builds the pins from the same rows the page already renders", () => {
+    // The map must not run its own selection. If it did, it could pin a kitchen
+    // the food list above it calls closed — the two would disagree on one
+    // screen, which is the failure mode this repo keeps designing against.
+    expect(code).toContain("food.map(");
+    expect(code).toContain("amenities.walkable");
+    expect(code).toContain("amenities.atTerminal");
+  });
+
+  it("carries each restroom's provenance caveat into its pin", () => {
+    // These locations are read off a Port map or Chamber-reported, none
+    // field-checked. Someone deciding whether to leave their car to find one
+    // needs that caveat at the pin, not only in the list.
+    expect(code).toContain("note: row.feature.notes");
+  });
+
+  it("leaves the same map bare on /ferry, the only other page that renders it", () => {
+    // Both props default to []. On /ferry the map explains the pass system to
+    // someone planning a trip, not someone parked in the line — food pins would
+    // be clutter, and that page does not read the amenity store at all.
+    const ferry = fs.readFileSync(
+      path.join(process.cwd(), "src", "app", "(site)", "ferry", "page.tsx"),
+      "utf8",
+    );
+    expect(ferry, "/ferry started passing pins to Sr104TrafficMap").toMatch(
+      /<Sr104TrafficMap\s*\/>/,
+    );
+  });
+});
+
 describe("/line perf floor — the reads it is allowed to make", () => {
   it("uses the cookie-free visibility helper, not the session-reading one", () => {
     // getEffectiveHiddenPaths is a store read (assertPageVisibleStatic uses the
