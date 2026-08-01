@@ -56,7 +56,13 @@ export interface MapFeature {
    *  below — see src/lib/cost.ts for why the two are kept apart. */
   cost?: CostValue;
   /** Chamber member: draws the marker with added emphasis (a brand-tide outer
-   *  ring and a slightly larger pin) so member locations read first.
+   *  ring and a slightly larger pin) so member locations read first. On an
+   *  AREA — a building footprint traced in the /admin/maps builder — it adds
+   *  the member treatment instead: a footprint tint + boundary in the same
+   *  derived member-blue family as the pin ring (matching the runtime
+   *  "member built" tile-building highlight), or, when the area carries its
+   *  own colour (parking type / manual colour), a member-blue edge casing
+   *  around that colour's outline.
    *
    *  Deliberately a SEPARATE visual channel from `category`, which owns the
    *  pin's inner ring colour — membership adds a ring, it never repaints the
@@ -64,7 +70,12 @@ export interface MapFeature {
    *  emphasis is ADDITIVE. Non-members are drawn exactly as before, because
    *  dimming them would degrade the tourism map to make the same point.
    *
-   *  Markers only; ignored for line/trail/area. */
+   *  Markers and areas; ignored for line/trail.
+   *
+   *  E16 SEAM: this flag is hand-set by the Chamber in the admin editors until
+   *  membership goes native. Once E16 lands the member store as the system of
+   *  record, derive this from that store (match by listing/AMS member id) and
+   *  retire the hand edits — do not add more hand-flag surfaces. */
   member?: boolean;
   /** Hex color for line/trail/area stroke+fill, or a marker tint override. */
   color?: string;

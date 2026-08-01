@@ -150,6 +150,19 @@ const MEMBER_RING = "#136680";
  *  it is safe; lowering it is not. */
 const MEMBER_BUILDING_OPACITY = 0.32;
 
+/** Fill opacity for a member-flagged DRAWN area (a building footprint traced
+ *  in the /admin/maps builder) — the app-side member-building treatment the
+ *  runtime match above can only approximate from tile data.
+ *
+ *  Deliberately deeper than MEMBER_BUILDING_OPACITY: a drawn footprint can sit
+ *  on ANY base surface, not just the neutral building grey. 0.32 over plain
+ *  land (`earth #e4e8e4`) composites to only 7.4 L* from the water fill — a
+ *  hair under the 8 L* pond floor; 0.38 clears every land surface (worst
+ *  10.3 L*, on earth) while the MEMBER_RING boundary keeps WCAG 1.4.11's 3:1
+ *  on every surface it can border (worst 3.44:1, greenspace).
+ *  tests/unit/member-pin.test.ts recomputes all of this per surface. */
+const MEMBER_AREA_OPACITY = 0.38;
+
 const BOUNDARY_COLOR = "#324A6D";
 const LINE_COLOR = "#2a7f8a";
 const TRAIL_COLOR = "#4a7c59";
@@ -657,6 +670,10 @@ export function FeatureMap({
       const solidLines: ReturnType<typeof lineFeature>[] = [];
       const dashedLines: ReturnType<typeof lineFeature>[] = [];
       const fills: ReturnType<typeof polyFeature>[] = [];
+      // Member-flagged drawn areas (building footprints). App-side features
+      // only — anonymous tile buildings stay achromatic per ADR-0007; the
+      // membership fact lives in OUR data, never in the tiles.
+      const memberAreas: ReturnType<typeof polyFeature>[] = [];
       const circles: { lngLat: LngLat; color: string; popup: string }[] = [];
       // Street-parking curb strokes (E31 phase 6): rendered in their own layer
       // because line-offset places each stroke against the correct curb.
@@ -706,10 +723,52 @@ export function FeatureMap({
           addLegend(pl ?? { key: "kind-trail", label: "Trail", color, shape: "dash" });
         } else if (f.kind === "area" && f.polygon) {
           const color = featureColor(f, AREA_COLOR);
-          fills.push(polyFeature(f.polygon, { color, popup: featurePopupHtml(f) }));
+          const popup = featurePopupHtml(f);
+          // Does the area carry a colour of its OWN (parking auto-colour or a
+          // manual pick)? The AREA_COLOR fallback is a generic default, not a
+          // meaning — only a real category colour is protected from repaint.
+          const ownColor =
+            Boolean(f.color) || Boolean(f.parking && parkingTypeInfo(f.parking.type));
+          // Member geometry gets an explicitly CLOSED ring: areas are stored
+          // as open rings (E32 wire format), which MapLibre's fill layer
+          // auto-closes but a LINE layer does not — an open ring leaves the
+          // wide member band with rounded end-caps ("lobes") at the start
+          // vertex instead of a mitred corner.
+          const closedRing =
+            f.polygon.length >= 3 &&
+            (f.polygon[0][0] !== f.polygon[f.polygon.length - 1][0] ||
+              f.polygon[0][1] !== f.polygon[f.polygon.length - 1][1])
+              ? [...f.polygon, f.polygon[0]]
+              : f.polygon;
+          if (f.member === true && !ownColor) {
+            // A traced member building footprint: the member family owns the
+            // fill + boundary, the same treatment as the runtime-matched
+            // "member built" tier above, so a hand-traced footprint and a
+            // matched tile building read as one thing. (#140's channel rule
+            // holds trivially — there is no category colour here to repaint.)
+            memberAreas.push(
+              polyFeature(closedRing, { popup, tint: MEMBER_AREA_OPACITY, ring: 2.5, casing: 0 }),
+            );
+            addLegend({
+              key: "member-area",
+              label: "Chamber member",
+              color: MEMBER_RING,
+              shape: "swatch",
+            });
+          } else {
+            if (f.member === true) {
+              // Member area WITH its own colour: membership ADDS, it never
+              // repaints (#140). The colour fill/outline below render exactly
+              // as for a non-member; a member-blue casing with a white gap
+              // goes UNDER the colour outline — the areas analogue of the
+              // pin's concentric outer ring, gap and all.
+              memberAreas.push(polyFeature(closedRing, { popup, tint: 0, ring: 9, casing: 1 }));
+            }
+            fills.push(polyFeature(f.polygon, { color, popup }));
+            const pl = parkingLegend(f, color, "swatch");
+            addLegend(pl ?? { key: "kind-area", label: "Area", color, shape: "swatch" });
+          }
           f.polygon.forEach((p) => pts.push(toLngLat(p)));
-          const pl = parkingLegend(f, color, "swatch");
-          addLegend(pl ?? { key: "kind-area", label: "Area", color, shape: "swatch" });
         }
       }
 
@@ -946,6 +1005,55 @@ export function FeatureMap({
           map.addLayer({ id: "fm-fills", type: "fill", source: "fm-fills", paint: { "fill-color": ["get", "color"], "fill-opacity": ["coalesce", ["get", "opacity"], 0.22] } });
           map.addLayer({ id: "fm-fills-outline", type: "line", source: "fm-fills", paint: { "line-color": ["get", "color"], "line-width": 2 } });
           wirePopup("fm-fills");
+        }
+        // Member-flagged drawn areas. Slotted around the fm-fills pair on
+        // purpose: an own-colour member area lives in BOTH sources, and the
+        // sandwich (colour fill → member band → white gap → colour outline)
+        // is what renders the concentric edge — colour core, white gap,
+        // member-blue band — mirroring the member pin's category ring /
+        // white gap / outer ring, with no half of the band washed by the
+        // translucent colour fill.
+        if (memberAreas.length) {
+          addGeo("fm-member-areas", memberAreas);
+          map.addLayer(
+            {
+              id: "fm-member-areas",
+              type: "fill",
+              source: "fm-member-areas",
+              // tint = MEMBER_AREA_OPACITY for a plain traced footprint, 0
+              // for an own-colour area (the colour keeps its fill; membership
+              // is the boundary treatment + popup text there).
+              paint: { "fill-color": MEMBER_RING, "fill-opacity": ["get", "tint"] },
+            },
+            map.getLayer("fm-fills") ? "fm-fills" : undefined,
+          );
+          const beforeOutline = map.getLayer("fm-fills-outline") ? "fm-fills-outline" : undefined;
+          map.addLayer(
+            {
+              id: "fm-member-areas-ring",
+              type: "line",
+              source: "fm-member-areas",
+              layout: { "line-join": "round" },
+              paint: { "line-color": MEMBER_RING, "line-width": ["get", "ring"] },
+            },
+            beforeOutline,
+          );
+          // The white gap between the member band and the colour outline —
+          // same job as the pin's 1px white gap: the two never read as one
+          // thick band, and the band stays structurally visible even if an
+          // admin picks an area colour near the member blue (not colour-alone).
+          map.addLayer(
+            {
+              id: "fm-member-areas-gap",
+              type: "line",
+              source: "fm-member-areas",
+              filter: ["==", ["get", "casing"], 1],
+              layout: { "line-join": "round" },
+              paint: { "line-color": "#ffffff", "line-width": 5 },
+            },
+            beforeOutline,
+          );
+          wirePopup("fm-member-areas");
         }
         if (curbStrokes.length) {
           addGeo("fm-curbs", curbStrokes);
