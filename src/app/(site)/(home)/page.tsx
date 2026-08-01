@@ -79,6 +79,14 @@ export default async function Home() {
           alt=""
           fill
           preload
+          // This is the LCP element on "/" (verified via the Lighthouse CI
+          // trace: selector main#main > div.relative > img.-z-20). `preload`
+          // alone emits the <link rel=preload as=image> with NO fetchpriority,
+          // which Chrome schedules as a LOW-priority fetch — behind every JS
+          // chunk on the connection pool. fetchPriority="high" rides the same
+          // preload link (ImagePreload forwards it) and bumps the hero ahead
+          // of non-critical requests, exactly the web.dev LCP guidance.
+          fetchPriority="high"
           sizes="100vw"
           className="-z-20 object-cover"
         />
