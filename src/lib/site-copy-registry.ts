@@ -1342,7 +1342,7 @@ export const COPY_BLOCKS = [
     label: "Short-term streets card body",
     multiline: true,
     fallback:
-      "Most signed streets near the dock allow 3 hours, and the clock only runs from midnight to 6 pm, except Sundays and holidays. After 6 pm, and all day Sunday, the limit lapses — an evening or Sunday trip can park free on the street. Brackett's Landing, the beach lot beside the terminal, allows 4 hours. Good for a quick out-and-back, not for a day trip. The sign on the pole is always the rule.",
+      "Most signed streets near the dock allow 3 hours, and the clock only runs from midnight to 6 pm, except Sundays and holidays. After 6 pm, and all day Sunday, the limit lapses on most streets — an evening or Sunday trip can usually park free. Brackett's Landing, the beach lot beside the terminal, allows 4 hours. Good for a quick out-and-back, not for a day trip. The sign on the pole is always the rule.",
   },
   {
     key: "edmonds.avoid.title",
@@ -1356,7 +1356,7 @@ export const COPY_BLOCKS = [
     label: "Do-not-park callout intro",
     multiline: true,
     fallback:
-      "These places sit right by the terminal and look convenient. They tow, and a ferry rider is not their customer.",
+      "These places sit right by the terminal and look convenient. You risk towing or a warning on the windshield — a ferry rider is not their customer.",
   },
   {
     key: "edmonds.avoid.salish",
@@ -1394,7 +1394,7 @@ export const COPY_BLOCKS = [
     page: "Parking — Edmonds side",
     label: "Do-not-park: the terminal itself",
     multiline: true,
-    fallback: "The Edmonds ferry terminal has no public parking at all.",
+    fallback: "The Edmonds ferry terminal itself has no parking lot — the lots are all a few blocks away.",
   },
   {
     key: "edmonds.bus.summary",

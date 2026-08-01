@@ -3,7 +3,7 @@
 //   Port 2025 Parking Policy PDF + official parking map dated 12-30-25
 //     (POKPARK / POKHILL / POKTT text-to-pay zones, 25023 short code)
 //   WSDOT Kingston terminal page (Diamond lot D515, 73 stalls, $8/$12 + multi-day rates)
-//   Diamond PermitPoint: monthly permit $125.70 as of July 2026 (WSDOT's $100 figure is stale)
+//   Diamond PermitPoint: monthly permit $122.70 as of 2026-08-01 (WSDOT's $100 figure is stale)
 //   Kitsap Transit park & ride list (George's Corner, Bayside Community Church)
 //   Kitsap County Complete Streets Transportation Report (Heffron, May 2016 — the only
 //     public per-street source; its curb inventory dates to 2015, so every street entry
@@ -368,7 +368,7 @@ export const parkingZones: MapZone[] = [
     summary:
       "$8 for 0–12 hr, $12 for 12–24 hr — overnight OK. At NE 1st St & Ohio Ave, one block from the ferry. Free with a disabled placard.",
     details:
-      "The WSDOT-owned, Diamond-operated lot at 26613 Ohio Ave NE — the angled strip on NE 1st St between Ohio and Iowa, a 5-minute walk to the tollbooths. Overnight and multi-day parking allowed (WSF publishes rates from 2 days $24 up to 7 days $38). Monthly permit $125.70 all-in via Diamond PermitPoint, valid 24/7. Pay at the kiosk (card) or with PayByPhone / ParkMobile. Vehicles with a valid disabled placard or plate park free — this lot only. Questions: Diamond Parking, 206-729-0590.",
+      "The WSDOT-owned, Diamond-operated lot at 26613 Ohio Ave NE — the angled strip on NE 1st St between Ohio and Iowa, a 5-minute walk to the tollbooths. Overnight and multi-day parking allowed (WSF publishes rates from 2 days $24 up to 7 days $38). Monthly permit $122.70 all-in via Diamond PermitPoint, valid 24/7. Pay at the kiosk (card) or with PayByPhone / ParkMobile. Vehicles with a valid disabled placard or plate park free — this lot only. Questions: Diamond Parking, 206-729-0590.",
     confidence: "verified",
     sourceUrl:
       "https://wsdot.com/ferries/vesselwatch/terminaldetail.aspx?terminalid=12",
