@@ -9,11 +9,14 @@
 // browser drive of the editor, not a unit test.
 //
 // The interactive tests need the self-hosted vector tiles (the map's `load`
-// gates the editor's controls). CI is keyless (no R2_TILES_*), so when the
-// tiles route cannot serve, those tests SKIP — visibly, not silently — and the
-// V-1 checklist plus a local run with tiles cover them. The page-shell test
-// always runs.
+// gates the editor's controls). When the tiles route has no R2_TILES_*
+// (keyless CI), the committed fixture archive serves the tiles via route
+// interception instead, so the interactive tests run everywhere; the visible
+// skip remains only if the fixture is also missing, and the V-1 checklist
+// covers that gap. The page-shell test always runs.
 
+import { existsSync, readFileSync } from "fs";
+import { fileURLToPath } from "url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { BASE_URL } from "./config";
@@ -85,10 +88,36 @@ beforeAll(async () => {
     headers: { Range: "bytes=0-1023" },
   });
   tilesAvailable = probe.status() === 206 || probe.status() === 200;
+  // Local escape hatch (E31 P7): serve a kingston.pmtiles via route
+  // interception so the interactive tests run without R2_TILES_*. Defaults to
+  // the committed fixture (tests/fixtures/tiles/kingston.pmtiles, added by
+  // #135); PMTILES_FILE still overrides it, e.g. with a fresh prod download.
+  const pmtilesFile =
+    process.env.PMTILES_FILE ??
+    fileURLToPath(new URL("../fixtures/tiles/kingston.pmtiles", import.meta.url));
+  if (!tilesAvailable && existsSync(pmtilesFile)) {
+    const archive = readFileSync(pmtilesFile);
+    await context.route("**/api/map/tiles/*", async (route) => {
+      const m = /bytes=(\d+)-(\d+)?/.exec((await route.request().headerValue("range")) ?? "");
+      const start = m ? Number(m[1]) : 0;
+      const end = m?.[2] ? Math.min(Number(m[2]), archive.length - 1) : archive.length - 1;
+      await route.fulfill({
+        status: m ? 206 : 200,
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "Accept-Ranges": "bytes",
+          ...(m ? { "Content-Range": `bytes ${start}-${end}/${archive.length}` } : {}),
+          ETag: '"pmtiles-local-fixture"',
+        },
+        body: archive.subarray(start, end + 1),
+      });
+    });
+    tilesAvailable = true;
+  }
   if (!tilesAvailable) {
     console.warn(
       "[admin-map-editor] vector tiles unavailable (no R2_TILES_*) — interactive tests skip; " +
-        "run locally with tiles, and the E32 V-1 checklist covers the gap",
+        "run locally with tiles (or set PMTILES_FILE), and the E32 V-1 checklist covers the gap",
     );
   }
   // Opt into the editor's test hook (window.__vkDraw) so the suite can prove
