@@ -7,8 +7,8 @@
 //  - the route's inline checks moved here VERBATIM — same rejection messages,
 //    so the refactor cannot have changed a single API response byte;
 //  - linked-id validation runs against the REAL stores (seed + live overlay),
-//    with lodging ids invalid by default (the API's behavior today) and valid
-//    only under the batch script's explicit includeLodging opt-in;
+//    with the kind:"business" universe being restaurants ∪ lodging
+//    (portal-lodging, PR #124) — one universe for route and script alike;
 //  - the org kind is derived from the role, never taken from the caller;
 //  - createInvite's own rules (admin-requires-email, org join-XOR-create)
 //    surface through the same AuthError channel.
@@ -106,7 +106,7 @@ describe("mintInvite — member-business (the batch-onboarding shape)", () => {
         { role: "member-business", linkedIds: ["nope"], newOrgName: "X" },
         ACTOR,
       ),
-    ).rejects.toThrow(/unknown restaurant id\(s\): nope/);
+    ).rejects.toThrow(/unknown business id\(s\): nope/);
   });
 
   it("does not treat a pending (unapproved) listing as a valid target", async () => {
@@ -115,36 +115,28 @@ describe("mintInvite — member-business (the batch-onboarding shape)", () => {
         { role: "member-business", linkedIds: ["mint-pending-cafe"], newOrgName: "X" },
         ACTOR,
       ),
-    ).rejects.toThrow(/unknown restaurant id\(s\): mint-pending-cafe/);
+    ).rejects.toThrow(/unknown business id\(s\): mint-pending-cafe/);
   });
 
-  it("rejects a lodging id by default — the API's universe is restaurants only", async () => {
-    await expect(
-      mintInvite(
-        { role: "member-business", linkedIds: ["mint-inn"], newOrgName: "Mint Inn" },
-        ACTOR,
-      ),
-    ).rejects.toThrow(/unknown restaurant id\(s\): mint-inn/);
-  });
-
-  it("accepts a lodging id under includeLodging (the batch script's universe)", async () => {
+  it("accepts a lodging id — kind:\"business\" spans restaurants ∪ lodging", async () => {
     const invite = await mintInvite(
       { role: "member-business", linkedIds: ["mint-inn"], newOrgName: "Mint Inn" },
       ACTOR,
-      { includeLodging: true },
     );
     expect(invite.linkedIds).toEqual(["mint-inn"]);
     expect(invite.newOrgKind).toBe("business");
   });
 
-  it("names the wider universe in the unknown-id message under includeLodging", async () => {
-    await expect(
-      mintInvite(
-        { role: "member-business", linkedIds: ["nope"], newOrgName: "X" },
-        ACTOR,
-        { includeLodging: true },
-      ),
-    ).rejects.toThrow(/unknown business listing id\(s\): nope/);
+  it("accepts a restaurant + lodging mix in one invite", async () => {
+    const invite = await mintInvite(
+      {
+        role: "member-business",
+        linkedIds: ["mint-cafe", "mint-inn"],
+        newOrgName: "Two-Listing Holdings",
+      },
+      ACTOR,
+    );
+    expect(invite.linkedIds).toEqual(expect.arrayContaining(["mint-cafe", "mint-inn"]));
   });
 
   it("dedupes linkedIds and drops non-string entries", async () => {

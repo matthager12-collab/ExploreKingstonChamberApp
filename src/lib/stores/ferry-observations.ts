@@ -71,18 +71,45 @@ function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
 }
 
-/** ISO instant → Kingston-local date "YYYY-MM-DD" + minutes-since-midnight. */
-function pacificParts(iso: string): { date: string; minutes: number } {
+// Hoisted formatters: Intl.DateTimeFormat construction is expensive, and the
+// aggregation below used to build FOUR of them per observation row (two per
+// pacificParts call × two calls). At ~12k rows that was ~1.4s of JS on every
+// cold /ferry render — and the observe cron nulls aggCache every ~15 min, so
+// real visitors kept repaying it. The instances are immutable and reusable;
+// format/formatToParts on a shared instance is safe.
+const PACIFIC_DATE_FMT = new Intl.DateTimeFormat("en-CA", { timeZone: TZ });
+const PACIFIC_TIME_FMT = new Intl.DateTimeFormat("en-US", {
+  timeZone: TZ,
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+// Memoized pacificParts results. Hit rate is high by construction: `departs`
+// repeats across the dozens of snapshots of the same sailing, and `ts` repeats
+// across the ~4 rows written per snapshot. Bounded so it can never grow
+// without limit (90 days of observations is well under the cap; clearing on
+// overflow just means one recomputation pass).
+const PACIFIC_PARTS_CACHE_MAX = 50_000;
+const pacificPartsCache = new Map<string, { date: string; minutes: number }>();
+
+/**
+ * ISO instant → Kingston-local date "YYYY-MM-DD" + minutes-since-midnight.
+ * Memoized; treat the returned object as immutable (cache entries are shared).
+ * Exported for the equivalence test only — app code outside this module should
+ * not need it.
+ */
+export function pacificParts(iso: string): { date: string; minutes: number } {
+  const hit = pacificPartsCache.get(iso);
+  if (hit) return hit;
   const d = new Date(iso);
-  const date = new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(d);
-  const t = new Intl.DateTimeFormat("en-US", {
-    timeZone: TZ,
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(d);
+  const date = PACIFIC_DATE_FMT.format(d);
+  const t = PACIFIC_TIME_FMT.formatToParts(d);
   const get = (x: string) => Number(t.find((p) => p.type === x)?.value ?? 0);
-  return { date, minutes: get("hour") * 60 + get("minute") };
+  const parts = { date, minutes: get("hour") * 60 + get("minute") };
+  if (pacificPartsCache.size >= PACIFIC_PARTS_CACHE_MAX) pacificPartsCache.clear();
+  pacificPartsCache.set(iso, parts);
+  return parts;
 }
 
 /**
@@ -130,8 +157,8 @@ export async function recordSailingSpaceSnapshot(
   return true;
 }
 
-async function readObservations(): Promise<FerryObservation[]> {
-  return readFerryObservations<FerryObservation>();
+async function readObservations(sinceIso?: string): Promise<FerryObservation[]> {
+  return readFerryObservations<FerryObservation>(sinceIso);
 }
 
 /**
@@ -143,7 +170,13 @@ async function readObservations(): Promise<FerryObservation[]> {
 export async function getEmpiricalBusyness(): Promise<EmpiricalResult> {
   if (aggCache && Date.now() - aggCache.at < CACHE_TTL_MS) return aggCache.value;
 
-  const observations = await readObservations();
+  // Bound the scan to the retention window (+1 day of slack for prune lag):
+  // pruning only runs every ~48 snapshot writes (~8h), so the table can
+  // overshoot 90 days when crons stall, and the aggregate shouldn't rescan
+  // rows retention is about to delete. The accuracy backtest below reads the
+  // full log on purpose — do not add a cutoff there.
+  const sinceIso = new Date(Date.now() - (RETENTION_DAYS + 1) * 24 * 60 * 60 * 1000).toISOString();
+  const observations = await readObservations(sinceIso);
   const acc = new Map<string, { sumFull: number; nFull: number; sumDelay: number; nDelay: number }>();
   const days = new Set<string>();
   let sampleCount = 0;

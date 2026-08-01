@@ -45,6 +45,17 @@ and bounded at the ingest boundary, never trusted from the client; the closed
 shape is pinned by the table-driven suite in
 `src/app/api/__tests__/track-route.test.ts`.
 
+**The side switcher (`vk-side` cookie) is a preference, not a location record.**
+Its "use my location" button is user-initiated and one-shot: the coordinate is
+classified on the device into kingston/edmonds and immediately discarded, only
+that binary choice is written to the cookie, and nothing reaches the server —
+no coordinate is ever transmitted or stored. (A first-visit geolocation
+auto-ask that predated E11 was removed as the last MHMDA floor before launch.)
+That is why the component sits in the reviewed-exemption list of
+`tests/unit/geolocation-consent-guard.test.ts` rather than behind the consent
+card; `tests/unit/side-switcher.test.tsx` pins the no-geolocation-on-mount
+behavior positively.
+
 ## 2. The registration contract — no unregistered PII store
 
 **No epic may add ANY store containing personal data without registering it in

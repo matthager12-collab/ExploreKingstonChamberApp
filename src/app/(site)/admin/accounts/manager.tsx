@@ -232,12 +232,14 @@ export function AccountsManager({
   orgs,
   restaurants,
   charities,
+  lodging,
 }: {
   users: SafeUser[];
   invites: InviteRow[];
   orgs: OrgOption[];
   restaurants: NameOption[];
   charities: NameOption[];
+  lodging: NameOption[];
 }) {
   // ---------- shared lookups ----------
 
@@ -245,8 +247,9 @@ export function AccountsManager({
     const m = new Map<string, string>();
     for (const r of restaurants) m.set(r.id, r.name);
     for (const c of charities) m.set(c.id, c.name);
+    for (const l of lodging) m.set(l.id, l.name);
     return m;
-  }, [restaurants, charities]);
+  }, [restaurants, charities, lodging]);
 
   const orgById = useMemo(() => new Map(orgs.map((o) => [o.id, o])), [orgs]);
 
@@ -398,8 +401,17 @@ export function AccountsManager({
   const orgRole = isOrgRole(role);
   // Which store the linked ids come from follows the ROLE, exactly as the mint
   // endpoint validates them — not the new-org kind picker, which only labels
-  // the organization that redemption will create.
-  const options = role === "member-business" ? restaurants : role === "org-editor" ? charities : [];
+  // the organization that redemption will create. member-business spans both
+  // listing stores (restaurants + lodging), matching the endpoint's union.
+  const options =
+    role === "member-business"
+      ? [
+          ...restaurants,
+          ...lodging.map((l) => ({ id: l.id, name: `${l.name} (lodging)` })),
+        ]
+      : role === "org-editor"
+        ? charities
+        : [];
 
   function pickRole(next: Role) {
     setRole(next);
@@ -961,14 +973,14 @@ export function AccountsManager({
               <fieldset>
                 <legend className="text-sm font-medium text-ink">
                   {role === "member-business"
-                    ? "Restaurants this organization manages"
+                    ? "Businesses this organization manages"
                     : "Organizations this account manages"}
                 </legend>
                 <div className="mt-1 grid max-h-64 gap-1.5 overflow-y-auto rounded-lg border border-sand bg-white p-3 sm:grid-cols-2">
                   {options.length === 0 ? (
                     <p className="text-sm text-ink-soft">
                       Nothing to link yet — add{" "}
-                      {role === "member-business" ? "restaurants" : "organizations"} first.
+                      {role === "member-business" ? "businesses" : "organizations"} first.
                     </p>
                   ) : (
                     options.map((o) => (

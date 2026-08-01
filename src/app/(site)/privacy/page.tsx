@@ -70,6 +70,13 @@ export default function PrivacyPage() {
               send.)
             </li>
             <li>
+              <strong>The side switcher never sends your location anywhere.</strong> The
+              &ldquo;use my location&rdquo; button (Kingston side / Edmonds side) runs only when
+              you tap it: your position is checked on your device and immediately discarded, and
+              all that&rsquo;s saved is a one-word cookie recording which side you chose — no
+              coordinate ever leaves your device.
+            </li>
+            <li>
               <strong>We never track use of food or health resources.</strong> Taps on
               food-bank or health-assistance links are dropped at our servers and never recorded —
               not counted, not sampled, nothing.

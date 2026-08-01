@@ -34,7 +34,7 @@ call that decides internally whether the path is allowlisted.
 | 2 | Cross-origin `GET` (WSDOT, map tiles, fonts) | Not intercepted | — | — | n/a — third parties keep their own caching rules |
 | 3 | `/admin/*`, `/portal/*`, `/api/*` | **Never cached** — one exact-path exception, row 4. Passes through untouched | — | — | n/a |
 | 4 | `GET /api/ferry/status` (exact string equality, nested inside branch 3) | Network-first; `cache.put` only when `res.ok` | `vk-data-*` | 1 entry | Cached copy is stamped `X-SW-Fetched-At`; the live copy is not. Both boards read that header and render the amber line: *"Offline — saved times as of H:MM. Not live; confirm at wsdot.wa.gov/ferries when you're back online."* Two-way wording and a date qualifier — see below the table |
-| 5 | Navigation (`request.mode === "navigate"`) to a path in `NAV_ALLOWLIST` | Network-first; `cache.put` only when `res.status === 200 && !res.redirected` | `vk-shell-*` | 9 entries, FIFO | `<OfflineBanner/>` (`src/components/pwa.tsx`): *"You're offline — showing saved info from H:MM."*, or the time-less *"You're offline — showing saved info."* when the timestamp fails the honesty gate (§7) |
+| 5 | Navigation (`request.mode === "navigate"`) to a path in `NAV_ALLOWLIST` | Network-first; `cache.put` only when `res.status === 200 && !res.redirected` | `vk-shell-*` | 11 entries, FIFO | `<OfflineBanner/>` (`src/components/pwa.tsx`): *"You're offline — showing saved info from H:MM."*, or the time-less *"You're offline — showing saved info."* when the timestamp fails the honesty gate (§7) |
 | 6 | Any other same-origin navigation | Network-first, **never cached**. On failure: saved copy → `/offline` → a plain-text 503 | — | — | `/offline` says it in prose; the banner's time clause is suppressed on that **document**, wherever it is served from (§7) |
 | 7 | `/_next/static/*`, `/brand/*`, and `/_next/image?url=/brand/…` **only** | Cache-first | `vk-static-*` | 80 entries, FIFO | None needed for `/_next/static/*` — content-hashed and immutable. `/brand/*` is not: its urls are stable, and cache-first means no revalidation, so a **replaced** logo or icon reaches an already-visited device only on a `VERSION` bump (§3.1) |
 | 8 | Everything else same-origin `GET` (e.g. `/manifest.webmanifest`, `/geo/*.json`) | Not intercepted | — | — | n/a. `/manifest.webmanifest` *is* warmed into the static cache at install, but no fetch branch ever reads it back — §2 |
@@ -67,7 +67,9 @@ morning.
 `NAV_ALLOWLIST` is **exact-pathname membership, never a prefix**. A prefix on
 `/events` would swallow `/events/suggest` (which renders an admin preview of
 unpublished events); a prefix on `/ferry` would swallow `/ferry/plan`. Today it
-is `/`, `/ferry`, `/eat`, `/events`, `/parking`, `/about`, `/offline`.
+is `/`, `/ferry`, `/eat`, `/events`, `/parking`, `/about`, `/simple`, `/print`,
+`/offline` (`/simple` and `/print` joined in v4 — issue #52, the E14
+follow-up).
 
 Three routes are **deliberately absent** and `tests/unit/sw-contract.test.ts`
 fails the build if any of them is added: `/ferry/plan` (the prediction flag
@@ -107,12 +109,12 @@ Naming scheme: **`vk-<role>-<VERSION>`**. Every cache name ends with the
 version string, and `activate` deletes every cache that starts with `vk-` and
 does **not** end with `-${VERSION}`. The `vk-` prefix guard matters — this
 origin also hosts caches this app did not create, and deleting those would be
-someone else's outage. `VERSION` is **`"v2"`** today, so the live names are
-`vk-shell-v2`, `vk-static-v2`, `vk-data-v2`.
+someone else's outage. `VERSION` is **`"v4"`** today, so the live names are
+`vk-shell-v4`, `vk-static-v4`, `vk-data-v4`, `vk-kiosk-v4`.
 
 | Cache | Holds | Cap | Eviction |
 |---|---|---|---|
-| `vk-shell-*` | The single `PRECACHE` entry (`/offline`), then one HTML entry per allowlisted path | `SHELL_LIMIT` = `NAV_ALLOWLIST.length + 2` = **9** | FIFO `trim()` after every write |
+| `vk-shell-*` | The single `PRECACHE` entry (`/offline`), then one HTML entry per allowlisted path | `SHELL_LIMIT` = `NAV_ALLOWLIST.length + 2` = **11** | FIFO `trim()` after every write |
 | `vk-static-*` | `/_next/static/*`, `/brand/*`, optimizer-served brand imagery (`/_next/image?url=/brand/…`), and the three `PRECACHE_STATIC` entries warmed at install: `/manifest.webmanifest`, `/brand/icon-192.png`, `/brand/icon-512.png` | `STATIC_LIMIT` = **80** | FIFO `trim()` after every write |
 | `vk-data-*` | Exactly one entry, keyed `/api/ferry/status` | **1**, by construction (fixed key) | Overwritten by every successful poll |
 
@@ -133,8 +135,8 @@ Notes that are load-bearing:
   precached entries, being the oldest by definition, are first in line for
   eviction. Parking the icons there would have put the one asset we cannot
   afford to lose (`/offline`) at the front of the queue. With the list at one,
-  the shell budget is a budget for the allowlist and nothing else: seven
-  allowlisted pathnames (`/offline` is one of them) against a cap of nine, so
+  the shell budget is a budget for the allowlist and nothing else: nine
+  allowlisted pathnames (`/offline` is one of them) against a cap of eleven, so
   **ordinary browsing can never evict the offline fallback**.
 - **The install icons and the manifest are precached into the *static* cache**
   (`PRECACHE_STATIC`), which is where the `/brand/` fetch branch reads the icons

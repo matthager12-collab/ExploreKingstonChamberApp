@@ -3,12 +3,14 @@
 // Extracted from POST /api/portal/invites (E06) so the batch onboarding
 // script (scripts/mint-invites.ts) mints through the exact same rules the
 // admin UI does — same role check, same linked-id validation against the real
-// stores, same note truncation, same createInvite call. The route's behavior
-// is unchanged: every rejection here throws an AuthError carrying the message
-// the route used to inline, and the route still maps AuthError → 400.
+// stores, same note truncation, same createInvite call. Every rejection here
+// throws an AuthError carrying the message the route used to inline, and the
+// route still maps AuthError → 400.
 //
 // linkedIds are validated against the real stores, so a typo'd or malicious
-// id can never pre-grant edit rights over a listing created later.
+// id can never pre-grant edit rights over a listing created later. For
+// kind:"business" the valid universe is restaurants ∪ lodging (portal-lodging,
+// PR #124) — one universe for BOTH writers, route and script alike.
 
 // Submodule imports, not the "@/lib/auth" barrel: the barrel re-exports
 // session.ts (next/headers), which a plain-Node script cannot load.
@@ -29,18 +31,6 @@ export interface InviteRequestBody {
   newOrgName?: unknown;
 }
 
-export interface MintInviteOptions {
-  /**
-   * Widen the valid business linked-id universe from restaurants only (the
-   * API's behavior today) to restaurants + lodging. The batch onboarding
-   * script sets this so the lodging businesses can be invited for launch;
-   * the API keeps its restaurant-only validation until portal lodging
-   * support lands (feat/portal-lodging), at which point that branch flips
-   * the default here rather than re-widening the route.
-   */
-  includeLodging?: boolean;
-}
-
 /**
  * Validate an invite request and mint the invite.
  *
@@ -52,7 +42,6 @@ export interface MintInviteOptions {
 export async function mintInvite(
   body: InviteRequestBody,
   actor: string,
-  opts: MintInviteOptions = {},
 ): Promise<InviteRow> {
   const role = body.role as Role;
   if (!ROLES.includes(role)) {
@@ -76,22 +65,19 @@ export async function mintInvite(
   const kind: OrgKind = role === "member-business" ? "business" : "nonprofit";
 
   if (linkedIds.length > 0) {
+    // kind:"business" spans BOTH member-editable listing stores — restaurants
+    // and lodging — so a hotel or marina can be onboarded exactly like a
+    // restaurant. Ids the union does not contain are still rejected outright.
     const records =
       kind === "business"
-        ? opts.includeLodging
-          ? [...(await getRestaurants()), ...(await getLodging())]
-          : await getRestaurants()
+        ? [...(await getRestaurants()), ...(await getLodging())]
         : await getCharities();
     const valid = new Set(records.map((r) => r.id));
     const unknown = linkedIds.filter((id) => !valid.has(id));
     if (unknown.length > 0) {
-      const noun =
-        kind === "business"
-          ? opts.includeLodging
-            ? "business listing"
-            : "restaurant"
-          : "charity";
-      throw new AuthError(`unknown ${noun} id(s): ${unknown.join(", ")}`);
+      throw new AuthError(
+        `unknown ${kind === "business" ? "business" : "charity"} id(s): ${unknown.join(", ")}`,
+      );
     }
   }
 

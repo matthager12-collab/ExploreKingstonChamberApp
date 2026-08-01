@@ -172,8 +172,6 @@ async function main(): Promise<number> {
           note: `Launch onboarding — ${l.name}`,
         },
         actor,
-        // Restaurants AND lodging are invitable — the launch universe.
-        { includeLodging: true },
       );
       rows.push(
         [l.name, l.id, invite.code, joinUrl, invite.expiresAt.toISOString().slice(0, 10)]

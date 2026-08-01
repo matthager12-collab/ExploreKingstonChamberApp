@@ -81,7 +81,11 @@ function transitDirectionsUrl(destination: string): string {
 
 export default async function FerryPage() {
   const hiddenPreview = await assertPageVisible("/ferry");
-  const [carFerry, kingston, edmonds, alerts, copy, ferryInfo, side, empirical, prediction, cams, hiddenPaths] =
+  // getVesselLocations rides in the same Promise.all as everything else: it
+  // has no data dependency on the other reads (its sole consumer is
+  // <FerryVesselMap initial={vessels}/>), and awaiting it serially after this
+  // block added a measured ~70-90ms to every dynamic /ferry render.
+  const [carFerry, kingston, edmonds, alerts, copy, ferryInfo, side, empirical, prediction, cams, hiddenPaths, vessels] =
     await Promise.all([
       getTodaysSailings(),
       getTerminalStatus("kingston"),
@@ -94,6 +98,7 @@ export default async function FerryPage() {
       getFerryPredictionAccess(),
       getWebcams(),
       getEffectiveHiddenPaths(),
+      getVesselLocations(),
     ]);
   const fastFerry = getFastFerrySailings();
   // The walk-on round trip is quoted mid-sentence further down, not just in the
@@ -102,7 +107,6 @@ export default async function FerryPage() {
   // shared with the safety dictionary so all three pages say the same thing.
   const walkOnRoundTrip =
     walkOnRoundTripFare(ferryInfo.fares) ?? SAFETY_TOKEN_FALLBACKS.en.walkOnRoundTrip;
-  const vessels = await getVesselLocations();
   const initial = { carFerry, fastFerry, terminals: { kingston, edmonds }, alerts };
   const serverNow = new Date().toISOString();
   const today = todayPacific();

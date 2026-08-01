@@ -23,14 +23,18 @@ const GEOLOCATION_RE = /navigator\.geolocation|getCurrentPosition|watchPosition/
 const CONSENT_RE = /privacy\/consent|shouldPromptGeoConsent|hasGeoConsent/;
 
 /**
- * Known, reviewed exemptions. `side-switcher.tsx` reads position on mount to
- * pick which side of the water the visitor is on; the reading is classified
- * client-side and written to a local preference cookie — it is never sent to
- * the server, so it collects nothing. It predates E11 and is a documented
- * product decision (docs/ARCHITECTURE.md decision 17, "ask location once
- * (opt-out)"). FLAGGED FOR REVIEW: E11's own standard is to ask in plain
- * language BEFORE the browser prompt, and this surface does not. Removing it
- * from this list (i.e. gating it) is the fix if that decision is revisited.
+ * Known, reviewed exemptions. `side-switcher.tsx` reads position ONLY when the
+ * visitor taps its "use my location" button — user-initiated and one-shot,
+ * never on mount and never a watch. (The pre-E11 first-visit auto-ask this
+ * comment used to flag for review was removed as the last MHMDA floor before
+ * launch; the tap itself is the affirmative act the /privacy page promises.)
+ * The coordinate is classified on-device into kingston/edmonds and discarded;
+ * only that binary choice is written to the local `vk-side` preference cookie,
+ * so nothing is ever transmitted or stored server-side — there is nothing to
+ * consent to sharing, and the browser's own permission prompt is the whole
+ * gate. Enforced positively, not just by this exemption:
+ * tests/unit/side-switcher.test.tsx fails if a mount-time geolocation read (or
+ * anything beyond the binary cookie) ever comes back.
  *
  * `nearest-amenity.tsx` (E27) is the strongest exemption case here: the restroom
  * finder makes NO network call of any kind and persists nothing at all — not

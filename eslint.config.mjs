@@ -29,13 +29,19 @@ const eslintConfig = defineConfig([
   // occurrences go back to being ERRORS and `npm run lint` fails the build. The
   // failure is a nasty one to read, because it points at frozen files and reads
   // as "E22 broke the map editor" when nothing in them changed at all.
+  //
+  // The ferry-nav-feedback fix repointed the home page again after its pure
+  // R100 `git mv` into (site)/(home) — the scoped segment that carries the
+  // instant-nav loading boundary without wrapping /es (see
+  // tests/unit/hidden-page-404-guard.test.ts). Same file, same one
+  // pre-existing occurrence, new path.
   {
     files: [
       "src/app/(site)/admin/accounts/manager.tsx",
       "src/app/(site)/admin/map/editor.tsx",
       "src/app/(site)/admin/maps/editor.tsx",
       "src/app/(site)/ferry/ferry-board.tsx",
-      "src/app/(site)/page.tsx",
+      "src/app/(site)/(home)/page.tsx",
       "src/app/(site)/portal/nonprofit/\\[id\\]/editor.tsx",
       "src/app/(site)/webcams/webcam-grid.tsx",
       "src/components/feature-map.tsx",
