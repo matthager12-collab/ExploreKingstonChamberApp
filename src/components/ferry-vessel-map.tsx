@@ -54,10 +54,38 @@ function terminalEl(name: string): HTMLElement {
   return el;
 }
 
-function vesselEl(): HTMLElement {
+// Original top-down ferry icon evoking Washington State Ferries livery — the
+// classic double-ended Salish look: elongated white-trimmed hull, long green
+// cabin band with a roof walkway, open car deck at the stern. A thin dark
+// outline plus a soft white halo keep it readable over water and land alike.
+// Drawn bow-up so `rotation: v.heading` (compass degrees) points it the right
+// way; because the real boats are double-ended, the dark wheelhouse block at
+// the bow (vs the lighter open stern deck) is what makes the heading legible.
+// All sizing is inline (explicit width/height/display) so global CSS cannot
+// resize it. This is the owner-approved "candidate B" from the 2026-08-01
+// mockup review.
+function vesselIconSvg(): string {
+  const hull =
+    "M15 3 C20.6 7 24 11.4 24 16.4 L24 37.6 C24 42.6 20.6 47 15 51 C9.4 47 6 42.6 6 37.6 L6 16.4 C6 11.4 9.4 7 15 3 Z";
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 56" width="21" height="40" style="display:block" aria-hidden="true">` +
+    `<path d="${hull}" fill="none" stroke="#ffffff" stroke-width="5" stroke-opacity="0.9"/>` +
+    `<path d="${hull}" fill="#fdfffe" stroke="#16333d" stroke-width="1.5"/>` +
+    `<path d="M15 5.6 C19.2 8.8 21.6 12.4 21.6 16.8 L21.6 37.2 C21.6 41.6 19.2 45.2 15 48.4 C10.8 45.2 8.4 41.6 8.4 37.2 L8.4 16.8 C8.4 12.4 10.8 8.8 15 5.6 Z" fill="none" stroke="#0a7d5c" stroke-width="1.3" stroke-opacity="0.95"/>` +
+    `<rect x="11.6" y="40.5" width="6.8" height="5" rx="1.5" fill="#c3cfd4"/>` +
+    `<rect x="10.2" y="15.5" width="9.6" height="24" rx="4.8" fill="#0a7d5c"/>` +
+    `<rect x="14.1" y="18" width="1.8" height="19" rx="0.9" fill="#ffffff" fill-opacity="0.9"/>` +
+    `<rect x="11.6" y="11.6" width="6.8" height="3.8" rx="1.5" fill="#12333f"/>` +
+    `</svg>`
+  );
+}
+
+function vesselEl(v: VesselPosition): HTMLElement {
   const el = document.createElement("div");
-  el.style.cssText = "font-size:22px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));cursor:pointer;";
-  el.textContent = "⛴️";
+  el.style.cssText = "line-height:0;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35));cursor:pointer;";
+  el.setAttribute("role", "img");
+  el.setAttribute("aria-label", `Ferry ${v.name}`);
+  el.innerHTML = vesselIconSvg();
   return el;
 }
 
@@ -82,7 +110,7 @@ export function FerryVesselMap({
     if (!maplibregl || !map) return;
     for (const m of vesselMarkersRef.current) m.remove();
     vesselMarkersRef.current = data.vessels.map((v) =>
-      new maplibregl.Marker({ element: vesselEl(), anchor: "center", rotation: v.heading })
+      new maplibregl.Marker({ element: vesselEl(v), anchor: "center", rotation: v.heading })
         .setLngLat([v.lng, v.lat])
         .setPopup(new maplibregl.Popup({ offset: 14, maxWidth: "220px" }).setHTML(vesselPopup(v)))
         .addTo(map),
