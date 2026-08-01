@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { mapStyle, TILES_PMTILES_PATH, VECTOR_ATTRIBUTION } from "@/lib/map/basemap";
+import { abbreviateStreetName } from "@/lib/map/street-abbrev";
+import streetAbbrevs from "@/lib/map/street-abbrevs.json";
 
 // Guards the single source of truth for the map base layer. The vector swap
 // (E31, ADR-0006) landed and E32 removed the legacy raster config — these
@@ -89,16 +91,59 @@ describe("mapStyle (self-hosted vector base)", () => {
       }
     });
 
-    it("only ever renders names straight from the tiles — no abbreviations invented in code", () => {
+    it("renders USPS-abbreviated names via the generated match table, falling back to the raw tile name", () => {
+      // coalesce(short_name, match(name -> abbreviated, else name)): an
+      // official OSM short name still wins if the tiles ever carry one; a name
+      // the table lacks (tiles rebuilt before `npm run tiles:abbrevs`) falls
+      // back to the raw name — a stale table can cost an abbreviation, never
+      // a label.
+      const rawName = ["coalesce", ["get", "name"], ""];
+      const pairs = Object.entries(streetAbbrevs as Record<string, string>).flat();
+      expect(pairs.length).toBeGreaterThan(0);
       for (const l of [overview, minor, main]) {
-        // coalesce(short_name, name): prefer an official OSM short name if the
-        // tiles ever carry one; today they don't, so this must stay exactly a
-        // property lookup — any literal string here would be an invented name.
         expect(l.layout?.["text-field"]).toEqual([
           "coalesce",
           ["get", "short_name"],
-          ["get", "name"],
+          ["match", rawName, ...pairs, rawName],
         ]);
+      }
+    });
+
+    it("abbreviates mechanically, never renames: every table value re-derives from its key (USPS rules only)", () => {
+      // The style can only ever show a name the mechanical function produces
+      // from the full OSM name — a hand-edited "SR 104" entry fails here.
+      for (const [full, abbr] of Object.entries(streetAbbrevs as Record<string, string>)) {
+        expect(abbr, `entry for "${full}"`).toBe(abbreviateStreetName(full));
+      }
+      expect((streetAbbrevs as Record<string, string>)["Northeast State Highway 104"]).toBe(
+        "NE State Hwy 104",
+      );
+    });
+
+    it("keeps the approved z13–14 overview density and relaxes text-padding only from z15 up (owner: more names when zoomed in)", () => {
+      const padding = overview.layout?.["text-padding"] as unknown[];
+      expect(padding[0]).toBe("interpolate");
+      const stops: Array<[number, number]> = [];
+      for (let i = 3; i < padding.length; i += 2) {
+        stops.push([padding[i] as number, padding[i + 1] as number]);
+      }
+      // First stop at z14 keeps everything at z<=14 exactly at the #128 value.
+      expect(stops[0]).toEqual([14, 20]);
+      // Padding only ever decreases as you zoom in (never re-clutters a level
+      // the owner already approved, never tightens the town overview).
+      for (let i = 1; i < stops.length; i++) {
+        expect(stops[i][0]).toBeGreaterThan(stops[i - 1][0]);
+        expect(stops[i][1]).toBeLessThan(stops[i - 1][1]);
+      }
+    });
+
+    it("repeats long street names: line layers carry a tightened symbol-spacing", () => {
+      // MapLibre's default is 250; both line-placed layers must sit at or
+      // below it so long streets restate their name along the way.
+      for (const l of [minor, main]) {
+        const spacing = l.layout?.["symbol-spacing"] as number;
+        expect(spacing).toBeLessThanOrEqual(250);
+        expect(spacing).toBeGreaterThanOrEqual(100); // sanity: not wallpaper
       }
     });
 

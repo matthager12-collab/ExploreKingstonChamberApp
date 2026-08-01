@@ -4,6 +4,7 @@
 // every fare block links to its authoritative source.
 
 import type { Metadata } from "next";
+import Link from "next/link";
 import {
   Badge,
   Callout,
@@ -235,6 +236,17 @@ export default async function FerryPage() {
                   line is hours long, foot passengers stroll aboard.
                 </li>
               </ul>
+              {/* Walking on from the Edmonds side means leaving a car in
+                  Edmonds — /parking#edmonds is the honest run-down of where
+                  it can stay and where it gets towed. */}
+              <p className="mt-3">
+                <Link
+                  href="/parking#edmonds"
+                  className="inline-flex min-h-[44px] items-center text-sm font-semibold text-tide-deep underline"
+                >
+                  {`${copyText(copy, "edmonds.ferry.crosslink")} →`}
+                </Link>
+              </p>
             </div>
           </Card>
           <Card>

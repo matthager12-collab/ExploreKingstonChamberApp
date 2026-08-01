@@ -147,7 +147,10 @@ Rendering details worth knowing:
   IntersectionObserver until the map scrolls into view (perf budget). The base
   style comes from `mapStyle()` in `src/lib/map/basemap.ts` — see "The basemap"
   below. Markers are HTML `Marker` elements (teardrops); lines/areas are
-  GeoJSON sources batched by render style.
+  GeoJSON sources batched by render style. Because markers are DOM elements
+  above the canvas, MapLibre's symbol-collision engine cannot see them —
+  street labels declutter against each other, and markers simply draw over any
+  label beneath them.
 - **On-map name labels** (chips + hand-rolled declutter, with per-feature admin
   overrides) — the whole subsystem is documented in
   [MAP-LABELS.md](MAP-LABELS.md).
@@ -451,6 +454,10 @@ Facts worth knowing:
   render — the guarantee is asserted by `src/lib/map/__tests__/basemap.test.ts`.
   The only symbol layers are street-name TEXT (three `road-*` layers using
   MapLibre's native label collision — see [MAP-LABELS.md](MAP-LABELS.md)).
+  Street names render USPS-abbreviated via `streetTextField()` and the
+  generated table `src/lib/map/street-abbrevs.json`; regenerate with
+  `npm run tiles:abbrevs` whenever the tiles are rebuilt — the drift-guard
+  test in `tests/unit/map/street-abbrev-drift.test.ts` fails until you do.
 - **Brand palette (E31 phase 7).** Every style color is a named entry in the
   module's `PALETTE`, derived as *tints* of the Tailwind brand tokens in
   `src/app/globals.css` (shell/sand → paper + land, seaglass/tide → water,

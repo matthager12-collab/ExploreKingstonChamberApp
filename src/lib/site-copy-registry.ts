@@ -1296,6 +1296,135 @@ export const COPY_BLOCKS = [
       "Run a Kingston business and don't have an account yet? Portal invite codes come from the Kingston Chamber.",
   },
   // =============== end "Get listed" CTAs (copy/get-listed-cta) ===============
+
+  // ============== BEGIN edmonds.* (Edmonds-side parking, /parking) ==============
+  // The "park in Edmonds, walk on" section (feat/edmonds-side-parking). Facts
+  // verified 2026-07-31 — sources live on each card via
+  // src/lib/data/edmonds-parking.ts; the copy here is the SENTENCES only.
+  // {walkOnRoundTrip} is the E27 fare token (admin-editable at
+  // /admin/ferry-info → Fares), filled at render time exactly as /simple and
+  // /es fill it — never hardcode a fare figure in this block.
+  // Time-sensitive facts (U-Park rate drift, Sound Transit's 2027 paid-parking
+  // watch) belong in docs/OPERATIONS.md §14.5, not in this copy.
+  {
+    key: "edmonds.section.title",
+    page: "Parking — Edmonds side",
+    label: "Section title",
+    fallback: "Parking on the Edmonds side",
+  },
+  {
+    key: "edmonds.section.subtitle",
+    page: "Parking — Edmonds side",
+    label: "Section subtitle",
+    multiline: true,
+    fallback:
+      "Leave the car in Edmonds and walk onto the boat. You skip the car line, and there is always room on foot. Here is where a car can actually stay over there — and where it gets towed.",
+  },
+  {
+    key: "edmonds.fare",
+    page: "Parking — Edmonds side",
+    label: "Walk-on fare sentence ({walkOnRoundTrip} is filled from the fares record)",
+    multiline: true,
+    fallback:
+      "A walk-on ticket is {walkOnRoundTrip} and covers the whole round trip. You pay it once, in Edmonds — the boat home from Kingston is free.",
+  },
+  {
+    key: "edmonds.upark.summary",
+    page: "Parking — Edmonds side",
+    label: "U-Park card body",
+    multiline: true,
+    fallback:
+      "The one real all-day lot near the dock, about a 2-minute walk from the terminal: 64 spaces, including 2 spaces that are free with a disabled parking placard. WSDOT lists the rate as $15–$20 — verify the posted rate at the pay station before you leave the car. Staying overnight or longer? Call U-Park first at (206) 284-9797.",
+  },
+  {
+    key: "edmonds.shortterm.summary",
+    page: "Parking — Edmonds side",
+    label: "Short-term streets card body",
+    multiline: true,
+    fallback:
+      "Most signed streets near the dock allow 3 hours, and the clock only runs from midnight to 6 pm, except Sundays and holidays. After 6 pm, and all day Sunday, the limit lapses — an evening or Sunday trip can park free on the street. Brackett's Landing, the beach lot beside the terminal, allows 4 hours. Good for a quick out-and-back, not for a day trip. The sign on the pole is always the rule.",
+  },
+  {
+    key: "edmonds.avoid.title",
+    page: "Parking — Edmonds side",
+    label: "Do-not-park callout title",
+    fallback: "Do not park here for the ferry",
+  },
+  {
+    key: "edmonds.avoid.intro",
+    page: "Parking — Edmonds side",
+    label: "Do-not-park callout intro",
+    multiline: true,
+    fallback:
+      "These places sit right by the terminal and look convenient. They tow, and a ferry rider is not their customer.",
+  },
+  {
+    key: "edmonds.avoid.salish",
+    page: "Parking — Edmonds side",
+    label: "Do-not-park: Salish Crossing",
+    multiline: true,
+    fallback:
+      "The shopping center is for its own customers only and tows and boots actively. The old commuter-parking arrangement there ended in 2023.",
+  },
+  {
+    key: "edmonds.avoid.harborsquare",
+    page: "Parking — Edmonds side",
+    label: "Do-not-park: Harbor Square",
+    multiline: true,
+    fallback: "For patrons of its businesses only — no all-day parking.",
+  },
+  {
+    key: "edmonds.avoid.portlots",
+    page: "Parking — Edmonds side",
+    label: "Do-not-park: Port of Edmonds lots",
+    multiline: true,
+    fallback:
+      "For people using the marina or Port facilities only. Guest spaces allow 3 hours.",
+  },
+  {
+    key: "edmonds.avoid.sounder",
+    page: "Parking — Edmonds side",
+    label: "Do-not-park: Edmonds Station Sounder lot",
+    multiline: true,
+    fallback:
+      "The free Sound Transit lot is for transit passengers only, 24 hours max — walking onto the ferry does not count, even when the lot sits half empty. Cars parked there for anything else can be impounded.",
+  },
+  {
+    key: "edmonds.avoid.terminal",
+    page: "Parking — Edmonds side",
+    label: "Do-not-park: the terminal itself",
+    multiline: true,
+    fallback: "The Edmonds ferry terminal has no public parking at all.",
+  },
+  {
+    key: "edmonds.bus.summary",
+    page: "Parking — Edmonds side",
+    label: "Bus-in card body",
+    multiline: true,
+    fallback:
+      "Skip Edmonds parking entirely: leave the car at Community Transit's free Edmonds Park & Ride and ride the bus in. Routes 102, 130, 166 and 909 connect directly to the ferry terminal. Community Transit itself recommends the bus, because parking near the terminal is limited.",
+  },
+  {
+    key: "edmonds.multiday.title",
+    page: "Parking — Edmonds side",
+    label: "Multi-day gap callout title",
+    fallback: "Leaving a car for several days? Edmonds has no verified option",
+  },
+  {
+    key: "edmonds.multiday.body",
+    page: "Parking — Edmonds side",
+    label: "Multi-day gap callout body",
+    multiline: true,
+    fallback:
+      "As of July 2026 we can find no published option for leaving a car near the Edmonds terminal for more than about a day, so rather than guess, we say so plainly. For a multi-day trip: have someone drop you off, come by bus or train, or call U-Park at (206) 284-9797 and ask before you count on their lot.",
+  },
+  {
+    key: "edmonds.ferry.crosslink",
+    page: "Parking — Edmonds side",
+    label: "Cross-link text on /ferry's walk-on card (links to /parking#edmonds)",
+    fallback: "Parking on the Edmonds side — where a car can stay, and where it gets towed",
+  },
+  // =============== END edmonds.* (Edmonds-side parking, /parking) ===============
 ] as const satisfies readonly CopyBlock[];
 
 /** Union of every registered copy key — a typo at a call site is a tsc error. */

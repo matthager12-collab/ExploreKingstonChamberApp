@@ -5,8 +5,8 @@
 //      today" panel, and the home callout. Ships OFF so the Chamber can validate
 //      first, then flip it on.
 //   2. An accuracy panel — the latest backtest (heuristic prediction vs. the
-//      fullness we've actually logged), with a "run now" button, so staff can
-//      judge whether the model is good enough to turn on.
+//      fullness we've actually logged), a plain-English verdict on whether it's
+//      good enough to show, a day-by-day trend chart, and a "run now" button.
 //
 // Authorization is server-side (/api/admin/ferry-prediction and
 // /api/admin/ferry-accuracy both require role admin). Plain fetch + local state,
@@ -14,6 +14,9 @@
 
 import { useState } from "react";
 import { Badge, Card } from "@/components/ui";
+import { accuracyVerdict, type VerdictTone } from "@/lib/ferry-accuracy-verdict";
+import type { DailyAccuracyPoint } from "@/lib/stores/ferry-observations";
+import { AccuracyTrend } from "./accuracy-trend";
 
 interface Setting {
   enabled: boolean;
@@ -34,7 +37,20 @@ export interface PredictionState {
   enabled: boolean;
   setting: Setting | null;
   accuracy: { latest: AccuracyMetrics | null; history: AccuracyMetrics[] };
+  /** Per-day series behind the trend chart, oldest first. */
+  daily: DailyAccuracyPoint[];
 }
+
+// Verdict tone → Badge tone. Kept here so the verdict module stays UI-free.
+// The Badge palette has no amber, so "borderline" takes the solid navy (a
+// definite state, not an alarm) and coral — the app's warning affordance — is
+// reserved for the one verdict that calls for action.
+const VERDICT_BADGE = {
+  ready: "green",
+  borderline: "navy",
+  "not-ready": "coral",
+  unknown: "sand",
+} as const satisfies Record<VerdictTone, "green" | "navy" | "coral" | "sand">;
 
 const btn = "rounded-full px-4 py-2 text-sm font-semibold disabled:cursor-default disabled:opacity-100";
 
@@ -59,7 +75,7 @@ export function FerryPredictionControl({ initial }: { initial: PredictionState }
   const [busy, setBusy] = useState<null | "on" | "off" | "run">(null);
   const [error, setError] = useState<string | null>(null);
 
-  const { enabled, setting, accuracy } = state;
+  const { enabled, setting, accuracy, daily } = state;
 
   async function setEnabled(next: boolean) {
     setBusy(next ? "on" : "off");
@@ -91,13 +107,24 @@ export function FerryPredictionControl({ initial }: { initial: PredictionState }
     try {
       const res = await fetch("/api/admin/ferry-accuracy", { method: "POST" });
       const data = (await res.json().catch(() => ({}))) as
-        | { ok: true; latest: AccuracyMetrics | null; history: AccuracyMetrics[] }
+        | {
+            ok: true;
+            latest: AccuracyMetrics | null;
+            history: AccuracyMetrics[];
+            daily: DailyAccuracyPoint[];
+          }
         | { error?: string };
       if (!res.ok || !("latest" in data)) {
         setError(("error" in data && data.error) || "Something went wrong");
         return;
       }
-      setState((s) => ({ ...s, accuracy: { latest: data.latest, history: data.history } }));
+      setState((s) => ({
+        ...s,
+        accuracy: { latest: data.latest, history: data.history },
+        // Older deploys of the route didn't return `daily`; keep what we have
+        // rather than blanking the chart on an unexpected shape.
+        daily: data.daily ?? s.daily,
+      }));
     } catch {
       setError("Network error — try again");
     } finally {
@@ -106,6 +133,7 @@ export function FerryPredictionControl({ initial }: { initial: PredictionState }
   }
 
   const a = accuracy.latest;
+  const verdict = accuracyVerdict(a, daily);
 
   return (
     <Card className="mb-6 border-tide/40">
@@ -190,20 +218,25 @@ export function FerryPredictionControl({ initial }: { initial: PredictionState }
               <Metric label="Bias" value={`${a.bias > 0 ? "+" : ""}${a.bias}`} hint={a.bias > 0 ? "runs high" : a.bias < 0 ? "runs low" : "even"} />
               <Metric label="Sample" value={`${a.n}`} hint={`over ${a.spanDays} day${a.spanDays === 1 ? "" : "s"}`} />
             </div>
-            <p className="mt-3 text-sm text-ink-soft">
-              On {a.n} logged sailing{a.n === 1 ? "" : "s"} across {a.spanDays} day
-              {a.spanDays === 1 ? "" : "s"}, the estimate is off by about{" "}
-              <span className="font-semibold text-ink">{a.mae}</span> busyness points on average and
-              names the right level{" "}
-              <span className="font-semibold text-ink">{pct(a.levelMatchRate)}</span> of the time.
-              {a.bias >= 2
-                ? " It's leaning high (over-predicting)."
-                : a.bias <= -2
-                  ? " It's leaning low (under-predicting)."
-                  : " It's well-centered."}{" "}
-              Give it more days before trusting a small sample.
+
+            {/* The go/no-go read. The four tiles above are the evidence; this is
+                what they mean for the decision this page exists to support. */}
+            <div className="mt-4 rounded-xl border border-sand bg-sand/25 px-4 py-3">
+              <p className="flex flex-wrap items-center gap-2">
+                <Badge tone={VERDICT_BADGE[verdict.tone]}>{verdict.headline}</Badge>
+              </p>
+              <p className="mt-2 text-sm text-ink">{verdict.detail}</p>
+            </div>
+
+            <p className="mt-5 font-semibold text-sound-deep">Accuracy day by day</p>
+            <p className="mt-1 text-sm text-ink-soft">
+              The headline figures above are running totals across every sailing ever logged, so
+              they barely move once the sample is large. This chart splits them out by day, so a
+              change in the model — or a stretch of unusual traffic — actually shows up.
             </p>
-            <p className="mt-1 text-xs text-ink-soft">Last run {fmtWhen(a.computedAt)}.</p>
+            <AccuracyTrend series={daily} />
+
+            <p className="mt-3 text-xs text-ink-soft">Last run {fmtWhen(a.computedAt)}.</p>
           </>
         ) : (
           <p className="mt-2 text-sm text-ink-soft">

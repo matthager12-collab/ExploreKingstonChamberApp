@@ -5,12 +5,55 @@
 // admin) now renders the self-hosted vector base below, and the legacy OSM
 // raster config + Leaflet are gone from the tree.
 
-import type { StyleSpecification } from "maplibre-gl";
+import type { ExpressionSpecification, StyleSpecification } from "maplibre-gl";
+
+import streetAbbrevs from "./street-abbrevs.json";
 
 // --- Self-hosted vector base (MapLibre + our Protomaps PMTiles, E31) --------
 
 /** Same-origin path to the self-hosted vector tiles (the E31 Phase 2 route). */
 export const TILES_PMTILES_PATH = "/api/map/tiles/kingston.pmtiles";
+
+// Road `kind` values that get street-name labels. The union is also what
+// scripts/derive-street-abbrevs.ts scans when it regenerates the abbreviation
+// table, so the table and the label filters can never disagree on eligibility.
+// ferry + rail are deliberately absent everywhere: the tiles carry NAMED
+// ferry/rail features on the roads layer ("Edmonds - Kingston Ferry") and a
+// filter that admitted them would float route names over water.
+export const MAIN_LABELED_ROAD_KINDS = ["highway", "major_road", "medium_road"] as const;
+export const MINOR_LABELED_ROAD_KINDS = ["minor_road", "path", "other"] as const;
+export const LABELED_ROAD_KINDS: readonly string[] = [
+  ...MAIN_LABELED_ROAD_KINDS,
+  ...MINOR_LABELED_ROAD_KINDS,
+];
+
+/**
+ * The shared text-field for every street-label layer: USPS-abbreviated names
+ * (owner request 2026-08-01).
+ *
+ * The tiles carry full OSM names only ("Northeast State Highway 104") and
+ * MapLibre expressions cannot string-replace, so the mechanical USPS rules
+ * (src/lib/map/street-abbrev.ts) run at BUILD time over every road name in the
+ * served archive; the resulting full->abbreviated table (street-abbrevs.json,
+ * regenerate with `npm run tiles:abbrevs`) folds into one ["match"] expression
+ * here. Unknown names — a rebuilt archive gaining streets before the table is
+ * refreshed — fall back to the raw tile name, so a stale table can only ever
+ * cost an abbreviation, never a label. An official OSM `short_name` would win
+ * over both, but the current build has no such attribute.
+ *
+ * The inner coalesce to "" keeps the match input string-typed for unnamed
+ * roads (a null input would be a runtime expression error); "" matches no
+ * table key and renders no label, exactly like the plain name lookup did.
+ */
+function streetTextField(): ExpressionSpecification {
+  const rawName: ExpressionSpecification = ["coalesce", ["get", "name"], ""];
+  const pairs = Object.entries(streetAbbrevs as Record<string, string>).flat();
+  const abbreviated =
+    pairs.length === 0
+      ? rawName
+      : (["match", rawName, ...pairs, rawName] as unknown as ExpressionSpecification);
+  return ["coalesce", ["get", "short_name"], abbreviated];
+}
 
 export const VECTOR_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · <a href="https://protomaps.com">Protomaps</a>';
@@ -59,7 +102,8 @@ const PALETTE = {
  * and street-name glyphs from `public/fonts` (Noto Sans, OFL — the Protomaps
  * basemaps glyph set). There is still NO sprite, NO icon, and NO `pois`
  * source-layer, which is why no church symbol (or any POI icon) can appear —
- * the only symbol layer is line-placed street-name TEXT from the roads layer.
+ * the only symbol layers are street-name TEXT from the roads layer (names
+ * USPS-abbreviated through the generated match table, see streetTextField).
  *
  * `pmtilesUrl` is the absolute `pmtiles://…` archive URL; callers build it from
  * `TILES_PMTILES_PATH` + `location.origin` (this module stays window-free —
@@ -122,17 +166,18 @@ export function mapStyle(pmtilesUrl: string): StyleSpecification {
         id: "road-names-overview", type: "symbol", source: "kingston", "source-layer": "roads",
         minzoom: 13,
         maxzoom: 16.5,
-        filter: ["match", ["get", "kind"],
-          ["highway", "major_road", "medium_road", "minor_road", "path", "other"], true, false],
+        filter: ["match", ["get", "kind"], [...LABELED_ROAD_KINDS], true, false],
         layout: {
           "symbol-placement": "point",
-          // Prefer an official OSM short name when the tiles ever carry one;
-          // never invent abbreviations in code. (The current Protomaps build
-          // has no short_name attribute, so this coalesce is a no-op today.)
-          "text-field": ["coalesce", ["get", "short_name"], ["get", "name"]],
+          "text-field": streetTextField(),
           "text-font": ["Noto Sans Regular"],
           "text-size": ["interpolate", ["linear"], ["zoom"], 13, 9, 16, 11.5],
-          "text-padding": 20,
+          // The density dial (collision-only decluttering). z13–14 keeps the
+          // #128 spacing the owner approved; from z15 the padding relaxes so
+          // residential blocks label comprehensively as you zoom in (owner
+          // request 2026-08-01: "increase the amount of named streets
+          // especially when zoomed in").
+          "text-padding": ["interpolate", ["linear"], ["zoom"], 14, 20, 15, 10, 16, 4],
         },
         paint: {
           "text-color": PALETTE.labelMinor,
@@ -148,11 +193,12 @@ export function mapStyle(pmtilesUrl: string): StyleSpecification {
         // z18-evaluated size, so a steeper ramp would un-place labels.
         id: "road-labels-minor", type: "symbol", source: "kingston", "source-layer": "roads",
         minzoom: 15,
-        filter: ["match", ["get", "kind"], ["minor_road", "path", "other"], true, false],
+        filter: ["match", ["get", "kind"], [...MINOR_LABELED_ROAD_KINDS], true, false],
         layout: {
           "symbol-placement": "line",
-          "symbol-spacing": 300,
-          "text-field": ["coalesce", ["get", "short_name"], ["get", "name"]],
+          // 240 (was 300): long residential streets repeat their name sooner.
+          "symbol-spacing": 240,
+          "text-field": streetTextField(),
           "text-font": ["Noto Sans Regular"],
           "text-size": ["interpolate", ["linear"], ["zoom"], 15, 11, 16, 12],
           "text-padding": 1,
@@ -171,13 +217,15 @@ export function mapStyle(pmtilesUrl: string): StyleSpecification {
         // Kingston Road Northeast") still fit their merged lines at town zoom.
         id: "road-labels", type: "symbol", source: "kingston", "source-layer": "roads",
         minzoom: 12,
-        filter: ["match", ["get", "kind"], ["highway", "major_road", "medium_road"], true, false],
+        filter: ["match", ["get", "kind"], [...MAIN_LABELED_ROAD_KINDS], true, false],
         layout: {
           "symbol-placement": "line",
-          "text-field": ["coalesce", ["get", "short_name"], ["get", "name"]],
+          "text-field": streetTextField(),
           "text-font": ["Noto Sans Regular"],
           "text-size": ["interpolate", ["linear"], ["zoom"], 12, 9.5, 16, 13],
-          "symbol-spacing": 180,
+          // 150 (was 180): SR-104 and the arterials repeat their name more
+          // often, so a street-level view still shows what road you're on.
+          "symbol-spacing": 150,
           "text-padding": 1,
         },
         paint: {
