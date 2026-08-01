@@ -14,13 +14,15 @@
 
 import { z } from "zod";
 
-/** The five queue consumers. */
+/** The queue consumers. `claim_request` (producer E17) is the public
+ *  own-this-listing intake — schema here, route in the E17 claim slice. */
 export const WORKLIST_TYPES = [
   "moderation",
   "sync_conflict",
   "staleness",
   "report_inaccurate",
   "privacy_request",
+  "claim_request",
 ] as const;
 export type WorklistType = (typeof WORKLIST_TYPES)[number];
 
@@ -128,12 +130,33 @@ export const privacyRequestPayloadSchema = z.object({
   scopeNote: z.string().max(2000).optional(),
 });
 
+/** claim_request — a business owner asking to claim an existing listing
+ *  (E17, M-10-03/FR-A96). Creates a queue item and NOTHING else: no session,
+ *  no account, no edit rights — the Chamber verifies out-of-band (call the
+ *  listed number) and mints a bound invite from the claims console.
+ *  PRIVACY: name + ONE contact field, message optional — same
+ *  data-minimization posture as report_inaccurate; this shape must never
+ *  grow location or additional identity fields. Repeat requests for the
+ *  same listing merge into the open item (count increments).
+ *  NOTE (E16 coordination): the sync_conflict union member above is
+ *  untouched by this addition. */
+export const claimRequestPayloadSchema = z.object({
+  store: z.string().min(1),
+  id: z.string().min(1),
+  businessName: z.string().max(200).optional(),
+  contactName: z.string().min(1, "your name is required").max(200),
+  contact: z.string().min(1, "a way to reach you is required").max(200),
+  message: z.string().max(1000).optional(),
+  count: z.number().int().min(1),
+});
+
 export const WORKLIST_PAYLOAD_SCHEMAS: Record<WorklistType, z.ZodType> = {
   moderation: moderationPayloadSchema,
   sync_conflict: syncConflictPayloadSchema,
   staleness: stalenessPayloadSchema,
   report_inaccurate: reportInaccuratePayloadSchema,
   privacy_request: privacyRequestPayloadSchema,
+  claim_request: claimRequestPayloadSchema,
 };
 
 /** Closed per-type resolution vocabularies. `dismissed` state (no resolution)
@@ -144,6 +167,7 @@ export const WORKLIST_RESOLUTIONS = {
   staleness: ["verified", "archived"],
   report_inaccurate: ["fixed", "dismissed"],
   privacy_request: ["fulfilled", "declined"],
+  claim_request: ["invited", "rejected", "duplicate"],
 } as const satisfies Record<WorklistType, readonly string[]>;
 
 export type WorklistResolution = (typeof WORKLIST_RESOLUTIONS)[WorklistType][number];
