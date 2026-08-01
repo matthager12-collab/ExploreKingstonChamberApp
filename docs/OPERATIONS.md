@@ -109,7 +109,8 @@ on Render; they belong only to a Vercel deployment (§7, `.env.production.exampl
    ids an account may edit live on that org as `linked_ids`, not on the user.
    Hand the code over; they redeem it at `/portal/join`, and you can revoke an
    un-redeemed code from the same page. (`/api/auth/login`, `/setup`, `/redeem`
-   are rate-limited.)
+   are rate-limited.) To invite **every listed business at once**, use the
+   batch script — see **[Batch onboarding invites (launch)](#batch-onboarding-invites-launch)**.
 4. Portal edits (hours, listings, events, volunteer needs) land in the
    `record` table and appear on public pages within ~60 s (ISR).
 
@@ -815,6 +816,41 @@ Invites now expire on their own after **14 days**, and an invite bound to an
 email address only works for that address. An **admin** invite cannot be minted
 without an email binding at all — a forwarded admin code would otherwise be a
 bearer grant on the whole site.
+
+### Batch onboarding invites (launch)
+
+`scripts/mint-invites.ts` mints a **member-business** invite for **every listed
+business — restaurants AND lodging** — so onboarding all ~22 doesn't mean
+clicking `/admin/accounts` 22 times. Each invite is linked to its listing and
+creates the business's org on redemption, and it goes through the **same
+validation + mint path as the admin UI** (`src/lib/invite-mint.ts`), so
+script-minted invites carry the 14-day expiry, are revocable at
+`/admin/accounts`, and are audit-rowed like any other.
+
+```sh
+# Dry run (the default): prints the mint/skip plan, writes NOTHING.
+DATABASE_URL=… npm run invites:mint -- --skip-existing
+
+# Mint for real, CSV to a file:
+DATABASE_URL=… npm run invites:mint -- --execute --skip-existing \
+    --actor you@chamber.example --out invites.csv
+```
+
+Flags: `--execute` (default is dry-run) · `--only id,id` (restrict to specific
+listing ids) · `--skip-existing` (skip listings already covered by an **active**
+invite or by an account whose org links to the listing — expired/revoked/used
+invites do *not* count, so a lapsed business gets re-invited) · `--out file`
+(CSV destination; without it CSV goes to stdout — prefer `--out`, or `npm run
+-s`, because npm's run banner also prints to stdout) · `--base-url` (join-URL
+origin; defaults to `NEXT_PUBLIC_SITE_URL`) · `--actor` (audit-trail actor —
+use your admin email).
+
+The CSV is a mail-merge input: `business_name, listing_id, invite_code,
+join_url, expires`. The join URL is plain `/portal/join` (the page has no
+`?code=` prefill); the code is its own column. **The script never sends
+anything** — the Chamber emails the codes from its own inbox. If a run fails
+partway, already-minted codes stay live (revoke or keep them); fix the cause
+and re-run with `--skip-existing` to fill the gaps.
 
 ### Deploy day: everyone signs in again (one time)
 
