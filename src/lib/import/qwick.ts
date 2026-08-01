@@ -649,10 +649,17 @@ export async function persistDryRun(plan: QwickPlan, runBy: string): Promise<App
  *  Every record write validates against the strict directory schema BEFORE
  *  any write happens (all-or-nothing per charter: a malformed candidate must
  *  never partially write — validation failures should have quarantined at
- *  plan time, so a throw here is a bug, not data). */
+ *  plan time, so a throw here is a bug, not data).
+ *
+ *  `principal` stamps every RECORD write (updated_by) and MUST stay
+ *  IMPORT_PRINCIPAL for real imports — it is the refresh discriminator the
+ *  precedence law keys on. `runBy` names who initiated the run in the
+ *  import_run row only (the admin's email when the run comes from the admin
+ *  surface); it defaults to `principal` so the CLI is unchanged. */
 export async function applyQwickPlan(
   plan: QwickPlan,
   principal: string = IMPORT_PRINCIPAL,
+  runBy: string = principal,
 ): Promise<ApplyResult> {
   // Pre-validate every planned write so a late failure can't half-apply.
   for (const entry of plan.created) {
@@ -699,7 +706,7 @@ export async function applyQwickPlan(
       createdBy: principal,
     });
   }
-  return { runId: await persistRun("apply", principal, plan), stats: planStats(plan) };
+  return { runId: await persistRun("apply", runBy, plan), stats: planStats(plan) };
 }
 
 /** Past runs, newest first — the history read the admin surface lists. */

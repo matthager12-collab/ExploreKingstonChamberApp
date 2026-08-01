@@ -146,6 +146,15 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     capability: "manage-site",
   },
   {
+    id: "import-qwick",
+    href: "/admin/import/qwick",
+    title: "Listings import (Qwick)",
+    navLabel: "Import",
+    blurb:
+      "Preview and apply a saved Qwick kiosk export — everything lands as invisible drafts.",
+    capability: "manage-site",
+  },
+  {
     id: "audit",
     href: "/admin/audit",
     title: "Change history",
