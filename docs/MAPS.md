@@ -147,6 +147,16 @@ Rendering details worth knowing:
   by render style. Because markers are DOM elements above the canvas, MapLibre's
   symbol-collision engine cannot see them — street labels declutter against
   each other, and markers simply draw over any label beneath them.
+- **Colorway** ("Evergreen & Sound", [ADR-0007](adr/ADR-0007-map-colorway-and-overlay-palette.md)):
+  the base is a LIGHT, desaturated family and the overlay a DARK, saturated one,
+  so hue is free to carry meaning on both sides. `earth` and `building` are
+  deliberately achromatic — they are the two largest surfaces, and keeping them
+  neutral is what gives every overlay hue somewhere safe to sit. Two rules that
+  are load-bearing, not cosmetic: **don't deepen the greens** (`forest #b3cbad`
+  puts the worst text surface at 4.84:1, one step off failing AA), and **don't
+  re-saturate the arterial** (`#e6dcc4` is the only warm sand that separates
+  from the `park-and-ride-24h` badge). `basemap.test.ts` asserts no colours, so
+  the ADR and review are the only guards here.
 - **Auto-frame:** after drawing, the map fits bounds to the content it actually
   drew (overriding a stale center/zoom) — but only when the content spans ≤ 4 km
   and the view doesn't carry the wide `streets` overlay. A lone far pin (e.g.
