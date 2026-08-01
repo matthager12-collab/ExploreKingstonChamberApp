@@ -10,8 +10,19 @@
     "measures production would fail on someone else's traffic spike and would",
     "block a PR for a reason the author cannot act on.",
     "",
-    "numberOfRuns 3 + median aggregation because Lighthouse is noisy in CI.",
-    "Flakiness is handled by taking the median, NOT by loosening the budget."
+    "numberOfRuns 5 + median aggregation because Lighthouse is noisy in CI.",
+    "Flakiness is handled by taking the median, NOT by loosening the budget.",
+    "Was 3; raised to 5 (2026-07-31) with the CI cache-warmup step. Measured",
+    "mechanism of the home-page coin flip, from the lhr traces: hydration",
+    "kicks off Link prefetches at ~140-190ms, and the router also preloads the",
+    "prefetched routes' code-split chunks (the basemap/map chunk among them).",
+    "Observed first paint lands in the same ~145-190ms window. On the draws",
+    "where a chunk SCRIPT starts 1-2ms before the observed paint, Lantern adds",
+    "a full simulated request round to FCP (~905ms -> ~1430ms) and the run",
+    "scores 0.84-0.86 instead of 0.88-0.90. That race is millisecond-scale",
+    "scheduling jitter — not controllable without disabling Link prefetch (a",
+    "real UX regression). A 5-run median needs 3 bad draws to fail instead of",
+    "2; the assertion itself is unchanged."
   ],
   "ci": {
     "collect": {
@@ -24,7 +35,7 @@
         "http://127.0.0.1:3000/eat",
         "http://127.0.0.1:3000/events"
       ],
-      "numberOfRuns": 3,
+      "numberOfRuns": 5,
       "settings": {
         "//": "NO desktop preset — it would override the mobile emulation and throttling below, and we would be measuring a laptop while calling it a phone budget.",
         "formFactor": "mobile",

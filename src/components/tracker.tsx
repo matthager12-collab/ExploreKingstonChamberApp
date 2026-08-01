@@ -227,13 +227,78 @@ export function WebVitals() {
   return null;
 }
 
-/** Fires one pageview per pathname change. Renders nothing. */
+/**
+ * Fires one pageview per pathname change. Renders nothing.
+ *
+ * The beacon is DEFERRED past first paint rather than sent from the effect
+ * body. Hydration runs before first paint on fast loads, so an eager beacon
+ * lands inside the pre-LCP window — the Lighthouse trace showed /api/track
+ * finishing at ~134ms against an observed LCP of ~142ms. Measurement caveat
+ * (2026-07-31): Lighthouse's Lantern simulation turned out NOT to count the
+ * Ping-type beacon against FCP/LCP — the CI coin-flip was the cold first run
+ * plus a prefetched route chunk racing the paint — so this deferral is NOT
+ * load-bearing for the CI gate. It ships for the real visitor: a POST
+ * competing with the hero image for a phone's ferry-queue bandwidth during
+ * the most latency-critical window of the load, for zero benefit.
+ *
+ * THE DEFERRAL MUST BE PAINT-ANCHORED, NOT JUST IDLE-ANCHORED. Measured on
+ * the production build: requestIdleCallback alone fires at ~140-158ms —
+ * hydration finishes, the event loop goes idle, and the first paint has NOT
+ * happened yet (~146-170ms). An idle-only deferral put the beacon right back
+ * in the pre-paint window. requestAnimationFrame runs just before the next
+ * frame paints, so idle work scheduled from inside it lands strictly after
+ * that paint.
+ *
+ * No pageview is ever lost to the deferral: leaving the page (pagehide /
+ * visibility-hidden, same pair WebVitals uses — iOS Safari does not reliably
+ * fire visibilitychange when the app is swiped away) or client-navigating
+ * away (effect cleanup) flushes immediately, and `sent` makes the paths
+ * idempotent. A hidden tab never fires rAF, so the deferral is only rAF-
+ * anchored while visible; hidden tabs schedule idle work directly (their
+ * pre-paint window is moot) and the visibility flush covers close-from-
+ * background. requestIdleCallback is feature-detected (missing on Safari);
+ * the fallback timer waits 500ms, comfortably past first paint.
+ */
 export function Tracker() {
   const pathname = usePathname();
 
   useEffect(() => {
     if (!pathname || pathname.startsWith("/admin")) return;
-    send({ type: "pageview", path: pathname, sessionId: getSessionId() });
+    let sent = false;
+    let rafId: number | undefined;
+    let idleId: number | undefined;
+    let timerId: ReturnType<typeof setTimeout> | undefined;
+    const flush = () => {
+      if (sent) return;
+      sent = true;
+      send({ type: "pageview", path: pathname, sessionId: getSessionId() });
+    };
+    const scheduleIdle = () => {
+      if (typeof requestIdleCallback === "function") {
+        idleId = requestIdleCallback(flush, { timeout: 3000 });
+      } else {
+        timerId = setTimeout(flush, 500);
+      }
+    };
+    if (typeof requestAnimationFrame === "function" && document.visibilityState === "visible") {
+      rafId = requestAnimationFrame(scheduleIdle);
+    } else {
+      scheduleIdle();
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      // Client-side nav away before idle: record the view now, not never.
+      flush();
+      if (rafId !== undefined) cancelAnimationFrame(rafId);
+      if (idleId !== undefined) cancelIdleCallback(idleId);
+      if (timerId !== undefined) clearTimeout(timerId);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", flush);
+    };
   }, [pathname]);
 
   return null;
