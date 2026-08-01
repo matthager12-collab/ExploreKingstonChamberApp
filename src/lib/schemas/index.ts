@@ -3,6 +3,7 @@
 // docs/SCHEMAS.md describes how a future domain (E08 UGC, E12 events, E17
 // imports) joins the pattern.
 
+import { directoryListingSchema } from "./directory";
 import { eventSchema } from "./event";
 import { itinerarySchema } from "./itinerary";
 import { lodgingSchema } from "./lodging";
@@ -15,10 +16,12 @@ export const DOMAIN_SCHEMAS = {
   webcams: webcamSchema,
   restaurants: restaurantSchema,
   events: eventSchema,
+  directory: directoryListingSchema,
 } as const;
 
 export type SchemaDomain = keyof typeof DOMAIN_SCHEMAS;
 
+export * from "./directory";
 export * from "./event";
 export * from "./form";
 export * from "./itinerary";

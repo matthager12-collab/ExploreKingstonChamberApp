@@ -9,7 +9,16 @@
 // src/lib/types.ts is ask-first per the E07 charter).
 
 import type { z } from "zod";
-import type { EventItem, Itinerary, ItineraryStop, Lodging, Restaurant, Webcam } from "@/lib/types";
+import type {
+  DirectoryListing,
+  EventItem,
+  Itinerary,
+  ItineraryStop,
+  Lodging,
+  Restaurant,
+  Webcam,
+} from "@/lib/types";
+import type { directoryListingSchema } from "./directory";
 import type { eventSchema } from "./event";
 import type { itinerarySchema } from "./itinerary";
 import type { lodgingSchema } from "./lodging";
@@ -33,3 +42,6 @@ export type ItineraryStopParity = Assert<
   MutuallyAssignable<z.infer<typeof itinerarySchema>["stops"][number], ItineraryStop>
 >;
 export type EventParity = Assert<MutuallyAssignable<z.infer<typeof eventSchema>, EventItem>>;
+export type DirectoryListingParity = Assert<
+  MutuallyAssignable<z.infer<typeof directoryListingSchema>, DirectoryListing>
+>;

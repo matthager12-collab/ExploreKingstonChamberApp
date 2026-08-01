@@ -44,7 +44,9 @@ export type DomainDef = {
   key: string;
   label: string;
   noun: string;
-  publicPath: string;
+  /** Public route the domain renders on. Absent for admin-only domains
+   *  (E17 directory) — the editor then skips its "live on <path>" chrome. */
+  publicPath?: string;
   fields: FieldDef[];
   /** The domain's zod schema — the same object the API route validates with. */
   schema: z.ZodType;

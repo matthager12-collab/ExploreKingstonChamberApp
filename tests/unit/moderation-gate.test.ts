@@ -35,6 +35,10 @@ import { getEvents, getEventsAdmin } from "@/lib/stores/event-store";
 import { getItineraries, getItinerariesAdmin } from "@/lib/stores/itinerary-store";
 import { getLodging, getLodgingAdmin, getWebcams, getWebcamsAdmin } from "@/lib/stores/listing-stores";
 import { getRestaurant, getRestaurants, getRestaurantsAdmin } from "@/lib/stores/business-store";
+import {
+  getDirectoryListings,
+  getDirectoryListingsAdmin,
+} from "@/lib/stores/directory-store";
 import { listWorklistItems } from "@/lib/stores/worklist-store";
 import { createTestDb, type TestDb } from "../setup/pglite-db";
 
@@ -208,6 +212,29 @@ describe("(a) default getters are live-only; *Admin variants surface everything"
       ],
       getPublic: getWebcams,
       getAdmin: getWebcamsAdmin,
+    },
+    {
+      // E17 directory: seedless and strict-validated from birth — the doc
+      // must satisfy directoryListingSchema to clear the write gate.
+      store: "directory",
+      docs: [
+        {
+          id: "gate-pending-directory",
+          name: "Pending Shop",
+          category: "shop",
+          description: "Pending directory listing",
+          tags: [],
+        },
+        {
+          id: "gate-draft-directory",
+          name: "Draft Shop",
+          category: "shop",
+          description: "Draft directory listing",
+          tags: [],
+        },
+      ],
+      getPublic: getDirectoryListings,
+      getAdmin: getDirectoryListingsAdmin,
     },
     {
       store: "itineraries",

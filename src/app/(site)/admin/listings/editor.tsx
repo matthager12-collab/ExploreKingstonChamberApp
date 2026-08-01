@@ -7,15 +7,16 @@
 // src/components/admin/record-editor.tsx, which also mounts the E09
 // Provenance strip and RecordHistory (restore) panel for every domain here.
 
-import type { Lodging, Restaurant, Webcam } from "@/lib/types";
+import type { DirectoryListing, Lodging, Restaurant, Webcam } from "@/lib/types";
 import type { DomainDef, GenericRecord } from "@/lib/schemas/form";
 import { restaurantFields, restaurantSchema } from "@/lib/schemas/restaurant";
 import { lodgingFields, lodgingSchema } from "@/lib/schemas/lodging";
 import { webcamFields, webcamSchema } from "@/lib/schemas/webcam";
+import { directoryFields, directoryListingSchema } from "@/lib/schemas/directory";
 import { RecordEditor } from "@/components/admin/record-editor";
 import type { MediaItem } from "@/lib/media/refs";
 
-type DomainKey = "restaurants" | "lodging" | "webcams";
+type DomainKey = "restaurants" | "lodging" | "webcams" | "directory";
 
 const DOMAINS: DomainDef[] = [
   {
@@ -42,6 +43,16 @@ const DOMAINS: DomainDef[] = [
     fields: webcamFields,
     schema: webcamSchema,
   },
+  {
+    // E17 directory: imported/hand-created listings outside the curated
+    // domains. No public page renders it yet — publicPath stays unset so the
+    // editor doesn't advertise a route that 404s.
+    key: "directory",
+    label: "Directory",
+    noun: "directory listing",
+    fields: directoryFields,
+    schema: directoryListingSchema,
+  },
 ];
 
 export function ListingsEditor({
@@ -49,7 +60,12 @@ export function ListingsEditor({
   seedIds,
   photoLibrary,
 }: {
-  initial: { restaurants: Restaurant[]; lodging: Lodging[]; webcams: Webcam[] };
+  initial: {
+    restaurants: Restaurant[];
+    lodging: Lodging[];
+    webcams: Webcam[];
+    directory: DirectoryListing[];
+  };
   seedIds: Record<DomainKey, string[]>;
   /** Read server-side by the page — media-store is server-only, and this is a
    *  client component. Feeds the "photos" field on restaurants and lodging. */

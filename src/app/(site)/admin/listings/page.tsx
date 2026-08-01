@@ -6,6 +6,7 @@
 import type { Metadata } from "next";
 import { getLodgingAdmin, getWebcamsAdmin } from "@/lib/stores/listing-stores";
 import { getRestaurantsAdmin } from "@/lib/stores/business-store";
+import { getDirectoryListingsAdmin } from "@/lib/stores/directory-store";
 import { restaurants as restaurantSeed } from "@/lib/data/restaurants";
 import { lodging as lodgingSeed } from "@/lib/data/lodging";
 import { webcams as webcamSeed } from "@/lib/data/webcams";
@@ -23,10 +24,11 @@ export const metadata: Metadata = {
 export default async function AdminListingsPage() {
   // Admin read (E08): includes pending/draft records with status surfaced —
   // once members submit work, the reviewers must be able to see it.
-  const [restaurants, lodging, webcams, photoLibrary] = await Promise.all([
+  const [restaurants, lodging, webcams, directory, photoLibrary] = await Promise.all([
     getRestaurantsAdmin(),
     getLodgingAdmin(),
     getWebcamsAdmin(),
+    getDirectoryListingsAdmin(),
     getMediaItems(),
   ]);
 
@@ -43,11 +45,12 @@ export default async function AdminListingsPage() {
       >
         <ListingsEditor
           photoLibrary={photoLibrary}
-          initial={{ restaurants, lodging, webcams }}
+          initial={{ restaurants, lodging, webcams, directory }}
           seedIds={{
             restaurants: restaurantSeed.map((r) => r.id),
             lodging: lodgingSeed.map((r) => r.id),
             webcams: webcamSeed.map((r) => r.id),
+            directory: [],
           }}
         />
       </Section>
