@@ -19,6 +19,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "import:data-dir": "NODE_OPTIONS=--conditions=react-server tsx scripts/import-data-dir.ts",
+    "invites:mint": "NODE_OPTIONS=--conditions=react-server tsx scripts/mint-invites.ts",
     "export:json": "NODE_OPTIONS=--conditions=react-server tsx scripts/export-json.ts",
     "restore:db": "NODE_OPTIONS=--conditions=react-server tsx scripts/restore-db.ts",
     "privacy:backfill": "NODE_OPTIONS=--conditions=react-server tsx scripts/privacy-backfill.ts",
