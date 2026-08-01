@@ -43,7 +43,11 @@ lives at `/line/preview` instead. Details: `src/lib/page-visibility.tsx`.
    visitors. Verify with an anonymous/private window.
 4. THEN the slice-5 follow-up PR: `/line` into `public/sw.js` `NAV_ALLOWLIST`
    (exact path) + VERSION bump + sw-contract test in the same commit. Never
-   while dark — the cached-404 trap documented in sw.js.
+   while dark — the cached-404 trap documented in sw.js. Same PR: add
+   `http://127.0.0.1:3000/line` to the `.lighthouserc.json` URL set — the
+   0.85/4300 floors can't be measured by CI while `/line` 404s in the CI
+   build, so until this lands the floor is inferred (real ISR, no dynamic
+   APIs, deferred map), not measured.
 5. Re-hide = the same toggle. The page 404s again within the same window.
 
 ## Perf floor (hard — this is the page's reason to exist)
@@ -97,4 +101,5 @@ forever.
 - Slice 4: `/admin/line-sign` print page (vendored QR encoder, QUARTILE) +
   sign copy. Physical sign needs the WSDOT right-of-way question answered
   (Open question 1).
-- Slice 5: flip + SW allowlist follow-up PR + analytics sanity in /admin/ops.
+- Slice 5: flip + SW allowlist follow-up PR (incl. `/line` into the
+  `.lighthouserc.json` URL set) + analytics sanity in /admin/ops.
