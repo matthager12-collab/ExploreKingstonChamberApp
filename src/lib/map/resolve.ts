@@ -40,6 +40,8 @@ export async function resolveMapView(viewId: string): Promise<ResolvedMapView | 
       summary: z.summary,
       center: z.center,
       polygon: z.polygon,
+      streetPaths: z.streetPaths,
+      curb: z.curb,
     }));
   }
 

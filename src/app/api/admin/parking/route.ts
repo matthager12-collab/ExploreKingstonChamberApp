@@ -11,7 +11,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser, requireAdmin } from "@/lib/auth";
-import type { MapZone, ParkingRule } from "@/lib/data/parking";
+import { CURB_SIDES, type CurbSide, type MapZone, type ParkingRule } from "@/lib/data/parking";
 import {
   deleteParkingZone,
   getParkingZone,
@@ -123,6 +123,39 @@ export async function POST(request: NextRequest) {
     polygon = body.polygon.map((p) => [p[0], p[1]]);
   }
 
+  // E31 phase 6 — street geometry + curb side. The POST rebuilds the zone from
+  // this whitelist, so any field missing here is silently WIPED on save (the
+  // trap documented in docs/PARKING-PAY-LINKS.md §2); keeping these is what
+  // lets a plain editor save round-trip a street zone intact.
+  let streetPaths: [number, number][][] | undefined;
+  if (body.streetPaths != null) {
+    if (!Array.isArray(body.streetPaths) || body.streetPaths.length === 0) {
+      return NextResponse.json(
+        { error: "streetPaths must be a non-empty array of polylines" },
+        { status: 400 },
+      );
+    }
+    for (const path of body.streetPaths) {
+      if (!Array.isArray(path) || path.length < 2 || !path.every(isLatLng)) {
+        return NextResponse.json(
+          { error: "each street path needs ≥2 [lat, lng] points within the Kingston area" },
+          { status: 400 },
+        );
+      }
+    }
+    streetPaths = (body.streetPaths as [number, number][][]).map((path) =>
+      path.map((p) => [p[0], p[1]]),
+    );
+  }
+
+  let curb: CurbSide | undefined;
+  if (body.curb != null && body.curb !== "") {
+    if (!CURB_SIDES.includes(body.curb as CurbSide)) {
+      return NextResponse.json({ error: "unknown curb side" }, { status: 400 });
+    }
+    curb = body.curb as CurbSide;
+  }
+
   const summary = typeof body.summary === "string" ? body.summary.trim() : "";
   const details = typeof body.details === "string" ? body.details.trim() : "";
   const sourceUrl =
@@ -144,6 +177,8 @@ export async function POST(request: NextRequest) {
     overnight,
     center,
     ...(polygon ? { polygon } : {}),
+    ...(streetPaths ? { streetPaths } : {}),
+    ...(curb ? { curb } : {}),
     ...(sourceUrl ? { sourceUrl } : {}),
     ...(sourceNote ? { sourceNote } : {}),
   };

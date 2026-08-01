@@ -625,12 +625,18 @@ export function MapBuilder({
         );
       }
 
-      // Parking zones — polygons colored by rule (circle fallback).
+      // Parking zones — street centre-lines / polygons colored by rule
+      // (circle fallback). Street zones use their E31 phase-6 streetPaths so
+      // this reference layer matches the public map's shape (centre line, not
+      // curb-offset strokes — close enough for a dimmed context layer).
       const zonePolys: GeoJSON.Feature[] = [];
+      const zoneLines: GeoJSON.Feature[] = [];
       const zonePts: GeoJSON.Feature[] = [];
       for (const z of data.builtins.parkingZones ?? []) {
         const color = parkingColor(z.rule);
-        if (z.polygon && z.polygon.length >= 3) {
+        if (z.streetPaths?.length) {
+          for (const p of z.streetPaths) zoneLines.push(lineFeat(p, { color }));
+        } else if (z.polygon && z.polygon.length >= 3) {
           zonePolys.push(polyFeat(z.polygon, { color }));
         } else {
           zonePts.push({
@@ -639,6 +645,16 @@ export function MapBuilder({
             geometry: { type: "Point", coordinates: toLngLat(z.center) },
           });
         }
+      }
+      if (zoneLines.length) {
+        addSource("ctx-parking-street", zoneLines);
+        addLayer({
+          id: "ctx-parking-street",
+          type: "line",
+          source: "ctx-parking-street",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: { "line-color": ["get", "color"], "line-width": 3, "line-opacity": 0.45 },
+        });
       }
       if (zonePolys.length) {
         addSource("ctx-parking", zonePolys);

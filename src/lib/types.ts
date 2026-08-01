@@ -82,18 +82,6 @@ export interface Restaurant {
   mapCategory?: "food" | "coffee" | "drink";
 }
 
-export interface ParkingArea {
-  id: string;
-  name: string;
-  type: "lot" | "street" | "ferry-holding";
-  address: string;
-  rates: string;
-  timeLimit?: string;
-  notes?: string;
-  lat: number;
-  lng: number;
-}
-
 export interface Atm {
   id: string;
   name: string;
