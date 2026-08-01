@@ -130,7 +130,9 @@ export default async function ParkingPage() {
                   <span
                     aria-hidden
                     className="inline-block rounded-md px-1.5 py-0.5 text-[0.6875rem] font-extrabold text-white"
-                    style={{ backgroundColor: "#e8891d" }}
+                    // ADR-0007: coral-deep — white text passes AA here (the
+                    // old orange badge was 2.62:1, same defect as .fm-pr-pin).
+                    style={{ backgroundColor: "#8a4c22" }}
                   >
                     P&R
                   </span>

@@ -259,16 +259,17 @@ const trailDash = (f: GeoJSONStoreFeatures): [number, number] | undefined =>
 /* Built-in context layer styling (kept in sync with feature-map.tsx)  */
 /* ------------------------------------------------------------------ */
 
+// Values are ADR-0007 §4 ("Evergreen & Sound" overlay half).
 const PARKING_RULE_COLORS: Record<string, string> = {
   "free-2hr": "#2e9e4f",
   "free-unrestricted": "#1E96C0",
   paid: "#7c4dbe",
-  "park-and-ride-24h": "#e8891d",
+  "park-and-ride-24h": "#8a4c22",
   prohibited: "#d43d3d",
-  "load-zone": "#f0b429",
-  permit: "#6b7280",
+  "load-zone": "#b8860b",
+  permit: "#7a7468",
 };
-const FALLBACK_PARKING_COLOR = "#6b7280";
+const FALLBACK_PARKING_COLOR = "#7a7468";
 
 function parkingColor(rule: string): string {
   return PARKING_RULE_COLORS[rule] ?? FALLBACK_PARKING_COLOR;
@@ -285,7 +286,7 @@ const STREET_COLORS: Record<StreetRule, string> = {
   "free-2hr": "#2e9e4f",
   "free-unrestricted": "#1E96C0",
   prohibited: "#d43d3d",
-  "ferry-holding": "#64748b",
+  "ferry-holding": "#3f5473", // ADR-0007: navy — no longer a near-twin of permit
   default: "#8b9aa8",
 };
 
@@ -1873,7 +1874,7 @@ export function MapBuilder({
             <span
               aria-hidden
               className="h-9 w-12 rounded border border-sand"
-              style={{ background: parkingTypeInfo(draft.parkingType)?.color ?? "#6b7280" }}
+              style={{ background: parkingTypeInfo(draft.parkingType)?.color ?? "#7a7468" }}
             />
             <span className="text-xs text-ink-soft">Color: automatic by parking type</span>
           </span>

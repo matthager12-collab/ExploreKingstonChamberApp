@@ -468,17 +468,17 @@ Facts worth knowing:
   generated table `src/lib/map/street-abbrevs.json`; regenerate with
   `npm run tiles:abbrevs` whenever the tiles are rebuilt — the drift-guard
   test in `tests/unit/map/street-abbrev-drift.test.ts` fails until you do.
-- **Brand palette (E31 phase 7).** Every style color is a named entry in the
-  module's `PALETTE`, derived as *tints* of the Tailwind brand tokens in
-  `src/app/globals.css` (shell/sand → paper + land, seaglass/tide → water,
-  fern → greenery, coral → the highway accent, ink/ink-soft → street names).
-  If a brand token changes, re-derive the palette there rather than editing
-  layer colors ad hoc. Note:
-  [ADR-0007](adr/ADR-0007-map-colorway-and-overlay-palette.md) ("Evergreen &
-  Sound") records an owner decision that supersedes these specific tint
-  *values* while keeping the `PALETTE` structure and the
-  derive-from-brand-tokens doctrine — the recolor lands as a follow-up (see
-  the Colorway bullet under `<FeatureMap>` for the load-bearing rules).
+- **Brand palette (E31 phase 7 structure, ADR-0007 values).** Every style
+  color is a named entry in the module's `PALETTE`, derived as *tints* of the
+  Tailwind brand tokens in `src/app/globals.css` (shell/sand → paper + land,
+  seaglass/tide → water, fern → greenery, warm sand → the highway accent,
+  ink/ink-soft → street names). The hex values are the owner-accepted
+  "Evergreen & Sound" colorway —
+  [ADR-0007](adr/ADR-0007-map-colorway-and-overlay-palette.md) is the
+  authority on every value (see the Colorway bullet under `<FeatureMap>` for
+  the load-bearing rules: label-contrast caps the greens, the arterial must
+  stay `#e6dcc4`). If a brand token changes, re-derive the palette by amending
+  the ADR rather than editing layer colors ad hoc.
 - **Dark map variant: deliberately deferred.** Investigated for the phase-7
   "brand palette + dark mode" charter line (2026-07-31): the app has **no dark
   theme anywhere** — no `prefers-color-scheme` handling, no theme toggle, no
@@ -488,11 +488,12 @@ Facts worth knowing:
   be a design incoherence, not a feature. **Ship a dark map style variant when
   (and only when) the app grows a dark theme** — the vector base makes it a
   second `PALETTE` in `basemap.ts`, which is exactly why the seam exists.
-- **Offline tiles (PWA).** The E31 offline slice — precaching the PMTiles
-  archive for the E13 PWA so the map renders without a network — is **in
-  progress on a sibling branch (`e31-p7-offline-sw`); no PR exists yet**, and
-  E31's offline acceptance criterion stays open until that slice lands with a
-  real offline test. [PWA.md](PWA.md) is authoritative for offline behavior.
+- **Offline tiles (PWA).** The E31 offline slice landed on `main` via
+  **PR #141** (SW v5): the service worker precaches a small downtown archive
+  (`public/offline-tiles/kingston-downtown.pmtiles`, `OFFLINE_TILES_PATH` in
+  `basemap.ts`) and serves byte ranges from it when the network is gone, with
+  a real offline test in `tests/server/offline-map.test.ts`.
+  [PWA.md](PWA.md) is authoritative for offline behavior.
 
 ---
 

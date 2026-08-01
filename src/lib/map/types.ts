@@ -88,13 +88,16 @@ export interface MapFeature {
 export type ParkingType =
   | "paid" | "free" | "free-timed" | "permit" | "park-and-ride" | "load-zone" | "no-parking";
 
+// Colors track the zone-rule palette (ADR-0007 §4, "Evergreen & Sound"):
+// permit/park-and-ride/load-zone carry the same meanings as the MapZone rules,
+// so they moved with them — a legend chip must match the map it explains.
 export const PARKING_TYPES = [
   { key: "paid",          label: "Paid lot",            color: "#7c4dbe" },
   { key: "free",          label: "Free",                color: "#2e9e4f" },
   { key: "free-timed",    label: "Free · time-limited", color: "#1e96c0" },
-  { key: "permit",        label: "Permit / commuter",   color: "#6b7280" },
-  { key: "park-and-ride", label: "Park & ride",         color: "#e8891d" },
-  { key: "load-zone",     label: "Load / 15-min zone",  color: "#f0b429" },
+  { key: "permit",        label: "Permit / commuter",   color: "#7a7468" },
+  { key: "park-and-ride", label: "Park & ride",         color: "#8a4c22" },
+  { key: "load-zone",     label: "Load / 15-min zone",  color: "#b8860b" },
   { key: "no-parking",    label: "No parking",          color: "#d43d3d" },
 ] as const;
 

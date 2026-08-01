@@ -67,40 +67,48 @@ export const VECTOR_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · <a href="https://protomaps.com">Protomaps</a>';
 
 /**
- * Brand-anchored basemap palette (E31 phase 7). Derived from the Tailwind
- * brand tokens in src/app/globals.css — TINTS of the tokens, not the raw
- * values, because a basemap needs near-neutral surfaces the UI tokens are too
- * saturated to provide. The phase-6 look is kept; this pass only pulls
- * temperature and saturation toward the brand:
+ * "Evergreen & Sound" basemap palette. The STRUCTURE (named PALETTE constant,
+ * derive-from-brand-tokens doctrine) is E31 phase 7; the VALUES are the
+ * owner-accepted colorway recorded in ADR-0007
+ * (docs/adr/ADR-0007-map-colorway-and-overlay-palette.md) — that ADR is the
+ * authority on every hex below; change values only by amending it. Derived
+ * from the Tailwind brand tokens in src/app/globals.css — TINTS of the tokens,
+ * not the raw values, because a basemap needs near-neutral surfaces the UI
+ * tokens are too saturated to provide:
  *
- *   shell #fbfcfd / sand #e4e4e0 → paper + land (cooled from the old cream)
- *   seaglass #b7e0f2 / tide #1e96c0 → water (Puget Sound reads as the brand blue)
- *   fern #4a7c59 → greenery tints (less yellow than the old OSM-ish greens)
- *   coral #a85c28 → the warm highway/major-road accent (rustier, less mustard)
- *   ink #20262e / ink-soft #6b7683 → street-name text (slate, not olive)
+ *   shell/sand → paper + land, cooled to marine-layer neutrals (the two
+ *     largest surfaces, earth + building, are near-achromatic on purpose —
+ *     ADR-0007 §2: base is a LIGHT family so the DARK overlay hues own meaning)
+ *   seaglass #b7e0f2 / tide #1e96c0 → water (quieted; no longer the loudest fill)
+ *   fern #4a7c59 → greenery tints (forest/greenspace finally own green)
+ *   warm sand → highway/major-road (NOT mustard, NOT coral-amber)
+ *   ink #20262e / ink-soft #6b7683 → street-name text, pulled toward the greens
  *
- * If a brand token changes, re-derive these rather than editing ad hoc.
+ * If a brand token changes, re-derive these rather than editing ad hoc — and
+ * per ADR-0007 §3 the greens sit ONE step under the label-contrast ceiling
+ * (forest #b3cbad = 4.84:1 worst text surface): do NOT deepen any green
+ * without re-running text contrast on every surface.
  */
 const PALETTE = {
-  bg: "#f2f2ed", // paper behind/beyond the tiled area (halo color too)
-  earth: "#e7e5dc", // land
-  water: "#aad7ec", // seaglass-leaning
-  forest: "#c9dcc6",
-  grassland: "#d3e2d1",
-  farmland: "#e3e1d2",
-  landcover: "#d8dfd4",
-  cemetery: "#dbe0d4",
-  pedestrian: "#edebe2",
-  greenspace: "#c3dac2", // parks/gardens in the landuse layer
-  building: "#ddd8c9",
-  buildingOutline: "#c4bca8",
-  highway: "#eec27a", // coral-warmed amber (was mustard #f4c667)
-  majorRoad: "#f5d99e",
+  bg: "#eef0ee", // paper behind/beyond the tiled area (halo color too) — marine-layer light
+  earth: "#e4e8e4", // land — chroma 4, neutral ground
+  water: "#b5d2de", // tide/seaglass family, quieted
+  forest: "#b3cbad", // fern-derived; the §3 label-contrast ceiling sits right above this
+  grassland: "#c3d4bd",
+  farmland: "#dad7c4",
+  landcover: "#cdd6c8",
+  cemetery: "#c9d2c4",
+  pedestrian: "#e7e9e5",
+  greenspace: "#aac4a4", // parks/gardens in the landuse layer
+  building: "#d8ddd7", // chroma 6, neutral
+  buildingOutline: "#bfc6be",
+  highway: "#e6dcc4", // warm sand, EXACTLY this — the only sand that cleared the old P&R orange (ADR-0007 §5)
+  majorRoad: "#eee7d6",
   road: "#ffffff",
-  path: "#e4dcc9",
-  rail: "#c8c2b2",
-  labelMinor: "#5d6570", // ink-soft, darkened for canvas contrast
-  labelMain: "#444c57", // toward ink
+  path: "#d6cfbd",
+  rail: "#c6c2b4",
+  labelMinor: "#59645d", // ink-soft pulled toward the greens
+  labelMain: "#3f4b45", // toward ink
 } as const;
 
 /**

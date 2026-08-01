@@ -6,10 +6,13 @@
 // Guards here: the editor shell renders with no Leaflet/OSM remnants; a
 // no-touch save round-trips a trail's [lat,lng] open PATH byte-identically
 // (the LineString face of FR-EDIT-06); and the draw-marker → save → delete
-// loop hits the real admin API. Skips visibly when the tiles route has no
-// R2_TILES_* (keyless CI).
+// loop hits the real admin API. When the tiles route has no R2_TILES_*
+// (keyless CI), the committed fixture archive serves the tiles via route
+// interception instead, so the interactive tests run everywhere; the visible
+// skip remains only if the fixture is also missing.
 
-import { readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
+import { fileURLToPath } from "url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { BASE_URL } from "./config";
@@ -120,12 +123,15 @@ beforeAll(async () => {
     headers: { Range: "bytes=0-1023" },
   });
   tilesAvailable = probe.status() === 206 || probe.status() === 200;
-  // Local escape hatch (E31 P7): point PMTILES_FILE at a kingston.pmtiles
-  // (e.g. downloaded from prod's public tiles route) and the browser serves it
-  // via route interception — the interactive tests then run without R2_TILES_*.
-  // CI stays keyless and still skips: the env var is never set there.
-  if (!tilesAvailable && process.env.PMTILES_FILE) {
-    const archive = readFileSync(process.env.PMTILES_FILE);
+  // Local escape hatch (E31 P7): serve a kingston.pmtiles via route
+  // interception so the interactive tests run without R2_TILES_*. Defaults to
+  // the committed fixture (tests/fixtures/tiles/kingston.pmtiles, added by
+  // #135); PMTILES_FILE still overrides it, e.g. with a fresh prod download.
+  const pmtilesFile =
+    process.env.PMTILES_FILE ??
+    fileURLToPath(new URL("../fixtures/tiles/kingston.pmtiles", import.meta.url));
+  if (!tilesAvailable && existsSync(pmtilesFile)) {
+    const archive = readFileSync(pmtilesFile);
     await context.route("**/api/map/tiles/*", async (route) => {
       const m = /bytes=(\d+)-(\d+)?/.exec((await route.request().headerValue("range")) ?? "");
       const start = m ? Number(m[1]) : 0;

@@ -39,17 +39,21 @@ import { basemapArchiveUrl, loadMapLibre } from "@/lib/map/maplibre";
 import { curbOffsetSigns } from "@/lib/map/curb";
 
 // ---- shared color conventions (kept in sync with both admin editors) ----
+// Values are ADR-0007 §4 (the "Evergreen & Sound" overlay half): dark,
+// saturated overlay hues over the light desaturated base. The four that moved
+// there (park-and-ride-24h, load-zone, ferry-holding, permit) are the ADR's;
+// the rest are deliberately unchanged.
 
 const PARKING_RULE_COLORS: Record<string, string> = {
   "free-2hr": "#2e9e4f",
   "free-unrestricted": "#1E96C0",
   paid: "#7c4dbe",
-  "park-and-ride-24h": "#e8891d",
+  "park-and-ride-24h": "#8a4c22",
   prohibited: "#d43d3d",
-  "load-zone": "#f0b429",
-  permit: "#6b7280",
+  "load-zone": "#b8860b",
+  permit: "#7a7468",
 };
-const FALLBACK_PARKING_COLOR = "#6b7280";
+const FALLBACK_PARKING_COLOR = "#7a7468";
 
 function parkingColor(rule: string): string {
   return PARKING_RULE_COLORS[rule] ?? FALLBACK_PARKING_COLOR;
@@ -85,7 +89,7 @@ const STREET_COLORS: Record<StreetRule, string> = {
   "free-2hr": "#2e9e4f",
   "free-unrestricted": "#1E96C0",
   prohibited: "#d43d3d",
-  "ferry-holding": "#64748b",
+  "ferry-holding": "#3f5473", // ADR-0007: navy — no longer a near-twin of permit
   default: "#8b9aa8",
 };
 
@@ -1120,7 +1124,9 @@ const PIN_CSS = `
   display: inline-block;
   padding: 3px 7px;
   border-radius: 8px;
-  background: #e8891d;
+  /* ADR-0007: brand coral-deep — white text is 6.69:1 here (the old #e8891d
+     orange was 2.62:1, a live WCAG AA failure at this size). */
+  background: #8a4c22;
   color: #fff;
   font: 800 0.75rem/1.1 system-ui, -apple-system, sans-serif;
   letter-spacing: .02em;
