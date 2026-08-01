@@ -26,6 +26,7 @@ type Feature = {
   title: string;
   views: string[];
   cost?: string;
+  member?: boolean;
   point?: [number, number];
   path?: [number, number][];
   polygon?: [number, number][];
@@ -100,6 +101,45 @@ async function drawCoords(id: string): Promise<[number, number][]> {
     const g = w.__vkDraw!.getSnapshotFeature(fid)!.geometry;
     return (g.type === "Polygon" ? (g.coordinates as number[][][])[0] : g.coordinates) as [number, number][];
   }, id);
+}
+
+/** Poll the draw store until the feature holds `expected` vertices, or the
+ *  deadline passes — returning whatever it last held either way, so the caller
+ *  asserts on real state instead of a sleep-then-hope read. terra-draw applies
+ *  a midpoint insert / vertex delete through its own event handling, which the
+ *  immediate post-click read used to race (the 4-vs-5 flake, run 30710383614). */
+async function coordCountSettles(
+  id: string,
+  expected: number,
+  timeoutMs: number,
+): Promise<[number, number][]> {
+  const deadline = Date.now() + timeoutMs;
+  let coords = await drawCoords(id);
+  while (coords.length !== expected && Date.now() < deadline) {
+    await page.waitForTimeout(100);
+    coords = await drawCoords(id);
+  }
+  return coords;
+}
+
+/** Project lngLat to page px only once the camera has genuinely settled.
+ *  Selecting a shape runs an ANIMATED fitBounds (the companion editor spec's
+ *  "Selection fitBounds ANIMATES" note), so a pixel projected mid-flight is
+ *  stale by the time the synthetic click lands — the other half of the
+ *  midpoint flake. Settled = the map reports no motion AND two projections
+ *  120ms apart agree to sub-pixel; bounded, not a blanket sleep. */
+async function atLngLatSettled(lngLat: [number, number]): Promise<{ x: number; y: number }> {
+  let prev = await atLngLat(lngLat);
+  for (let i = 0; i < 40; i++) {
+    await page.waitForTimeout(120);
+    const cur = await atLngLat(lngLat);
+    const moving = await page.evaluate(
+      () => (window as unknown as { __vkMap?: { isMoving(): boolean } }).__vkMap!.isMoving(),
+    );
+    if (!moving && Math.abs(cur.x - prev.x) < 0.5 && Math.abs(cur.y - prev.y) < 0.5) return cur;
+    prev = cur;
+  }
+  return prev;
 }
 
 async function openBuilder(): Promise<void> {
@@ -327,25 +367,57 @@ describe("admin map builder (MapLibre + terra-draw)", () => {
       const before = await drawCoords(TRAIL_ID);
       expect(before.length).toBe(pre!.path!.length);
 
-      // Midpoint insert: terra-draw renders midpoints as store features while a
-      // feature is selected; click one and the ring gains a vertex.
-      const mid = await page.evaluate(() => {
-        const w = window as unknown as {
-          __vkDraw?: { getSnapshot(): { properties: Record<string, unknown>; geometry: { type: string; coordinates: [number, number] } }[] };
-        };
-        const m = w.__vkDraw!.getSnapshot().find((f) => f.properties.midPoint);
-        return m ? m.geometry.coordinates : null;
-      });
-      expect(mid, "select mode must render midpoints").not.toBeNull();
-      const midPx = await atLngLat(mid as [number, number]);
-      await page.mouse.click(midPx.x, midPx.y);
-      const afterInsert = await drawCoords(TRAIL_ID);
+      // Midpoint insert: terra-draw renders midpoints as store features while
+      // a feature is selected — but not synchronously with the selection
+      // click, and selection ALSO starts the animated fitBounds. So: poll the
+      // store for the handle, project it only once the camera settles, then
+      // click-and-poll for the new vertex. A synthetic click can still be
+      // swallowed whole (the adapter's double-click discrimination — see the
+      // line-draw pacing note above), so the click retries, bounded — but
+      // ONLY while the store is untouched: the moment the count moves at all
+      // we stop clicking and assert, so a slow insert can never be compounded
+      // into two.
+      const midpoint = async (): Promise<[number, number]> => {
+        await page.waitForFunction(
+          () => {
+            const w = window as unknown as {
+              __vkDraw?: { getSnapshot(): { properties: Record<string, unknown> }[] };
+            };
+            return Boolean(w.__vkDraw?.getSnapshot().some((f) => f.properties.midPoint));
+          },
+          undefined,
+          { timeout: 10_000 },
+        );
+        return page.evaluate(() => {
+          const w = window as unknown as {
+            __vkDraw?: {
+              getSnapshot(): {
+                properties: Record<string, unknown>;
+                geometry: { type: string; coordinates: [number, number] };
+              }[];
+            };
+          };
+          return w.__vkDraw!.getSnapshot().find((f) => f.properties.midPoint)!.geometry
+            .coordinates;
+        });
+      };
+      let afterInsert = before;
+      for (let attempt = 0; attempt < 3 && afterInsert.length === before.length; attempt++) {
+        const midPx = await atLngLatSettled(await midpoint());
+        await page.mouse.click(midPx.x, midPx.y);
+        afterInsert = await coordCountSettles(TRAIL_ID, before.length + 1, 2_500);
+      }
       expect(afterInsert.length).toBe(before.length + 1);
 
-      // Right-click a vertex to remove it, back to the original count.
-      const vtx = await atLngLat(afterInsert[1]);
-      await page.mouse.click(vtx.x, vtx.y, { button: "right" });
-      const afterDelete = await drawCoords(TRAIL_ID);
+      // Right-click a vertex to remove it, back to the original count — the
+      // same settled-projection + click-and-poll ladder, same
+      // swallowed-click-only retry bound.
+      let afterDelete = afterInsert;
+      for (let attempt = 0; attempt < 3 && afterDelete.length === afterInsert.length; attempt++) {
+        const vtx = await atLngLatSettled(afterInsert[1]);
+        await page.mouse.click(vtx.x, vtx.y, { button: "right" });
+        afterDelete = await coordCountSettles(TRAIL_ID, before.length, 2_500);
+      }
       expect(afterDelete.length).toBe(before.length);
 
       // Both gestures marked the draft dirty, and the edit persists as an OPEN
@@ -394,6 +466,40 @@ describe("admin map builder (MapLibre + terra-draw)", () => {
       await page.evaluate(
         (id) => fetch(`/api/admin/map-features?id=${encodeURIComponent(id)}`, { method: "DELETE" }),
         COST_ID,
+      );
+    }
+  });
+
+  // Member buildings (BACKLOG § "Member buildings on the map"): the API
+  // whitelists `member` kind-agnostically and #140 proved the MARKER path;
+  // this is the AREA face of the same documented silent-strip trap — a traced
+  // member footprint must keep its flag through a save round-trip.
+  it("round-trips member on an area at the API layer (runs keyless — no map needed)", async () => {
+    await page.goto(BASE_URL + "/admin/maps", { waitUntil: "load" });
+    const AREA_ID = "member-bldg-api-spec";
+    const AREA: Feature = {
+      id: AREA_ID,
+      kind: "area",
+      title: "Member building spec footprint",
+      views: ["explore"],
+      polygon: [
+        [47.7982, -122.4986],
+        [47.7986, -122.4986],
+        [47.7986, -122.4979],
+        [47.7982, -122.4979],
+      ],
+    };
+    try {
+      await putFeature({ ...AREA, member: true });
+      expect((await getFeature(AREA_ID))?.member).toBe(true);
+      // Truthy-but-not-boolean must be dropped, not stored (the route's
+      // `=== true` rule) — same shape as the invalid-cost probe above.
+      await putFeature({ ...AREA, member: "yes" as unknown as boolean });
+      expect((await getFeature(AREA_ID))?.member).toBeUndefined();
+    } finally {
+      await page.evaluate(
+        (id) => fetch(`/api/admin/map-features?id=${encodeURIComponent(id)}`, { method: "DELETE" }),
+        AREA_ID,
       );
     }
   });
