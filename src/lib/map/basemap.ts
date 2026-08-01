@@ -68,21 +68,56 @@ export function mapStyle(pmtilesUrl: string): StyleSpecification {
         },
       },
       {
-        // Side-street names: smaller type, tighter repeat spacing, minimal
-        // collision padding — the goal is that most named residential streets
-        // show SOME label. TEXT ONLY — no icon-image anywhere in this style,
-        // so the no-POI-symbol guarantee holds.
-        id: "road-labels-minor", type: "symbol", source: "kingston", "source-layer": "roads",
+        // Overview street names (town zoom, ~z13–16): HORIZONTAL, point-placed
+        // labels for every named road, paper-map style. Line-placed labels
+        // barely work at these zooms here: MapLibre reserves room for the z18
+        // text size along each tile-clipped fragment, and downtown Kingston
+        // sits on the z14/z15 tile-column boundary (lng ≈ -122.4939), so its
+        // short street fragments reject nearly every along-the-line anchor —
+        // the owner's "only SR-104 is labeled" screenshot. Point placement on
+        // line features anchors at line vertices and needs no along-line fit,
+        // so short fragments still get a name; `text-padding` is the density
+        // dial (collision-only decluttering). The two line-placed layers sit
+        // later in the array, so where a rotated label and a horizontal one
+        // fight for the same spot, the rotated one wins and this one drops.
+        // TEXT ONLY — no icon-image anywhere in this style, so the
+        // no-POI-symbol guarantee holds.
+        id: "road-names-overview", type: "symbol", source: "kingston", "source-layer": "roads",
         minzoom: 13,
+        maxzoom: 16.5,
+        filter: ["match", ["get", "kind"],
+          ["highway", "major_road", "medium_road", "minor_road", "path", "other"], true, false],
+        layout: {
+          "symbol-placement": "point",
+          // Prefer an official OSM short name when the tiles ever carry one;
+          // never invent abbreviations in code. (The current Protomaps build
+          // has no short_name attribute, so this coalesce is a no-op today.)
+          "text-field": ["coalesce", ["get", "short_name"], ["get", "name"]],
+          "text-font": ["Noto Sans Regular"],
+          "text-size": ["interpolate", ["linear"], ["zoom"], 13, 9, 16, 11.5],
+          "text-padding": 20,
+        },
+        paint: {
+          "text-color": "#5b5b50",
+          "text-halo-color": "#f4f1ea",
+          "text-halo-width": 1.3,
+        },
+      },
+      {
+        // Side-street names, rotated along the street. Line placement only
+        // finds room once fragments are long enough on screen (z15+ here) —
+        // below that the overview layer above carries the density. Capping the
+        // size ramp at z16 matters beyond looks: placement reserves room at the
+        // z18-evaluated size, so a steeper ramp would un-place labels.
+        id: "road-labels-minor", type: "symbol", source: "kingston", "source-layer": "roads",
+        minzoom: 15,
         filter: ["match", ["get", "kind"], ["minor_road", "path", "other"], true, false],
         layout: {
-          // line-center: one label mid-street. Downtown blocks are short, and
-          // repeating "line" placement rarely finds room on them — centering
-          // is what gets most named side streets SOME label.
-          "symbol-placement": "line-center",
-          "text-field": ["get", "name"],
+          "symbol-placement": "line",
+          "symbol-spacing": 300,
+          "text-field": ["coalesce", ["get", "short_name"], ["get", "name"]],
           "text-font": ["Noto Sans Regular"],
-          "text-size": ["interpolate", ["linear"], ["zoom"], 13, 9.5, 16, 12, 19, 15],
+          "text-size": ["interpolate", ["linear"], ["zoom"], 15, 11, 16, 12],
           "text-padding": 1,
         },
         paint: {
@@ -92,17 +127,20 @@ export function mapStyle(pmtilesUrl: string): StyleSpecification {
         },
       },
       {
-        // Main-road names. Placed after the minor layer so, where the two
-        // collide, MapLibre keeps these (topmost symbols claim space first).
+        // Main-road names, rotated along the road. Placed after (= wins
+        // collisions against) both layers above. minzoom 12 is the data floor:
+        // the tiles carry no road names below z12. The z16 size cap keeps the
+        // z18-evaluated placement size small enough that long names ("South
+        // Kingston Road Northeast") still fit their merged lines at town zoom.
         id: "road-labels", type: "symbol", source: "kingston", "source-layer": "roads",
-        minzoom: 12.5,
+        minzoom: 12,
         filter: ["match", ["get", "kind"], ["highway", "major_road", "medium_road"], true, false],
         layout: {
           "symbol-placement": "line",
-          "text-field": ["get", "name"],
+          "text-field": ["coalesce", ["get", "short_name"], ["get", "name"]],
           "text-font": ["Noto Sans Regular"],
-          "text-size": ["interpolate", ["linear"], ["zoom"], 12.5, 10, 16, 13.5, 19, 16.5],
-          "symbol-spacing": 220,
+          "text-size": ["interpolate", ["linear"], ["zoom"], 12, 9.5, 16, 13],
+          "symbol-spacing": 180,
           "text-padding": 1,
         },
         paint: {
