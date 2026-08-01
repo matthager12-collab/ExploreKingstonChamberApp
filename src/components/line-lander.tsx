@@ -1,6 +1,7 @@
 // E33 — the Line Lander body: everything a driver parked in the SR-104 ferry
 // line needs, in the order they need it (boarding pass → don't leave the line
-// → next boats → wait context → map → food → restrooms → link-outs).
+// → next boats → wait context → cameras → food → restrooms → map → where's the
+// boat → link-outs).
 //
 // Shared by /line (the real ISR page) and /line/preview (the admin preview),
 // so the Chamber signs off on EXACTLY the bytes visitors will get.
@@ -15,8 +16,15 @@
 //     this page's critical path. FerryBusyToday renders its pure heuristic
 //     without the empirical table; once the aggregation fix lands
 //     (fix/ferry-busyness-agg) a cheap cached read can be wired in here.
-//   - Sr104TrafficMap defers its ~200 KB engine behind an
-//     IntersectionObserver, below the fold.
+//   - Sr104TrafficMap and FerryVesselMap both defer the ~200 KB MapLibre engine
+//     behind an IntersectionObserver, and sit adjacent at the bottom so it is
+//     loaded at most once, late, and only if the visitor scrolls that far.
+//   - FerryVesselMap is mounted WITHOUT `initial`: getVesselLocations()
+//     revalidates at 10s and a prerendered route inherits the shortest
+//     revalidate reachable from it, so server-fetching it here would cut this
+//     page's ISR window from 30s to 10s. It self-fetches on reveal instead.
+//   - FerryWebcamsBox is collapsed by default, so the WSDOT JPEGs and their
+//     refresh timer cost nothing until someone taps.
 //
 // BOUNDARIES (composition contract in the epic doc): no queue sensing or
 // self-mark (E25), no pay-links (E26 — link /parking), no outbound sends
@@ -25,6 +33,8 @@
 
 import Link from "next/link";
 import { FerryBusyToday } from "@/components/ferry-busy-today";
+import { FerryVesselMap } from "@/components/ferry-vessel-map";
+import { FerryWebcamsBox } from "@/components/ferry-webcams-box";
 import { LineAmenities } from "@/components/line-amenities";
 import { LineFood } from "@/components/line-food";
 import { NextFerries } from "@/components/next-ferries";
@@ -33,9 +43,11 @@ import { Callout, PageHeader, Section } from "@/components/ui";
 import { lineBacksPastBarberCutoff, parseWaitHours } from "@/lib/ferry-line";
 import { getFerryStatusSnapshot } from "@/lib/ferry-status";
 import { openFoodFromLine, splitAmenitiesFromLine } from "@/lib/line-lander";
+import { getEffectiveHiddenPaths } from "@/lib/page-visibility";
 import { getRestaurants } from "@/lib/stores/business-store";
 import { getFerryInfo } from "@/lib/stores/ferry-info-store";
 import { getFerryPredictionEnabled } from "@/lib/stores/ferry-prediction-store";
+import { getWebcams } from "@/lib/stores/listing-stores";
 import { getFeaturesForView } from "@/lib/stores/map-store";
 import { copyText, getCopyOverrides } from "@/lib/stores/site-store";
 import { todayPacific } from "@/lib/time";
@@ -46,20 +58,35 @@ export async function LineLander() {
   // which would break the perf floor above. Session-free flag check only
   // (the E12 pattern): while the prediction feature ships dark, /line simply
   // omits the panel; admins validate it on /ferry/plan.
-  const [snapshot, copy, ferryInfo, restaurants, amenityFeatures, predictionEnabled] =
-    await Promise.all([
-      // E25 swap point: when E25's versioned prediction contract
-      // (SailingPrediction / goNoGo / safeToDeliverUntil) lands, the
-      // prediction-ish bits below (wait context, busyness panel) swap from
-      // this snapshot to that contract at this call site.
-      getFerryStatusSnapshot(),
-      getCopyOverrides(),
-      getFerryInfo(),
-      getRestaurants(),
-      // Merged store, never the seed array — Chamber additions must show up.
-      getFeaturesForView("amenities"),
-      getFerryPredictionEnabled(),
-    ]);
+  const [
+    snapshot,
+    copy,
+    ferryInfo,
+    restaurants,
+    amenityFeatures,
+    predictionEnabled,
+    cams,
+    hiddenPaths,
+  ] = await Promise.all([
+    // E25 swap point: when E25's versioned prediction contract
+    // (SailingPrediction / goNoGo / safeToDeliverUntil) lands, the
+    // prediction-ish bits below (wait context, busyness panel) swap from
+    // this snapshot to that contract at this call site.
+    getFerryStatusSnapshot(),
+    getCopyOverrides(),
+    getFerryInfo(),
+    getRestaurants(),
+    // Merged store, never the seed array — Chamber additions must show up.
+    getFeaturesForView("amenities"),
+    getFerryPredictionEnabled(),
+    // Same rule: the merged store, so a camera the Chamber adds appears here.
+    getWebcams(),
+    // Store read, NOT a session read — this is the cookie-free half of the
+    // visibility helpers (assertPageVisibleStatic uses the very same call), so
+    // it cannot mark the route dynamic. Only used to decide whether linking to
+    // /webcams would send someone to a 404.
+    getEffectiveHiddenPaths(),
+  ]);
 
   const pass = snapshot.boardingPass;
   const bp = ferryInfo.boardingPass;
@@ -72,6 +99,10 @@ export async function LineLander() {
   const food = openFoodFromLine(restaurants);
   const amenities = splitAmenitiesFromLine(amenityFeatures);
   const serverNow = new Date().toISOString();
+  // Kingston-side cameras only, by the same id split /ferry and /webcams use.
+  // No side variable to consult here — that is the point of this page.
+  const kingstonCams = cams.filter((w) => !w.id.startsWith("edmonds-"));
+  const webcamsPageVisible = !hiddenPaths.includes("/webcams");
 
   return (
     <>
@@ -151,6 +182,18 @@ export async function LineLander() {
         )}
       </Section>
 
+      {/* Cheap enough to sit this high: collapsed, it is a button. The WSDOT
+          JPEGs and their refresh timer only exist once someone taps. */}
+      <Section>
+        <FerryWebcamsBox
+          cams={kingstonCams}
+          totalCount={cams.length}
+          webcamsPageVisible={webcamsPageVisible}
+          title={copyText(copy, "line.cams.title")}
+          blurb={copyText(copy, "line.cams.blurb")}
+        />
+      </Section>
+
       <Section
         title={copyText(copy, "line.food.title")}
         subtitle={copyText(copy, "line.food.subtitle")}
@@ -167,6 +210,23 @@ export async function LineLander() {
         subtitle={copyText(copy, "line.map.subtitle")}
       >
         <Sr104TrafficMap />
+      </Section>
+
+      {/* Sits next to the other map on purpose. Both defer MapLibre behind an
+          IntersectionObserver, so keeping them adjacent and well below the fold
+          means the ~200 KB engine loads at most once, late, and only for a
+          visitor who scrolled this far.
+
+          NO `initial` PROP — deliberate, and the reason is in the component's
+          doc comment: getVesselLocations() revalidates at 10s, and a
+          prerendered route inherits the shortest revalidate reachable from it,
+          so server-fetching here would cut this page's ISR window from 30s to
+          10s. The map fetches its own first payload on reveal instead. */}
+      <Section
+        title={copyText(copy, "line.boat.title")}
+        subtitle={copyText(copy, "line.boat.subtitle")}
+      >
+        <FerryVesselMap />
       </Section>
 
       <Section>

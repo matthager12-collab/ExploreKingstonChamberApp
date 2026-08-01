@@ -1119,6 +1119,21 @@ export const COPY_BLOCKS = [
       "With a wait this long, the line usually reaches past Barber Cutoff Rd. Sending someone to join you? Tell them to come down SR 104 from Miller Bay Rd — not to U-turn into the line.",
   },
   {
+    key: "line.cams.title",
+    page: "Ferry line (/line)",
+    label: "Heading on the collapsed WSDOT camera box",
+    fallback: "📷 See the line right now",
+  },
+  {
+    key: "line.cams.blurb",
+    page: "Ferry line (/line)",
+    label: "Sub-line on the camera box — framed for someone already in the line",
+    multiline: true,
+    // Kept short on purpose: this sits beside the Show/Hide control, and a
+    // longer sentence wraps to four lines on a 375px phone and squeezes it.
+    fallback: "WSDOT cameras on SR 104 — find your spot, and see if it's moving.",
+  },
+  {
     key: "line.map.title",
     page: "Ferry line (/line)",
     label: "Map section title",
@@ -1129,6 +1144,20 @@ export const COPY_BLOCKS = [
     page: "Ferry line (/line)",
     label: "Map section subtitle",
     fallback: "The SR 104 boarding-pass system, mapped — sign, pass machine, tollbooths.",
+  },
+  {
+    key: "line.boat.title",
+    page: "Ferry line (/line)",
+    label: "Vessel-map section title",
+    fallback: "Where's the boat?",
+  },
+  {
+    key: "line.boat.subtitle",
+    page: "Ferry line (/line)",
+    label: "Vessel-map section subtitle",
+    multiline: true,
+    fallback:
+      "Live positions of the Edmonds–Kingston ferries. A boat still mid-Sound is a boat that has to dock and unload before it takes you.",
   },
   {
     key: "line.food.title",
