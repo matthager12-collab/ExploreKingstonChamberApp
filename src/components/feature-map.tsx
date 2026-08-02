@@ -37,7 +37,15 @@ import {
 import { mapStyle } from "@/lib/map/basemap";
 import { basemapArchiveUrl, loadMapLibre } from "@/lib/map/maplibre";
 import { fixMarkerA11y } from "@/lib/map/marker-a11y";
+import { MapTouchLockOverlay, useMapTouchLock } from "@/components/map-touch-lock";
 import { curbOffsetSigns } from "@/lib/map/curb";
+
+/** How far inside the viewport a map must be before the ~200 KB MapLibre engine
+ *  loads, as a FRACTION of the viewport — see the reveal gate at the bottom of
+ *  the build effect for why this is a fraction and never a pixel count. Both
+ *  the IntersectionObserver rootMargin and the plain-rect fallback derive from
+ *  this one value, so the two can never disagree about what "revealed" means. */
+const REVEAL_INSET = 0.25;
 
 // ---- shared color conventions (kept in sync with both admin editors) ----
 // Values are ADR-0007 §4 (the "Evergreen & Sound" overlay half): dark,
@@ -440,13 +448,12 @@ export function FeatureMap({
   );
   const [legend, setLegend] = useState<LegendEntry[]>([]);
   // On touch devices the map starts non-draggable so the page can scroll past
-  // it; a tap unlocks panning. Always false on desktop (fine pointer).
-  const [locked, setLocked] = useState(false);
-
-  function unlock() {
-    mapRef.current?.dragPan.enable();
-    setLocked(false);
-  }
+  // it; a tap unlocks panning. Always false on desktop (fine pointer). Shared
+  // with the two ferry maps so all three behave and read the same.
+  // Destructured because the build effect below depends on `applyTouchLock`:
+  // the hook's callbacks are stable, the object it returns is not, so naming
+  // the callback keeps the dependency honest without re-running on every render.
+  const { locked: touchLocked, applyTo: applyTouchLock, unlock: unlockTouch } = useMapTouchLock();
 
   // When a server-resolved payload is supplied, render it directly (no fetch).
   useEffect(() => {
@@ -485,7 +492,7 @@ export function FeatureMap({
     if (status !== "ready" || !data) return;
     const view = data; // non-null capture
     let cancelled = false;
-    let cleanupIo: (() => void) | undefined;
+    let cleanupReveal: () => void = () => {};
     const container = containerRef.current;
     if (!container) return;
 
@@ -523,14 +530,7 @@ export function FeatureMap({
 
       // On touch devices a full-width map otherwise eats the page's vertical
       // swipes: disable panning until the visitor taps to activate.
-      const coarse =
-        typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
-      if (coarse) {
-        map.dragPan.disable();
-        setLocked(true);
-      } else {
-        setLocked(false);
-      }
+      applyTouchLock(map);
 
       // ---- on-map labels: 0-size markers + hand-rolled declutter (P1) ----
       labelsRef.current = [];
@@ -1160,30 +1160,82 @@ export function FeatureMap({
 
     // Defer the ~200 KB MapLibre engine (heavy: ~950 ms init on a throttled CPU)
     // until the map is genuinely in view. A NEGATIVE rootMargin means it must be
-    // ~200 px inside the viewport before loading, so a map that sits below a
-    // page's fold (e.g. the "food map" section on /eat) never loads during the
-    // initial paint — keeping it out of the Lighthouse perf budget — while a map
-    // that fills the viewport from the top (the dedicated /map, /parking pages)
-    // still loads immediately.
+    // well inside the viewport before loading, so a map that sits below a page's
+    // fold (e.g. the "food map" section on /eat) never loads during the initial
+    // paint — keeping it out of the Lighthouse perf budget — while a map that
+    // fills the viewport from the top (the dedicated /map, /parking pages) still
+    // loads immediately.
+    //
+    // The inset MUST be a PERCENTAGE, and it must be vertical-only. A fixed
+    // "-200px" shorthand applies to all four sides, and a root shrunk by 200 px
+    // on both left AND right collapses to zero width on any viewport under
+    // 400 CSS px — every non-Max iPhone (375 / 390 / 393). WebKit then reports
+    // isIntersecting: false forever, so init() never ran and the map rendered as
+    // an empty bordered box on iOS; Blink papers over it by clamping the root to
+    // zero width and still intersecting, which is why this survived desktop and
+    // Chromium CI. Percentages are resolved against the root's own dimensions,
+    // so REVEAL_INSET can never invert the box no matter how small the viewport
+    // gets — including a phone in LANDSCAPE (~320 px tall), where even a
+    // vertical-only "-200px 0px" would collapse the same way. On a typical phone
+    // viewport 25% lands at ~165 px, close to the original 200 px intent.
+
+    // Every route into init() goes through here: it runs at most once, and a
+    // rejected init lands in the "error" state instead of vanishing. `void
+    // init()` used to swallow the rejection, so a map that failed to build (no
+    // WebGL, a style that would not load) left the same silent empty box as a
+    // map that was never started — status is already "ready" by this point, so
+    // nothing else would ever render an overlay.
+    let started = false;
+    const start = () => {
+      if (started || cancelled) return;
+      started = true;
+      cleanupReveal();
+      init().catch(() => {
+        if (!cancelled) setStatus("error");
+      });
+    };
+
     if (typeof IntersectionObserver === "undefined") {
-      void init();
+      start();
     } else {
       const io = new IntersectionObserver(
         (entries) => {
-          if (entries.some((e) => e.isIntersecting)) {
-            io.disconnect();
-            void init();
-          }
+          if (entries.some((e) => e.isIntersecting)) start();
         },
-        { rootMargin: "-200px" },
+        { rootMargin: `-${REVEAL_INSET * 100}% 0px` },
       );
       io.observe(container);
-      cleanupIo = () => io.disconnect();
+
+      // Belt and braces. IntersectionObserver's geometry is subtly
+      // engine-specific — a collapsed root reads as "never intersecting" on
+      // WebKit and "always intersecting" on Blink, which is exactly how the
+      // -200px inset above blanked every map on iPhone for ten days. This
+      // reimplements the SAME band with a plain rect test off a passive scroll
+      // listener, from the same REVEAL_INSET, so the two cannot disagree about
+      // when a map is revealed. If the observer is ever wrong again, the map
+      // still loads on the next scroll rather than staying dead all session.
+      const revealedByRect = () => {
+        const r = container.getBoundingClientRect();
+        const vh = window.innerHeight;
+        return r.top < vh * (1 - REVEAL_INSET) && r.bottom > vh * REVEAL_INSET;
+      };
+      const onMaybeRevealed = () => {
+        if (revealedByRect()) start();
+      };
+      window.addEventListener("scroll", onMaybeRevealed, { passive: true });
+      window.addEventListener("resize", onMaybeRevealed, { passive: true });
+      cleanupReveal = () => {
+        io.disconnect();
+        window.removeEventListener("scroll", onMaybeRevealed);
+        window.removeEventListener("resize", onMaybeRevealed);
+      };
+      // Covers a map that is already in view at mount, where no scroll follows.
+      onMaybeRevealed();
     }
 
     return () => {
       cancelled = true;
-      cleanupIo?.();
+      cleanupReveal();
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
       if (moveTimerRef.current) clearTimeout(moveTimerRef.current);
@@ -1197,7 +1249,7 @@ export function FeatureMap({
       mapRef.current = null;
       setLegend([]);
     };
-  }, [status, data]);
+  }, [status, data, applyTouchLock]);
 
   return (
     <div className={className}>
@@ -1220,17 +1272,8 @@ export function FeatureMap({
             Map unavailable.
           </div>
         )}
-        {status === "ready" && locked && (
-          <button
-            type="button"
-            onClick={unlock}
-            className="absolute inset-0 z-[450] flex items-end justify-center rounded-2xl bg-transparent pb-4"
-            aria-label="Tap to interact with the map"
-          >
-            <span className="rounded-full bg-sound-deep/85 px-4 py-2 text-sm font-semibold text-white shadow">
-              Tap to explore the map
-            </span>
-          </button>
+        {status === "ready" && touchLocked && (
+          <MapTouchLockOverlay onUnlock={unlockTouch} />
         )}
       </div>
       {status === "ready" && legend.length > 0 && <MapLegend entries={legend} />}
