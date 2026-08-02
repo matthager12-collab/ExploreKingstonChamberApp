@@ -42,6 +42,7 @@ import {
   saveDirectoryListing,
 } from "@/lib/stores/directory-store";
 import { RecordValidationError } from "@/lib/db/store-schemas";
+import { revalidatePublicPathsForStore } from "@/lib/public-paths";
 import {
   directoryListingSchema,
   findItinerarySlugClash,
@@ -114,6 +115,13 @@ export async function POST(request: NextRequest) {
   const raw = body.record as Record<string, unknown>;
 
   const meta = { actor, source: "admin" } as const;
+  // An admin save publishes immediately, but the public page is ISR — without
+  // this the Chamber edits a listing, looks at /eat, and sees the old copy for
+  // up to a minute. The domain names ARE the store names.
+  const saved = async (record: unknown) => {
+    await revalidatePublicPathsForStore(domain);
+    return NextResponse.json({ ok: true, record });
+  };
   try {
     if (domain === "itineraries") {
       const parsed = itinerarySchema.safeParse(raw);
@@ -124,13 +132,13 @@ export async function POST(request: NextRequest) {
       const clash = findItinerarySlugClash(await getItineraries(), record);
       if (clash) return bad(`slug "${record.slug}" is already used by "${clash.title}"`);
       await saveItinerary(record, meta);
-      return NextResponse.json({ ok: true, record });
+      return saved(record);
     }
     if (domain === "lodging") {
       const parsed = lodgingSchema.safeParse(raw);
       if (!parsed.success) return bad(firstZodMessage(parsed.error));
       await saveLodging(parsed.data, meta);
-      return NextResponse.json({ ok: true, record: parsed.data });
+      return saved(parsed.data);
     }
     if (domain === "directory") {
       const parsed = directoryListingSchema.safeParse(raw);
@@ -152,7 +160,7 @@ export async function POST(request: NextRequest) {
         ...meta,
         status: existing?.status ?? "live",
       });
-      return NextResponse.json({ ok: true, record });
+      return saved(record);
     }
     if (domain === "restaurants") {
       // The form can't edit structured hours, and this endpoint has never read
@@ -168,12 +176,12 @@ export async function POST(request: NextRequest) {
       if (existing?.weeklyHours) record.weeklyHours = existing.weeklyHours;
       if (existing?.hoursVerified) record.hoursVerified = existing.hoursVerified;
       await saveRestaurant(record, meta);
-      return NextResponse.json({ ok: true, record });
+      return saved(record);
     }
     const parsed = webcamSchema.safeParse(raw);
     if (!parsed.success) return bad(firstZodMessage(parsed.error));
     await saveWebcam(parsed.data, meta);
-    return NextResponse.json({ ok: true, record: parsed.data });
+    return saved(parsed.data);
   } catch (err) {
     if (err instanceof RecordValidationError) return bad(err.message);
     throw err;
@@ -217,5 +225,6 @@ export async function DELETE(request: NextRequest) {
     throw err;
   }
 
+  await revalidatePublicPathsForStore(domain);
   return NextResponse.json({ ok: true });
 }
