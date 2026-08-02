@@ -1,4 +1,4 @@
-// The shopping seed — the invariants that keep a browsable map honest.
+// The shopping seed — the invariants that keep four browsable maps honest.
 //
 // This layer's failure mode is different from the amenity seed's. Nobody is
 // harmed by walking to a closed gift shop the way they are by walking to a
@@ -9,49 +9,106 @@
 // country), and the only defence against the fourth mistake is that every pin
 // still says where it came from and when.
 //
-// It also pins the structural facts the /map switcher depends on, and the one
-// taxonomy rule that makes the map readable: retail and services are different
-// icons, because "what do I leave with" is the question a shopping map answers.
+// It also pins the structure the /map switcher depends on. These 28 pins first
+// shipped as ONE "shopping" view and were split four ways because the label
+// declutter could not fit 28 chips at the fitted zoom — so the per-view size
+// ceiling below is a real rendering constraint, not a style preference.
 
 import { describe, expect, it } from "vitest";
 import { mapFeatures } from "@/lib/data/map-features";
 import { mapViews } from "@/lib/data/map-views";
 import { MARKER_CATEGORIES, markerCategory, CATEGORY_LABEL_RANK } from "@/lib/map/types";
 
-const SHOPPING_VIEW = "shopping";
+/** The four errand maps the businesses are split across. */
+const SHOPPING_VIEWS = [
+  "shops-gifts",
+  "food-to-take-home",
+  "home-practical",
+  "health-beauty",
+] as const;
 
-const shoppingFeatures = mapFeatures.filter((f) => f.views.includes(SHOPPING_VIEW));
+const inShoppingViews = (f: { views: string[] }) =>
+  f.views.some((v) => (SHOPPING_VIEWS as readonly string[]).includes(v));
+
+const shoppingFeatures = mapFeatures.filter(inShoppingViews);
 
 /**
  * A named, checkable origin: OSM's own survey date, a second source that
  * corroborated the record, or an explicit admission that neither exists.
  *
  * "no survey date on record" counts on purpose. A pin nobody has checked is
- * allowed on this map — a pin that hides the fact is not.
+ * allowed on these maps — a pin that hides the fact is not. Keeping the
+ * wording standard is what makes `grep "No survey date on record"` a
+ * field-check work-list.
  */
 const PROVENANCE =
   /osm check \d{4}-\d{2}-\d{2}|verified|corroborated|no survey date on record|food & drink map|events calendar/i;
 
-describe("shopping map view", () => {
-  const view = () => mapViews.find((v) => v.id === SHOPPING_VIEW);
+/**
+ * Above this, the greedy declutter in feature-map.tsx starts dropping name
+ * chips at the fitted downtown zoom and the map degrades into anonymous pins.
+ * Ten leaves headroom for the Chamber to add a few in /admin/maps before a
+ * view needs splitting again.
+ */
+const MAX_PINS_PER_VIEW = 10;
 
-  it("is published, or it is invisible on /map", () => {
-    expect(view(), "seed must define a 'shopping' view").toBeDefined();
-    expect(view()!.published).toBe(true);
+describe("the four shopping views", () => {
+  it.each(SHOPPING_VIEWS)("'%s' exists and is published", (id) => {
+    const view = mapViews.find((v) => v.id === id);
+    expect(view, `seed must define a '${id}' view`).toBeDefined();
+    // A draft view is invisible in the /map switcher.
+    expect(view!.published).toBe(true);
   });
 
-  it("declares no BuiltInSource — there is no shop layer to pull from", () => {
+  it.each(SHOPPING_VIEWS)("'%s' declares no BuiltInSource", (id) => {
     // Not a stylistic preference. BuiltInSource offers restaurants /
     // parking-zones / streets, and E17's DirectoryListing has no coordinates.
-    // If a future epic adds a geocoded directory source, this assertion is the
-    // place that should fail and make someone re-read the view's comment.
-    expect(view()!.sources).toEqual([]);
+    // If a future epic adds a geocoded directory source, this is the assertion
+    // that should fail and make someone re-read the views' comment.
+    expect(mapViews.find((v) => v.id === id)!.sources).toEqual([]);
   });
 
-  it("has features, so the pill is not an empty promise", () => {
+  it.each(SHOPPING_VIEWS)("'%s' has pins, so the pill is not an empty promise", (id) => {
     // The parking-cash view once shipped as a blank canvas under copy that
     // promised markers. Once is enough.
-    expect(shoppingFeatures.length).toBeGreaterThan(0);
+    const n = mapFeatures.filter((f) => f.views.includes(id)).length;
+    expect(n, `view '${id}' has no features`).toBeGreaterThan(0);
+  });
+
+  it.each(SHOPPING_VIEWS)("'%s' stays small enough for its labels to render", (id) => {
+    const n = mapFeatures.filter((f) => f.views.includes(id)).length;
+    expect(n, `view '${id}' has ${n} pins — split it rather than hide labels`).toBeLessThanOrEqual(
+      MAX_PINS_PER_VIEW,
+    );
+  });
+
+  it("files every business on exactly one of the four", () => {
+    // Two errand maps claiming the same shop is a duplicate a visitor meets as
+    // a mystery; zero is a business that silently vanished during a re-split.
+    for (const f of shoppingFeatures) {
+      const hits = f.views.filter((v) => (SHOPPING_VIEWS as readonly string[]).includes(v));
+      expect(hits, `${f.id} is on ${hits.length} shopping views: ${hits.join(", ")}`).toHaveLength(1);
+    }
+  });
+
+  it("leaves no pin stranded on the retired 'shopping' view", () => {
+    // PR #150's single view was replaced by the four above. A feature still
+    // pointing at it would render on no map at all.
+    expect(mapViews.some((v) => v.id === "shopping")).toBe(false);
+    expect(mapFeatures.filter((f) => f.views.includes("shopping"))).toHaveLength(0);
+  });
+});
+
+describe("seed-wide view integrity", () => {
+  it("points every feature at a view that exists", () => {
+    // The generalised version of the stranded-pin bug above: any seed feature
+    // naming a view the seed does not define is invisible on the site.
+    const ids = new Set(mapViews.map((v) => v.id));
+    for (const f of mapFeatures) {
+      for (const v of f.views) {
+        expect(ids, `${f.id} lists unknown view '${v}'`).toContain(v);
+      }
+    }
   });
 });
 
