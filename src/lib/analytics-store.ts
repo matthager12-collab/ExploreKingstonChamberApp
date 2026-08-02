@@ -105,8 +105,17 @@ export interface AnalyticsEvent {
    * would quietly inflate exactly the numbers the Chamber reports to LTAC. It
    * gets its own series instead, which is the honest way to answer "is the
    * kiosk earning its place at the dock?".
+   *
+   * "internal" is US — the people building and running this site. Same
+   * argument, one step further: a kiosk is at least a real person walking up
+   * to a real panel, whereas an admin reloading /eat for the ninth time to
+   * check a card's spacing is not a visit to Kingston by any definition the
+   * Chamber would defend in an LTAC report. Marked at the ingest boundary (see
+   * /api/track) and excluded from every visitor rollup below, but still
+   * COUNTED, in its own two-number series: during a soft launch, a dashboard
+   * reading zero has to be distinguishable from a filter that ate everything.
    */
-  source?: "kiosk";
+  source?: "kiosk" | "internal";
 }
 
 /**
@@ -310,6 +319,29 @@ export interface AnalyticsSummary {
     /** Which kiosk screens people actually open, most-used first. */
     byPath: { path: string; count: number }[];
   };
+  /**
+   * Our own traffic, excluded from every field above and reported here instead.
+   *
+   * This is a RECEIPT, not a metric. Nobody wants to know how many times we
+   * loaded our own site; what they need to know is that the exclusion is
+   * switched on and working. A soft launch produces small numbers either way,
+   * so "12 visitor sessions, 4 excluded as ours" and "12 visitor sessions,
+   * 0 excluded" say completely different things about whether to trust the 12.
+   */
+  internal: {
+    events: number;
+    sessions: number;
+  };
+  /**
+   * The baseline this summary was computed from — the ISO instant before which
+   * events were ignored, or null when the whole log was counted.
+   *
+   * Carried on the summary rather than fetched separately by the dashboard so
+   * that a number and the window it covers can never be rendered apart. Every
+   * consumer that shows a count inherits the obligation to say "since when",
+   * which is the first question anyone asks about a launch metric.
+   */
+  since: string | null;
 }
 
 /**
@@ -347,8 +379,19 @@ function pacificDay(ts: string): string {
   }
 }
 
-export async function summarize(): Promise<AnalyticsSummary> {
-  const events = await readAnalyticsEvents<AnalyticsEvent>();
+/**
+ * Roll the event log up for the admin dashboard and LTAC reporting.
+ *
+ * `sinceIso` is the analytics BASELINE — pass
+ * getAnalyticsSince() (src/lib/stores/analytics-baseline-store.ts) to count only
+ * from the Chamber's chosen starting line. It is a parameter rather than a
+ * lookup inside this function on purpose: this module is the pure summarizer
+ * that the ingest tests and the reporting exporter both drive directly, and
+ * giving it an opinion about a settings store would make every one of those
+ * callers set up an overlay first.
+ */
+export async function summarize(sinceIso?: string): Promise<AnalyticsSummary> {
+  const events = await readAnalyticsEvents<AnalyticsEvent>(sinceIso);
 
   const sessions = new Set<string>();
   const byPath = new Map<string, number>();
@@ -381,7 +424,22 @@ export async function summarize(): Promise<AnalyticsSummary> {
   const kioskByPath = new Map<string, number>();
   let kioskPageviews = 0;
 
+  // Our own traffic. Two numbers, no breakdown — see AnalyticsSummary.internal
+  // for why this is a receipt rather than a report.
+  const internalSessions = new Set<string>();
+  let internalEvents = 0;
+
   for (const e of events) {
+    // Same guarantee as the kiosk split below, and first for the same reason:
+    // one `continue` at the top of the loop is a structurally different promise
+    // from an `if (!internal)` repeated at six accumulation sites, five of which
+    // a future edit will remember.
+    if (e.source === "internal") {
+      internalEvents++;
+      internalSessions.add(e.sessionId);
+      continue;
+    }
+
     // THE SPLIT, and it is first for a reason: everything below this line is a
     // visitor rollup, and the kiosk is one shared device standing in one spot.
     // Counting it as a visitor would inflate session counts, pin a geo bucket
@@ -504,7 +562,10 @@ export async function summarize(): Promise<AnalyticsSummary> {
   );
 
   return {
-    totalEvents: events.length,
+    // Net of our own traffic, matching every other field here. The alternative
+    // — a grand total that silently includes rows no other number counts —
+    // is the one shape guaranteed to make the dashboard fail to add up.
+    totalEvents: events.length - internalEvents,
     pageviews,
     outboundClicks,
     geoPings,
@@ -552,5 +613,10 @@ export async function summarize(): Promise<AnalyticsSummary> {
         .map(([path, count]) => ({ path, count }))
         .sort((a, b) => b.count - a.count),
     },
+    internal: {
+      events: internalEvents,
+      sessions: internalSessions.size,
+    },
+    since: sinceIso ?? null,
   };
 }

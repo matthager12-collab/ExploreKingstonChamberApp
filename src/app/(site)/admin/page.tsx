@@ -15,8 +15,10 @@ import {
   type AnalyticsSummary,
 } from "@/lib/analytics-store";
 import { BELOW_K_BUCKET_LABEL, K_FLOOR } from "@/lib/privacy/policy";
+import { getAnalyticsBaseline } from "@/lib/stores/analytics-baseline-store";
 import { surveyStore } from "@/lib/survey-store";
 import { Badge, Callout, Card, PageHeader, Section } from "@/components/ui";
+import { AnalyticsBaselineControl } from "./analytics-baseline-control";
 
 export const metadata: Metadata = {
   title: "Visitor Insights",
@@ -116,7 +118,14 @@ function EmptyNote({ children }: { children: string }) {
 }
 
 export default async function AdminPage() {
-  const [analytics, survey] = await Promise.all([summarize(), surveyStore.summarize()]);
+  // The baseline is read FIRST because summarize() takes it as its window —
+  // every number below is "since this instant". Sequential on purpose: the
+  // other two reads cannot start until we know which events to read.
+  const baseline = await getAnalyticsBaseline();
+  const [analytics, survey] = await Promise.all([
+    summarize(baseline?.since ?? undefined),
+    surveyStore.summarize(),
+  ]);
 
   const overnightPct =
     survey.total > 0 ? `${Math.round((survey.overnightCount / survey.total) * 100)}%` : "—";
@@ -166,6 +175,10 @@ export default async function AdminPage() {
             ⤓ Download backup
           </a>
         </div>
+      </Section>
+
+      <Section>
+        <AnalyticsBaselineControl baseline={baseline} internal={analytics.internal} />
       </Section>
 
       <Section title="At a glance">

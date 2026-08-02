@@ -1776,3 +1776,71 @@ forbids the session read the usual preview needs). Preview at `/line/preview`;
 flip procedure, sign/QR rules, and the honesty contract for its amenities
 block: **`docs/LINE-LANDER.md`**. Do not add `/line` to the service-worker
 allowlist while it is dark, and print no QR before the custom domain is live.
+
+## 16. Trustworthy launch numbers — the baseline and the internal marker
+
+Two mechanisms keep the figures on `/admin` reportable. Neither deletes
+anything, and both are visible on the dashboard so the Chamber can always say
+what a number covers.
+
+### 16.1 The counting window (baseline)
+
+**Admin → Insights → "Start counting from now"** sets a watermark. Every figure
+on the page — and everything derived from `summarize()` — then covers only
+events at or after it. Earlier events stay in `analytics_event`; **"Show all
+history" brings them straight back.**
+
+Use it when the site opens to a new audience. Setting it twice is normal and
+cheap: once at the soft launch, again on public-launch day if the Chamber wants
+a clean public-launch figure. The card shows the instant, who set it, and a
+note, because "why do our numbers start here?" is a question that gets asked a
+year later, by someone who was not in the room.
+
+It is stored as one overlay record (`analytics-baseline` / `settings`) and
+filters on the `ts` **column**, the same column the E11 retention purge uses —
+so "before the baseline" and "past retention" can never disagree about when an
+event happened.
+
+### 16.2 The internal marker — keeping our own traffic out
+
+Events from the Chamber's own side are stored with `source: "internal"` and
+excluded from every visitor figure, exactly as the kiosk is (E22). They are
+still **counted**, in their own two-number receipt at the bottom of the card:
+a filter you cannot see is a filter you cannot trust, and during a soft launch
+"0 excluded" and "the marker broke" must not look the same.
+
+Two ways an event is marked, at `/api/track`:
+
+| Channel | Covers | Setup |
+| --- | --- | --- |
+| **Signed-in Chamber staff** — roles `admin`, `moderator`, `viewer` | Anyone logged in, on every device, automatically | None |
+| **Device flag** — `localStorage` `vk-internal` | Signed-out phones, tablets, board members, headless browsers | Open any page with `?vk-internal=1` once; `?vk-internal=0` undoes it |
+
+`org-editor` and `member-business` are deliberately **not** internal. They are
+the member businesses and nonprofits — locals with their own reason to open the
+app, and half of what a business launch launches to. Excluding them would make
+member engagement permanently invisible. To change that, move the role in
+`INTERNAL_ROLES` in `src/app/api/track/route.ts`; every number moves with it.
+
+Note that `/portal/*` **is** tracked (only `/admin/*` is excluded), so a member
+editing their own listing registers as visitor pageviews. That follows from the
+role split above; revisit both together if it ever looks wrong in a report.
+
+The `?vk-internal=1` link is safe to text to someone: the parameter is stripped
+from the address bar as soon as it applies, so it cannot ride along into a URL
+they later share.
+
+### 16.3 Actually deleting events
+
+`scripts/purge-analytics.mjs` — destructive, and deliberately not reachable from
+the admin UI, because the baseline's whole value is that a mistake costs
+nothing. Dry run by default:
+
+```
+node scripts/purge-analytics.mjs --before 2026-08-06 --env-file .env.production.local
+node scripts/purge-analytics.mjs --before 2026-08-06 --internal-only --confirm --env-file .env.production.local
+```
+
+Prefer `--internal-only`: it clears our traffic while leaving real visitor
+history intact. Deleting analytics events is privacy-positive — the E11
+retention manifest sets maximum lifetimes, not minimums.

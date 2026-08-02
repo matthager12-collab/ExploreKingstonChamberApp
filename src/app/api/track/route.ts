@@ -38,6 +38,7 @@ import {
   type AnalyticsGeo,
   type WebVitalMetric,
 } from "@/lib/analytics-store";
+import { getSessionUser, SESSION_COOKIE, type Role } from "@/lib/auth";
 import { lookupGeo } from "@/lib/geoip";
 import { isSensitiveOutbound, isSensitivePath } from "@/lib/privacy/policy";
 import { checkRateLimit, clientKey } from "@/lib/rate-limit";
@@ -85,6 +86,70 @@ function isLoopbackOrPrivate(ip: string): boolean {
   if (/^169\.254\./.test(v)) return true; // link-local
   if (/^f[cd]/.test(v) || /^fe80/.test(v)) return true; // IPv6 ULA / link-local
   return false;
+}
+
+/**
+ * THE POLICY: which signed-in roles are "us" rather than "a person using the
+ * site". Chamber-side accounts only.
+ *
+ * The five roles split cleanly in two (src/lib/auth/roles.ts). `admin`,
+ * `moderator` and `viewer` are Chamber staff — the people building, moderating
+ * and reporting on this site. Their clicks are work, and work is what this
+ * whole mechanism exists to keep out of the visitor numbers.
+ *
+ * `org-editor` and `member-business` are the ~174 member businesses and
+ * nonprofits, and they are deliberately NOT here. They are locals with their
+ * own reason to open the app, they are half of what a "public + business"
+ * launch is launching to, and whether they actually show up is a question the
+ * Chamber wants answered rather than filtered away. Excluding them would make
+ * member engagement permanently invisible.
+ *
+ * Move a role across this line and every number moves with it — so it is one
+ * list, in one place, rather than a condition spelled out at the call site.
+ */
+const INTERNAL_ROLES: readonly Role[] = ["admin", "moderator", "viewer"];
+
+/**
+ * Is this beacon ours? Two independent channels, because neither covers the
+ * ground alone:
+ *
+ *   1. A signed-in Chamber staff session. Server-side and unforgeable, and it
+ *      needs no setup — whoever is logged in is covered on every device they
+ *      log in from, forever, without remembering anything.
+ *
+ *   2. A self-declared device flag from the client (see tracker.tsx). This is
+ *      the channel for everyone channel 1 misses: a phone browsing signed out,
+ *      a board member's tablet, a spouse checking the site over dinner, an
+ *      agent driving a headless browser. They visit /?vk-internal=1 once.
+ *
+ * Channel 2 is client-supplied on a public endpoint, which everywhere else in
+ * this file is a reason for suspicion — the `source: "kiosk"` whitelist exists
+ * precisely because a free-text field would let anyone invent a series. It is
+ * safe HERE because of the direction it points: the only thing a forged
+ * `internal: true` can do is remove the forger's own events from the visitor
+ * count. There is nothing to gain by opting yourself out of a number, and a
+ * visitor who wants out of an anonymous page counter should arguably have that.
+ *
+ * Never throws. A failure to classify must degrade to "count it as a visitor",
+ * never to a 500 — telemetry does not get to break a page load, and this
+ * function runs on every single one.
+ */
+async function isInternalRequest(request: NextRequest, body: Record<string, unknown>): Promise<boolean> {
+  if (body.internal === true) return true;
+
+  // The cookie check is what keeps this off the hot path. An anonymous visitor
+  // — every visitor, essentially — has no vk-session cookie, so they return
+  // here having touched nothing. Only an already-signed-in request pays for the
+  // user lookup below, and there are a few dozen of those accounts in total.
+  if (!request.cookies.get(SESSION_COOKIE)?.value) return false;
+  try {
+    const user = await getSessionUser();
+    return user !== null && INTERNAL_ROLES.includes(user.role);
+  } catch {
+    // Missing AUTH_SECRET, DB blip, anything. Count it as a visitor: a
+    // slightly inflated number beats a dropped pageview and a broken beacon.
+    return false;
+  }
 }
 
 function deriveGeo(request: NextRequest): AnalyticsGeo {
@@ -235,7 +300,20 @@ export async function POST(request: NextRequest) {
     // free-text field is a free-text field even when we only meant to write
     // "kiosk" into it. Absent (the website) stays absent, which is what keeps
     // every event written before the kiosk existed counting as a visitor.
-    const source = body.source === "kiosk" ? ("kiosk" as const) : undefined;
+    //
+    // "internal" OUTRANKS "kiosk" when both apply. The overlap is real — the
+    // panel gets set up, tested and demoed by us before anyone walks up to it —
+    // and in that window the taps are ours, not walk-ups. Since the whole point
+    // of the kiosk series is answering "is this thing earning its spot at the
+    // dock?", seeding it with our own setup taps would corrupt the one number
+    // it exists to produce. Flag the panel internal while working on it, clear
+    // the flag when it goes live.
+    const internal = await isInternalRequest(request, body);
+    const source = internal
+      ? ("internal" as const)
+      : body.source === "kiosk"
+        ? ("kiosk" as const)
+        : undefined;
 
     const event: AnalyticsEvent = {
       ts: new Date().toISOString(),

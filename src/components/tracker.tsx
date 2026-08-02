@@ -28,6 +28,23 @@ import { isSensitiveOutbound } from "@/lib/privacy/policy";
 
 const SESSION_KEY = "vk-sid";
 
+/**
+ * Marks THIS DEVICE as ours, so its events are recorded as internal and kept
+ * out of every visitor number (see /api/track's isInternalRequest).
+ *
+ * localStorage, not sessionStorage, and that difference is the entire feature:
+ * a session id should evaporate when the browser closes, whereas "this is the
+ * Chamber's front-desk iPad" is true until somebody says otherwise.
+ *
+ * Set it by visiting any page with ?vk-internal=1 — a link you can text to a
+ * board member — and clear it with ?vk-internal=0. Deliberately not behind a
+ * login: most of the people whose clicks we do not want to count (a spouse
+ * checking the site, a volunteer testing on their own phone, an agent driving
+ * a headless browser) will never sign in at all.
+ */
+const INTERNAL_KEY = "vk-internal";
+const INTERNAL_PARAM = "vk-internal";
+
 // Fallback for privacy modes where sessionStorage throws.
 let inMemorySessionId: string | null = null;
 
@@ -54,12 +71,104 @@ function getSessionId(): string {
 }
 
 /**
+ * Is this device flagged as ours? Read live from localStorage on every beacon
+ * rather than cached at module scope — this file's components live in the root
+ * layout and never unmount for the life of the tab, so a cached value would
+ * outlive the toggle that changed it and quietly keep sending the old answer.
+ */
+export function isInternalDevice(): boolean {
+  try {
+    return localStorage.getItem(INTERNAL_KEY) === "1";
+  } catch {
+    return false; // private mode / storage disabled — count it as a visitor
+  }
+}
+
+/** Flag or unflag this device. Exported for the admin dashboard's toggle. */
+export function setInternalDevice(on: boolean): void {
+  try {
+    if (on) localStorage.setItem(INTERNAL_KEY, "1");
+    else localStorage.removeItem(INTERNAL_KEY);
+  } catch {
+    // Nothing sensible to do — the beacon will keep counting this device.
+  }
+  internalListeners.forEach((l) => l());
+}
+
+// ---------------------------------------------------------------------------
+// Change notification for the flag, so React components can read it with
+// useSyncExternalStore instead of copying it into state from an effect. The
+// flag lives outside React (localStorage) and can change from another tab, and
+// this file's components never unmount — all three are the conditions
+// useSyncExternalStore exists for. The owner of the value owns its
+// subscription; the alternative is every reader inventing its own.
+// ---------------------------------------------------------------------------
+
+const internalListeners = new Set<() => void>();
+
+/** Subscribe to device-flag changes, including flips made in another tab. */
+export function subscribeInternalDevice(onChange: () => void): () => void {
+  internalListeners.add(onChange);
+  // `storage` fires only in OTHER tabs, which is exactly the case the local
+  // listener set cannot cover.
+  window.addEventListener("storage", onChange);
+  return () => {
+    internalListeners.delete(onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
+
+/**
+ * Server snapshot for useSyncExternalStore: null, meaning "not known yet".
+ *
+ * Not `false`. localStorage does not exist during SSR, so a server-rendered
+ * `false` would state as fact that this device is counted — and then correct
+ * itself a moment later on the one screen someone opened specifically to find
+ * out. null renders as "checking…" and resolves to the truth.
+ */
+export function internalDeviceServerSnapshot(): boolean | null {
+  return null;
+}
+
+/**
+ * Apply ?vk-internal=1 / =0 from the current URL, then strip it from the
+ * address bar.
+ *
+ * The strip is not tidiness. A URL carrying this flag is contagious: leave it
+ * in the bar and it rides along into anything copy-pasted from there, silently
+ * excluding whoever opens the link. history.replaceState changes the bar
+ * without a navigation, so nothing re-renders and no pageview is disturbed.
+ *
+ * Reads window.location.search rather than useSearchParams() ON PURPOSE.
+ * useSearchParams() without a Suspense boundary opts its route into
+ * client-side rendering, and this file's components are mounted in the ROOT
+ * LAYOUT — it would deopt every prerendered page in the app and take the
+ * Lighthouse performance gate with it.
+ */
+function syncInternalFlagFromUrl(): void {
+  try {
+    const url = new URL(window.location.href);
+    const value = url.searchParams.get(INTERNAL_PARAM);
+    if (value === null) return;
+    setInternalDevice(value !== "0" && value !== "false");
+    url.searchParams.delete(INTERNAL_PARAM);
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  } catch {
+    // Malformed URL or a browser without replaceState — the flag just doesn't apply.
+  }
+}
+
+/**
  * Fire-and-forget beacon to /api/track. Exported (E11) so the consent
  * surfaces can send their one "consent" event through the SAME path —
  * sendBeacon-with-fetch-fallback — instead of growing a second fetch idiom.
+ *
+ * The internal marker is stamped HERE, at the single choke point every event
+ * type already flows through, so pageviews, outbound taps, consent grants and
+ * web vitals are all covered without four separate call sites remembering to.
  */
 export function send(payload: Record<string, unknown>) {
-  const body = JSON.stringify(payload);
+  const body = JSON.stringify(isInternalDevice() ? { ...payload, internal: true } : payload);
   try {
     // sendBeacon queues the request even if the page unloads (outbound taps!).
     if (typeof navigator !== "undefined" && navigator.sendBeacon?.("/api/track", body)) {
@@ -263,6 +372,12 @@ export function Tracker() {
   const pathname = usePathname();
 
   useEffect(() => {
+    // Before anything is sent: a visitor who just opened /?vk-internal=1 must
+    // have that applied in time for THIS page's own beacon, not the next one.
+    // Runs per pathname rather than once, because this component is mounted in
+    // the root layout and never remounts — a [] effect here would only ever see
+    // the URL the tab was first opened with.
+    syncInternalFlagFromUrl();
     if (!pathname || pathname.startsWith("/admin")) return;
     let sent = false;
     let rafId: number | undefined;
