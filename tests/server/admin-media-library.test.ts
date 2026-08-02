@@ -18,6 +18,7 @@ import path from "path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { BASE_URL } from "./config";
+import { signInAdmin } from "./admin-session";
 
 let browser: Browser;
 let context: BrowserContext;
@@ -32,10 +33,9 @@ const ALT = "Wooden pier railing with gulls";
 beforeAll(async () => {
   browser = await chromium.launch();
   context = await browser.newContext({ viewport: { width: 1280, height: 1200 } });
-  const login = await context.request.post(BASE_URL + "/api/auth/login", {
-    data: { email: "ci@example.test", password: "ci-admin-password" },
-  });
-  if (!login.ok()) throw new Error("admin login for the media spec must succeed");
+  // Minted, not logged in — see tests/server/admin-session.ts (shared
+  // login rate-limit budget).
+  await signInAdmin(context);
   page = await context.newPage();
   page.on("dialog", (d) => void d.accept());
 });

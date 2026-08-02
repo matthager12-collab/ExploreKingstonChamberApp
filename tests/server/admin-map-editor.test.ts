@@ -20,6 +20,7 @@ import { fileURLToPath } from "url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { BASE_URL } from "./config";
+import { signInAdmin } from "./admin-session";
 
 const ZONE_ID = "port-free-2hr-row";
 const ZONE_NAME = "Free 2-hour row (Mike Wallace Park)";
@@ -80,10 +81,9 @@ beforeAll(async () => {
   // Tall viewport: the 460px map sits under page chrome, and mouse events
   // aimed below the viewport's bottom edge silently hit nothing.
   context = await browser.newContext({ viewport: { width: 1280, height: 1200 } });
-  const login = await context.request.post(BASE_URL + "/api/auth/login", {
-    data: { email: "ci@example.test", password: "ci-admin-password" },
-  });
-  if (!login.ok()) throw new Error("admin login for the editor spec must succeed");
+  // Minted, not logged in — see tests/server/admin-session.ts (shared
+  // login rate-limit budget).
+  await signInAdmin(context);
   const probe = await context.request.get(BASE_URL + "/api/map/tiles/kingston.pmtiles", {
     headers: { Range: "bytes=0-1023" },
   });

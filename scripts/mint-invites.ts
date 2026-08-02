@@ -67,9 +67,11 @@ const skipExisting = flag("--skip-existing");
 const outFile = opt("--out");
 const actor = opt("--actor") ?? "scripts/mint-invites";
 const baseUrl = (opt("--base-url") ?? siteUrl()).replace(/\/+$/, "");
-// The join page has no ?code= prefill — the CSV carries the code and the
-// plain join URL as separate mail-merge columns.
+// E17: each row's join URL carries ?code=, so the link alone lands the owner
+// on a pre-filled form; the code stays in its own column for mail-merges that
+// want to mention it in prose.
 const joinUrl = `${baseUrl}/portal/join`;
+const joinLinkFor = (code: string) => `${joinUrl}?code=${encodeURIComponent(code)}`;
 
 const host = (() => {
   try {
@@ -174,7 +176,13 @@ async function main(): Promise<number> {
         actor,
       );
       rows.push(
-        [l.name, l.id, invite.code, joinUrl, invite.expiresAt.toISOString().slice(0, 10)]
+        [
+          l.name,
+          l.id,
+          invite.code,
+          joinLinkFor(invite.code),
+          invite.expiresAt.toISOString().slice(0, 10),
+        ]
           .map(csvField)
           .join(","),
       );

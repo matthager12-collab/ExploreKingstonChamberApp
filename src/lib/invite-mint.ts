@@ -10,15 +10,26 @@
 // linkedIds are validated against the real stores, so a typo'd or malicious
 // id can never pre-grant edit rights over a listing created later. For
 // kind:"business" the valid universe is restaurants ∪ lodging (portal-lodging,
-// PR #124) — one universe for BOTH writers, route and script alike.
+// PR #124) ∪ directory (E17; drafts included — imported drafts are what gets
+// claimed) — one universe for BOTH writers, route and script alike. E17 also
+// refuses at mint time any linked record already claimed, by EITHER half of a
+// claim: record.owner_org_id, or an org whose linked_ids already grant edit
+// rights over it (see src/lib/ownership.ts on why one half is not enough).
 
 // Submodule imports, not the "@/lib/auth" barrel: the barrel re-exports
 // session.ts (next/headers), which a plain-Node script cannot load.
 // identity.ts is explicitly request-scope-free for exactly this use.
-import { AuthError, createInvite, type InviteRow } from "@/lib/auth/identity";
+import {
+  AuthError,
+  createInvite,
+  listOrganizations,
+  type InviteRow,
+} from "@/lib/auth/identity";
 import { ROLES, type OrgKind, type Role } from "@/lib/auth/roles";
+import { findClaimedLinkedRecords, OwnershipConflictError } from "@/lib/ownership";
 import { getRestaurants } from "@/lib/stores/business-store";
 import { getCharities } from "@/lib/stores/charity-store";
+import { getDirectoryListingsAdmin } from "@/lib/stores/directory-store";
 import { getLodging } from "@/lib/stores/listing-stores";
 
 /** The untrusted request shape — exactly what the route reads out of JSON. */
@@ -65,18 +76,52 @@ export async function mintInvite(
   const kind: OrgKind = role === "member-business" ? "business" : "nonprofit";
 
   if (linkedIds.length > 0) {
-    // kind:"business" spans BOTH member-editable listing stores — restaurants
-    // and lodging — so a hotel or marina can be onboarded exactly like a
-    // restaurant. Ids the union does not contain are still rejected outright.
+    // kind:"business" spans the member-editable listing stores — restaurants,
+    // lodging, and (E17) the directory — so a hotel, marina, or imported
+    // directory listing can be onboarded exactly like a restaurant. The
+    // directory is read through its ADMIN getter on purpose: imported records
+    // sit as drafts, and drafts are precisely what gets claimed. Ids the
+    // union does not contain are still rejected outright.
     const records =
       kind === "business"
-        ? [...(await getRestaurants()), ...(await getLodging())]
+        ? [
+            ...(await getRestaurants()),
+            ...(await getLodging()),
+            ...(await getDirectoryListingsAdmin()),
+          ]
         : await getCharities();
     const valid = new Set(records.map((r) => r.id));
     const unknown = linkedIds.filter((id) => !valid.has(id));
     if (unknown.length > 0) {
       throw new AuthError(
         `unknown ${kind === "business" ? "business" : "charity"} id(s): ${unknown.join(", ")}`,
+      );
+    }
+
+    // E17 mint-time refusal: a record an org already claims must not be
+    // minted into a second claim. "Claims" is the UNION of both halves —
+    // record.owner_org_id AND any org whose linked_ids already grant edit
+    // rights over the id. Keying on the stamp alone meant a redemption whose
+    // backfill failed left the listing looking free, and the Chamber could
+    // hand a second code to an unrelated business that would then be able to
+    // edit the same listing. Named so the admin knows who holds it; the route
+    // maps OwnershipConflictError to a 409.
+    const claimed = await findClaimedLinkedRecords(kind, linkedIds, await listOrganizations(), {
+      // Adding another person to the org that already holds the listing is
+      // the remedy this error recommends — it must not refuse itself.
+      ignoreOrgId: typeof body.orgId === "string" ? body.orgId.trim() || null : null,
+    });
+    if (claimed.length > 0) {
+      const parts = claimed.map((c) => {
+        const holders = [
+          ...(c.ownerOrgId ? [c.ownerOrgName ?? c.ownerOrgId] : []),
+          ...c.grantOrgs.filter((g) => g.id !== c.ownerOrgId).map((g) => g.name),
+        ];
+        return `${c.id} is already claimed by ${holders.join(" and ")}`;
+      });
+      throw new OwnershipConflictError(
+        `${parts.join("; ")} — release the claim on the claims console (/admin/claims) first, ` +
+          `or invite this person into that organization instead.`,
       );
     }
   }

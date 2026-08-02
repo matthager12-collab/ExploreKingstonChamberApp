@@ -16,6 +16,7 @@ import { fileURLToPath } from "url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { BASE_URL } from "./config";
+import { signInAdmin } from "./admin-session";
 
 const TRAIL_ID = "waterfront-boardwalk";
 const TRAIL_TITLE = "Waterfront boardwalk stroll";
@@ -155,10 +156,9 @@ async function openBuilder(): Promise<void> {
 beforeAll(async () => {
   browser = await chromium.launch();
   context = await browser.newContext({ viewport: { width: 1280, height: 1200 } });
-  const login = await context.request.post(BASE_URL + "/api/auth/login", {
-    data: { email: "ci@example.test", password: "ci-admin-password" },
-  });
-  if (!login.ok()) throw new Error("admin login for the builder spec must succeed");
+  // Minted, not logged in — see tests/server/admin-session.ts (shared
+  // login rate-limit budget).
+  await signInAdmin(context);
   const probe = await context.request.get(BASE_URL + "/api/map/tiles/kingston.pmtiles", {
     headers: { Range: "bytes=0-1023" },
   });

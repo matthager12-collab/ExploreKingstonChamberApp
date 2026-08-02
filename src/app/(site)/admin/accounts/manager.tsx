@@ -260,6 +260,9 @@ export function AccountsManager({
   const [origin, setOrigin] = useState("");
   useEffect(() => setOrigin(window.location.origin), []);
   const joinUrl = `${origin}/portal/join`;
+  // E17 sub-minute claim: the per-invite link carries ?code= so the owner
+  // lands on a pre-filled form — one tap, three fields, done.
+  const joinLinkFor = (code: string) => `${joinUrl}?code=${encodeURIComponent(code)}`;
 
   // ---------- accounts state ----------
   //
@@ -458,7 +461,7 @@ export function AccountsManager({
       names.length > 0
         ? `, linked to ${listNames(names)} so you can update hours, events, and listing details anytime`
         : "";
-    return `Create your account at ${joinUrl} with code ${invite.code}${who}${linked}. The code expires ${fmtDate(invite.expiresAt)}.`;
+    return `Create your account at ${joinLinkFor(invite.code)} (invite code ${invite.code})${who}${linked}. The code expires ${fmtDate(invite.expiresAt)}.`;
   }
 
   async function submit(e: FormEvent<HTMLFormElement>) {
@@ -754,9 +757,10 @@ export function AccountsManager({
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-ink-soft">
                   <span>
-                    Redeem at <span className="font-medium break-all text-ink">{joinUrl}</span>
+                    Redeem at{" "}
+                    <span className="font-medium break-all text-ink">{joinLinkFor(i.code)}</span>
                   </span>
-                  <CopyButton text={joinUrl} label="Copy link" />
+                  <CopyButton text={joinLinkFor(i.code)} label="Copy join link" />
                 </div>
                 {orgNameFor(i) && (
                   <p className="mt-1 text-sm text-ink-soft">
@@ -836,9 +840,10 @@ export function AccountsManager({
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-ink-soft">
               <span>
-                They redeem it at <span className="font-medium break-all text-ink">{joinUrl}</span>
+                They redeem it at{" "}
+                <span className="font-medium break-all text-ink">{joinLinkFor(fresh.code)}</span>
               </span>
-              <CopyButton text={joinUrl} label="Copy link" />
+              <CopyButton text={joinLinkFor(fresh.code)} label="Copy join link" />
             </div>
             <div className="mt-4">
               <div className="flex items-center gap-2">

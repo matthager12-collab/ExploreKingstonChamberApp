@@ -568,6 +568,8 @@ which redirects to `/portal/setup`. Editors write records into Postgres
 | `/admin/content` | Content CMS: edit the 77 copy blocks (`src/lib/site-copy-registry.ts`, reaching client components via `copy-context.tsx`) and **show/hide pages** (page-visibility) |
 | `/admin/ferry-info` | Structured ferry **facts** (payment / boarding-pass / cash-tips / sources), the **prediction on/off** toggle, and the **SR-104 boarding-pass override** |
 | `/admin/listings` | Restaurants (add / edit / hide via tombstone), lodging, and webcams |
+| `/admin/claims` | Claims console (E17): which listings are claimed and by whom, listing-bound invite minting, and **releasing a claim** (the only undo) — see "Onboard an owner in under a minute" below |
+| `/admin/import/qwick` | No-terminal Qwick listings import (E17): paste/upload a saved export, preview, apply as invisible drafts — see "Import the Qwick listings" below |
 | `/admin/worklist` | The one review queue (E08): member submissions, visitor reports, re-verify checks — see "Worklist & moderation" below |
 | `/admin/itineraries` | Build/edit itineraries |
 | `/admin/hunts` | Build/edit scavenger hunts; review player submissions |
@@ -962,6 +964,129 @@ npm run import:qwick -- --apply --fixture <export.json>     # prints DB host, as
    idempotency are CI-tested); an unchanged re-run writes nothing.
 4. Reports persist as `import_run` rows; every record write is audited as
    actor `import:qwick`.
+
+The same import runs **without a terminal** at `/admin/import/qwick` (paste or
+upload the saved export, preview, then apply) — this runbook's rules apply
+unchanged: preview first, drafts only, quarantines need a human decision.
+
+### Onboard an owner in under a minute (E17)
+
+A business taps "This is my listing" on `/eat` or `/stay`; the request lands as
+a `claim_request` item in `/admin/worklist` and on `/admin/claims`. **Claim
+requests NEVER auto-grant** — every claim goes through a human at the Chamber:
+
+1. **Verify the claimant out-of-band: call the listing's published phone
+   number** and confirm the person who submitted the claim answers for the
+   business. Pre-R3 the phone check alone suffices. **NEVER verify via a
+   GrowthZone lookup** — the vendor roll-off retired it; the app is the
+   membership system of record.
+2. **Mint the invite from `/admin/claims`**: the "Invite owner" button on the
+   listing's row creates a listing-bound invite (role derived from the domain,
+   linked to exactly that record) and shows a copyable
+   `/portal/join?code=…` link. Minting refuses (409) if the listing is already
+   owned.
+3. **Send the copyable link yourself from the Chamber inbox** — the app never
+   sends email or SMS (E21 owns outbound). Read the code aloud if you're
+   still on the phone.
+4. **Confirm claimed in the console**: once they redeem, the row on
+   `/admin/claims` flips to claimed with the owning org named.
+5. **Resolve the worklist item as `invited`** (the buttons record what you
+   did — they never mint). Reject with a note, or mark duplicate, when the
+   claim doesn't check out.
+
+A business with **no listing and no membership** routes to the **E30
+membership-application flow** when it lands — not a bespoke path; don't
+hand-create listings or orgs to shortcut a claim.
+
+#### Repeat requests: you always see the FIRST requester, plus a count
+
+`/api/claim` is public and unauthenticated, so a second request for a listing
+that already has an open item **cannot overwrite the first requester's name,
+number, business name, or message**. A repeat contributes exactly one thing:
+`+1` to the count. The claims console and the worklist both label the details
+accordingly ("First requester", "First requester's contact") and say so
+explicitly once the count passes 1.
+
+This is deliberate — the old merge let anyone who knew a live listing id
+replace the genuine owner's callback number with their own, and the superseded
+number survived nowhere (contact PII is stripped from audit snapshots by
+design). The operational rule is unchanged and still the one that matters:
+**call the number published ON THE LISTING, never the number in the request.**
+A high count means "several people want this listing", not "the newest one is
+the real owner" — work it out on the phone.
+
+#### Release a claim (the undo)
+
+**When:** the wrong person claimed a listing, the business changed hands, or a
+claim was granted in error. This is the **only** way to take ownership back off
+a listing.
+
+1. Go to `/admin/claims` and find the row (search matches listing name, listing
+   id, and organization name).
+2. Press **Release claim** — it only appears on claimed rows.
+3. Read the confirm panel. It names the organization that is about to lose
+   access. Press **Yes, release the claim**.
+
+What it does, immediately: clears the listing's ownership stamp **and** removes
+the listing from the organization's linked ids. Edit access is revoked on the
+spot — the business can no longer edit that listing. Their account, their other
+listings, and this listing's *content* are all untouched. The row goes back to
+"Unclaimed" and can be invited again right away.
+
+Both halves land in the audit trail under the acting admin's email: a record
+row for the listing, and an `org-update` row for the organization.
+
+**One side effect worth naming.** Release is a human write with source
+`admin`, so under the E17 precedence law the **Qwick importer will no longer
+update that listing** (its `updated_by` is no longer `import:qwick`). A
+released listing is Chamber-curated from then on, until someone claims it
+again. That is intended, but it does not undo itself.
+
+#### "Needs attention" rows
+
+A claim has two halves: the **listing** records its owner, and the
+**organization** is granted edit access. Permissions are decided by the grant;
+the stamp is what the console and the mint refusal read. When only one half
+landed, the row says **Needs attention** and states which half is missing
+instead of confidently claiming "Claimed" or "Unclaimed".
+
+The usual cause is a redemption whose ownership backfill failed. Look for
+`invite-redeem ownership backfill incomplete` or `invite-redeem linked-id grant
+failed` in the logs — both log the org id, the requested ids, and exactly what
+was stamped / skipped / failed.
+
+The repair is the same in every case: **release the claim, then invite the
+right owner again.**
+
+> Expect the console to light up on its FIRST load after this ships.
+> Organizations onboarded before the claims console existed have grants but no
+> ownership stamps, so their listings read "Claimed — grant-without-owner"
+> rather than "Unclaimed". That is accurate: those orgs really can edit those
+> listings. There is no bulk re-stamp surface; repair is per listing (release +
+> re-invite). If the count is large, a one-off backfill script is the sane
+> follow-up.
+
+#### Two live codes for one listing
+
+Before minting, the console warns when a listing already has an outstanding
+invite (count + expiry; the code itself is never shown on this page). A second
+code is not an error, but **only the first redemption wins** and the loser gets
+a 409. Revoke the stale code on `/admin/accounts` first — see "Revoke an
+invite" above.
+
+#### Maintainer note: claiming a seed listing materializes it
+
+Curated listings ship as **git seed data** and only exist in Postgres once
+something writes them. Granting a claim is such a write: the ownership backfill
+creates an **overlay row** from the seed doc (status `live`, source `portal`).
+
+Public reads merge seed + overlay and the **overlay wins by id**. So from the
+moment a curated listing is claimed, **later edits to that record in the git
+seed no longer reach the site** — the owner owns it now, and the seed entry is
+shadowed. This is correct behaviour (the whole point of a claim), but it
+surprises maintainers who edit seed JSON and see nothing change. Check
+`/admin/claims` for that id before assuming a deploy problem; the fix for a
+genuinely stale record is to edit it in the admin UI, not in the seed.
 
 ---
 

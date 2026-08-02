@@ -37,7 +37,9 @@ export type WriteMeta = {
   /** E05 default is "live" (behavior-preserving); E08 flips submission
    *  surfaces to "pending". */
   status?: RecordStatus;
-  ownerOrgId?: string;
+  /** ABSENT leaves the column alone; an explicit `null` CLEARS it (that is how
+   *  E17's release-a-claim path un-owns a listing). Anything else stamps. */
+  ownerOrgId?: string | null;
   externalId?: string;
   /** Audit-action override — importer ('import') and the E09 restore route
    *  ('restore', so the trail records the undo) only. App writes leave this
@@ -185,7 +187,9 @@ export async function writeRecord<T extends WithId>(
           updatedAt: now,
           updatedBy: actor,
           // external/owner ids only move when explicitly provided — an admin
-          // edit must not wipe the AMS seam E16 will populate.
+          // edit must not wipe the AMS seam E16 will populate. "Provided"
+          // means `!== undefined`, so an explicit null is a deliberate CLEAR
+          // (E17 release), not a no-op.
           ...(meta?.externalId !== undefined ? { externalId: meta.externalId } : {}),
           ...(meta?.ownerOrgId !== undefined ? { ownerOrgId: meta.ownerOrgId } : {}),
         },

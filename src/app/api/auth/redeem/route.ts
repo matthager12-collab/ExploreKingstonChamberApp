@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { redeemInvite, sessionCookie, tokenFor } from "@/lib/auth";
+import { OwnershipConflictError } from "@/lib/ownership";
 import { checkRateLimit, clientKey } from "@/lib/rate-limit";
 
 function tooMany(retryAfterSeconds: number): NextResponse {
@@ -43,6 +44,16 @@ export async function POST(request: NextRequest) {
     res.cookies.set(sessionCookie.name, tokenFor(user), sessionCookie.options);
     return res;
   } catch (e) {
+    if (e instanceof OwnershipConflictError) {
+      // E17: the linked listing was claimed between mint and redeem.
+      // redeemInvite only throws this from its PRE-CHECK, which runs before
+      // redeemInviteTx opens — so today no user, no org, and (by falling
+      // through here without touching cookies) no session. That guarantee is
+      // the pre-check's ORDERING, not this branch's: if a future change ever
+      // raises OwnershipConflictError from inside or after the transaction,
+      // the account may already exist and this response would be a lie.
+      return NextResponse.json({ error: e.message }, { status: 409 });
+    }
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "could not redeem invite" },
       { status: 400 },

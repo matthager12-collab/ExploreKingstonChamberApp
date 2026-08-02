@@ -120,6 +120,14 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     capability: "manage-accounts",
   },
   {
+    id: "claims",
+    href: "/admin/claims",
+    title: "Claims console",
+    navLabel: "Claims",
+    blurb: "See which listings are claimed, and invite the owners who haven't.",
+    capability: "manage-accounts",
+  },
+  {
     id: "worklist",
     href: "/admin/worklist",
     title: "Worklist / moderation",
@@ -143,6 +151,15 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     title: "Ferry-dock kiosk",
     navLabel: "Kiosk",
     blurb: "Turn the dock touchscreen on or off, pick its screens, push an update now.",
+    capability: "manage-site",
+  },
+  {
+    id: "import-qwick",
+    href: "/admin/import/qwick",
+    title: "Listings import (Qwick)",
+    navLabel: "Import",
+    blurb:
+      "Preview and apply a saved Qwick kiosk export — everything lands as invisible drafts.",
     capability: "manage-site",
   },
   {

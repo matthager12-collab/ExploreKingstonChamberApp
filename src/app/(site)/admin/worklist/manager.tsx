@@ -352,6 +352,57 @@ function PayloadDetail({ item }: { item: WorklistItemView }) {
       </div>
     );
   }
+  if (item.type === "claim_request") {
+    // E17: an owner asking to claim a listing. The console at /admin/claims
+    // is where the invite is MINTED; the buttons on this item only record
+    // the outcome. Deep-link straight to the listing's row.
+    //
+    // The payload is FIRST-WRITER-WINS (see mergePayloads in lib/db/worklist):
+    // a repeat request only bumps `count`, so every requester detail below is
+    // the FIRST person who asked, not the most recent. The labels have to say
+    // so, or an admin reads a stale name as "who just called".
+    const count = Number(p.count ?? 1);
+    // `businessName` is whatever the anonymous form was given, so it is shown
+    // as a claim ABOUT the listing, never as the listing's name.
+    const submittedAs =
+      typeof p.businessName === "string" &&
+      p.businessName.trim() !== "" &&
+      p.businessName !== item.subjectLabel
+        ? p.businessName
+        : null;
+    return (
+      <div className="space-y-2">
+        <DetailRows
+          rows={[
+            { label: "Listing", value: plain(item.subjectLabel) },
+            ...(submittedAs ? [{ label: "Submitted as", value: submittedAs }] : []),
+            { label: "First requester", value: plain(p.contactName) },
+            { label: "First requester's contact", value: plain(p.contact) },
+            { label: "Message", value: plain(p.message) },
+            {
+              label: "Requests",
+              value:
+                count > 1
+                  ? `${count} total — later requests add to this count only; the details above are the FIRST requester's`
+                  : "1",
+            },
+          ]}
+        />
+        <p className="text-xs text-ink-soft">
+          Verification is human: call the number on the LISTING (not the one in
+          this request) before granting anything. Mint the invite from the
+          claims console first — the buttons here record the outcome, they do
+          not mint.
+        </p>
+        <a
+          href={`/admin/claims#claim-row-${item.subjectStore}-${item.subjectId}`}
+          className="inline-block text-sm font-medium text-tide-deep underline decoration-seaglass underline-offset-2 hover:text-sound"
+        >
+          Open this listing in the claims console
+        </a>
+      </div>
+    );
+  }
   // privacy_request
   return (
     <DetailRows
@@ -744,6 +795,53 @@ export function WorklistManager({
                               Tools for this queue arrive with its producer epic — resolve or
                               dismiss below if it&apos;s already handled.
                             </span>
+                          )}
+                          {item.type === "claim_request" && (
+                            <>
+                              {/* Records the outcome AFTER the invite was
+                                  minted at /admin/claims — it does not mint. */}
+                              <button
+                                className={`${actionBtn} bg-sound text-white hover:bg-sound-deep`}
+                                disabled={busy}
+                                data-confirm={`Record "${item.subjectLabel}" as invited? Only do this after minting the invite from the claims console.`}
+                                onClick={() =>
+                                  void act(
+                                    { action: "resolve", id: item.id, resolution: "invited", note },
+                                    `Record "${item.subjectLabel}" as invited? Only do this after minting the invite from the claims console.`,
+                                    "Recorded as invited.",
+                                  )
+                                }
+                              >
+                                Invited
+                              </button>
+                              <button
+                                className={`${actionBtn} border border-coral-deep text-coral-deep hover:bg-coral-deep/10`}
+                                disabled={busy || !note.trim()}
+                                data-confirm={`Reject the claim on "${item.subjectLabel}"? Your note records why.`}
+                                onClick={() =>
+                                  void act(
+                                    { action: "resolve", id: item.id, resolution: "rejected", note },
+                                    `Reject the claim on "${item.subjectLabel}"?`,
+                                    "Claim rejected.",
+                                  )
+                                }
+                              >
+                                Reject claim
+                              </button>
+                              <button
+                                className={`${actionBtn} border border-sand text-ink hover:border-tide`}
+                                disabled={busy}
+                                onClick={() =>
+                                  void act(
+                                    { action: "resolve", id: item.id, resolution: "duplicate", note },
+                                    undefined,
+                                    "Marked as duplicate.",
+                                  )
+                                }
+                              >
+                                Duplicate
+                              </button>
+                            </>
                           )}
                           {item.type === "privacy_request" && (
                             <PrivacyRequestTools

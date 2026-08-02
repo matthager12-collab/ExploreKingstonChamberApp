@@ -26,6 +26,7 @@ import {
   revokeInvite,
 } from "@/lib/auth";
 import { mintInvite, type InviteRequestBody } from "@/lib/invite-mint";
+import { OwnershipConflictError } from "@/lib/ownership";
 
 export async function GET() {
   const denied = await requireRole("admin");
@@ -53,6 +54,11 @@ export async function POST(request: NextRequest) {
     const invite = await mintInvite(body, actor.email);
     return NextResponse.json({ ok: true, invite: { ...invite, state: inviteState(invite) } });
   } catch (err) {
+    if (err instanceof OwnershipConflictError) {
+      // E17: a linked record is already owned by an org — the message names
+      // it. 409, not 400: the request was well-formed, the state conflicts.
+      return NextResponse.json({ error: err.message }, { status: 409 });
+    }
     if (err instanceof AuthError) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }

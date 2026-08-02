@@ -18,9 +18,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { BOARDING_PASS } from "../../src/lib/data/ferry-info";
 import { copyFallback } from "../../src/lib/site-copy-registry";
 import { BASE_URL } from "./config";
+import { ADMIN_COOKIE_HEADER } from "./admin-session";
 
 /** Seeded by tests/server/global-setup.ts. */
-const ADMIN = { email: "ci@example.test", password: "ci-admin-password" };
 
 /** React-escaped form of a prose string, for asserting on rendered text nodes
  *  (same helper as es-accessibility.test.ts). */
@@ -48,18 +48,9 @@ async function get(path: string, cookie?: string): Promise<{ status: number; htm
 }
 
 async function adminCookie(): Promise<string> {
-  const res = await fetch(BASE_URL + "/api/auth/login", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(ADMIN),
-    redirect: "manual",
-  });
-  expect(res.ok, `admin login failed with ${res.status}`).toBe(true);
-  const raw = res.headers.getSetCookie?.() ?? [];
-  const set = raw.length > 0 ? raw : [res.headers.get("set-cookie") ?? ""];
-  const session = set.map((c) => c.split(";")[0]).find((c) => c.startsWith("vk-session="));
-  expect(session, `no vk-session cookie in the login response: ${set.join(" | ")}`).toBeTruthy();
-  return session!;
+  // Minted, not logged in — see tests/server/admin-session.ts (shared
+  // login rate-limit budget). Still async so callers are unchanged.
+  return ADMIN_COOKIE_HEADER;
 }
 
 /** Flip /line visibility through the real admin API — the same call the

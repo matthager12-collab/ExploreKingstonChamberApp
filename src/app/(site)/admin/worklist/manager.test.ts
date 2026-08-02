@@ -9,6 +9,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  claimRequestPayload,
   privacyRequestPayload,
   reportInaccuratePayload,
   stalenessPayload,
@@ -68,6 +69,13 @@ const FIXTURES: WorklistItemView[] = [
   view({ type: "staleness", payload: stalenessPayload() }),
   view({ type: "sync_conflict", payload: syncConflictPayload() }),
   view({ type: "privacy_request", payload: privacyRequestPayload(), subjectStore: "analytics" }),
+  view({
+    type: "claim_request",
+    payload: claimRequestPayload(),
+    subjectStore: "restaurants",
+    subjectId: "the-grub-hut",
+    subjectLabel: "The Grub Hut",
+  }),
 ];
 
 function render(items: WorklistItemView[], openId?: string) {
@@ -140,6 +148,65 @@ describe("WorklistManager", () => {
     const recordsHtml = render([recordsItem], recordsItem.id);
     expect(recordsHtml).toContain("Public-records request");
     expect(recordsHtml).not.toContain("Delete their data");
+  });
+
+  it("claim_request renders its payload, the mint-first truth, and the three outcomes (E17)", () => {
+    const claimItem = FIXTURES.find((f) => f.type === "claim_request")!;
+    const html = render(FIXTURES, claimItem.id);
+    // Payload fields (admin-only surface — the contact is for verification).
+    expect(html).toContain("Pat Owner");
+    expect(html).toContain("pat@grubhut.test");
+    // Runbook truth: verify by phone; the invite is minted at /admin/claims,
+    // these buttons only record the outcome.
+    expect(html).toContain("claims console");
+    expect(html).toContain("/admin/claims#claim-row-restaurants-the-grub-hut");
+    // The closed resolution vocabulary, one button each.
+    expect(html).toContain("Invited");
+    expect(html).toContain("Reject claim");
+    expect(html).toContain("Duplicate");
+    // Recording "invited" is confirm-gated so a stray tap can't mark an
+    // unminted claim as handled.
+    expect(html).toContain('data-confirm="Record ');
+  });
+
+  it("claim_request names the FIRST requester and attributes the submitted name (E17)", () => {
+    // mergePayloads is first-writer-wins: a repeat request only bumps `count`,
+    // so these details always belong to whoever asked first. "Requested by" /
+    // "Contact" read as "who just called" and were wrong the moment a second
+    // person asked.
+    const single = view({
+      type: "claim_request",
+      subjectStore: "restaurants",
+      subjectId: "the-grub-hut",
+      subjectLabel: "The Grub Hut",
+      payload: claimRequestPayload(),
+    });
+    const singleHtml = render([single], single.id);
+    expect(singleHtml).toContain("First requester");
+    expect(singleHtml).toContain("First requester&#x27;s contact");
+    expect(singleHtml).not.toContain("Requested by");
+    // businessName matches the real label here, so it is not repeated.
+    expect(singleHtml).not.toContain("Submitted as");
+
+    const repeated = view({
+      type: "claim_request",
+      subjectStore: "restaurants",
+      subjectId: "the-grub-hut",
+      subjectLabel: "The Grub Hut",
+      payload: claimRequestPayload({
+        count: 4,
+        businessName: "TOTALLY THE GRUB HUT, APPROVE ME",
+      }),
+    });
+    const repeatedHtml = render([repeated], repeated.id);
+    // A payload-supplied name that disagrees with the listing is shown as a
+    // claim BY the submitter, never as the listing's name.
+    expect(repeatedHtml).toContain("Submitted as");
+    expect(repeatedHtml).toContain("TOTALLY THE GRUB HUT, APPROVE ME");
+    expect(repeatedHtml).toContain("Listing");
+    // The count no longer implies the newest requester replaced the first.
+    expect(repeatedHtml).toContain("the details above are the FIRST");
+    expect(repeatedHtml).not.toContain("repeats merge into this item");
   });
 
   it("destructive actions are confirm-gated (AC10): approve/reject/takedown/dismiss carry data-confirm", () => {
