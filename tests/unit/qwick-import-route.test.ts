@@ -79,12 +79,26 @@ function signedOut() {
   authState.user = null;
 }
 
-function postReq(body: unknown) {
+function postReq(body: unknown, extraHeaders: Record<string, string> = {}) {
   return new NextRequest("http://localhost/api/admin/import/qwick", {
     method: "POST",
     body: typeof body === "string" ? body : JSON.stringify(body),
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...extraHeaders },
   });
+}
+
+/** Wraps request.text() so a test can assert whether the body was buffered. */
+function watchBodyRead(req: NextRequest): { read: () => boolean } {
+  let read = false;
+  const original = req.text.bind(req);
+  Object.defineProperty(req, "text", {
+    configurable: true,
+    value: async () => {
+      read = true;
+      return original();
+    },
+  });
+  return { read: () => read };
 }
 
 let tdb: TestDb;
@@ -200,6 +214,54 @@ describe("input guards", () => {
   it("oversized body → 413", async () => {
     asAdmin();
     const res = await POST(postReq("x".repeat(6 * 1024 * 1024 + 16)));
+    expect(res.status).toBe(413);
+    expect((await res.json()).error).toMatch(/too large/i);
+  });
+
+  // Regression: the cap used to be applied only AFTER request.text() had
+  // already buffered the whole body, so it bounded JSON.parse and nothing else.
+  it("an over-cap Content-Length is refused WITHOUT buffering the body", async () => {
+    asAdmin();
+    const req = postReq({ mode: "preview", export: CLEAN }, {
+      "content-length": String(6 * 1024 * 1024 + 1),
+    });
+    const watcher = watchBodyRead(req);
+    const res = await POST(req);
+    expect(res.status).toBe(413);
+    expect((await res.json()).error).toMatch(/too large/i);
+    expect(watcher.read(), "the body was buffered despite the header cap").toBe(false);
+  });
+
+  // …but the header is a claim, not a guarantee: an honest small/absent
+  // Content-Length must not widen the cap, and chunked uploads send none.
+  it("a lying (small) Content-Length does not widen the cap", async () => {
+    asAdmin();
+    const res = await POST(
+      postReq("x".repeat(6 * 1024 * 1024 + 16), { "content-length": "12" }),
+    );
+    expect(res.status).toBe(413);
+  });
+
+  it("a malformed Content-Length is ignored, not trusted", async () => {
+    asAdmin();
+    const res = await POST(
+      postReq({ mode: "preview", export: CLEAN }, { "content-length": "not-a-number" }),
+    );
+    // Falls through to the real byte check, which this small body passes.
+    expect(res.status).toBe(200);
+  });
+
+  // Regression: `.length` counts UTF-16 code units. A 3-bytes-per-char export
+  // (em dashes, accented business names, CJK) can be >6 MB on the wire while
+  // measuring well under 6 M code units, sailing straight past a length cap.
+  it("a multi-byte body over 6 MB of BYTES → 413 even though .length is under the cap", async () => {
+    asAdmin();
+    // U+2014 EM DASH: 1 UTF-16 code unit, 3 UTF-8 bytes.
+    const body = "—".repeat(2_200_000);
+    expect(body.length).toBeLessThan(6 * 1024 * 1024);
+    expect(Buffer.byteLength(body, "utf8")).toBeGreaterThan(6 * 1024 * 1024);
+    // No Content-Length header — this exercises the post-read byte check only.
+    const res = await POST(postReq(body));
     expect(res.status).toBe(413);
     expect((await res.json()).error).toMatch(/too large/i);
   });
