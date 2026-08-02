@@ -36,11 +36,27 @@ import { RecordValidationError } from "@/lib/db/store-schemas";
 
 export const dynamic = "force-dynamic";
 
-/** Body cap (~6 MB). The real 166-listing export is well under 1 MB; anything
- *  bigger than this is a mistake, not a bigger kiosk. */
-const MAX_BODY_CHARS = 6 * 1024 * 1024;
+/** Body cap (~6 MB) measured in BYTES ON THE WIRE, not JS string length. The
+ *  real 166-listing export is well under 1 MB; anything bigger than this is a
+ *  mistake, not a bigger kiosk. */
+const MAX_BODY_BYTES = 6 * 1024 * 1024;
 /** Row cap — an export claiming more rows than this is not a Kingston export. */
 const MAX_ROWS = 2000;
+
+const TOO_LARGE =
+  "Request body too large (the cap is 6 MB). A real Qwick export is well under 1 MB — check you pasted the export itself, not a page dump.";
+
+/** The client's declared body size, or null when it did not declare one
+ *  (chunked transfer, or a Request synthesized in a test). Anything that is
+ *  not a non-negative integer is treated as "unknown" rather than trusted —
+ *  a hostile Content-Length must never be able to WIDEN the cap, only to let
+ *  us refuse early. The post-read byte check is what actually enforces it. */
+function declaredBodyBytes(request: NextRequest): number | null {
+  const raw = request.headers.get("content-length");
+  if (raw === null) return null;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 ? n : null;
+}
 
 function bad(error: string, status = 400): NextResponse {
   return NextResponse.json({ error }, { status });
@@ -52,12 +68,20 @@ export async function POST(request: NextRequest) {
   // The gate proved a session exists — this only re-reads it for the run row.
   const actor = (await getSessionUser())!.email;
 
+  // Cheap pre-check FIRST: refuse an over-cap upload from the header, before
+  // request.text() buffers the whole thing into memory. Content-Length is a
+  // claim (and absent on chunked requests), so this bounds the honest case
+  // only — it is a memory guard, not the enforcement point.
+  const declared = declaredBodyBytes(request);
+  if (declared !== null && declared > MAX_BODY_BYTES) return bad(TOO_LARGE, 413);
+
   const text = await request.text();
-  if (text.length > MAX_BODY_CHARS) {
-    return bad(
-      "Request body too large (the cap is 6 MB). A real Qwick export is well under 1 MB — check you pasted the export itself, not a page dump.",
-      413,
-    );
+  // Enforcement point. String .length counts UTF-16 code units, so an export
+  // full of multi-byte characters (accented business names, em dashes, emoji)
+  // can be well over 6 MB on the wire and still measure under a code-unit cap.
+  // Measure the UTF-8 encoding instead.
+  if (Buffer.byteLength(text, "utf8") > MAX_BODY_BYTES) {
+    return bad(TOO_LARGE, 413);
   }
 
   let body: Record<string, unknown>;

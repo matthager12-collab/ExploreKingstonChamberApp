@@ -368,7 +368,10 @@ export function QwickImportManager({ initialRuns }: { initialRuns: RunRow[] }) {
         {plan && (
           <div className="mt-4 space-y-3">
             <p className="text-sm text-ink">
-              <span className="font-semibold">Plan:</span> {statsSummary(preview!.stats)}
+              <span className="font-semibold">Planned now:</span>{" "}
+              {statsSummary(preview!.stats)}. Apply re-plans this same export against
+              the database as it stands at that moment, so treat these as an estimate,
+              not a promise.
             </p>
 
             <Bucket
@@ -486,10 +489,19 @@ export function QwickImportManager({ initialRuns }: { initialRuns: RunRow[] }) {
 
       <Section
         title="3 · Apply"
-        subtitle="Applies the SAME export you previewed — the server re-checks it against the current database first. Created records land as invisible drafts; publishing stays a per-record decision on the listings screen."
+        subtitle="Applies the SAME export you previewed. The server deliberately re-plans it from scratch against the database as it stands at that moment — it never replays the stored preview — so the counts that actually run can differ from the preview's. Created records land as invisible drafts; publishing stays a per-record decision on the listings screen."
       >
         {preview === null ? (
-          <p className="text-sm text-ink-soft">Run a preview first — Apply unlocks after it.</p>
+          // E14 contrast, fixed at the usage site: this paragraph is a direct
+          // child of <Section>, so it sits on the page fill (--color-shell),
+          // where --color-ink-soft measures 4.4993:1 — under AA 1.4.3. The same
+          // token clears AA inside a Card (4.62:1 on white), which is why every
+          // other muted note in this file may keep it. Full ink here (14.8:1);
+          // no --color-* token VALUE changed. The zero-tolerance axe suite
+          // cannot catch this pair — <body> carries a background-image, so axe
+          // reports "incomplete" instead of a violation — so the guard is
+          // tests/unit/qwick-import-ui.test.tsx, which measures the ratio.
+          <p className="text-sm text-ink">Run a preview first — Apply unlocks after it.</p>
         ) : (
           <Card>
             <label className="flex items-start gap-3 text-sm text-ink">
@@ -499,10 +511,19 @@ export function QwickImportManager({ initialRuns }: { initialRuns: RunRow[] }) {
                 onChange={(e) => setConfirmed(e.target.checked)}
                 className="mt-1 h-4 w-4 accent-sound"
               />
+              {/* Honest confirmation: the numbers below are the PREVIEW's, and
+                  the server re-plans on apply (deliberately — it is what stops
+                  a stale plan being replayed against a moved database). Saying
+                  "write these numbers" would be a promise this screen cannot
+                  keep, so the checkbox says what it really commits to and
+                  points at the result panel as the authoritative count. */}
               <span>
-                I have read the preview above and want to write it to the database:{" "}
-                <span className="font-semibold">{statsSummary(preview.stats)}</span>. Nothing
-                becomes public — created and refreshed records stay drafts.
+                I have read the preview above and want to apply this export. The preview
+                planned <span className="font-semibold">{statsSummary(preview.stats)}</span>,
+                but the server re-plans from the export when Apply runs — if the database
+                changed in between, the final counts will differ. What actually ran is
+                reported below once it finishes, and that is the authoritative number.
+                Nothing becomes public — created and refreshed records stay drafts.
               </span>
             </label>
             <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -522,8 +543,10 @@ export function QwickImportManager({ initialRuns }: { initialRuns: RunRow[] }) {
             </div>
             {applied && (
               <p className="mt-4 rounded-lg border border-sand bg-shell px-3 py-2 text-sm text-ink">
-                <span className="font-semibold">Applied.</span> {statsSummary(applied.stats)} —
-                run {applied.runId.slice(0, 8)}. Review the new drafts in the Directory tab of{" "}
+                <span className="font-semibold">Applied — what actually ran:</span>{" "}
+                {statsSummary(applied.stats)} — run {applied.runId.slice(0, 8)}. These are
+                the authoritative counts from the server&apos;s re-plan; the preview&apos;s
+                were only an estimate. Review the new drafts in the Directory tab of{" "}
                 <a href="/admin/listings" className="font-medium text-tide-deep underline">
                   Listings
                 </a>
