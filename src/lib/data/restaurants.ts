@@ -485,4 +485,49 @@ export const restaurants: Restaurant[] = [
     lng: -122.498292,
     walkMinutesFromFerry: 4,
   },
+  {
+    // Added 2026-08-01 — this one was simply missing, which is why it appeared
+    // on no map: the Food & Drink view draws from these listings, so an absent
+    // listing is an absent pin. Spotted by the Chamber, not by any check.
+    //
+    // Hours dispute, resolved the way this file already resolves them: their
+    // own site says Fri–Sun run to 6 pm, aggregators say 4 pm every open day.
+    // Both agree on the 6 am open and the Tuesday closure. We follow the
+    // business's own site (as with Saucy Sailor above) and keep the
+    // disagreement visible in the `hours` string.
+    //
+    // No `orderingUrl`: a Toast page for this business appears in search
+    // results, but Toast 403s every server-side fetch, so the slug could not
+    // be confirmed and a dead order link right before a boat is worse than
+    // none. Add it once someone opens it in a real browser.
+    id: "over-the-moon-coffee",
+    name: "Over the Moon Coffee Roasters",
+    cuisine: "Coffee roastery & cafe",
+    description:
+      "House-roasted coffee and an espresso bar a couple of minutes from the ferry lanes, with a brunch menu of made-in-house sandwiches, burritos, and quiche. Roasting in Kingston since 2020.",
+    address: "11229 NE State Hwy 104 #3, Kingston, WA 98346",
+    phone: "(360) 638-6156",
+    website: "https://overthemooncoffee.com/",
+    hours:
+      "Mon, Wed, Thu 6 am–4 pm; Fri–Sun 6 am–6 pm; closed Tue (their site and the listing sites disagree on the weekend close — call ahead)",
+    weeklyHours: {
+      mon: [["06:00", "16:00"]],
+      tue: [],
+      wed: [["06:00", "16:00"]],
+      thu: [["06:00", "16:00"]],
+      fri: [["06:00", "18:00"]],
+      sat: [["06:00", "18:00"]],
+      sun: [["06:00", "18:00"]],
+    },
+    hoursVerified: "2026-08-01",
+    priceLevel: 1,
+    // "coffee" here also drives the map pin: restaurantCategory() reads cuisine
+    // + tags and resolves ☕ rather than 🍽️, so no explicit mapCategory needed.
+    tags: ["coffee", "breakfast", "brunch", "quick"],
+    // OSM node "Over the Moon Coffee" (amenity=cafe) at 11229 NE State Hwy 104,
+    // corroborated by the street address on the business's own site.
+    lat: 47.797275,
+    lng: -122.497385,
+    walkMinutesFromFerry: 2,
+  },
 ];
