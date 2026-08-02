@@ -90,7 +90,7 @@ in sync with the listings automatically.
 
 ### Seed vs overlay
 
-- **Views** seed: `src/lib/data/map-views.ts` — six views, all published:
+- **Views** seed: `src/lib/data/map-views.ts` — nine views, all published:
 
   | id | name | `sources` | features come from |
   | --- | --- | --- | --- |
@@ -99,7 +99,19 @@ in sync with the listings automatically.
   | `explore` | Explore Kingston | `[]` | drawn features |
   | `trails` | Trails & Walks | `[]` | drawn features |
   | `amenities` | Restrooms & Amenities | `[]` | drawn features (E27) |
-  | `shopping` | Shopping & Services | `[]` | drawn features |
+  | `shops-gifts` | Shops & Gifts | `[]` | drawn features (8) |
+  | `food-to-take-home` | Food & Drink to Take Home | `[]` | drawn features (8) |
+  | `home-practical` | Home & Practical | `[]` | drawn features (5) |
+  | `health-beauty` | Health & Beauty | `[]` | drawn features (7) |
+
+  The last four are one business list split by **errand**, not by marker
+  category — Kingston Mini Storage is category `services` but files under
+  `home-practical` beside the hardware store. They began life as a single
+  `shopping` view (PR #150) and were split within the hour: 28 pins on one map
+  meant the greedy label declutter dropped most of the name chips at the fitted
+  zoom, leaving anonymous pins. `tests/unit/shopping-seed.test.ts` now caps any
+  one of them at **10 pins** for that reason, and fails a feature that lands on
+  two of the four or on the retired `shopping` id.
 
 - **Features** seed: `src/lib/data/map-features.ts` — starter landmarks (Mike
   Wallace Park, Point No Point, Village Green, a waterfront boardwalk trail)
@@ -108,14 +120,16 @@ in sync with the listings automatically.
   provenance in `notes`, and `tests/unit/{amenity,shopping}-seed.test.ts`
   fail if a new pin arrives without one. Read those block headers before
   adding to either — the shopping header records three specific ways
-  OpenStreetMap was wrong about Kingston businesses.
-- **Why `shopping` has no built-in source.** It is the obvious candidate for
-  one, and there isn't a source to use: `BuiltInSource` offers
+  OpenStreetMap was wrong about Kingston businesses. Pins there are ordered
+  **geographically**, so the four views interleave; `grep 'views: \["…"\]'` to
+  read one view's set.
+- **Why the shopping views have no built-in source.** They are the obvious
+  candidate for one, and there isn't a source to use: `BuiltInSource` offers
   `restaurants | parking-zones | streets`, and E17's `DirectoryListing`
   (`src/lib/schemas/directory.ts`) has no `lat`/`lng` — name, address, phone,
   website, tags only. If a later epic geocodes directory records, adding a
-  `directory` source filtered to `shop`/`services` and retiring the hand-seeded
-  pins is the intended path; the seam is commented at the view.
+  `directory` source filtered per category and retiring the hand-seeded pins is
+  the intended path; the seam is commented at the views.
 - Admin edits overlay both via `writeOverlayRecord()`; `readMerged()` merges
   seed with overlay (custom wins by id; `{ _deleted: true }` tombstones a seed
   row). Store module: `src/lib/stores/map-store.ts`
