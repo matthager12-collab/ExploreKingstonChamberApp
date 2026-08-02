@@ -29,6 +29,10 @@ const EXPECTED: Record<string, "food" | "coffee" | "drink"> = {
   "da-poke-shop": "food",
   "westside-pizza": "food",
   "kingston-coffee-company": "coffee",
+  // Classifier-derived, not overridden: cuisine "Coffee roastery & cafe" plus
+  // the "coffee" tag hit the keyword branch, so it takes ☕ without needing an
+  // explicit mapCategory.
+  "over-the-moon-coffee": "coffee",
 };
 
 describe("restaurantCategory over the seed data", () => {
