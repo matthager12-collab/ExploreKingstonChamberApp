@@ -87,11 +87,8 @@ function errText(err: unknown): string {
 
 /** writeRecord's upsert only leaves owner_org_id alone when the field is
  *  ABSENT; an explicit null IS "provided", and is what clears the column.
- *  WriteMeta types it `string | undefined`, so clearing needs this one cast —
- *  widening WriteMeta to `string | null` belongs to src/lib/db/records.ts,
- *  which this change does not own. The release test asserts the column
- *  really goes null, so the cast cannot rot silently. */
-const CLEAR_OWNER = null as unknown as WriteMeta["ownerOrgId"];
+ *  WriteMeta types it `string | null | undefined` for exactly this reason. */
+const CLEAR_OWNER: WriteMeta["ownerOrgId"] = null;
 
 export interface OwnedLinkedRecord {
   id: string;

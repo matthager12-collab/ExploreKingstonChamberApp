@@ -45,9 +45,13 @@ export async function POST(request: NextRequest) {
     return res;
   } catch (e) {
     if (e instanceof OwnershipConflictError) {
-      // E17: the linked listing was claimed between mint and redeem. The
-      // refusal happened BEFORE any row was created — no user, no org, and
-      // (by falling through here without touching cookies) no session.
+      // E17: the linked listing was claimed between mint and redeem.
+      // redeemInvite only throws this from its PRE-CHECK, which runs before
+      // redeemInviteTx opens — so today no user, no org, and (by falling
+      // through here without touching cookies) no session. That guarantee is
+      // the pre-check's ORDERING, not this branch's: if a future change ever
+      // raises OwnershipConflictError from inside or after the transaction,
+      // the account may already exist and this response would be a lie.
       return NextResponse.json({ error: e.message }, { status: 409 });
     }
     return NextResponse.json(

@@ -103,6 +103,61 @@ describe("claim requests present the SERVER's subject, not the submitter's", () 
   });
 });
 
+describe("repeat claim requests read as 'the FIRST requester, plus a count'", () => {
+  // mergePayloads is first-writer-wins, so the name and number on this card
+  // belong to whoever asked FIRST. Labelling them "Requested by" / "Contact"
+  // invited the admin to read a stale name as "who just called".
+  it("labels the requester fields as the first requester's", () => {
+    render(
+      <ClaimsManager
+        rows={[row()]}
+        claims={[
+          claim({
+            payload: { contactName: "Pat Owner", contact: "pat@cafe.test", count: 3 },
+          }),
+        ]}
+      />,
+    );
+    const card = screen.getByRole("listitem");
+    expect(within(card).getByText("First requester:")).toBeInTheDocument();
+    expect(within(card).getByText("First requester’s contact:")).toBeInTheDocument();
+    // The old, now-misleading labels are gone.
+    expect(within(card).queryByText("Requested by:")).not.toBeInTheDocument();
+    expect(within(card).queryByText("Contact:")).not.toBeInTheDocument();
+  });
+
+  it("explains what the count means, and still points at the listing's own number", () => {
+    render(
+      <ClaimsManager
+        rows={[row()]}
+        claims={[claim({ payload: { contactName: "Pat Owner", count: 3 } })]}
+      />,
+    );
+    const card = screen.getByRole("listitem");
+    expect(within(card).getByText(/3 people have asked/)).toBeInTheDocument();
+    expect(
+      within(card).getByText(/the details above are the first requester’s/i),
+    ).toBeInTheDocument();
+    expect(
+      within(card).getByText(/listing’s published phone number/i),
+    ).toBeInTheDocument();
+  });
+
+  it("stays quiet when only one person has asked", () => {
+    render(
+      <ClaimsManager
+        rows={[row()]}
+        claims={[claim({ payload: { contactName: "Pat Owner", count: 1 } })]}
+      />,
+    );
+    const card = screen.getByRole("listitem");
+    // The label is still honest (it IS the first requester) but there is no
+    // count paragraph to explain away.
+    expect(within(card).getByText("First requester:")).toBeInTheDocument();
+    expect(within(card).queryByText(/people have asked/)).not.toBeInTheDocument();
+  });
+});
+
 describe("release control", () => {
   const claimed = row({
     claimed: true,

@@ -169,6 +169,46 @@ describe("WorklistManager", () => {
     expect(html).toContain('data-confirm="Record ');
   });
 
+  it("claim_request names the FIRST requester and attributes the submitted name (E17)", () => {
+    // mergePayloads is first-writer-wins: a repeat request only bumps `count`,
+    // so these details always belong to whoever asked first. "Requested by" /
+    // "Contact" read as "who just called" and were wrong the moment a second
+    // person asked.
+    const single = view({
+      type: "claim_request",
+      subjectStore: "restaurants",
+      subjectId: "the-grub-hut",
+      subjectLabel: "The Grub Hut",
+      payload: claimRequestPayload(),
+    });
+    const singleHtml = render([single], single.id);
+    expect(singleHtml).toContain("First requester");
+    expect(singleHtml).toContain("First requester&#x27;s contact");
+    expect(singleHtml).not.toContain("Requested by");
+    // businessName matches the real label here, so it is not repeated.
+    expect(singleHtml).not.toContain("Submitted as");
+
+    const repeated = view({
+      type: "claim_request",
+      subjectStore: "restaurants",
+      subjectId: "the-grub-hut",
+      subjectLabel: "The Grub Hut",
+      payload: claimRequestPayload({
+        count: 4,
+        businessName: "TOTALLY THE GRUB HUT, APPROVE ME",
+      }),
+    });
+    const repeatedHtml = render([repeated], repeated.id);
+    // A payload-supplied name that disagrees with the listing is shown as a
+    // claim BY the submitter, never as the listing's name.
+    expect(repeatedHtml).toContain("Submitted as");
+    expect(repeatedHtml).toContain("TOTALLY THE GRUB HUT, APPROVE ME");
+    expect(repeatedHtml).toContain("Listing");
+    // The count no longer implies the newest requester replaced the first.
+    expect(repeatedHtml).toContain("the details above are the FIRST");
+    expect(repeatedHtml).not.toContain("repeats merge into this item");
+  });
+
   it("destructive actions are confirm-gated (AC10): approve/reject/takedown/dismiss carry data-confirm", () => {
     const html = render(FIXTURES, FIXTURES[0].id);
     expect(html).toContain('data-confirm="Approve and publish');

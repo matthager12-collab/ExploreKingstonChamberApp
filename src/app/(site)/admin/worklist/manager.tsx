@@ -356,16 +356,36 @@ function PayloadDetail({ item }: { item: WorklistItemView }) {
     // E17: an owner asking to claim a listing. The console at /admin/claims
     // is where the invite is MINTED; the buttons on this item only record
     // the outcome. Deep-link straight to the listing's row.
+    //
+    // The payload is FIRST-WRITER-WINS (see mergePayloads in lib/db/worklist):
+    // a repeat request only bumps `count`, so every requester detail below is
+    // the FIRST person who asked, not the most recent. The labels have to say
+    // so, or an admin reads a stale name as "who just called".
     const count = Number(p.count ?? 1);
+    // `businessName` is whatever the anonymous form was given, so it is shown
+    // as a claim ABOUT the listing, never as the listing's name.
+    const submittedAs =
+      typeof p.businessName === "string" &&
+      p.businessName.trim() !== "" &&
+      p.businessName !== item.subjectLabel
+        ? p.businessName
+        : null;
     return (
       <div className="space-y-2">
         <DetailRows
           rows={[
-            { label: "Business", value: plain(p.businessName ?? item.subjectLabel) },
-            { label: "Requested by", value: plain(p.contactName) },
-            { label: "Contact", value: plain(p.contact) },
+            { label: "Listing", value: plain(item.subjectLabel) },
+            ...(submittedAs ? [{ label: "Submitted as", value: submittedAs }] : []),
+            { label: "First requester", value: plain(p.contactName) },
+            { label: "First requester's contact", value: plain(p.contact) },
             { label: "Message", value: plain(p.message) },
-            { label: "Requests", value: `${count} (repeats merge into this item)` },
+            {
+              label: "Requests",
+              value:
+                count > 1
+                  ? `${count} total — later requests add to this count only; the details above are the FIRST requester's`
+                  : "1",
+            },
           ]}
         />
         <p className="text-xs text-ink-soft">

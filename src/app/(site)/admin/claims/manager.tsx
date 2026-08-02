@@ -402,13 +402,15 @@ export function ClaimsManager({
                         </div>
                       )}
                       <div className="flex flex-wrap gap-x-2">
-                        <dt className="font-medium text-ink">Requested by:</dt>
+                        <dt className="font-medium text-ink">First requester:</dt>
                         <dd className="min-w-0 break-words text-ink-soft">
                           {plain(c.payload.contactName)}
                         </dd>
                       </div>
                       <div className="flex flex-wrap gap-x-2">
-                        <dt className="font-medium text-ink">Contact:</dt>
+                        <dt className="font-medium text-ink">
+                          First requester&rsquo;s contact:
+                        </dt>
                         <dd className="min-w-0 break-words text-ink-soft">
                           {plain(c.payload.contact)}
                         </dd>
@@ -422,6 +424,18 @@ export function ClaimsManager({
                         </div>
                       )}
                     </dl>
+                    {count > 1 && (
+                      // First-writer-wins (mergePayloads in lib/db/worklist):
+                      // a repeat request bumps the count and changes nothing
+                      // else, so the name and number above belong to whoever
+                      // asked FIRST — not to whoever asked most recently.
+                      <p className="mt-1 text-xs text-ink-soft">
+                        {count} people have asked about this listing. Later
+                        requests add to that count only — the details above are
+                        the first requester&rsquo;s. Verify against the
+                        listing&rsquo;s published phone number either way.
+                      </p>
+                    )}
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       {known ? (
                         <button
