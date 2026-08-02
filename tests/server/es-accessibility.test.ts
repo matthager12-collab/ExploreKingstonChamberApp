@@ -23,6 +23,7 @@ import {
   SAFETY_TOKEN_FALLBACKS,
 } from "../../src/lib/i18n/safety-content";
 import { BASE_URL } from "./config";
+import { ADMIN_COOKIE_HEADER } from "./admin-session";
 
 /** The walk-on round-trip figure as shipped in code, read the same way the
  *  pages read it — so this never drifts from what the seed actually says. */
@@ -33,7 +34,6 @@ function seedWalkOnFare(): string {
 }
 
 /** Seeded by tests/server/global-setup.ts. */
-const ADMIN = { email: "ci@example.test", password: "ci-admin-password" };
 
 /** Every distinct tel: target in the document. */
 function telTargets(html: string): string[] {
@@ -102,18 +102,9 @@ async function get(path: string, cookie?: string): Promise<{ status: number; htm
  *  Done by hand rather than with a cookie jar because the session cookie is
  *  `Secure` under NODE_ENV=production and the harness serves plain http. */
 async function adminCookie(): Promise<string> {
-  const res = await fetch(BASE_URL + "/api/auth/login", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(ADMIN),
-    redirect: "manual",
-  });
-  expect(res.ok, `admin login failed with ${res.status}`).toBe(true);
-  const raw = res.headers.getSetCookie?.() ?? [];
-  const set = raw.length > 0 ? raw : [res.headers.get("set-cookie") ?? ""];
-  const session = set.map((c) => c.split(";")[0]).find((c) => c.startsWith("vk-session="));
-  expect(session, `no vk-session cookie in the login response: ${set.join(" | ")}`).toBeTruthy();
-  return session!;
+  // Minted, not logged in — see tests/server/admin-session.ts (shared
+  // login rate-limit budget). Still async so callers are unchanged.
+  return ADMIN_COOKIE_HEADER;
 }
 
 /** Flip /es visibility through the real admin API — the same call the Admin →

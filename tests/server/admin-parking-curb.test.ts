@@ -14,6 +14,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { BASE_URL } from "./config";
+import { signInAdmin } from "./admin-session";
 
 // The one zone whose curb side is field-verified (PR #78).
 const ZONE_ID = "street-washington-blvd-104-loop";
@@ -57,10 +58,9 @@ async function postZone(zone: unknown): Promise<number> {
 beforeAll(async () => {
   browser = await chromium.launch();
   context = await browser.newContext();
-  const login = await context.request.post(BASE_URL + "/api/auth/login", {
-    data: { email: "ci@example.test", password: "ci-admin-password" },
-  });
-  if (!login.ok()) throw new Error("admin login for the parking API spec must succeed");
+  // Minted, not logged in — see tests/server/admin-session.ts (shared
+  // login rate-limit budget).
+  await signInAdmin(context);
   page = await context.newPage();
   await page.goto(BASE_URL + "/admin", { waitUntil: "domcontentloaded" });
 });
