@@ -162,11 +162,8 @@ export type CreateWorklistResult = {
 
 /** How a second submission folds into an already-active item, per type:
  *  - report_inaccurate: append the new messages, count = total messages;
- *  - claim_request (E17): count increments and the requester fields update
- *    to the latest request — the Chamber calls whoever asked most recently;
- *    fields the repeat request omitted keep their prior values (the
- *    superseded contact is gone for good: stripRequestContact keeps it out
- *    of the audit snapshots too);
+ *  - claim_request (E17): FIRST-WRITER-WINS — the count increments and
+ *    NOTHING else moves. See the comment inside for why;
  *  - staleness: pure no-op (the sweep re-finds the same overdue record);
  *  - moderation (and the E11/E16 fixture types): the newest payload replaces
  *    the old — a member who edits twice before review means the second
@@ -184,8 +181,26 @@ function mergePayloads(
     return { messages, count: messages.length };
   }
   if (type === "claim_request") {
+    // FIRST REQUESTER WINS, and it is a security property, not a preference.
+    // /api/claim is public and unauthenticated: anyone who knows a live
+    // listing id can post to it. The old merge spread `incoming` over
+    // `existing`, so one anonymous request replaced the genuine owner's
+    // callback number with the attacker's — irreversibly, because
+    // stripRequestContact keeps `contact` out of BOTH audit snapshots, so the
+    // superseded number existed nowhere else. The console then showed the
+    // attacker as the person to call back.
+    //
+    // So a repeat contributes exactly one thing: evidence that more than one
+    // person asked. contactName / contact / businessName / message all stay
+    // as the first requester left them; no array of every requester either
+    // (the payload must stay bounded, and E17's data-minimization posture is
+    // one name + one contact, not a growing roster of strangers' PII).
+    // Admin surfaces therefore read as "the first requester, plus a count".
+    //
+    // Nothing is lost that the Chamber acts on: verification is out-of-band
+    // against the number ON THE LISTING, never the one in the request.
     const prior = typeof existing.count === "number" ? existing.count : 1;
-    return { ...existing, ...incoming, count: prior + 1 };
+    return { ...existing, count: prior + 1 };
   }
   return incoming;
 }

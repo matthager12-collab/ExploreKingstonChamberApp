@@ -7,7 +7,9 @@
 //
 // A request grants NOTHING: no session, no account, no edit rights — the
 // server opens a Chamber worklist item and the Chamber verifies out-of-band.
-// Repeat requests for the same listing merge into one queue entry server-side.
+// Repeat requests for the same listing merge into one queue entry server-side,
+// first-writer-wins: a later request bumps a counter and cannot overwrite the
+// first requester's details.
 //
 // All public wording resolves through the copy registry (useCopy — E07 rule);
 // the only inline strings are admin-authored API error messages passed through.
@@ -56,11 +58,25 @@ export function ClaimListing({
   const successText = useCopy("claim.form.success");
   const genericError = useCopy("claim.form.error");
 
-  // Focus management: opening the disclosure moves focus into the form;
-  // success moves it to the confirmation so the outcome is never silent.
+  // Focus management, deliberately limited to TWO moments:
+  //
+  //  1. the disclosure EXPANDING — focus moves into the form so a keyboard or
+  //     screen-reader user lands on the first field instead of having to hunt
+  //     for content that appeared below the button they just pressed;
+  //  2. success — focus moves to the confirmation, so the outcome is never
+  //     silent (the form itself is gone by then).
+  //
+  // Nothing else may move focus. This effect used to depend on [open, phase],
+  // and `phase` cycles idle → busy → idle on every submit: it re-fired
+  // mid-request and again when an error rendered, yanking the caret out of
+  // the submit button the user had just pressed and back to the name field —
+  // right when they needed to read the error. Depending on [open] alone means
+  // it runs only when the disclosure actually toggles (closing is a no-op:
+  // the form has unmounted, so the ref is null). The error is announced
+  // instead of grabbed: it renders into a role="alert" live region below.
   useEffect(() => {
-    if (open && phase !== "done") nameRef.current?.focus();
-  }, [open, phase]);
+    if (open) nameRef.current?.focus();
+  }, [open]);
   useEffect(() => {
     if (phase === "done") doneRef.current?.focus();
   }, [phase]);
