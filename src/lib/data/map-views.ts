@@ -70,28 +70,77 @@ export const mapViews: MapView[] = [
     sources: [],
     published: true,
   },
+  /* ---------------- Shopping, split four ways ----------------
+   *
+   * These four replace a single "Shopping & Services" view (PR #150) that put
+   * all 28 businesses on one map. It was too dense to read: at the fitted
+   * downtown zoom the greedy label declutter had to drop most of the chips, so
+   * the map showed pins whose names you could only get by tapping each one.
+   * Four themed maps of 5–8 pins each let nearly every label render.
+   *
+   * The split is by ERRAND, not by the pin's marker category — which is why
+   * Kingston Mini Storage (category `services`) sits under Home & Practical
+   * next to the hardware store. A visitor thinks "where do I get X", not
+   * "which taxonomy is X".
+   *
+   * `sources: []` on all four is not a placeholder — there is no built-in
+   * layer to pull from. BuiltInSource offers restaurants / parking-zones /
+   * streets, and the one domain that sounds right, E17's DirectoryListing,
+   * carries no lat/lng at all (see src/lib/schemas/directory.ts — name,
+   * address, phone, website, tags). A map needs coordinates, so these are
+   * drawn MapFeatures, geocoded and source-noted one at a time in
+   * src/lib/data/map-features.ts.
+   *
+   * WHEN DIRECTORY LISTINGS GAIN COORDINATES, this is the seam to revisit:
+   * add a "directory" BuiltInSource filtered per category, the way
+   * "restaurants" backs food-drink, and retire the hand-seeded pins. Until
+   * then a hand-drawn pin the Chamber can fix in one click beats an empty map
+   * — the mistake parking-cash made and had to undo above.
+   *
+   * Every `center` here is the centroid of that view's own pins, and every one
+   * is a FALLBACK: the public map auto-frames to its content. They matter only
+   * if a view is ever emptied in /admin/maps.
+   */
   {
-    // Shops and services. `sources: []` is not a placeholder — there is no
-    // built-in layer this view could pull from. BuiltInSource offers
-    // restaurants / parking-zones / streets, and the one domain that sounds
-    // right, E17's DirectoryListing, carries no lat/lng at all (see
-    // src/lib/schemas/directory.ts — name, address, phone, website, tags).
-    // A map needs coordinates, so these are drawn MapFeatures, geocoded and
-    // source-noted one at a time in src/lib/data/map-features.ts.
-    //
-    // WHEN DIRECTORY LISTINGS GAIN COORDINATES, this is the seam to revisit:
-    // add a "directory" BuiltInSource filtered to category shop/services, the
-    // way "restaurants" backs food-drink, and retire the hand-seeded pins.
-    // Until then a hand-drawn pin the Chamber can fix in one click beats an
-    // empty map — the mistake parking-cash made and had to undo above.
-    id: "shopping",
-    name: "Shopping & Services",
+    id: "shops-gifts",
+    name: "Shops & Gifts",
     description:
-      "Shops and services in Kingston, in two clusters: the waterfront strip right off the ferry, and Kingston Center up the hill on Highway 104 — about a 10-minute walk between them.",
-    // A fallback only: the public map auto-frames to its content, and these
-    // pins span both clusters (~700 m, inside the 1.2 km outlier trim), so the
-    // fitted frame is what a visitor actually sees.
-    center: [47.7999, -122.4995],
+      "Browsable shops in Kingston — gifts, books, clothing, antiques, flowers, and plants. Split between the waterfront strip right off the ferry and Kingston Center up the hill, about a 10-minute walk apart.",
+    center: [47.7998, -122.4988],
+    zoom: 15,
+    sources: [],
+    published: true,
+  },
+  {
+    id: "food-to-take-home",
+    name: "Food & Drink to Take Home",
+    // Deliberately NOT merged into the "food-drink" view above, and named to
+    // read against it: that map is where you sit down and eat, this one is
+    // what you carry onto the boat or back to a rental. Four businesses appear
+    // on both — see the CROSSOVERS note in map-features.ts.
+    description:
+      "Groceries, the butcher, the bakery, wine shops, and the Sunday Public Market — food and drink to take with you, rather than somewhere to sit down. For restaurants and cafés, see the Food & Drink map.",
+    center: [47.7999, -122.4992],
+    zoom: 15,
+    sources: [],
+    published: true,
+  },
+  {
+    id: "home-practical",
+    name: "Home & Practical",
+    description:
+      "Hardware, auto parts, phones, and storage — the errands you run rather than browse. Mostly up the hill on Highway 104.",
+    center: [47.8017, -122.5006],
+    zoom: 16,
+    sources: [],
+    published: true,
+  },
+  {
+    id: "health-beauty",
+    name: "Health & Beauty",
+    description:
+      "Salons, spas, massage, nails, and alterations around downtown Kingston and Kingston Center.",
+    center: [47.7992, -122.4995],
     zoom: 15,
     sources: [],
     published: true,

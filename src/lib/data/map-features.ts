@@ -119,7 +119,18 @@ export const mapFeatures: MapFeature[] = [
     point: [47.8033, -122.5045],
   },
 
-  /* ---------------- Shops and services — the "shopping" view ----------------
+  /* ------- Shops and services — four themed views, one per errand -------
+   *
+   * shops-gifts (8) · food-to-take-home (8) · home-practical (5) ·
+   * health-beauty (7). These 28 pins shipped as ONE "shopping" view in
+   * PR #150 and were split immediately after: at the fitted downtown zoom the
+   * greedy label declutter had to drop most of the chips, leaving pins whose
+   * names you could only get by tapping. Views of 5–8 pins nearly all render.
+   *
+   * The split is by ERRAND, not by marker category — Kingston Mini Storage is
+   * category `services` but lives under home-practical beside the hardware
+   * store, because a visitor thinks "where do I get X", not "what taxonomy is
+   * X". A pin's `category` still drives its icon; `views` decides its map.
    *
    * SOURCING. Coordinates and the business list come from OpenStreetMap POIs
    * inside the Kingston bounding box (pulled 2026-08-01), which is the same
@@ -169,7 +180,10 @@ export const mapFeatures: MapFeature[] = [
    * unexplained twin.
    */
 
-  /* -- Waterfront strip: walkable straight off the ferry -- */
+  /* -- Waterfront strip: walkable straight off the ferry --
+   * Ordered by geography, not by view: neighbours stay next to each other so a
+   * coordinate typo is easy to spot. Read each pin's `views` for its map, or
+   * `grep 'views: \["health-beauty"\]'` to see one view's whole set. -- */
   {
     id: "shop-paisley-whale",
     kind: "marker",
@@ -177,7 +191,7 @@ export const mapFeatures: MapFeature[] = [
     notes:
       "Antiques, gifts, and vintage finds on the downtown strip, a couple of minutes from the ferry lanes. OSM check 2025-02-08.",
     category: "shop",
-    views: ["shopping"],
+    views: ["shops-gifts"],
     point: [47.7972839, -122.4969225],
     link: "https://thepaisleywhale.wordpress.com/",
   },
@@ -188,7 +202,7 @@ export const mapFeatures: MapFeature[] = [
     notes:
       "Clothing boutique — tops, dresses, outerwear, vintage and handmade goods, plus permanent jewelry. Address and phone verified against jasperrow.com.",
     category: "shop",
-    views: ["shopping"],
+    views: ["shops-gifts"],
     point: [47.7974544, -122.4970585],
     link: "https://jasperrow.com",
   },
@@ -199,7 +213,7 @@ export const mapFeatures: MapFeature[] = [
     notes:
       "Indoor and outdoor plants, custom fine woodworking, and goods from local artisans, at 11133 NE Maine St. Verified from the shop's own site; the pin is that street address, so treat it as within a building's width.",
     category: "shop",
-    views: ["shopping"],
+    views: ["shops-gifts"],
     point: [47.7988234, -122.4986056],
     link: "https://www.haven-craft.com/",
   },
@@ -211,7 +225,7 @@ export const mapFeatures: MapFeature[] = [
     notes:
       "Wine shop on the downtown strip; the d'Vine Bistro lounge next door is on the Food & Drink map. OSM check 2025-02-08.",
     category: "drink",
-    views: ["shopping"],
+    views: ["food-to-take-home"],
     point: [47.7973261, -122.4975002],
     link: "http://dvinewineshop.com",
   },
@@ -224,7 +238,7 @@ export const mapFeatures: MapFeature[] = [
     notes:
       "Bottles to take away as well as a place to sit — it also appears on the Food & Drink map. OSM check 2025-02-08.",
     category: "drink",
-    views: ["shopping"],
+    views: ["food-to-take-home"],
     point: [47.7971868, -122.497344],
   },
   {
@@ -234,7 +248,7 @@ export const mapFeatures: MapFeature[] = [
     notes:
       "Florist at 25960 Central Ave NE, Suite 101 — formerly The Flower Box. Tue–Sat 10–4, Sun/Mon by appointment. Verified against bouquetkingston.com.",
     category: "shop",
-    views: ["shopping"],
+    views: ["shops-gifts"],
     point: [47.7981391, -122.4981443],
     link: "https://bouquetkingston.com/",
   },
@@ -245,7 +259,7 @@ export const mapFeatures: MapFeature[] = [
     notes:
       "Crêperie steps from the ferry lanes, open early enough to catch before a morning boat. Full listing lives on the Food & Drink map.",
     category: "food",
-    views: ["shopping"],
+    views: ["food-to-take-home"],
     point: [47.7971965, -122.4968596],
     link: "https://jaimelescrepes.com",
   },
@@ -257,7 +271,7 @@ export const mapFeatures: MapFeature[] = [
       "Vape and e-juice shop on the downtown strip. No survey date on record — call ahead before making the walk.",
     category: "shop",
     label: { text: "Mr. Cloud's" },
-    views: ["shopping"],
+    views: ["home-practical"],
     point: [47.7977721, -122.4967624],
   },
   {
@@ -267,7 +281,7 @@ export const mapFeatures: MapFeature[] = [
     notes:
       "Tailoring and alterations, upstairs on the downtown strip. By appointment — (360) 731-9973. No survey date on record.",
     category: "services",
-    views: ["shopping"],
+    views: ["health-beauty"],
     point: [47.7972193, -122.4967622],
   },
   {
@@ -278,7 +292,7 @@ export const mapFeatures: MapFeature[] = [
       "Hair salon at 25960 Central Ave NE, Suite 102 — the same building as Bouquet. Address corroborated by a second directory source.",
     category: "services",
     label: { text: "Central Ave Salon" },
-    views: ["shopping"],
+    views: ["health-beauty"],
     point: [47.7980751, -122.4983123],
   },
   {
@@ -287,7 +301,7 @@ export const mapFeatures: MapFeature[] = [
     title: "Kingston Nails",
     notes: "Nail salon just up from the waterfront. OSM check 2025-02-08.",
     category: "services",
-    views: ["shopping"],
+    views: ["health-beauty"],
     point: [47.7975894, -122.4979912],
   },
   {
@@ -297,7 +311,7 @@ export const mapFeatures: MapFeature[] = [
     notes:
       "Massage studio near the waterfront. No survey date on record — call ahead.",
     category: "services",
-    views: ["shopping"],
+    views: ["health-beauty"],
     point: [47.7970147, -122.4976363],
   },
   {
@@ -307,7 +321,7 @@ export const mapFeatures: MapFeature[] = [
     notes:
       "Hair studio on the downtown strip. No survey date on record — call ahead.",
     category: "services",
-    views: ["shopping"],
+    views: ["health-beauty"],
     point: [47.7981036, -122.4974606],
   },
 
@@ -319,7 +333,7 @@ export const mapFeatures: MapFeature[] = [
     notes:
       "New-books shop in the Kingston Center strip on Highway 104. OSM check 2025-06-14.",
     category: "shop",
-    views: ["shopping"],
+    views: ["shops-gifts"],
     point: [47.8024687, -122.5005949],
     link: "https://saltwaterbookshop.com",
   },
@@ -330,7 +344,7 @@ export const mapFeatures: MapFeature[] = [
     notes:
       "Second-hand and used books, a few doors along from Saltwater Bookshop. OSM check 2025-06-14.",
     category: "shop",
-    views: ["shopping"],
+    views: ["shops-gifts"],
     point: [47.8028216, -122.5014913],
   },
   {
@@ -341,7 +355,7 @@ export const mapFeatures: MapFeature[] = [
       "Gifts, marine supplies, and general goods at 10943 NE Highway 104. OSM check 2025-06-14.",
     category: "shop",
     label: { text: "Mercantile" },
-    views: ["shopping"],
+    views: ["shops-gifts"],
     point: [47.8018392, -122.5022377],
   },
   {
@@ -351,7 +365,7 @@ export const mapFeatures: MapFeature[] = [
     notes:
       "The town hardware store, up the hill on Highway 104. OSM check 2026-05-18 — the freshest survey in this set.",
     category: "shop",
-    views: ["shopping"],
+    views: ["home-practical"],
     point: [47.8018899, -122.5001945],
   },
   {
@@ -361,7 +375,7 @@ export const mapFeatures: MapFeature[] = [
     notes:
       "Butcher and specialty foods, next to Kingston Mercantile & Marine. OSM check 2025-06-14.",
     category: "shop",
-    views: ["shopping"],
+    views: ["food-to-take-home"],
     point: [47.8018765, -122.5023235],
   },
   {
@@ -370,7 +384,7 @@ export const mapFeatures: MapFeature[] = [
     title: "Country Pet Shoppe",
     notes: "Pet supplies and feed, on the way up the hill. OSM check 2025-08-29.",
     category: "shop",
-    views: ["shopping"],
+    views: ["shops-gifts"],
     point: [47.8009455, -122.4986842],
     link: "https://www.countrypetshoppe.com/",
   },
@@ -381,7 +395,7 @@ export const mapFeatures: MapFeature[] = [
     notes:
       "Full grocery store in the Kingston Center strip — the nearest real supermarket to the ferry, useful for campers, boaters, and rental guests. No survey date on record.",
     category: "shop",
-    views: ["shopping"],
+    views: ["food-to-take-home"],
     point: [47.8026756, -122.501064],
   },
   {
@@ -391,7 +405,7 @@ export const mapFeatures: MapFeature[] = [
     notes: "Convenience store on Highway 104. OSM check 2025-06-14.",
     category: "shop",
     label: { text: "Mini-Mart" },
-    views: ["shopping"],
+    views: ["food-to-take-home"],
     point: [47.8012772, -122.5015917],
   },
   {
@@ -402,7 +416,7 @@ export const mapFeatures: MapFeature[] = [
       "Bakery counter in the Kingston Center strip. Full listing lives on the Food & Drink map. OSM check 2025-06-14.",
     category: "food",
     label: { text: "Borrowed Kitchen" },
-    views: ["shopping"],
+    views: ["food-to-take-home"],
     point: [47.8025211, -122.5007133],
     link: "https://www.borrowedkitchenbakery.com/",
   },
@@ -413,7 +427,7 @@ export const mapFeatures: MapFeature[] = [
     notes:
       "Phone store in the Kingston Center strip — the place to solve a dead phone before a boat. OSM check 2025-06-14.",
     category: "shop",
-    views: ["shopping"],
+    views: ["home-practical"],
     point: [47.8027423, -122.5012859],
   },
   {
@@ -423,7 +437,7 @@ export const mapFeatures: MapFeature[] = [
     notes:
       "Auto parts at the west end of the Highway 104 businesses. No survey date on record.",
     category: "shop",
-    views: ["shopping"],
+    views: ["home-practical"],
     point: [47.8022789, -122.5032807],
   },
   {
@@ -432,7 +446,7 @@ export const mapFeatures: MapFeature[] = [
     title: "Bliss Day Spa",
     notes: "Day spa in the Kingston Center strip. OSM check 2025-06-14.",
     category: "services",
-    views: ["shopping"],
+    views: ["health-beauty"],
     point: [47.8028675, -122.5016481],
   },
   {
@@ -442,7 +456,7 @@ export const mapFeatures: MapFeature[] = [
     notes:
       "Hair salon at 10801 NE Highway 104. No survey date on record — call ahead.",
     category: "services",
-    views: ["shopping"],
+    views: ["health-beauty"],
     point: [47.802277, -122.5034226],
   },
   {
@@ -452,12 +466,12 @@ export const mapFeatures: MapFeature[] = [
     notes: "Self-storage units off Highway 104. No survey date on record.",
     category: "services",
     label: { text: "Mini Storage" },
-    views: ["shopping"],
+    views: ["home-practical"],
     point: [47.8013079, -122.4991515],
     link: "https://kingstonministorage.com/",
   },
 
-  /* -- The biggest shopping draw of the week, and it isn't a storefront -- */
+  /* -- The biggest food draw of the week, and it isn't a storefront -- */
   {
     id: "shop-kingston-public-market",
     kind: "marker",
@@ -471,7 +485,7 @@ export const mapFeatures: MapFeature[] = [
       "Sunday market on the marina lawn at Mike Wallace Park — produce, crafts, and food vendors, 10 AM to 3 PM through the season. Check the events calendar for this week's date before you count on it.",
     category: "event",
     label: { text: "Public Market" },
-    views: ["shopping"],
+    views: ["food-to-take-home"],
     point: [47.7961, -122.4972],
     link: "/events",
   },
