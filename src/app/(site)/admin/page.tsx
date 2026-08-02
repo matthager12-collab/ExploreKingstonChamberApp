@@ -122,10 +122,12 @@ export default async function AdminPage() {
   // every number below is "since this instant". Sequential on purpose: the
   // other two reads cannot start until we know which events to read.
   const baseline = await getAnalyticsBaseline();
-  const [analytics, survey] = await Promise.all([
-    summarize(baseline?.since ?? undefined),
-    surveyStore.summarize(),
-  ]);
+  // BOTH summaries take the window. The card above the stat grid says "every
+  // number on this page counts activity since X" — pass it to one and not the
+  // other and that sentence is false for half the page, in the direction
+  // nobody would notice: reset pageviews sitting beside un-reset survey counts.
+  const since = baseline?.since ?? undefined;
+  const [analytics, survey] = await Promise.all([summarize(since), surveyStore.summarize(since)]);
 
   const overnightPct =
     survey.total > 0 ? `${Math.round((survey.overnightCount / survey.total) * 100)}%` : "—";

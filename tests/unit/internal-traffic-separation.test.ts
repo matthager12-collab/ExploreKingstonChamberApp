@@ -14,7 +14,8 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { summarize, type AnalyticsEvent } from "@/lib/analytics-store";
-import { analyticsEvent } from "@/lib/db/schema";
+import { analyticsEvent, surveyResponse } from "@/lib/db/schema";
+import { surveyStore } from "@/lib/survey-store";
 import { createTestDb, type TestDb } from "../setup/pglite-db";
 
 vi.mock("@/lib/auth", () => ({
@@ -94,6 +95,16 @@ beforeAll(async () => {
   await seed(OLD, { sessionId: "vk-old-1", path: "/eat" });
   await seed(OLD, { sessionId: "vk-old-2", path: "/eat" });
   await seed(OLD, { sessionId: "vk-old-3", path: "/ferry" });
+
+  // Survey responses on BOTH sides of the baseline. Non-zero on both sides on
+  // purpose: with an empty pre-baseline set, "the window is applied" and "there
+  // was nothing to exclude" produce identical numbers, and the assertion proves
+  // nothing. Different overnight/nights values so a leak is unmistakable.
+  await tdb.db.insert(surveyResponse).values([
+    { ts: new Date(OLD), response: { distanceBand: "local", overnight: false } },
+    { ts: new Date(OLD), response: { distanceBand: "local", overnight: true, lodgingNights: 9 } },
+    { ts: new Date(NEW), response: { distanceBand: "out-of-state", overnight: true, lodgingNights: 2 } },
+  ]);
 });
 afterAll(async () => {
   await tdb.close();
@@ -179,5 +190,29 @@ describe("the analytics baseline bounds what is counted", () => {
   it("reports the window it used, so a count is never shown without its dates", async () => {
     expect((await summarize(BASELINE)).since).toBe(BASELINE);
     expect((await summarize()).since).toBeNull();
+  });
+
+  it("applies to SURVEY responses too, not just events", async () => {
+    // The dashboard renders survey counts inside the same "counting window"
+    // card as the pageview counts. If only one honoured the baseline, a reset
+    // would show zeroed pageviews beside untouched survey totals under one
+    // sentence claiming both came from the same date — wrong in the direction
+    // nobody checks, because the survey card looks plausible either way.
+    const windowed = await surveyStore.summarize(BASELINE);
+    expect(windowed.total, "pre-baseline survey responses leaked in").toBe(1);
+    expect(windowed.overnightCount).toBe(1);
+    // The 9 nights belong to a pre-baseline response; only the 2 are in window.
+    expect(windowed.totalLodgingNights, "pre-baseline lodging nights leaked in").toBe(2);
+    expect(windowed.byDistance).toEqual({ "out-of-state": 1 });
+  });
+
+  it("restores survey history when the baseline is cleared", async () => {
+    // The same hide-never-delete property the events rely on. Asserted against
+    // a NON-EMPTY pre-baseline set, so it cannot pass by there being nothing
+    // to restore.
+    const all = await surveyStore.summarize();
+    expect(all.total).toBe(3);
+    expect(all.totalLodgingNights).toBe(11);
+    expect(all.byDistance).toEqual({ local: 2, "out-of-state": 1 });
   });
 });

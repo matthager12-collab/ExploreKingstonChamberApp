@@ -1786,9 +1786,16 @@ what a number covers.
 ### 16.1 The counting window (baseline)
 
 **Admin → Insights → "Start counting from now"** sets a watermark. Every figure
-on the page — and everything derived from `summarize()` — then covers only
-events at or after it. Earlier events stay in `analytics_event`; **"Show all
-history" brings them straight back.**
+on the page then covers only activity at or after it — **analytics events *and*
+survey responses**, because they are rendered side by side under one "counting
+window" heading and a window that applied to only half of them would make that
+heading false. `GET /api/survey` is windowed too, since its contract is that it
+returns the same numbers the dashboard shows. Nothing is deleted: the rows stay
+in `analytics_event` and `survey_response`, and **"Show all history" brings them
+straight back.**
+
+Anything new that surfaces a count on this page inherits the same obligation —
+thread the baseline through, or the heading stops being true for that number.
 
 Use it when the site opens to a new audience. Setting it twice is normal and
 cheap: once at the soft launch, again on public-launch day if the Chamber wants

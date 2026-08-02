@@ -41,11 +41,19 @@ export async function appendSurveyResponse(response: unknown): Promise<void> {
   await getDb().insert(surveyResponse).values({ response });
 }
 
-export async function readSurveyResponses<T>(): Promise<T[]> {
-  const rows = await getDb()
-    .select({ response: surveyResponse.response })
-    .from(surveyResponse)
-    .orderBy(asc(surveyResponse.ts));
+/**
+ * Read logged survey responses, oldest first. `sinceIso` (optional) bounds the
+ * scan the same way readAnalyticsEvents does, and for the same reason: the
+ * admin dashboard renders survey counts beside pageview counts under one
+ * "counting window" heading, so they have to honour the same window. A survey
+ * total that quietly ignored the baseline would sit next to a reset pageview
+ * total under a sentence claiming both came from the same date.
+ */
+export async function readSurveyResponses<T>(sinceIso?: string): Promise<T[]> {
+  const base = getDb().select({ response: surveyResponse.response }).from(surveyResponse);
+  const rows = await (
+    sinceIso ? base.where(gte(surveyResponse.ts, new Date(sinceIso))) : base
+  ).orderBy(asc(surveyResponse.ts));
   return rows.map((r) => r.response as T);
 }
 
