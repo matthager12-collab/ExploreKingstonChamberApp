@@ -11,9 +11,15 @@
 // so this route can never be used as an oracle for unpublished content.
 //
 // Rate limiting copies the redeem/report dual-bucket pattern: an IP bucket
-// BEFORE the body parse, then a per-(store,id) bucket so one hot listing
-// can't eat a shared IP's whole budget (and one spammer can't bury one
-// listing's queue entry).
+// BEFORE the body is even read, then a per-(store,id) bucket that bounds how
+// much churn one listing's queue entry can absorb. See RECORD_BUCKET below
+// for why the per-listing numbers are what they are — a stranger must not be
+// able to lock the genuine owner out of the form.
+//
+// The body is read as text and capped BEFORE JSON.parse, the same house
+// pattern as the sibling public intakes (/api/privacy/request, /api/survey,
+// /api/track): the schema's per-field caps bound what we KEEP, not what an
+// anonymous caller can make us buffer and parse.
 
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, clientKey } from "@/lib/rate-limit";
@@ -28,6 +34,27 @@ import {
 } from "@/lib/schemas/worklist";
 
 export const dynamic = "force-dynamic";
+
+/** Raw-body ceiling, enforced before JSON.parse. Same 8 KiB as every other
+ *  public intake in the app — the whole claim_request schema caps out around
+ *  1.5 KiB, so this is generous for a legitimate request and still refuses to
+ *  buffer a megabyte of anonymous junk. */
+const MAX_BODY_BYTES = 8_192;
+
+/** Per-(store,id) bucket. WHAT IT PROTECTS: queue-item churn only. A repeat
+ *  request can no longer overwrite the first requester's details (see the
+ *  claim_request branch of mergePayloads), so all a flood buys is one UPDATE
+ *  plus one audit row per hit.
+ *
+ *  WHY THESE NUMBERS: the old 10/hour was a denial-of-service ON THE OWNER —
+ *  eleven requests from anywhere locked the real owner out of the form for a
+ *  full hour. The IP bucket already caps any single source at 5 per 10
+ *  minutes, so reaching 60 takes twelve distinct IPs inside one window; and
+ *  because the window is now 10 minutes, even a stranger who pays that price
+ *  delays the owner by the same order as their own IP bucket would, not by an
+ *  hour. 60/10min is still a real bound: at most 6 writes per minute per
+ *  listing. */
+const RECORD_BUCKET = { limit: 60, windowMs: 10 * 60_000 } as const;
 
 /** Closed allowlist of claimable stores, each mapped to its PUBLIC getter.
  *  Anything else — including real stores like events or auth-users — is a
@@ -55,7 +82,17 @@ export async function POST(request: NextRequest) {
 
   let body: Record<string, unknown>;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    const raw = await request.text();
+    if (raw.length > MAX_BODY_BYTES) {
+      return NextResponse.json({ error: "request too large" }, { status: 413 });
+    }
+    const parsed: unknown = JSON.parse(raw);
+    // `null` and scalars parse cleanly but have no fields — read them as a
+    // malformed body instead of letting a property access 500 a public route.
+    if (typeof parsed !== "object" || parsed === null) {
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    }
+    body = parsed as Record<string, unknown>;
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
@@ -94,11 +131,9 @@ export async function POST(request: NextRequest) {
     throw err;
   }
 
-  // Per-listing bucket AFTER the parse (redeem-route pattern).
-  const recordLimit = await checkRateLimit(`claim:${store}:${id}`, {
-    limit: 10,
-    windowMs: 60 * 60_000,
-  });
+  // Per-listing bucket AFTER the parse (redeem-route pattern). Churn bound
+  // only — see RECORD_BUCKET for the numbers and why they are not tighter.
+  const recordLimit = await checkRateLimit(`claim:${store}:${id}`, RECORD_BUCKET);
   if (!recordLimit.ok) return tooMany(recordLimit.retryAfterSeconds);
 
   // PUBLIC read: drafts, pending, and tombstoned records 404 exactly like
@@ -109,10 +144,11 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // At most one open item per (store, id): a repeat request merges —
-    // count increments, requester fields update to the latest (the
-    // claim_request branch of mergePayloads; the partial unique index
-    // backstops concurrent creates).
+    // At most one open item per (store, id): a repeat request merges, and the
+    // merge is first-writer-wins — the count increments and nothing else
+    // moves, so a later anonymous caller cannot overwrite the first
+    // requester's callback details (the claim_request branch of
+    // mergePayloads; the partial unique index backstops concurrent creates).
     await createWorklistItem(
       {
         type: "claim_request",
