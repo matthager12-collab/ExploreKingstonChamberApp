@@ -104,8 +104,12 @@ function isLoopbackOrPrivate(ip: string): boolean {
  * Chamber wants answered rather than filtered away. Excluding them would make
  * member engagement permanently invisible.
  *
- * Move a role across this line and every number moves with it — so it is one
- * list, in one place, rather than a condition spelled out at the call site.
+ * ASK-FIRST (confirmed by Mat 2026-08-01, same footing as the E11 retention
+ * windows in src/lib/privacy/policy.ts): this membership is a decision that has
+ * been made, not a default awaiting review. Moving a role across this line
+ * moves every number the Chamber reports to LTAC — never tune it in passing.
+ * It is one list, in one place, rather than a condition spelled out at the call
+ * site, so that changing it is always a deliberate act.
  */
 const INTERNAL_ROLES: readonly Role[] = ["admin", "moderator", "viewer"];
 

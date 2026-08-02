@@ -1816,15 +1816,22 @@ Two ways an event is marked, at `/api/track`:
 | **Signed-in Chamber staff** — roles `admin`, `moderator`, `viewer` | Anyone logged in, on every device, automatically | None |
 | **Device flag** — `localStorage` `vk-internal` | Signed-out phones, tablets, board members, headless browsers | Open any page with `?vk-internal=1` once; `?vk-internal=0` undoes it |
 
-`org-editor` and `member-business` are deliberately **not** internal. They are
-the member businesses and nonprofits — locals with their own reason to open the
-app, and half of what a business launch launches to. Excluding them would make
-member engagement permanently invisible. To change that, move the role in
-`INTERNAL_ROLES` in `src/app/api/track/route.ts`; every number moves with it.
+`org-editor` and `member-business` are deliberately **not** internal, and this
+is a **settled decision, confirmed by Mat on 2026-08-01** — not a default that
+nobody got round to revisiting. They are the member businesses and nonprofits:
+locals with their own reason to open the app, and half of what a business
+launch launches to. Excluding them would make member engagement permanently
+invisible, which is the opposite of what the Chamber wants to learn.
 
-Note that `/portal/*` **is** tracked (only `/admin/*` is excluded), so a member
-editing their own listing registers as visitor pageviews. That follows from the
-role split above; revisit both together if it ever looks wrong in a report.
+A consequence that follows from the same decision: `/portal/*` **is** tracked
+(only `/admin/*` is excluded), so a member editing their own listing registers
+as visitor pageviews. That is intended. If a future report ever makes it look
+wrong, revisit both together — they are one decision, not two.
+
+The mechanism for changing it is `INTERNAL_ROLES` in
+`src/app/api/track/route.ts`. Moving a role across that line moves every number
+the Chamber reports, so treat it the way §16.1's retention numbers are treated:
+a human decision, recorded here, never a passing tweak.
 
 The `?vk-internal=1` link is safe to text to someone: the parameter is stripped
 from the address bar as soon as it applies, so it cannot ride along into a URL
