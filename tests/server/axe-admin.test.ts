@@ -5,20 +5,41 @@
 // violation on these pages fails, and the fix belongs in the page, never in a
 // baseline. The smoke suite and its baseline are deliberately untouched.
 //
-// Auth reuses the harness admin the global-setup seeds (ci@example.test) via
-// the real login route — the same pattern the E32 editor suite uses; the
-// login sets the vk-session cookie in the context's shared jar.
+// Auth MINTS the harness admin's session cookie directly rather than posting
+// to /api/auth/login. That is not a shortcut, it is a budget decision: the
+// login route is rate-limited to 8 attempts per 60s per IP *and* per email
+// (src/app/api/auth/login/route.ts), every server suite logs in as the same
+// ci@example.test from 127.0.0.1, and there are already eight such suites —
+// the cap exactly. A suite that logs in once per test case pushes the shared
+// window over, and the 429 lands on whichever suite happens to be running
+// (observed: admin-media-library and admin-parking-curb failing their login
+// hooks). Minting costs zero login budget. The cookie is built from the same
+// tokens module the server verifies with, using the seeded admin id and the
+// AUTH_SECRET global-setup hands the server process.
 //
 // Vacuity guard: an unauthenticated load of these pages REDIRECTS (page-level
 // role re-check -> /portal, and the admin layout gates too), and a scan of the
 // login/portal page would pass while proving nothing about the console. So
 // each test first asserts the final URL is still the target path AND that the
-// page-specific <h1> actually rendered before axe runs.
+// page-specific <h1> actually rendered before axe runs. A stale or unsigned
+// cookie therefore fails this suite loudly instead of scanning a login page.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { chromium, type Browser } from "playwright";
 import { AxeBuilder } from "@axe-core/playwright";
+import { makeSessionToken, sessionCookie } from "@/lib/auth/tokens";
 import { BASE_URL } from "./config";
+
+// Mirrors tests/server/global-setup.ts: the seeded admin's id, and the secret
+// it exports to the server. session_version starts at 0 (auth-schema default)
+// and nothing in this suite bumps it.
+const ADMIN_ID = "ci-admin";
+const HARNESS_SECRET = "vitest-only-secret";
+const ADMIN_COOKIE = {
+  name: sessionCookie.name,
+  value: makeSessionToken(ADMIN_ID, 0, HARNESS_SECRET),
+  url: BASE_URL,
+};
 
 const PAGES: { path: string; heading: string }[] = [
   { path: "/admin/claims", heading: "Claims console" },
@@ -40,11 +61,7 @@ describe("axe on the authenticated E17 admin surfaces (zero violations)", () => 
     // iteration) — same constraint as the smoke suite.
     const context = await browser.newContext();
     try {
-      // context.request shares the cookie jar with pages from this context.
-      const login = await context.request.post(BASE_URL + "/api/auth/login", {
-        data: { email: "ci@example.test", password: "ci-admin-password" },
-      });
-      expect(login.ok(), "admin login for the axe run must succeed").toBe(true);
+      await context.addCookies([ADMIN_COOKIE]);
 
       const page = await context.newPage();
       await page.goto(BASE_URL + path, { waitUntil: "load" });
