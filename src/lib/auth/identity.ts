@@ -30,6 +30,7 @@ import {
   revokeInvite as revokeInviteRow,
   updateOrg,
   updateUser,
+  type AuthAuditEntry,
   type InviteRow,
   type OrgRow,
   type UserRow,
@@ -37,7 +38,7 @@ import {
 import { ORG_ROLES, type OrgKind, type Role } from "@/lib/db/schema";
 import {
   backfillLinkedOwnership,
-  findOwnedLinkedRecords,
+  findClaimedLinkedRecords,
   OwnershipConflictError,
 } from "@/lib/ownership";
 import {
@@ -319,6 +320,56 @@ export async function updateOrgProfile(
   return updateOrg(orgId, patch, { actor, action: "org-update", source: "admin" });
 }
 
+/** Where an org linked_ids change came from, for the audit row. Redemption
+ *  writes "public" (pre-auth surface, same as the user/org rows the redeem
+ *  transaction inserts); admin tooling writes "admin". */
+type OrgWriteSource = AuthAuditEntry["source"];
+
+/**
+ * Set-UNION an org's linked_ids with `ids`. Order-stable (existing ids keep
+ * their positions, new ones append) and duplicate-free; a no-op returns the
+ * row untouched rather than writing an empty audit row.
+ *
+ * This is the GRANT half of a claim. can(user, "edit-record", id) decides
+ * from linked_ids — NOT from record.owner_org_id — so an ownership stamp
+ * without the matching grant is a 403 for the person who was just invited.
+ */
+export async function addOrgLinkedIds(
+  orgId: string,
+  ids: readonly string[],
+  actor: string,
+  source: OrgWriteSource = "admin",
+): Promise<OrgRow> {
+  const org = await findOrgById(orgId);
+  if (!org) throw new AuthError("Unknown organization");
+  const next = [...org.linkedIds];
+  for (const id of ids) {
+    if (!next.includes(id)) next.push(id);
+  }
+  if (next.length === org.linkedIds.length) return org;
+  return updateOrg(orgId, { linkedIds: next }, { actor, action: "org-update", source });
+}
+
+/**
+ * Set-DIFFERENCE an org's linked_ids — the grant half of a release. Removing
+ * the id is what actually revokes the business's edit access; clearing
+ * record.owner_org_id alone would leave them editing a listing the console
+ * calls unclaimed.
+ */
+export async function removeOrgLinkedIds(
+  orgId: string,
+  ids: readonly string[],
+  actor: string,
+  source: OrgWriteSource = "admin",
+): Promise<OrgRow | null> {
+  const org = await findOrgById(orgId);
+  if (!org) return null;
+  const drop = new Set(ids);
+  const next = org.linkedIds.filter((id) => !drop.has(id));
+  if (next.length === org.linkedIds.length) return org;
+  return updateOrg(orgId, { linkedIds: next }, { actor, action: "org-update", source });
+}
+
 /** E12: flip an org's trusted-auto-publish moderation bypass (FR-EVT-04).
  *  Admin-gated at every call site; audit-rowed like every org mutation. */
 export async function setOrgTrustedAutoPublish(
@@ -440,10 +491,13 @@ function linkedKindFor(role: Role): OrgKind {
  * probing which codes ever existed.
  *
  * E17 ownership: after the invite checks pass but BEFORE any row is created,
- * every linked record's owner_org_id is re-checked — a listing claimed
+ * every linked record is re-checked against the UNION of both halves of a
+ * claim (record.owner_org_id and any org's linked_ids) — a listing claimed
  * between mint and redeem refuses cleanly (OwnershipConflictError → 409)
- * with no user, no org, and no session. On success, owner_org_id is
- * backfilled onto every linked record still unowned.
+ * with no user, no org, and no session. On success both halves are landed:
+ * the org's linked_ids gain the invite's ids (the transaction only does that
+ * for orgs it CREATES) and owner_org_id is backfilled onto every linked
+ * record still unowned.
  */
 export async function redeemInvite(
   code: string,
@@ -477,11 +531,19 @@ export async function redeemInvite(
   if (!preview) throw invalid();
   validate(preview);
   if (preview.linkedIds.length > 0) {
-    const owned = await findOwnedLinkedRecords(
+    // The UNION of both halves of a claim: owner_org_id AND any org whose
+    // linked_ids already grant edit rights. Keying on owner_org_id alone let
+    // a redemption whose stamp never landed look unclaimed, so a second org
+    // could be invited over a listing the first one can already edit.
+    const claimed = await findClaimedLinkedRecords(
       linkedKindFor(preview.role),
       preview.linkedIds,
+      await listOrgs(),
+      // An invite that JOINS an existing org is not in conflict with that
+      // org's own claim — being added to the holder is the whole point.
+      { ignoreOrgId: preview.orgId },
     );
-    if (owned.length > 0) {
+    if (claimed.length > 0) {
       throw new OwnershipConflictError(
         "This listing has already been claimed — contact the Chamber.",
       );
@@ -512,22 +574,65 @@ export async function redeemInvite(
     }),
   });
 
-  // E17 ownership backfill: stamp owner_org_id onto every linked record that
-  // is still unowned, each write audited (source "portal", actor = the new
-  // account). Runs AFTER the redemption committed; a failure here must not
-  // strand the freshly created account behind an error response (the code is
-  // already burned), so it logs instead of throwing — the audit trail shows
-  // exactly how far it got, and an admin can finish the job.
+  // E17: land BOTH halves of the claim. Neither may throw — the redemption
+  // has committed, the code is burned, and the account exists; failing the
+  // response here would strand a real person with no way back in. They log
+  // in detail instead, and both the claims console and the mint refusal read
+  // the UNION of the two halves, so a half-applied claim shows up as a
+  // warning rather than as a listing that looks free to hand out again.
   if (preview.linkedIds.length > 0 && redeemed.user.orgId) {
+    // (1) THE GRANT. redeemInviteTx's buildOrg returns null when the invite
+    //     joins an EXISTING org, so that org's linked_ids were never
+    //     extended — and can() reads edit rights from linked_ids, not from
+    //     owner_org_id. Without this the invited user gets a 403 on the very
+    //     listing they were invited to claim. A newly created org already
+    //     carries the invite's linkedIds from inside the transaction.
+    //
+    //     Grant first, stamp second, deliberately: if only one half lands,
+    //     the half that lets the owner do their job is the better one to keep.
+    if (!redeemed.org) {
+      try {
+        await addOrgLinkedIds(
+          redeemed.user.orgId,
+          preview.linkedIds,
+          redeemed.user.email,
+          "public",
+        );
+      } catch (err) {
+        console.error("invite-redeem linked-id grant failed", {
+          orgId: redeemed.user.orgId,
+          linkedIds: preview.linkedIds,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    // (2) THE OWNERSHIP STAMP, each write audited (source "portal", actor =
+    //     the new account). The structured result is logged whenever anything
+    //     did not land cleanly: "backfill failed" with no detail is what let
+    //     a half-applied claim go unnoticed.
     try {
-      await backfillLinkedOwnership(
+      const outcome = await backfillLinkedOwnership(
         linkedKindFor(preview.role),
         preview.linkedIds,
         redeemed.user.orgId,
         redeemed.user.email,
       );
+      if (!outcome.complete) {
+        console.error("invite-redeem ownership backfill incomplete", {
+          orgId: outcome.orgId,
+          requested: outcome.requested,
+          stamped: outcome.stamped,
+          skipped: outcome.skipped,
+          failed: outcome.failed,
+        });
+      }
     } catch (err) {
-      console.error("invite-redeem ownership backfill failed", err);
+      console.error("invite-redeem ownership backfill failed", {
+        orgId: redeemed.user.orgId,
+        linkedIds: preview.linkedIds,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 

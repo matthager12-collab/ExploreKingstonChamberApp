@@ -4,11 +4,23 @@
 // big touch targets, everything reachable in a couple of taps while the
 // Chamber has the business owner on the phone.
 //
-// Actions go through the EXISTING APIs only: invite minting POSTs to
-// /api/portal/invites (admin-gated server-side), with the role DERIVED from
-// the listing's store — never operator-typed. Recording a claim's outcome
-// (invited / rejected / duplicate) happens on /admin/worklist; this console
-// is where the invite is actually minted first.
+// Actions: invite minting POSTs to /api/portal/invites (admin-gated
+// server-side), with the role DERIVED from the listing's store — never
+// operator-typed. Releasing a claim POSTs to /api/admin/claims/release, the
+// only way in the product to take owner_org_id back off a listing; it is
+// confirm-gated because it revokes a business's access to its own listing.
+// Recording a claim's outcome (invited / rejected / duplicate) happens on
+// /admin/worklist.
+//
+// Claim state is the UNION of two halves — the record's owner stamp and the
+// org's edit grant (src/lib/claims/console-data.ts). When they disagree the
+// row says "needs attention" and explains, rather than rendering a confident
+// Claimed/Unclaimed over a listing nobody can actually edit.
+//
+// Everything a request-submitter typed is rendered as clearly-attributed
+// SECONDARY text: claim intake is a public endpoint, so payload.businessName
+// is an unauthenticated caller's string. The headline is always the
+// server-derived subject label.
 //
 // Admin-only surface: plain strings, not the public copy registry.
 
@@ -30,6 +42,12 @@ import {
 } from "@/lib/claims/roles";
 import { ROLE_LABELS } from "@/lib/auth/roles";
 
+/** An org holding the grant half of a claim. */
+export interface ClaimGrantOrgView {
+  id: string;
+  name: string;
+}
+
 /** Mirrors ClaimsConsoleRow (src/lib/claims/console-data.ts) — re-declared
  *  type-only here because that module is `server-only`; the shared runtime
  *  values (stores, labels, role map) come from @/lib/claims/roles instead. */
@@ -42,6 +60,15 @@ export interface ClaimsRowView {
   claimed: boolean;
   ownerOrgId: string | null;
   ownerOrgName: string | null;
+  grantOrgs: ClaimGrantOrgView[];
+  mismatch: "grant-without-owner" | "owner-without-grant" | "conflicting-orgs" | null;
+}
+
+/** Live invite codes already out there for a listing, joined by the server. */
+export interface OutstandingInviteView {
+  count: number;
+  /** Soonest expiry among them, ISO. */
+  expiresAt: string;
 }
 
 /** An open claim_request worklist item, dates pre-serialized. */
@@ -60,6 +87,10 @@ const selectClass =
   "mt-1 block w-full rounded-lg border border-sand bg-white px-3 py-2 text-base sm:w-auto";
 const buttonClass =
   "rounded-full bg-sound px-5 py-2 text-sm font-semibold text-white hover:bg-sound-deep disabled:opacity-50";
+// Destructive confirm. Solid coral with white text is ~5:1 (globals.css), so
+// the emphasis is not carried by color alone — the button says what it does.
+const dangerButtonClass =
+  "rounded-full bg-coral px-5 py-2 text-sm font-semibold text-white hover:bg-coral-deep disabled:opacity-50";
 const ghostButtonClass =
   "rounded-full border border-sand bg-white px-4 py-2 text-sm font-semibold text-tide-deep hover:border-tide disabled:opacity-50";
 
@@ -112,6 +143,34 @@ function plain(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function orgList(orgs: ClaimGrantOrgView[]): string {
+  return orgs.map((o) => o.name).join(" and ");
+}
+
+/** Everyone who holds any part of this claim, for the confirm copy. */
+function holdersOf(r: ClaimsRowView): string {
+  const names = [
+    ...(r.ownerOrgId ? [r.ownerOrgName ?? r.ownerOrgId] : []),
+    ...r.grantOrgs.filter((g) => g.id !== r.ownerOrgId).map((g) => g.name),
+  ];
+  return names.join(" and ") || "this organization";
+}
+
+/** Plain-language explanation of a grant/stamp disagreement — the admin has
+ *  to be able to act on it without knowing the column names. */
+function mismatchText(r: ClaimsRowView): string {
+  switch (r.mismatch) {
+    case "grant-without-owner":
+      return `${orgList(r.grantOrgs)} can already edit this listing, but it is not recorded as the owner. Usually a claim that half-finished. Release it, then invite the owner again.`;
+    case "owner-without-grant":
+      return `${r.ownerOrgName ?? r.ownerOrgId} is recorded as the owner but has no edit access, so they will hit a permission error on their own listing. Release it, then invite them again.`;
+    case "conflicting-orgs":
+      return `More than one organization holds this listing (${holdersOf(r)}). Release it, then invite only the right one.`;
+    default:
+      return "";
+  }
+}
+
 /** Wire shape of a minted invite — only the fields this panel shows. */
 interface MintedInvite {
   code: string;
@@ -119,12 +178,34 @@ interface MintedInvite {
 }
 
 export function ClaimsManager({
-  rows,
+  rows: serverRows,
   claims,
+  outstandingInvites = {},
 }: {
   rows: ClaimsRowView[];
   claims: OpenClaimView[];
+  outstandingInvites?: Record<string, OutstandingInviteView>;
 }) {
+  // A released row is re-rendered from the server's own assembly of it (the
+  // release response returns the row), so the table never has to guess what
+  // the new state is.
+  const [released, setReleased] = useState<Record<string, ClaimsRowView>>({});
+  const rows = useMemo(
+    () => serverRows.map((r) => released[`${r.store}/${r.id}`] ?? r),
+    [serverRows, released],
+  );
+
+  // Codes minted in THIS session, so re-opening the panel still warns about
+  // the code the operator just created (the server prop is a page-load join).
+  const [mintedCounts, setMintedCounts] = useState<Record<string, number>>({});
+
+  /** Live codes already out there for a listing. */
+  function outstandingFor(id: string): { count: number; expiresAt: string | null } {
+    const base = outstandingInvites[id];
+    const count = (base?.count ?? 0) + (mintedCounts[id] ?? 0);
+    return { count, expiresAt: base?.expiresAt ?? null };
+  }
+
   // ---------- filters (client-side; ~220 rows) ----------
 
   const [storeFilter, setStoreFilter] = useState<ClaimStore | "all">("all");
@@ -141,7 +222,8 @@ export function ClaimsManager({
         q &&
         !r.name.toLowerCase().includes(q) &&
         !r.id.toLowerCase().includes(q) &&
-        !(r.ownerOrgName ?? "").toLowerCase().includes(q)
+        !(r.ownerOrgName ?? "").toLowerCase().includes(q) &&
+        !r.grantOrgs.some((g) => g.name.toLowerCase().includes(q))
       ) {
         return false;
       }
@@ -182,14 +264,28 @@ export function ClaimsManager({
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [minted, setMinted] = useState<MintedInvite | null>(null);
 
+  // ---------- claim release (destructive: confirm-gated) ----------
+
+  const [openReleaseKey, setOpenReleaseKey] = useState<string | null>(null);
+  const [releaseBusy, setReleaseBusy] = useState(false);
+  const [releaseError, setReleaseError] = useState<string | null>(null);
+  const [actionStatus, setActionStatus] = useState<string | null>(null);
+
   // Full URL for the copyable join link ("" during the server render pass).
   const origin = useOrigin();
 
   function openInvitePanel(key: string) {
+    setOpenReleaseKey(null);
     setOpenInviteKey(key);
     setEmail("");
     setInviteError(null);
     setMinted(null);
+  }
+
+  function openReleasePanel(key: string) {
+    setOpenInviteKey(null);
+    setOpenReleaseKey(key);
+    setReleaseError(null);
   }
 
   async function mintInvite(e: FormEvent<HTMLFormElement>, row: ClaimsRowView) {
@@ -216,11 +312,13 @@ export function ClaimsManager({
         error?: string;
       };
       if (!res.ok || !data.ok || !data.invite) {
-        // 409 = already owned; the server names the owning org in its message.
+        // 409 = already claimed; the server names the holding org in its
+        // message and points at the release control below.
         setInviteError(data.error ?? "Something went wrong");
         return;
       }
       setMinted(data.invite);
+      setMintedCounts((m) => ({ ...m, [row.id]: (m[row.id] ?? 0) + 1 }));
     } catch {
       setInviteError("Network error — try again");
     } finally {
@@ -228,9 +326,41 @@ export function ClaimsManager({
     }
   }
 
+  async function releaseClaim(row: ClaimsRowView) {
+    const key = `${row.store}/${row.id}`;
+    setReleaseBusy(true);
+    setReleaseError(null);
+    try {
+      const res = await fetch("/api/admin/claims/release", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ store: row.store, id: row.id }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        row?: ClaimsRowView | null;
+        error?: string;
+      };
+      if (!res.ok || !data.ok) {
+        setReleaseError(data.error ?? "Something went wrong");
+        return;
+      }
+      if (data.row) setReleased((prev) => ({ ...prev, [key]: data.row! }));
+      setOpenReleaseKey(null);
+      setActionStatus(
+        `Released the claim on ${row.name}. It is unclaimed again and can be invited.`,
+      );
+    } catch {
+      setReleaseError("Network error — try again");
+    } finally {
+      setReleaseBusy(false);
+    }
+  }
+
   // ---------- render ----------
 
   const claimedCount = rows.filter((r) => r.claimed).length;
+  const attentionCount = rows.filter((r) => r.mismatch !== null).length;
 
   return (
     <>
@@ -241,19 +371,19 @@ export function ClaimsManager({
         >
           <ul className="space-y-3">
             {claims.map((c) => {
-              const store = typeof c.payload.store === "string" ? c.payload.store : c.subjectStore;
-              const id = typeof c.payload.id === "string" ? c.payload.id : c.subjectId;
+              // Server-derived subject wins over anything in the payload:
+              // claim intake is a PUBLIC endpoint, so the payload's store,
+              // id, and businessName are all attacker-controllable strings.
+              const store = c.subjectStore;
+              const id = c.subjectId;
               const known = rowKeys.has(`${store}/${id}`);
               const count = Number(c.payload.count ?? 1);
+              const submittedName = plain(c.payload.businessName);
               return (
                 <li key={c.id}>
                   <Card>
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold text-sound-deep">
-                        {plain(c.payload.businessName) !== "—"
-                          ? String(c.payload.businessName)
-                          : c.subjectLabel}
-                      </span>
+                      <span className="font-semibold text-sound-deep">{c.subjectLabel}</span>
                       {isClaimStore(store) && (
                         <Badge tone="teal">{CLAIM_STORE_LABELS[store]}</Badge>
                       )}
@@ -263,6 +393,14 @@ export function ClaimsManager({
                       </span>
                     </div>
                     <dl className="mt-2 space-y-1 text-sm">
+                      {submittedName !== "—" && submittedName !== c.subjectLabel && (
+                        <div className="flex flex-wrap gap-x-2">
+                          <dt className="font-medium text-ink">Submitted as:</dt>
+                          <dd className="min-w-0 break-words text-ink-soft">
+                            {submittedName}
+                          </dd>
+                        </div>
+                      )}
                       <div className="flex flex-wrap gap-x-2">
                         <dt className="font-medium text-ink">Requested by:</dt>
                         <dd className="min-w-0 break-words text-ink-soft">
@@ -319,6 +457,17 @@ export function ClaimsManager({
         subtitle={`${claimedCount} of ${rows.length} listings are claimed by their owners. Inviting an owner creates their organization and links it to the listing when they redeem the code.`}
       >
         <Card>
+          {attentionCount > 0 && (
+            <p className="mb-3 rounded-lg border border-coral bg-coral/5 px-3 py-2 text-sm text-ink">
+              <span className="font-semibold">
+                {attentionCount} listing{attentionCount === 1 ? "" : "s"} need
+                {attentionCount === 1 ? "s" : ""} attention.
+              </span>{" "}
+              A claim has two halves — the listing records its owner, and the
+              organization is given edit access. Where only one half landed, the
+              row below says so. Releasing the claim resets both.
+            </p>
+          )}
           <div className="flex flex-wrap items-end gap-3">
             <label className="block text-sm font-medium text-ink">
               Type
@@ -363,6 +512,7 @@ export function ClaimsManager({
 
           <p className="mt-3 text-sm text-ink-soft" role="status">
             Showing {visible.length} of {rows.length} listings.
+            {actionStatus ? ` ${actionStatus}` : ""}
           </p>
 
           {visible.length === 0 ? (
@@ -388,7 +538,9 @@ export function ClaimsManager({
                 {visible.map((r) => {
                   const key = `${r.store}/${r.id}`;
                   const inviteOpen = openInviteKey === key;
+                  const releaseOpen = openReleaseKey === key;
                   const role = CLAIM_INVITE_ROLE_BY_STORE[r.store];
+                  const live = outstandingFor(r.id);
                   return (
                     <Fragment key={key}>
                       <tr
@@ -407,7 +559,14 @@ export function ClaimsManager({
                           </span>
                         </td>
                         <td className="py-3 pr-3">
-                          {r.claimed ? (
+                          {r.mismatch !== null ? (
+                            <>
+                              <Badge tone="coral">Needs attention</Badge>
+                              <span className="mt-1 block text-xs break-words text-ink-soft">
+                                {mismatchText(r)}
+                              </span>
+                            </>
+                          ) : r.claimed ? (
                             <>
                               <Badge tone="green">Claimed</Badge>
                               <span className="mt-1 block text-xs break-words text-ink-soft">
@@ -415,11 +574,34 @@ export function ClaimsManager({
                               </span>
                             </>
                           ) : (
-                            <Badge tone="sand">Unclaimed</Badge>
+                            <>
+                              <Badge tone="sand">Unclaimed</Badge>
+                              {live.count > 0 && (
+                                <span className="mt-1 block text-xs break-words text-ink-soft">
+                                  {live.count === 1
+                                    ? "An invite is already outstanding"
+                                    : `${live.count} invites are already outstanding`}
+                                  {live.expiresAt ? ` (expires ${fmtDate(live.expiresAt)})` : ""}
+                                </span>
+                              )}
+                            </>
                           )}
                         </td>
                         <td className="py-3">
-                          {!r.claimed && (
+                          {r.claimed ? (
+                            <button
+                              type="button"
+                              aria-label={`Release the claim on ${r.name}`}
+                              aria-expanded={releaseOpen}
+                              disabled={releaseBusy}
+                              onClick={() =>
+                                releaseOpen ? setOpenReleaseKey(null) : openReleasePanel(key)
+                              }
+                              className={ghostButtonClass}
+                            >
+                              Release claim
+                            </button>
+                          ) : (
                             <button
                               type="button"
                               aria-label={`Invite the owner of ${r.name} to claim it`}
@@ -435,6 +617,49 @@ export function ClaimsManager({
                           )}
                         </td>
                       </tr>
+                      {releaseOpen && (
+                        <tr className="border-b border-sand bg-shell last:border-b-0">
+                          <td colSpan={3} className="px-3 py-4">
+                            <div className="max-w-xl space-y-3">
+                              <p className="text-sm font-semibold tracking-wide text-coral-deep uppercase">
+                                Release this claim?
+                              </p>
+                              <p className="text-sm text-ink">
+                                This revokes {holdersOf(r)}&rsquo;s access to{" "}
+                                <span className="font-semibold">{r.name}</span>: the
+                                listing stops recording them as its owner and is
+                                unlinked from their organization, so signing in no
+                                longer lets them edit it. Their account and every other
+                                listing they hold are untouched, and the listing keeps
+                                its current content. Do this when a claim went to the
+                                wrong business — then invite the right one.
+                              </p>
+                              {releaseError && (
+                                <p role="alert" className="text-sm font-medium text-coral-deep">
+                                  {releaseError}
+                                </p>
+                              )}
+                              <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => void releaseClaim(r)}
+                                  disabled={releaseBusy}
+                                  className={dangerButtonClass}
+                                >
+                                  {releaseBusy ? "Releasing…" : "Yes, release the claim"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setOpenReleaseKey(null)}
+                                  className={ghostButtonClass}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
                       {inviteOpen && (
                         <tr className="border-b border-sand bg-shell last:border-b-0">
                           <td colSpan={3} className="px-3 py-4">
@@ -491,6 +716,28 @@ export function ClaimsManager({
                                   it creates an organization named &ldquo;{r.name}&rdquo; that
                                   owns this listing.
                                 </p>
+                                {live.count > 0 && (
+                                  <p className="rounded-lg border border-coral bg-coral/5 px-3 py-2 text-sm text-ink">
+                                    <span className="font-semibold">
+                                      {live.count === 1
+                                        ? "A code for this listing is already out there"
+                                        : `${live.count} codes for this listing are already out there`}
+                                      {live.expiresAt
+                                        ? ` (expires ${fmtDate(live.expiresAt)}).`
+                                        : "."}
+                                    </span>{" "}
+                                    Only the first person to redeem gets the listing; a
+                                    second code leaves the other person stuck. If the
+                                    first went to the wrong address, revoke it on{" "}
+                                    <a
+                                      href="/admin/accounts"
+                                      className="font-medium text-tide-deep underline"
+                                    >
+                                      the accounts page
+                                    </a>{" "}
+                                    first.
+                                  </p>
+                                )}
                                 <label className="block text-sm font-medium text-ink">
                                   Email binding (optional)
                                   <input
