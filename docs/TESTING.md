@@ -9,7 +9,7 @@ on push) — without passing the `ci` check.
 | Suite | Config | What it covers |
 | --- | --- | --- |
 | Unit | `vitest.config.ts` | Pure/characterization tests. Two first-class homes: the central `tests/unit/**/*.test.ts` and the colocated `src/**/*.test.ts` (both run). No server, no network, no real `DATABASE_URL` — the E05 data-layer suites run against an in-memory **PGlite** Postgres (`tests/setup/pglite-db.ts`) migrated with the checked-in `db/migrations/`. |
-| Server | `vitest.server.config.ts` | Boots the **standalone production build** once (`node .next/standalone/server.js`) against a **throwaway Postgres** (`TEST_DATABASE_URL`; a `postgres:16` service container in CI) and runs the route-gating walk + axe smoke against it. |
+| Server | `vitest.server.config.ts` | Boots the **standalone production build** once (`node .next/standalone/server.js`) against a **throwaway Postgres** (`TEST_DATABASE_URL`; a `postgres:16` service container in CI) and runs the suites that need a real server: the generated route-gating walk, the axe smoke and the authenticated admin axe scan, the map-editor and media specs, and the end-to-end business-onboarding walk (claim → invite → redeem → edit → moderate → approve → release). |
 
 Unit homes cover: the E05 data layer (records-parity merge semantics carried
 forward from the old json-store characterization suite, write-choke audit

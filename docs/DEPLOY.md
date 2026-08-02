@@ -569,6 +569,38 @@ curl -sI https://app.explorekingstonwa.com/api/health   # 200 + valid cert
 build-time inlined, so a dashboard-only change does nothing and canonical/OG
 URLs keep pointing at `onrender.com`.
 
+### Warm `/line` after EVERY deploy (it ships as a 404)
+
+Run this once the deploy goes live, and don't consider a deploy finished until
+it prints 200:
+
+```bash
+until [ "$(curl -s -o /dev/null -w '%{http_code}' https://app.explorekingstonwa.com/line)" = "200" ]; do sleep 10; done; echo "/line warm"
+```
+
+**Why.** `next build` prerenders with no database on purpose (builds must not
+need secrets — see `buildingWithoutDb()` in `src/lib/db/records.ts`), so the
+build reads an empty site-pages store. `/line` is in `DEFAULT_HIDDEN_PAGES` as a
+restore-safety net, that fail-closed rule fires, and the artifact Next ships is
+a 404: `.next/server/app/line.meta` contains `"status": 404` verbatim. Render
+then serves that baked 404 until ISR revalidates against the real database
+(`s-maxage=30`), after which it is a normal 200. Observed live on 2026-08-02:
+`/line` 404'd in a full-route sweep seconds after a deploy while every
+neighbouring route returned 200, and was 200 again minutes later.
+
+**Why it matters enough to be a checklist step.** `/line` is entered by QR code
+from a physical sign on SR 104. A visitor who scans during that window gets
+"page not found" and does not try again.
+
+Do **not** "fix" this by removing `/line` from `DEFAULT_HIDDEN_PAGES` — that
+flips it from fail-closed to public-by-default, which is the opposite of the
+intent (the list's own comment says so). The real fix, when someone has time,
+is to stop the build conflating "no record exists" with "no database to ask":
+either trigger an on-demand `revalidatePath("/line")` after deploy, or give the
+build a read-only `DATABASE_URL` (which trades against the no-secrets-in-build
+rule). The same trap applies to any future `DEFAULT_HIDDEN_PAGES` route that is
+actually live.
+
 *Other hosts, reference only — Render is the live deployment:* Vercel would use
 `cname.vercel-dns.com`; Fly the `<app>.fly.dev` hostname. **Do not use these.**
 
