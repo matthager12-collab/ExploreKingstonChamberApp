@@ -1,5 +1,6 @@
-// Portal listing API — PUT updates a member business listing (a restaurant
-// or a lodging place; the id decides which store it lives in).
+// Portal listing API — PUT updates a member business listing (a restaurant,
+// a lodging place, or a directory listing; the id decides which store it
+// lives in).
 //
 // Server-side rules: valid session required; can(…, "edit-record") against the STORED
 // record's id (never the client's word); only whitelisted fields merge onto
@@ -11,18 +12,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { can, getSessionUser } from "@/lib/auth";
 import { getRestaurant, saveRestaurant } from "@/lib/stores/business-store";
 import { getLodging, saveLodging } from "@/lib/stores/listing-stores";
+import {
+  getDirectoryListingsAdmin,
+  saveDirectoryListing,
+} from "@/lib/stores/directory-store";
 import { holdEditProposal } from "@/lib/moderation";
 import { RecordValidationError } from "@/lib/db/store-schemas";
-import type { Lodging, Restaurant } from "@/lib/types";
+import type { DirectoryListing, Lodging, Restaurant } from "@/lib/types";
 import type { AuthSubject } from "@/lib/auth";
 // Field rules come from the shared domain schemas (E07, vk/domain-schemas):
 // parseWeeklyHours is the same strict shape check that lived here before, and
 // the whole merged record gets a belt-and-braces schema parse before it lands
 // in the store.
 import {
+  DIRECTORY_CATEGORIES,
   ISO_DATE_RE,
   ORDERING_PLATFORMS,
   PRICE_LEVELS,
+  directoryListingSchema,
   firstZodMessage,
   lodgingSchema,
   parseWeeklyHours,
@@ -44,15 +51,130 @@ export async function PUT(request: NextRequest) {
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
   // The id decides the domain: restaurants first (the original path), then
-  // lodging. Both stores enumerate only what an invite could have linked, so
-  // an unknown id is a plain 404 either way.
+  // lodging, then the directory. All three stores enumerate only what an
+  // invite could have linked, so an unknown id is a plain 404 either way.
+  // The directory read is the ADMIN one on purpose: imported records are
+  // drafts, and a draft its owner cannot load is a listing they can never
+  // fill in.
   const storedRestaurant = await getRestaurant(id);
   if (storedRestaurant) return putRestaurant(user, storedRestaurant, body);
 
   const storedLodging = (await getLodging()).find((l) => l.id === id);
   if (storedLodging) return putLodging(user, storedLodging, body);
 
+  const storedDirectory = (await getDirectoryListingsAdmin()).find((d) => d.id === id);
+  if (storedDirectory) return putDirectory(user, storedDirectory, body);
+
   return NextResponse.json({ error: "Listing not found" }, { status: 404 });
+}
+
+/* -------------------------------- directory ------------------------------- */
+
+// E16/E17: the imported-members domain. Members edit contact facts and free
+// text (description, address, phone, website, tags); name and the category
+// (which /map bucket and future directory section the listing files under)
+// stay Chamber-controlled, mirroring lodging's name/type rule.
+//
+// THE STATUS BRANCH is the part that differs from the siblings above: a
+// directory DRAFT has never been public, so its owner iterates on it freely
+// — the direct save preserves draft status (writeRecord would otherwise
+// reset it to live: the E17 upsert rule) and the moderation floor is the
+// PUBLISH act, which stays an explicit admin decision. Once a listing is
+// live, edits hold for review exactly like restaurants and lodging.
+type StoredDirectory = Awaited<ReturnType<typeof getDirectoryListingsAdmin>>[number];
+
+async function putDirectory(
+  user: AuthSubject,
+  stored: StoredDirectory,
+  body: Record<string, unknown>,
+): Promise<NextResponse> {
+  if (!can(user, "edit-record", stored.id)) {
+    return NextResponse.json({ error: "You don't manage this listing" }, { status: 403 });
+  }
+
+  // Strip the surfaced status before the doc is rebuilt — it is governance,
+  // not record content, and must never land inside the stored document.
+  const { status, ...storedDoc } = stored;
+  const next: DirectoryListing = { ...storedDoc };
+
+  // Description — only overwrite with a non-empty value (imported drafts
+  // start empty; saving other fields must not be blocked by that).
+  if (typeof body.description === "string" && body.description.trim()) {
+    next.description = body.description.trim();
+  }
+
+  // Optional text fields — an empty string clears them.
+  for (const key of ["address", "phone", "website"] as const) {
+    const v = body[key];
+    if (typeof v === "string") next[key] = v.trim() || undefined;
+  }
+
+  if ("tags" in body) {
+    if (!Array.isArray(body.tags)) {
+      return NextResponse.json({ error: "tags must be an array" }, { status: 400 });
+    }
+    next.tags = body.tags
+      .filter((t): t is string => typeof t === "string")
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .slice(0, 12);
+  }
+
+  // Chamber-only corrections: display name and the category bucket.
+  if (user.role === "admin") {
+    if (typeof body.name === "string" && body.name.trim()) next.name = body.name.trim();
+    if ("category" in body) {
+      const v = body.category;
+      if (
+        typeof v !== "string" ||
+        !(DIRECTORY_CATEGORIES as readonly string[]).includes(v)
+      ) {
+        return NextResponse.json(
+          { error: `category must be one of: ${DIRECTORY_CATEGORIES.join(", ")}` },
+          { status: 400 },
+        );
+      }
+      next.category = v as DirectoryListing["category"];
+    }
+  }
+
+  next.id = stored.id; // belt and braces — never client-controlled
+  // Import provenance (sourceCategories/sourceImages) rides through the
+  // {...storedDoc} spread untouched — same guarantee the admin surface makes.
+
+  const checked = directoryListingSchema.safeParse(next);
+  if (!checked.success) {
+    return NextResponse.json({ error: firstZodMessage(checked.error) }, { status: 400 });
+  }
+
+  const isDraft = status !== "live";
+  try {
+    if (user.role === "admin") {
+      // Same rule as the admin workbench: preserve status — publishing is an
+      // explicit decision, never a side effect of an edit.
+      await saveDirectoryListing(next, { actor: user.email, source: "admin", status });
+    } else if (isDraft) {
+      // Never public → no hold. The member's own email lands in updated_by,
+      // which also (correctly) ends importer refresh rights over the record.
+      await saveDirectoryListing(next, { actor: user.email, source: "portal", status });
+    } else {
+      // MODERATION FLOOR (E08): the live listing keeps serving untouched —
+      // the full proposed revision waits in the worklist for Chamber review.
+      await holdEditProposal("directory", next, next.name, user);
+    }
+  } catch (err) {
+    if (err instanceof RecordValidationError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
+  }
+  return NextResponse.json(
+    user.role === "admin"
+      ? { ok: true, listing: next }
+      : isDraft
+        ? { ok: true, listing: next, draft: true }
+        : { ok: true, listing: next, pending: true },
+  );
 }
 
 /* ------------------------------- restaurants ------------------------------ */
