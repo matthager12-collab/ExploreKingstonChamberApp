@@ -76,9 +76,7 @@ function RestaurantCard({ r, photos }: { r: Restaurant; photos: Record<string, M
       <ListingPhoto images={r.images} library={photos} />
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h3 className="text-lg font-semibold text-sound-deep">{r.name}</h3>
-        <p className="text-sm text-ink-soft">
-          {r.cuisine} · <span aria-label={`price level ${r.priceLevel} of 3`}>{"$".repeat(r.priceLevel)}</span>
-        </p>
+        <p className="text-sm text-ink-soft">{r.cuisine}</p>
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
