@@ -7,7 +7,7 @@ import { getUnifiedEvents } from "@/lib/events/unified";
 import { getEvents } from "@/lib/stores/event-store";
 import { getUnifiedCalendarEnabled } from "@/lib/stores/unified-calendar-store";
 import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
-import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
+import { assertPageVisibleStatic } from "@/lib/page-visibility";
 import { formatPacificDate, formatPacificTime, todayPacific } from "@/lib/time";
 import { ReportInaccurate } from "@/components/report-inaccurate";
 import { EventJsonLd } from "@/components/json-ld";
@@ -182,7 +182,9 @@ function EventCard({ event, external }: { event: EventItem; external?: boolean }
 }
 
 export default async function EventsPage() {
-  const hiddenPreview = await assertPageVisible("/events");
+  // ISR page: the cookie-free gate is the one that actually bakes the 404
+  // when hidden (see assertPageVisibleStatic + the /give find, 2026-08-03).
+  await assertPageVisibleStatic("/events");
   // Ship-dark flag (E12): OFF → exactly the pre-E12 in-app-only page. The
   // check is session-free on purpose — this page is ISR (shared cache), so
   // an admin-preview branch here would serve preview data to everyone;
@@ -218,14 +220,13 @@ export default async function EventsPage() {
 
   return (
     <>
-      {hiddenPreview && <HiddenPageBanner />}
       {/* Event structured data (M-13-02/M-13-03). Emitted for UPCOMING events
           only — the same list the page renders, which is live-only via the
           default getters (E08), so nothing pending or draft is ever described
           to a crawler. Suppressed entirely on an admin's hidden-page preview:
           that render is not what the public sees, and marking up an unpublished
           page would invite it into search results. */}
-      {!hiddenPreview && upcoming.map((event) => <EventJsonLd key={event.id} event={event} />)}
+      {upcoming.map((event) => <EventJsonLd key={event.id} event={event} />)}
       <PageHeader
         eyebrow={copyText(copy, "events.header.eyebrow")}
         title={copyText(copy, "events.header.title")}

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getMapViews } from "@/lib/stores/map-store";
 import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
-import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
+import { assertPageVisibleStatic } from "@/lib/page-visibility";
 import { PageHeader, Section } from "@/components/ui";
 import { MapSwitcher } from "./switcher";
 
@@ -15,7 +15,9 @@ export const metadata: Metadata = {
 export const revalidate = 60;
 
 export default async function MapPage() {
-  const hiddenPreview = await assertPageVisible("/map");
+  // ISR page: the cookie-free gate is the one that actually bakes the 404
+  // when hidden (see assertPageVisibleStatic + the /give find, 2026-08-03).
+  await assertPageVisibleStatic("/map");
   const copy = await getCopyOverrides();
   const views = (await getMapViews())
     .filter((v) => v.published)
@@ -23,7 +25,6 @@ export default async function MapPage() {
 
   return (
     <>
-      {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
         eyebrow={copyText(copy, "map.header.eyebrow")}
         title={copyText(copy, "map.header.title")}

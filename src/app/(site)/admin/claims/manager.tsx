@@ -97,7 +97,16 @@ const ghostButtonClass =
 function fmtDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  // timeZone pinned: this client component receives server-rendered props,
+  // and an unpinned zone renders different DATES on a UTC server vs a
+  // Pacific browser for evening-UTC instants — a hydration mismatch that is
+  // also wrong by a day. Everything user-facing in this app speaks Pacific.
+  return d.toLocaleDateString("en-US", {
+    timeZone: "America/Los_Angeles",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 function rowDomId(store: string, id: string): string {

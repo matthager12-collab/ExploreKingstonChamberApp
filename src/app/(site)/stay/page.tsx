@@ -9,7 +9,7 @@ import { GetListedCallout } from "@/components/get-listed";
 import { ListingPhoto } from "@/components/listing-photo";
 import { getMediaItems } from "@/lib/stores/media-store";
 import type { MediaItem } from "@/lib/media/refs";
-import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
+import { assertPageVisibleStatic } from "@/lib/page-visibility";
 import {
   PageHeader,
   Section,
@@ -94,7 +94,9 @@ function LodgingCard({ place, photos }: { place: Lodging; photos: Record<string,
 }
 
 export default async function StayPage() {
-  const hiddenPreview = await assertPageVisible("/stay");
+  // ISR page: the cookie-free gate is the one that actually bakes the 404
+  // when hidden (see assertPageVisibleStatic + the /give find, 2026-08-03).
+  await assertPageVisibleStatic("/stay");
   const [lodging, copy, mediaItems] = await Promise.all([
     getLodging(),
     getCopyOverrides(),
@@ -104,7 +106,6 @@ export default async function StayPage() {
   const photos = Object.fromEntries(mediaItems.map((m) => [m.id, m]));
   return (
     <>
-      {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
         eyebrow={copyText(copy, "stay.header.eyebrow")}
         title={copyText(copy, "stay.header.title")}

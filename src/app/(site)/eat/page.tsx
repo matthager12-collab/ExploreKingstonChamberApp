@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import type { Restaurant } from "@/lib/types";
 import { getRestaurants } from "@/lib/stores/business-store";
 import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
-import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
+import { assertPageVisibleStatic } from "@/lib/page-visibility";
 import {
   PageHeader,
   Section,
@@ -160,7 +160,9 @@ function RestaurantCard({ r, photos }: { r: Restaurant; photos: Record<string, M
 export const revalidate = 60;
 
 export default async function EatPage() {
-  const hiddenPreview = await assertPageVisible("/eat");
+  // ISR page: the cookie-free gate is the one that actually bakes the 404
+  // when hidden (see assertPageVisibleStatic + the /give find, 2026-08-03).
+  await assertPageVisibleStatic("/eat");
   const [allRestaurants, copy, mediaItems] = await Promise.all([
     getRestaurants(),
     getCopyOverrides(),
@@ -188,7 +190,6 @@ export default async function EatPage() {
 
   return (
     <>
-      {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
         eyebrow={copyText(copy, "eat.header.eyebrow")}
         title={copyText(copy, "eat.header.title")}

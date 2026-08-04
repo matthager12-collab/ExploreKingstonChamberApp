@@ -14,7 +14,7 @@ import { getParkingZones } from "@/lib/stores/parking-store";
 import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
 import { getFerryInfo } from "@/lib/stores/ferry-info-store";
 import { walkOnRoundTripFare } from "@/lib/data/ferry-info";
-import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
+import { assertPageVisibleStatic } from "@/lib/page-visibility";
 import { EdmondsSideParking } from "./edmonds-section";
 
 // The parking map is the Chamber's live "parking-cash" map-CMS view, built and
@@ -33,7 +33,9 @@ export const metadata: Metadata = {
 /* ------------------------------------------------------------------ */
 
 export default async function ParkingPage() {
-  const hiddenPreview = await assertPageVisible("/parking");
+  // ISR page: the cookie-free gate is the one that actually bakes the 404
+  // when hidden (see assertPageVisibleStatic + the /give find, 2026-08-03).
+  await assertPageVisibleStatic("/parking");
   const parkingMap = await resolveMapView("parking-cash");
   const copy = await getCopyOverrides();
   const ferryInfo = await getFerryInfo();
@@ -45,7 +47,6 @@ export default async function ParkingPage() {
 
   return (
     <>
-      {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
         eyebrow={copyText(copy, "parking.header.eyebrow")}
         title={copyText(copy, "parking.header.title")}

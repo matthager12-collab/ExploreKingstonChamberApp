@@ -319,7 +319,13 @@ export function NextFerries({
 }) {
   const t = THEME[tone];
   const [data, setData] = useState<FerryStatus>(initial);
-  const [now, setNow] = useState(() => Date.now());
+  // Seeded from serverNow, not Date.now(): on an ISR page (/line) this HTML
+  // can be minutes old, and countdown text computed from the client clock
+  // would differ from the server-rendered text — a React #418 hydration
+  // mismatch. First paint matches the HTML; the 20s tick snaps to real time
+  // right after mount. Same reasoning as lastGoodRef below and the sibling
+  // ferry-busy-today.
+  const [now, setNow] = useState(() => Date.parse(serverNow));
   const [expanded, setExpanded] = useState(false);
   // E13 staleness. The instant is an ISO string, not a number: the service
   // worker stamps X-SW-Fetched-At as ISO and formatPacificTime() takes an ISO

@@ -8,9 +8,8 @@ import { walkOnRoundTripFare } from "@/lib/data/ferry-info";
 import { getFerryStatusSnapshot } from "@/lib/ferry-status";
 import { SAFETY_CONTENT, safetyValues } from "@/lib/i18n/safety-content";
 import {
-  assertPageVisible,
+  assertPageVisibleStatic,
   getEffectiveHiddenPaths,
-  HiddenPageBanner,
 } from "@/lib/page-visibility";
 import { getFerryInfo } from "@/lib/stores/ferry-info-store";
 import { copyText, getCopyOverrides } from "@/lib/stores/site-store";
@@ -88,7 +87,9 @@ function BoatColumn({
 }
 
 export default async function SimplePage() {
-  const hiddenPreview = await assertPageVisible("/simple");
+  // ISR page: the cookie-free gate is the one that actually bakes the 404
+  // when hidden (see assertPageVisibleStatic + the /give find, 2026-08-03).
+  await assertPageVisibleStatic("/simple");
   const [ferry, ferryInfo, copy, hiddenPaths] = await Promise.all([
     getFerryStatusSnapshot(),
     // E27's admin-editable fares record. A store read like getCopyOverrides()
@@ -115,7 +116,6 @@ export default async function SimplePage() {
 
   return (
     <>
-      {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
         eyebrow={copyText(copy, "simple.header.eyebrow")}
         title={copyText(copy, "simple.header.title")}

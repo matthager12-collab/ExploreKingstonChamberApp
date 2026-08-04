@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Callout, Card, ExternalLink, PageHeader, Section } from "@/components/ui";
 import { getWebcams } from "@/lib/stores/listing-stores";
 import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
-import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
+import { assertPageVisibleStatic } from "@/lib/page-visibility";
 import { WebcamGrid } from "./webcam-grid";
 
 // Webcams are admin-editable (seed + overlay via the listing store);
@@ -16,7 +16,9 @@ export const metadata: Metadata = {
 };
 
 export default async function WebcamsPage() {
-  const hiddenPreview = await assertPageVisible("/webcams");
+  // ISR page: the cookie-free gate is the one that actually bakes the 404
+  // when hidden (see assertPageVisibleStatic + the /give find, 2026-08-03).
+  await assertPageVisibleStatic("/webcams");
   const [cams, copy] = await Promise.all([getWebcams(), getCopyOverrides()]);
   // Same split the seed file used: edmonds-* ids on the Edmonds side,
   // everything else (including any admin-added local cams) on the Kingston side.
@@ -24,7 +26,6 @@ export default async function WebcamsPage() {
   const edmondsCams = cams.filter((w) => w.id.startsWith("edmonds-"));
   return (
     <>
-      {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
         eyebrow={copyText(copy, "webcams.header.eyebrow")}
         title={copyText(copy, "webcams.header.title")}
