@@ -85,3 +85,81 @@ been decided:
   kept) for feature labels; `docs/MAP-LABELS.md` rewritten as-built.
 - **PWA offline PMTiles precache**: in its own E31 phase-7 PR (service-worker
   slice), separate from the style/close-out PR.
+
+---
+
+## Amendment 1 — a satellite base layer for `/parking` (2026-08-03)
+
+**Status:** accepted (owner decision, 2026-08-03).
+
+This ADR's headline property was "no third-party requests, no API keys." That
+stands for every map in the app **except one deliberate, named exception**,
+recorded here so it stays an exception rather than becoming a precedent.
+
+### What changed
+
+`src/lib/map/basemap.ts` now also carries an **Esri World Imagery** raster
+source (`SATELLITE_TILE_URL`), shipped `visibility: "none"`. `/parking` — and
+only `/parking` — opens with it visible, with a Map/Satellite switch beside it.
+Every other surface (`/map`, both ferry maps, the kiosk, the admin editors)
+renders exactly as before and makes no off-origin request: MapLibre issues no
+tile requests for a hidden layer, which is why one shared style can hold both.
+
+### Why the exception was accepted
+
+The questions `/parking` answers are questions about **paint on the ground** —
+which row is the free one, where the lot edge really is, which stalls are
+angled. The seed geometry itself is labelled `confidence: "probable"` and
+georeferenced from a schematic, so the aerial is also how a Chamber admin
+field-verifies a shape. A vector base cannot show any of that.
+
+Public-domain alternatives were measured against the Port lot before accepting
+a third party, and both were rejected on the facts:
+
+| Source | Resolution over Kingston | Verdict |
+| --- | --- | --- |
+| USGS `USGSImageryOnly` | cache stops at ~1.6 m/px (`maxScale` 1:9028) | Too coarse — a parking lot is one grey smear. |
+| Kitsap County HXIP 2020 | ~0.10 m/px, public tile cache | Best imagery available, but `Copyright Kitsap County, HxGN Content Program` — rehosting needs county/Hexagon permission. Worth pursuing separately. |
+| Esri World Imagery | ~0.3 m — cars and stall stripes legible at z19 | **Accepted.** Keyless, free, no account. |
+
+### The costs, accepted knowingly
+
+- **Privacy.** A visitor's IP reaches Esri while imagery is showing. Nothing
+  else does: PMTiles, glyphs and fonts all remain same-origin. This is a tile
+  request, not analytics — the "no third-party analytics" commitment in the
+  privacy policy is unaffected — but it is a new third party on one page.
+- **CSP.** `services.arcgisonline.com` is carved out in **both** `img-src` and
+  `connect-src` (`next.config.ts`); MapLibre fetches raster tiles and then
+  paints them. The policy is still Report-Only pre-launch.
+- **Offline.** Imagery **cannot** work offline — `public/sw.js` only intercepts
+  same-origin requests, so no worker can cache these tiles. `<FeatureMap>`
+  therefore falls back to the vector base when it is built with the network
+  already gone, and disables the Satellite option, which is what keeps the
+  E31 Phase 7 promise (a visitor who loses signal at the dock still has the
+  parking map) intact. `tests/server/offline-map.test.ts` is the guard, and it
+  caught this exact regression before the change shipped.
+- **Terms.** The keyless `services.arcgisonline.com` endpoint is a legacy path;
+  Esri's current terms nominally expect an ArcGIS account for production use.
+  Attribution is rendered automatically (MapLibre credits a source only while a
+  layer using it is visible). **If Esri ever gates or throttles it, the fallback
+  is one constant:** point `SATELLITE_TILE_URL` at a self-hosted raster PMTiles
+  archive built from public-domain NAIP and served through the existing
+  `/api/map/tiles` proxy — the seam is already the right shape for it.
+
+### Load-bearing details
+
+- **`SATELLITE_MAX_ZOOM = 19`.** Esri serves a grey *"Map data not yet
+  available"* placeholder at z20 over Kingston — a 200, not a 404. Declaring the
+  source maxzoom makes MapLibre overzoom real z19 pixels instead of painting
+  that placeholder, which is what a visitor pinching into a lot would otherwise
+  hit constantly.
+- **The base layer is applied on `styledata`, not `load`.** `load` waits for
+  *every* source, so a 502 from the R2 tile proxy — which this app has had —
+  would otherwise leave `/parking` blank even though the imagery was serving
+  fine. The two are independent services and must fail independently.
+- **Overlay contrast.** The ADR-0007 palette is unchanged. Over imagery the
+  overlay gains white **casings** and its area fills get *weaker*, not stronger
+  (`IMAGERY_FILL_OPACITY` in `feature-map.tsx`): on a photograph the content
+  under the fill is the information, so identity moves to the boundary. A first
+  cut that raised fill opacity turned the Port lot into a flat purple rectangle
+  with the cars invisible.

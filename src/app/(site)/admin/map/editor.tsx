@@ -24,6 +24,8 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { PhotoPicker } from "@/components/admin/photo-picker";
+import type { MediaItem } from "@/lib/media/refs";
 import { useRouter } from "next/navigation";
 import type { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
 import type { GeoJSONStoreFeatures, TerraDraw } from "terra-draw";
@@ -101,6 +103,8 @@ type Draft = {
   confidence: MapZone["confidence"];
   /** "" = side unknown (renders the centre line). Street zones only. */
   curb: CurbSide | "";
+  /** Shared-library photo names, in display order. */
+  images: string[];
 };
 
 function toDraft(zone: MapZone): Draft {
@@ -112,6 +116,7 @@ function toDraft(zone: MapZone): Draft {
     overnight: zone.overnight,
     confidence: zone.confidence,
     curb: zone.curb ?? "",
+    images: zone.images ?? [],
   };
 }
 
@@ -152,7 +157,13 @@ function zoneDrawFeature(zone: MapZone): GeoJSONStoreFeatures {
 /* Editor                                                              */
 /* ------------------------------------------------------------------ */
 
-export function MapZoneEditor({ initialZones }: { initialZones: MapZone[] }) {
+export function MapZoneEditor({
+  initialZones,
+  mediaLibrary,
+}: {
+  initialZones: MapZone[];
+  mediaLibrary: MediaItem[];
+}) {
   const router = useRouter();
 
   const [zones, setZones] = useState<MapZone[]>(initialZones);
@@ -662,6 +673,11 @@ export function MapZoneEditor({ initialZones }: { initialZones: MapZone[] }) {
       // Explicit so CLEARING the side persists: undefined is dropped by
       // JSON.stringify, and the API rebuild then omits curb entirely.
       curb: draft.curb === "" ? undefined : draft.curb,
+      // Explicit for the same reason as curb above: REMOVING every photo has to
+      // persist, and `undefined` is dropped by JSON.stringify — the API would
+      // then rebuild the zone from the whitelist without images and the old
+      // ones would quietly come back on the next read.
+      images: draft.images.length ? draft.images : undefined,
       center,
       ...(polygon ? { polygon } : {}),
     };
@@ -904,6 +920,25 @@ export function MapZoneEditor({ initialZones }: { initialZones: MapZone[] }) {
                 </p>
               </div>
             ) : null}
+
+            <div className="mt-4">
+              <p className="text-sm font-medium text-ink">Photos of this lot</p>
+              <p className="mb-2 mt-1 text-xs text-ink-soft">
+                A photo of the pay station, the sign, or the entrance answers questions the
+                map cannot — visitors see the first one in the map popup and all of them on
+                the parking page. Upload under{" "}
+                <a href="/admin/media" className="font-semibold text-tide-deep underline">
+                  Photos
+                </a>{" "}
+                first, then pick here.
+              </p>
+              <PhotoPicker
+                value={draft.images}
+                library={mediaLibrary}
+                onChange={(images) => patchDraft({ images })}
+                emptyHint="No photos in the library yet. Add some under Photos, then come back and they'll be selectable here."
+              />
+            </div>
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <Field label="Overnight">

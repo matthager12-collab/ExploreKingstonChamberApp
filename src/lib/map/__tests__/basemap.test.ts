@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { mapStyle, TILES_PMTILES_PATH, VECTOR_ATTRIBUTION } from "@/lib/map/basemap";
+import {
+  applyBasemapMode,
+  mapStyle,
+  ROAD_LABEL_LAYERS,
+  SATELLITE_ATTRIBUTION,
+  SATELLITE_LAYER_ID,
+  SATELLITE_MAX_ZOOM,
+  SATELLITE_SOURCE_ID,
+  SATELLITE_TILE_URL,
+  TILES_PMTILES_PATH,
+  VECTOR_ATTRIBUTION,
+  VECTOR_SURFACE_LAYERS,
+} from "@/lib/map/basemap";
 import { abbreviateStreetName } from "@/lib/map/street-abbrev";
 import streetAbbrevs from "@/lib/map/street-abbrevs.json";
 
@@ -32,6 +44,18 @@ describe("mapStyle (self-hosted vector base)", () => {
 
   it("is fully self-hosted: glyphs come from OUR origin, never a third party", () => {
     expect(style.glyphs).toBe("https://example.test/fonts/{fontstack}/{range}.pbf");
+  });
+
+  it("has exactly ONE third-party source — the satellite raster (ADR-0006 amendment 1)", () => {
+    // The amendment is a single named exception, not a loosening. Any NEW
+    // off-origin source has to come here and justify itself.
+    const offOrigin = Object.entries(style.sources).filter(([, src]) => {
+      const s = src as { url?: string; tiles?: string[] };
+      const urls = [s.url, ...(s.tiles ?? [])].filter(Boolean) as string[];
+      return urls.some((u) => /^https?:\/\//.test(u.replace(/^pmtiles:\/\//, "")) &&
+        !u.includes("example.test"));
+    });
+    expect(offOrigin.map(([id]) => id)).toEqual([SATELLITE_SOURCE_ID]);
   });
 
   it("labels streets from the roads layer", () => {
@@ -166,5 +190,126 @@ describe("mapStyle (self-hosted vector base)", () => {
   it("credits OSM (ODbL) and Protomaps on the vector source", () => {
     expect(VECTOR_ATTRIBUTION).toContain("OpenStreetMap");
     expect(VECTOR_ATTRIBUTION).toContain("Protomaps");
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* Satellite base layer (ADR-0006 amendment 1)                         */
+/* ------------------------------------------------------------------ */
+
+describe("satellite base layer", () => {
+  const style = mapStyle(`https://example.test${TILES_PMTILES_PATH}`);
+  const source = style.sources[SATELLITE_SOURCE_ID] as {
+    type: string;
+    tiles: string[];
+    tileSize: number;
+    maxzoom: number;
+    attribution: string;
+  };
+  const layer = style.layers.find((l) => l.id === SATELLITE_LAYER_ID)!;
+
+  it("ships HIDDEN, so a map that never asks for imagery makes no third-party request", () => {
+    // MapLibre issues no tile requests for an invisible layer — this is the
+    // whole reason the raster can live in the shared style at all. Every other
+    // map in the app (the /map switcher, both ferry maps, the kiosk) renders
+    // this same style and must stay fully self-hosted.
+    expect((layer as { layout?: Record<string, unknown> }).layout?.visibility).toBe("none");
+  });
+
+  it("sits directly above the background, under every other layer", () => {
+    const ids = style.layers.map((l) => l.id);
+    expect(ids.indexOf(SATELLITE_LAYER_ID)).toBe(1);
+    expect(ids[0]).toBe("bg");
+  });
+
+  it("caps at z19 — Esri serves a grey 'not yet available' PLACEHOLDER at z20 here", () => {
+    // Verified against the live service over the Port lot on 2026-08-03: z20 is
+    // a 200 with a grey placeholder image, NOT a 404. Without this cap MapLibre
+    // would request it and paint it; with it, MapLibre overzooms real z19
+    // pixels instead — which is what a visitor pinching into a lot will hit.
+    expect(source.maxzoom).toBe(SATELLITE_MAX_ZOOM);
+    expect(SATELLITE_MAX_ZOOM).toBe(19);
+  });
+
+  it("is a 256px raster source over https, and credits Esri", () => {
+    expect(source.type).toBe("raster");
+    expect(source.tileSize).toBe(256);
+    expect(source.tiles).toEqual([SATELLITE_TILE_URL]);
+    expect(SATELLITE_TILE_URL.startsWith("https://")).toBe(true);
+    expect(source.attribution).toBe(SATELLITE_ATTRIBUTION);
+    expect(SATELLITE_ATTRIBUTION).toContain("Esri");
+  });
+
+  it("names only layers that actually exist in the style", () => {
+    // applyBasemapMode() guards every lookup, so a typo here would not throw —
+    // it would silently leave a vector surface painted over the imagery.
+    const ids = new Set(style.layers.map((l) => l.id));
+    for (const id of [...VECTOR_SURFACE_LAYERS, ...ROAD_LABEL_LAYERS]) {
+      expect(ids.has(id), `style has no layer "${id}"`).toBe(true);
+    }
+  });
+
+  it("keeps street names ON over imagery — the one thing an aerial cannot give you", () => {
+    for (const id of ROAD_LABEL_LAYERS) {
+      expect(VECTOR_SURFACE_LAYERS as readonly string[]).not.toContain(id);
+    }
+  });
+
+  describe("applyBasemapMode", () => {
+    /** Minimal stand-in for a live map: records what got set on which layer. */
+    function fakeMap(layerIds: string[]) {
+      const layout: Record<string, Record<string, unknown>> = {};
+      const paint: Record<string, Record<string, unknown>> = {};
+      return {
+        layout,
+        paint,
+        getLayer: (id: string) => (layerIds.includes(id) ? { id } : undefined),
+        setLayoutProperty: (id: string, k: string, v: unknown) => {
+          (layout[id] ??= {})[k] = v;
+        },
+        setPaintProperty: (id: string, k: string, v: unknown) => {
+          (paint[id] ??= {})[k] = v;
+        },
+      };
+    }
+    const allIds = [SATELLITE_LAYER_ID, ...VECTOR_SURFACE_LAYERS, ...ROAD_LABEL_LAYERS];
+
+    it("satellite: shows the imagery and hides every vector surface", () => {
+      const m = fakeMap(allIds);
+      applyBasemapMode(m as never, "satellite");
+      expect(m.layout[SATELLITE_LAYER_ID].visibility).toBe("visible");
+      for (const id of VECTOR_SURFACE_LAYERS) {
+        expect(m.layout[id].visibility, id).toBe("none");
+      }
+    });
+
+    it("map: hides the imagery and restores every vector surface", () => {
+      const m = fakeMap(allIds);
+      applyBasemapMode(m as never, "satellite");
+      applyBasemapMode(m as never, "map");
+      expect(m.layout[SATELLITE_LAYER_ID].visibility).toBe("none");
+      for (const id of VECTOR_SURFACE_LAYERS) {
+        expect(m.layout[id].visibility, id).toBe("visible");
+      }
+    });
+
+    it("repaints street names white-on-dark over imagery, and back again", () => {
+      const m = fakeMap(allIds);
+      applyBasemapMode(m as never, "satellite");
+      for (const id of ROAD_LABEL_LAYERS) {
+        expect(m.paint[id]["text-color"], id).toBe("#ffffff");
+        expect(m.paint[id]["text-halo-width"] as number).toBeGreaterThan(1.5);
+      }
+      applyBasemapMode(m as never, "map");
+      for (const id of ROAD_LABEL_LAYERS) {
+        expect(m.paint[id]["text-color"], id).not.toBe("#ffffff");
+      }
+    });
+
+    it("is a no-op on a map whose style has not loaded those layers yet", () => {
+      const m = fakeMap([]);
+      expect(() => applyBasemapMode(m as never, "satellite")).not.toThrow();
+      expect(m.layout).toEqual({});
+    });
   });
 });

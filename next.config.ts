@@ -62,16 +62,21 @@ const nextConfig: NextConfig = {
           //   - img-src data: blob: https://images.wsdot.wa.gov: map sprites/
           //     canvases plus the WSDOT webcams hotlinked by
           //     src/lib/data/webcams.ts.
-          //   - connect-src 'self' is enough: pmtiles are served same-origin
-          //     from /api/map/tiles/*.
+          //   - *.arcgisonline.com (img-src AND connect-src): the /parking
+          //     satellite base layer — the single third-party tile source in
+          //     the app (ADR-0006 amendment 1, see SATELLITE_TILE_URL in
+          //     src/lib/map/basemap.ts). BOTH directives are required because
+          //     MapLibre fetches raster tiles with fetch() and then paints
+          //     them through an <img>/ImageBitmap. Vector pmtiles and glyphs
+          //     remain same-origin from /api/map/tiles/* and /fonts/*.
           {
             key: "Content-Security-Policy-Report-Only",
             value: [
               "default-src 'self'",
               "script-src 'self' 'unsafe-inline'",
               "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: blob: https://images.wsdot.wa.gov",
-              "connect-src 'self'",
+              "img-src 'self' data: blob: https://images.wsdot.wa.gov https://services.arcgisonline.com",
+              "connect-src 'self' https://services.arcgisonline.com",
               "worker-src 'self' blob:",
               "frame-ancestors 'self'",
             ].join("; "),
