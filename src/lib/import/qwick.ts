@@ -37,6 +37,7 @@ import { validateRecord } from "../db/store-schemas";
 import { charities as charitySeed } from "../data/charities";
 import { lodging as lodgingSeed } from "../data/lodging";
 import { restaurants as restaurantSeed } from "../data/restaurants";
+import type { DirectoryCategory } from "../schemas/directory";
 import type { DirectoryListing } from "../types";
 import { mapQwickCategories } from "./qwick-category-map";
 
@@ -198,7 +199,12 @@ export type QwickCandidate = {
   externalId: string;
   name: string;
   nameKey: string;
-  description: string;
+  /** undefined = "this vendor/export does not carry one" (never diffed,
+   *  never overwrites); "" = "the vendor says it is empty" (a real value).
+   *  Qwick rows always carry a string; GrowthZone rows carry undefined for
+   *  absent-or-blank cells — a roster is authoritative for membership, not
+   *  for prose. */
+  description?: string;
   phone?: string;
   phoneDigits?: string;
   website?: string;
@@ -206,6 +212,10 @@ export type QwickCandidate = {
   sourceCategories: string[];
   sourceImages?: { logo?: string; listingImage?: string };
   isPromoted: boolean;
+  /** Precomputed by normalizers whose vendor carries them (GrowthZone);
+   *  absent on Qwick rows, where category is derived at build time. */
+  category?: DirectoryCategory;
+  address?: string;
 };
 
 export type NormalizeResult =
@@ -337,21 +347,25 @@ export function planStats(plan: QwickPlan): Record<string, number> {
   };
 }
 
-function isImporterOwned(local: LocalRecord): boolean {
+function isImporterOwned(local: LocalRecord, principal: string): boolean {
   const g = local.governance;
   return Boolean(
-    g && !g.deleted && !g.ownerOrgId && g.source === "import" && g.updatedBy === IMPORT_PRINCIPAL,
+    g && !g.deleted && !g.ownerOrgId && g.source === "import" && g.updatedBy === principal,
   );
 }
 
 /** Fields the importer may refresh on its own records, compared for the
- *  unchanged/updated split and reported as diffs on local-wins matches. */
+ *  unchanged/updated split and reported as diffs on local-wins matches.
+ *  category/address are undefined on Qwick candidates (skipped below), so
+ *  they only ever diff for vendors that carry them. */
 function candidateFields(c: QwickCandidate): Record<string, unknown> {
   return {
     name: c.name,
     description: c.description,
     phone: c.phone,
     website: c.website,
+    address: c.address,
+    category: c.category,
   };
 }
 
@@ -360,6 +374,10 @@ function diffAgainstLocal(local: LocalRecord, c: QwickCandidate): FieldDiff[] {
   const diffs: FieldDiff[] = [];
   for (const [field, upstreamValue] of Object.entries(upstream)) {
     if (upstreamValue === undefined) continue;
+    // `category` uses the directory vocabulary; comparing it against other
+    // stores' docs (restaurants/lodging have no such field) is meaningless
+    // noise in the hand-verification report.
+    if (field === "category" && local.store !== "directory") continue;
     const localValue = local.doc[field];
     if (localValue !== upstreamValue) diffs.push({ field, local: localValue, upstream: upstreamValue });
   }
@@ -370,23 +388,50 @@ function buildDirectoryRecord(id: string, c: QwickCandidate, previous?: Record<s
   const record: DirectoryListing = {
     id,
     name: c.name,
-    category: mapQwickCategories(c.sourceCategories),
-    description: c.description,
+    category: c.category ?? mapQwickCategories(c.sourceCategories),
+    description: c.description ?? "",
     tags: [],
     ...(c.phone ? { phone: c.phone } : {}),
     ...(c.website ? { website: c.website } : {}),
+    ...(c.address ? { address: c.address } : {}),
     ...(c.sourceCategories.length ? { sourceCategories: c.sourceCategories } : {}),
     ...(c.sourceImages ? { sourceImages: c.sourceImages } : {}),
   };
-  // A refresh keeps values the upstream feed cannot express (tags, address —
-  // importer-owned records can only have gotten them from this importer, but
-  // stay conservative and never drop what exists).
+  // A refresh keeps values the upstream feed cannot express (tags; address
+  // when this vendor doesn't carry one — importer-owned records can only have
+  // gotten them from this importer, but stay conservative and never drop
+  // what exists).
   if (previous) {
     if (Array.isArray(previous.tags)) record.tags = previous.tags as string[];
-    if (typeof previous.address === "string" && previous.address) record.address = previous.address;
+    if (!record.address && typeof previous.address === "string" && previous.address) {
+      record.address = previous.address;
+    }
+    if (
+      c.description === undefined &&
+      typeof previous.description === "string" &&
+      previous.description
+    ) {
+      record.description = previous.description;
+    }
   }
   return record;
 }
+
+/** Per-source knobs so other one-way importers (the E16 GrowthZone roster
+ *  path) reuse this planner without masquerading as Qwick: the alias/run
+ *  namespace, the precedence-law principal, and the vendor row normalizer.
+ *  Defaults preserve the original Qwick behavior for every existing caller. */
+export type ImportSourceConfig = {
+  source: string;
+  principal: string;
+  normalizeRow: (raw: unknown) => NormalizeResult;
+};
+
+const QWICK_CONFIG: ImportSourceConfig = {
+  source: IMPORT_SOURCE,
+  principal: IMPORT_PRINCIPAL,
+  normalizeRow: normalizeQwickRow,
+};
 
 /** The policy engine: deterministic, side-effect-free (charter step 3).
  *  `local` must be the union of ALL local domains' records — seeds included —
@@ -395,6 +440,7 @@ export function planQwickImport(
   rows: unknown[],
   local: LocalRecord[],
   aliases: AliasRecord[],
+  cfg: ImportSourceConfig = QWICK_CONFIG,
 ): QwickPlan {
   const plan: QwickPlan = {
     created: [],
@@ -430,12 +476,12 @@ export function planQwickImport(
 
   const aliasByExternal = new Map<string, AliasRecord>();
   for (const a of aliases) {
-    if (a.source === IMPORT_SOURCE) aliasByExternal.set(a.externalId, a);
+    if (a.source === cfg.source) aliasByExternal.set(a.externalId, a);
   }
 
   // Two upstream rows normalizing to the same name are ambiguous by charter.
   const nameKeyCounts = new Map<string, number>();
-  const normalized: NormalizeResult[] = rows.map(normalizeQwickRow);
+  const normalized: NormalizeResult[] = rows.map(cfg.normalizeRow);
   for (const r of normalized) {
     if (r.ok) {
       nameKeyCounts.set(r.candidate.nameKey, (nameKeyCounts.get(r.candidate.nameKey) ?? 0) + 1);
@@ -446,7 +492,7 @@ export function planQwickImport(
   const seenExternalIds = new Set<string>();
 
   const resolveTo = (c: QwickCandidate, target: LocalRecord, aliasNew: boolean) => {
-    if (isImporterOwned(target)) {
+    if (isImporterOwned(target, cfg.principal)) {
       const record = buildDirectoryRecord(target.id, c, target.doc);
       const diffs = diffAgainstLocal(target, c);
       if (diffs.length === 0) {
@@ -609,8 +655,8 @@ export async function readLocalRecords(): Promise<LocalRecord[]> {
   return out;
 }
 
-export async function readAliases(): Promise<AliasRecord[]> {
-  const rows = await listAliases(IMPORT_SOURCE);
+export async function readAliases(source: string = IMPORT_SOURCE): Promise<AliasRecord[]> {
+  const rows = await listAliases(source);
   return rows.map((r) => ({
     source: r.source,
     externalId: r.externalId,
@@ -630,9 +676,10 @@ async function persistRun(
   mode: "dry_run" | "apply",
   runBy: string,
   plan: QwickPlan,
+  source: string,
 ): Promise<string> {
   return insertImportRunRow({
-    source: IMPORT_SOURCE,
+    source,
     mode,
     runBy,
     stats: planStats(plan),
@@ -641,8 +688,12 @@ async function persistRun(
 }
 
 /** Dry-run persistence: ONLY the import_run row (mode 'dry_run'). */
-export async function persistDryRun(plan: QwickPlan, runBy: string): Promise<ApplyResult> {
-  return { runId: await persistRun("dry_run", runBy, plan), stats: planStats(plan) };
+export async function persistDryRun(
+  plan: QwickPlan,
+  runBy: string,
+  source: string = IMPORT_SOURCE,
+): Promise<ApplyResult> {
+  return { runId: await persistRun("dry_run", runBy, plan, source), stats: planStats(plan) };
 }
 
 /** Execute a plan through the store choke points (audit rows for free).
@@ -660,6 +711,7 @@ export async function applyQwickPlan(
   plan: QwickPlan,
   principal: string = IMPORT_PRINCIPAL,
   runBy: string = principal,
+  source: string = IMPORT_SOURCE,
 ): Promise<ApplyResult> {
   // Pre-validate every planned write so a late failure can't half-apply.
   for (const entry of plan.created) {
@@ -678,7 +730,7 @@ export async function applyQwickPlan(
       action: "import",
     });
     await insertAlias({
-      source: IMPORT_SOURCE,
+      source,
       externalId: entry.externalId,
       subjectStore: "directory",
       subjectId: entry.record.id,
@@ -699,17 +751,17 @@ export async function applyQwickPlan(
   for (const entry of plan.matched) {
     if (!entry.aliasNew) continue;
     await insertAlias({
-      source: IMPORT_SOURCE,
+      source,
       externalId: entry.externalId,
       subjectStore: entry.store,
       subjectId: entry.id,
       createdBy: principal,
     });
   }
-  return { runId: await persistRun("apply", runBy, plan), stats: planStats(plan) };
+  return { runId: await persistRun("apply", runBy, plan, source), stats: planStats(plan) };
 }
 
 /** Past runs, newest first — the history read the admin surface lists. */
-export async function listImportRuns(limit = 20) {
-  return listImportRunRows(IMPORT_SOURCE, limit);
+export async function listImportRuns(limit = 20, source: string = IMPORT_SOURCE) {
+  return listImportRunRows(source, limit);
 }

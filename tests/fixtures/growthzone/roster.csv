@@ -1,0 +1,12 @@
+Member ID,Member Name,Membership Status,Membership Level,Primary Contact,Email,Work Phone,Website,Address 1,Address 2,City,State,Zip,Business Categories,Description,Member Since
+2001,J'aime Les Crêpes,Active,Small Business,Jaime Chef,owner@jaimelescrepes.com,(360) 297-0000,https://jaimelescrepes.com,11264 NE State Hwy 104,,Kingston,WA,98346,Restaurants,,2015
+2002,Willy's Sourdough Kitchen,Active,Small Business,Will Owner,will@sourdoughwillys.com,(360) 860-3933,,,,Kingston,WA,98346,"Restaurants, Pizza",,2018
+2003,"Kingston Marine Supply, Inc.",Active,Business,Sam Chandler,sam@kingstonmarine.example.com,(360) 555-0101,kingstonmarine.example.com,123 Ohio Ave NE,Suite B,Kingston,WA,98346,"Marine, Retail","Chandlery & boat supplies.<br>Since 1987",2020
+2004,Dropped Business LLC,Dropped,Small Business,,dropped@example.com,,,,,,,,Services,,2010
+2005,The Grub Hut,Active,Small Business,,grub1@example.com,,,,,,,,Restaurants,,2019
+2006,Grub Hut,Active,Small Business,,grub2@example.com,,,,,,,,Restaurants,,2019
+2007,,Active,Small Business,,,,,,,,,,,,
+2008,Café Amélie Bakery,Active,Small Business,,cafe@amelie.example.com,(360) 555-0199,,456 Bannister St,,Kingston,WA,98346,Bakery,"Fresh bread daily.
+Danish pastries.",2022
+2009,Active Courtesy Org,Active - Courtesy,Courtesy,,,,,,,,,,Non-Profit Organizations,,2019
+2010,Junk Values Inc,Active,Small Business,,info@junk.example.com,N/A,N/A,,,,,,Consulting,,2021

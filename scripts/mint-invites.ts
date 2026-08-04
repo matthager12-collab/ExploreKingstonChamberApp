@@ -8,6 +8,13 @@
 // Flags:
 //   --execute          actually mint (the default is a dry-run plan; writes nothing)
 //   --only <id,id>     restrict to specific listing ids
+//   --include-directory  ALSO sweep the directory domain (imported member
+//                      listings, drafts included — they are what gets
+//                      claimed). Off by default so the pre-E16 invocation
+//                      keeps minting exactly restaurants+lodging; with ~150
+//                      imported members this flag changes the mint count by
+//                      an order of magnitude, so pair it with --only or
+//                      --skip-existing deliberately.
 //   --skip-existing    skip listings already covered by an ACTIVE invite or by
 //                      an account whose org is linked to the listing
 //   --out <file>       write the CSV to a file instead of stdout
@@ -40,6 +47,7 @@ import {
 import { mintInvite } from "../src/lib/invite-mint";
 import { siteUrl } from "../src/lib/site-url";
 import { getRestaurants } from "../src/lib/stores/business-store";
+import { getDirectoryListingsAdmin } from "../src/lib/stores/directory-store";
 import { getLodging } from "../src/lib/stores/listing-stores";
 
 const args = process.argv.slice(2);
@@ -86,11 +94,19 @@ const csvField = (v: string) => (/[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}
 
 async function main(): Promise<number> {
   // The merged public stores: git seed + live overlay, exactly what the site
-  // lists. Restaurants first, then lodging — stable, store order.
-  const [restaurants, lodging] = await Promise.all([getRestaurants(), getLodging()]);
+  // lists. Restaurants first, then lodging — stable, store order. The
+  // directory sweep is the ADMIN read (drafts included) on purpose: imported
+  // drafts are what gets claimed, and invite-mint validates against the same
+  // universe.
+  const [restaurants, lodging, directory] = await Promise.all([
+    getRestaurants(),
+    getLodging(),
+    flag("--include-directory") ? getDirectoryListingsAdmin() : Promise.resolve([]),
+  ]);
   let listings = [
     ...restaurants.map((r) => ({ id: r.id, name: r.name, kind: "restaurant" as const })),
     ...lodging.map((l) => ({ id: l.id, name: l.name, kind: "lodging" as const })),
+    ...directory.map((d) => ({ id: d.id, name: d.name, kind: "directory" as const })),
   ];
 
   const only = opt("--only");
