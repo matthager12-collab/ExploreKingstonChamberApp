@@ -12,6 +12,7 @@
 import "server-only";
 
 import { and, eq, inArray, sql } from "drizzle-orm";
+import { z } from "zod";
 
 import { getDb } from "./client";
 import {
@@ -444,4 +445,98 @@ export async function deleteRecord(
     _deleted?: boolean;
   } & WithId;
   await writeRecord(store, { ...doc, _deleted: true } as OverlayRow<WithId>, meta);
+}
+
+/* ------------------------- E20 volunteer slot counter ------------------------- */
+
+/** Shape check for the counter read-back — the doc is jsonb, trust nothing. */
+const slotCountersSchema = z.object({
+  slotsFilled: z.coerce.number().int(),
+  slotsTotal: z.coerce.number().int(),
+});
+
+/**
+ * E20: atomically move the shared `slotsFilled` counter on a volunteer-needs
+ * record by ±1. This is THE slot-cap primitive for public signups, and the
+ * same counter the nonprofit portal's walk-in stepper hand-adjusts — one
+ * counter, two writers (charter step 9 clamps the stepper against recorded
+ * signups in slice 3).
+ *
+ * Lives HERE because this module is the only one that may query the record
+ * table, and because writeRecord is the wrong tool on purpose: its upsert
+ * replaces the whole doc and resets status/source from meta (the E17 rule),
+ * while this must touch exactly one integer under row-level guards and leave
+ * governance alone. The row is locked (SELECT … FOR UPDATE) for a consistent
+ * full-doc before-snapshot, but the GUARDS live in the conditional UPDATE
+ * itself — under the pg Pool or PGlite either alone is sufficient; together
+ * they are belt and braces.
+ *
+ * Guards: +1 requires a live, non-deleted shift with slotsFilled < slotsTotal
+ * (a full shift returns null — the 409 path). −1 requires slotsFilled > 0 and
+ * deliberately works on hidden/taken-down shifts too: a volunteer cancelling
+ * after the Chamber unpublished the shift must still free the slot. Returns
+ * the post-adjust counters, or null when the guard refused.
+ *
+ * The audit row carries FULL doc snapshots under action 'update', so the
+ * trail stays E09-restorable and uniform — restoring "the version before the
+ * signup" restores the whole doc, which is correct.
+ */
+export async function adjustVolunteerSlots(
+  id: string,
+  delta: 1 | -1,
+  meta: { actor: string; source: RecordSource },
+): Promise<{ slotsFilled: number; slotsTotal: number } | null> {
+  const db = getDb();
+  return db.transaction(async (tx) => {
+    const lockRes = await tx.execute(sql`
+      SELECT doc FROM record
+      WHERE store = 'volunteer-needs' AND id = ${id}
+      FOR UPDATE
+    `);
+    const lockRows = (lockRes as unknown as { rows?: unknown[] }).rows ?? (lockRes as unknown as unknown[]);
+    const beforeDoc =
+      Array.isArray(lockRows) && lockRows.length > 0
+        ? (lockRows[0] as { doc: Record<string, unknown> }).doc
+        : null;
+    if (!beforeDoc) return null;
+
+    const updated = await tx.execute(sql`
+      UPDATE record SET
+        doc = jsonb_set(doc, '{slotsFilled}', to_jsonb(coalesce((doc->>'slotsFilled')::int, 0) + ${delta})),
+        updated_at = now(),
+        updated_by = ${meta.actor}
+      WHERE store = 'volunteer-needs' AND id = ${id}
+        AND coalesce((doc->>'slotsFilled')::int, 0) + ${delta} >= 0
+        AND (
+          ${delta} < 0
+          OR (deleted = false AND status = 'live'
+              AND coalesce((doc->>'slotsFilled')::int, 0) < coalesce((doc->>'slotsTotal')::int, 0))
+        )
+      RETURNING doc
+    `);
+    const updatedRows = (updated as unknown as { rows?: unknown[] }).rows ?? (updated as unknown as unknown[]);
+    if (!Array.isArray(updatedRows) || updatedRows.length === 0) return null;
+    const afterDoc = (updatedRows[0] as { doc: Record<string, unknown> }).doc;
+
+    await tx.insert(audit).values({
+      actor: meta.actor,
+      action: "update",
+      store: "volunteer-needs",
+      recordId: id,
+      before: beforeDoc,
+      after: afterDoc,
+      source: meta.source,
+    });
+
+    const counters = slotCountersSchema.safeParse({
+      slotsFilled: afterDoc.slotsFilled,
+      slotsTotal: afterDoc.slotsTotal,
+    });
+    // A volunteer-needs doc without numeric counters cannot pass the write
+    // gate, so a parse failure here is a bug, not data — surface it.
+    if (!counters.success) {
+      throw new Error(`volunteer-needs/${id}: counter fields unreadable after adjust`);
+    }
+    return counters.data;
+  });
 }

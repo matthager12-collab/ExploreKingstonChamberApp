@@ -16,6 +16,7 @@ import type {
   ItineraryStop,
   Lodging,
   Restaurant,
+  VolunteerNeed,
   Webcam,
 } from "@/lib/types";
 import type { directoryListingSchema } from "./directory";
@@ -23,6 +24,7 @@ import type { eventSchema } from "./event";
 import type { itinerarySchema } from "./itinerary";
 import type { lodgingSchema } from "./lodging";
 import type { restaurantSchema } from "./restaurant";
+import type { volunteerNeedSchema } from "./volunteer";
 import type { webcamSchema } from "./webcam";
 
 /** true only when A and B are assignable in BOTH directions. */
@@ -44,4 +46,7 @@ export type ItineraryStopParity = Assert<
 export type EventParity = Assert<MutuallyAssignable<z.infer<typeof eventSchema>, EventItem>>;
 export type DirectoryListingParity = Assert<
   MutuallyAssignable<z.infer<typeof directoryListingSchema>, DirectoryListing>
+>;
+export type VolunteerNeedParity = Assert<
+  MutuallyAssignable<z.infer<typeof volunteerNeedSchema>, VolunteerNeed>
 >;

@@ -28,4 +28,9 @@ export * from "./itinerary";
 export * from "./lodging";
 export * from "./restaurant";
 export * from "./shared";
+// volunteer-needs is deliberately NOT in DOMAIN_SCHEMAS: that map is keyed by
+// the /api/admin/content-records workbench domains, and shifts are edited in
+// the nonprofit portal instead (E20). The schema still ships from here so the
+// portal route and tests share one source of truth.
+export * from "./volunteer";
 export * from "./webcam";

@@ -30,6 +30,7 @@ describe("PII inventory coverage (the E16 tripwire)", () => {
       "users",
       "invites",
       "charities",
+      "volunteer_signup",
       "worklist_item",
       "hunt-submissions",
       "survey_response",

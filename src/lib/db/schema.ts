@@ -37,6 +37,7 @@ export * from "./worklist-schema";
 
 // E17 importer substrate (listing_alias dedupe memory + import_run reports).
 export * from "./import-schema";
+export * from "./volunteer-signup-schema";
 
 /** Lifecycle states a structured record can be in. Everything is 'live'
  *  this epic (behavior-preserving); E08 starts writing 'pending' from
