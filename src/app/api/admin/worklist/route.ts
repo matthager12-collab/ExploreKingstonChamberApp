@@ -28,6 +28,7 @@ import {
   rejectModerationItem,
   takedownLiveRecord,
 } from "@/lib/moderation";
+import { revalidatePublicPathsForStore } from "@/lib/public-paths";
 import {
   WORKLIST_STATES,
   WORKLIST_TYPES,
@@ -111,6 +112,10 @@ export async function POST(request: NextRequest) {
     const note = typeof body.note === "string" && body.note.trim() ? body.note.trim() : undefined;
     try {
       const { label } = await takedownLiveRecord(store, subjectId, admin, note);
+      // A takedown is the one action where the delay is worst: the record is
+      // off the site the moment this returns, but a visitor could still be
+      // served the cached page carrying it.
+      await revalidatePublicPathsForStore(store);
       return NextResponse.json({ ok: true, label });
     } catch (err) {
       if (err instanceof ModerationActionError) return bad(err.message, 404);
@@ -157,6 +162,9 @@ export async function POST(request: NextRequest) {
         if (err instanceof ModerationActionError) return bad(err.message, 409);
         throw err;
       }
+      // The approval published content — refresh the pages that render it so
+      // the reviewer can see their own decision take effect.
+      await revalidatePublicPathsForStore(item.subjectStore);
       return NextResponse.json({ ok: true });
     }
     case "reject": {
