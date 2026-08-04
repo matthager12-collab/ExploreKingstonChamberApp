@@ -4,6 +4,8 @@ import { getCharities, getVolunteerNeeds } from "@/lib/stores/charity-store";
 import { getEvents } from "@/lib/stores/event-store";
 import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
 import { assertPageVisibleStatic } from "@/lib/page-visibility";
+import { VolunteerSignup } from "@/components/volunteer-signup";
+import { volunteerSignupEnabled } from "@/lib/volunteer-gate";
 import {
   PageHeader,
   Section,
@@ -46,6 +48,7 @@ function pacificDateKey(iso: string): string {
 export const revalidate = 60;
 
 export default async function GiveBackPage() {
+  const signupEnabled = volunteerSignupEnabled();
   // The STATIC variant, deliberately: this page is ISR (revalidate above),
   // and assertPageVisible's admin pass-through reads cookies() on the hidden
   // branch — which cannot work during background revalidation, so hiding the
@@ -176,11 +179,21 @@ export default async function GiveBackPage() {
                     {need.slotsFilled} of {need.slotsTotal} slots filled
                   </p>
                 </div>
-                <div className="mt-3">
-                  <ExternalLink href={raiseHandHref(charity, need.title)}>
-                    Raise your hand →
-                  </ExternalLink>
-                </div>
+                {/* E20 flag gate: dark (default) keeps the pre-E20 mailto CTA
+                    byte-for-byte; "1" swaps in the no-account signup form.
+                    The mailto stays the full-shift fallback inside the form. */}
+                {signupEnabled ? (
+                  <VolunteerSignup
+                    shiftId={need.id}
+                    fallbackHref={raiseHandHref(charity, need.title)}
+                  />
+                ) : (
+                  <div className="mt-3">
+                    <ExternalLink href={raiseHandHref(charity, need.title)}>
+                      Raise your hand →
+                    </ExternalLink>
+                  </div>
+                )}
               </Card>
             );
           })}

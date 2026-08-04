@@ -21,7 +21,8 @@ import { idempotencyKeys } from "./schema";
 /** The client mints `crypto.randomUUID()`; the bound is the column width.
  *  Anything else is a malformed header, not a duplicate — callers must be able
  *  to tell those apart (a duplicate is success, a malformed key is a 400). */
-const KEY_RE = /^[A-Za-z0-9-]{8,64}$/;
+export const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9-]{8,64}$/;
+const KEY_RE = IDEMPOTENCY_KEY_RE;
 
 /** node-postgres reports rowCount; PGlite (the vitest engine) reports
  *  affectedRows and leaves rowCount undefined. Duplicated per house style —

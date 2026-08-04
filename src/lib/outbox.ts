@@ -279,3 +279,31 @@ export async function flushOutbox(): Promise<void> {
   // tolerating that is the whole point of the design.
   await runFlushPass();
 }
+
+/**
+ * E20 consumer seam: queue a request the CALLER already attempted itself.
+ *
+ * submitOrQueue() cannot serve a caller that needs to read the HTTP response
+ * (the volunteer signup form must tell 200 from 409-full), so that caller
+ * does its own first fetch with its own idempotency key — and when that
+ * fetch THROWS (transport failure; any HTTP response means don't queue, per
+ * this module's contract), it hands the identical request here WITH THE SAME
+ * KEY. Same key is the whole point: a first attempt that died mid-response
+ * may still have landed server-side, and only key-equality makes the replay
+ * a no-op instead of a duplicate. Consume-only — replay semantics, retry
+ * budget, and the flush loop are unchanged E13 machinery.
+ */
+export async function enqueueRequest(
+  url: string,
+  payload: unknown,
+  idempotencyKey: string,
+): Promise<void> {
+  await putEntry({
+    id: idempotencyKey,
+    url,
+    body: JSON.stringify(payload),
+    contentType: "application/json",
+    createdAt: Date.now(),
+    attempts: 0,
+  });
+}
