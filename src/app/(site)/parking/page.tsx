@@ -57,14 +57,18 @@ export default async function ParkingPage() {
         title="The map"
         subtitle={copyText(copy, "parking.map.subtitle")}
       >
-        {/* Opens on aerial imagery (owner, 2026-08-03): the questions this map
-            answers — which row is the free one, where the lot edge actually is,
-            which stalls are angled — are questions about paint on the ground,
-            and only a photograph shows those. The switch back to the vector map
-            is always one tap away, and matters: imagery does not render offline
-            in the PWA, and street names read better on the vector base. */}
+        {/* Vector base only (ADR-0006 amendment 2, owner 2026-08-04 —
+            reverses the 2026-08-03 imagery-default decision): Esri's keyless
+            imagery tops out at native z19 over Kingston, which smears cars
+            into blobs at the zooms stalls need, so the satellite option is
+            withdrawn from the public page until better imagery is licensed
+            (Kitsap County's ~0.10 m HXIP orthos are the identified upgrade
+            path — permission required). FeatureMap keeps the imagery
+            capability dormant; restoring it is `basemap="satellite"
+            basemapToggle` on the line below. The admin editors still offer
+            imagery for tracing. */}
         {parkingMap ? (
-          <FeatureMap resolved={parkingMap} height="500px" basemap="satellite" basemapToggle />
+          <FeatureMap resolved={parkingMap} height="500px" />
         ) : (
           <Card>
             <p className="text-sm text-ink-soft">Parking map unavailable right now.</p>
