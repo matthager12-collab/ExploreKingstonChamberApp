@@ -8,14 +8,22 @@
 // useEffect (same pattern as components/feature-map.tsx); terra-draw is
 // created after the map's style loads, which the adapter requires.
 //
-// Flow (unchanged): pick a zone from the sidebar (or click it on the map) →
-// the map fits to it, its polygon grows drag-able corner handles (terra-draw
-// select mode: drag corners, click a midpoint to add one, right-click a
-// corner to remove it, no self-intersection) and its center pin becomes
-// draggable → adjust shape and fields → Save POSTs the geometry read back
-// from the draw store to /api/admin/parking. "Draw new zone" arms terra-draw
-// polygon draw; Delete tombstones the zone in the overlay store (seed zones
-// stay hidden).
+// Flow: pick a zone from the sidebar (or click it on the map) → the map fits to
+// it, its shape grows drag-able handles (terra-draw select mode: drag a vertex,
+// click a midpoint to add one, right-click to remove) and its center pin becomes
+// draggable → adjust shape and fields → Save POSTs the geometry read back from
+// the draw store to /api/admin/parking. Delete tombstones the zone in the
+// overlay store (seed zones stay hidden).
+//
+// TWO GEOMETRY KINDS, and the difference is the thing to hold on to:
+//   - a LOT is a `polygon` — one draw feature under the zone id;
+//   - a STREET is `streetPaths`, a LIST of centre-line polylines, drawn as
+//     curb-hugging offset strokes on the public map. Each path is its own draw
+//     feature under `id~n` (see PATH_SEP) and they are reassembled on save.
+// Street geometry used to be a read-only OSM underlay. It is now drawable and
+// editable here, because the Chamber needs to map streets OSM never split out —
+// local eyes beat the import, which is the same principle the polygons already
+// followed. `pe-streets` survives as a live PREVIEW of the offset result.
 //
 // Wire-format invariant (FR-EDIT-06): the API speaks stored [lat,lng] open
 // rings, r6-rounded; terra-draw speaks GeoJSON [lng,lat] closed rings. Every
@@ -40,7 +48,20 @@ import {
 import { mapStyle, TILES_PMTILES_PATH } from "@/lib/map/basemap";
 import { loadMapLibre, pmtilesUrl } from "@/lib/map/maplibre";
 import { editorIdStrategy, loadTerraDraw } from "@/lib/map/terradraw";
-import { r6, toGeoJsonRing, toStoredRing } from "@/lib/map/draw-coords";
+import {
+  r6,
+  toGeoJsonPath,
+  toStoredPath,
+  toStoredRing,
+} from "@/lib/map/draw-coords";
+import { curbOffsetSigns } from "@/lib/map/curb";
+import {
+  isZoneFeature,
+  pathMidpoint,
+  streetPathsFromFeatures,
+  zoneDrawFeatures,
+  zoneIdOfFeature,
+} from "@/lib/map/zone-draw";
 import { Badge } from "@/components/ui";
 
 /* ------------------------------------------------------------------ */
@@ -144,15 +165,8 @@ function ConfidenceBadge({ confidence }: { confidence: MapZone["confidence"] }) 
   return <Badge tone="sand">probable</Badge>;
 }
 
-/** The zone's polygon as a terra-draw store feature (id = zone id). */
-function zoneDrawFeature(zone: MapZone): GeoJSONStoreFeatures {
-  return {
-    id: zone.id,
-    type: "Feature",
-    properties: { mode: "polygon", rule: zone.rule },
-    geometry: { type: "Polygon", coordinates: [toGeoJsonRing(zone.polygon ?? [])] },
-  } as GeoJSONStoreFeatures;
-}
+/** Which terra-draw draw mode is armed, if any. */
+type DrawKind = "polygon" | "linestring";
 
 /* ------------------------------------------------------------------ */
 /* Editor                                                              */
@@ -171,7 +185,7 @@ export function MapZoneEditor({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [dirty, setDirty] = useState(false);
-  const [drawing, setDrawing] = useState(false);
+  const [drawing, setDrawing] = useState<DrawKind | null>(null);
   const [saving, setSaving] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
@@ -196,6 +210,8 @@ export function MapZoneEditor({
   selectedIdRef.current = selectedId;
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
   const drawingRef = useRef(drawing);
   drawingRef.current = drawing;
   const selectRef = useRef<(id: string) => void>(() => {});
@@ -212,22 +228,42 @@ export function MapZoneEditor({
 
   /* ---------------- imperative layer management ---------------- */
 
-  /** Street zones as a read-only GeoJSON underlay (E31 phase 6): their
-   *  geometry is OSM centre-line data, not a drawable shape, so the editor
-   *  shows it dashed for reference — the curb field is what an admin edits. */
+  /**
+   * PREVIEW of the curb strokes as /parking will actually draw them.
+   *
+   * Was a plain dashed copy of the centre line, back when street geometry was
+   * read-only reference. Now that centre lines are drawn and dragged here, the
+   * useful thing to show underneath is the OUTPUT: the same `line-offset` sign
+   * math the public map runs (`curbOffsetSigns`), so picking "east side" moves
+   * a visible stroke onto the east curb instead of changing a dropdown and
+   * hoping. Choosing a side that runs parallel to the street is ill-defined and
+   * falls back to the centre line — that shows up here as a stroke that simply
+   * does not move, which is the honest signal that the answer is unknown.
+   *
+   * Read-only: the editable line is terra-draw's, above this.
+   */
   function streetUnderlayData(): GeoJSON.FeatureCollection {
     return {
       type: "FeatureCollection",
-      features: zonesRef.current.flatMap((z) =>
-        (z.streetPaths ?? []).map((path) => ({
-          type: "Feature" as const,
-          properties: { color: ruleColor(z.rule) },
-          geometry: {
-            type: "LineString" as const,
-            coordinates: path.map((p) => [p[1], p[0]]),
-          },
-        })),
-      ),
+      features: zonesRef.current.flatMap((z) => {
+        // The SELECTED zone previews the unsaved dropdown value, so picking a
+        // side moves the stroke immediately — that live answer is the whole
+        // point of the preview. Colour deliberately stays the SAVED rule: the
+        // editable centre line above is drawn from the saved rule too, and
+        // recolouring only one of the pair reads as a rendering bug.
+        const d = z.id === selectedIdRef.current ? draftRef.current : null;
+        const curb = d ? (d.curb === "" ? undefined : d.curb) : z.curb;
+        return (z.streetPaths ?? []).flatMap((path) =>
+          curbOffsetSigns(path, curb).map((offsetSign) => ({
+            type: "Feature" as const,
+            properties: { color: ruleColor(z.rule), offsetSign },
+            geometry: {
+              type: "LineString" as const,
+              coordinates: toGeoJsonPath(path),
+            },
+          })),
+        );
+      }),
     };
   }
 
@@ -268,9 +304,10 @@ export function MapZoneEditor({
     marker.on("dragend", () => setDirty(true));
     markersRef.current.set(zone.id, marker);
 
-    if (zone.polygon && zone.polygon.length >= 3) {
-      const results = withStoreOps(() => draw.addFeatures([zoneDrawFeature(zone)]));
-      // A rejected add means the polygon silently won't render or edit here —
+    const features = zoneDrawFeatures(zone);
+    if (features.length > 0) {
+      const results = withStoreOps(() => draw.addFeatures(features));
+      // A rejected add means the geometry silently won't render or edit here —
       // surface it for diagnosis instead of swallowing the validation result.
       for (const r of results) {
         if (!r.valid) console.warn(`map editor: zone "${zone.id}" not editable — ${r.reason}`);
@@ -278,17 +315,36 @@ export function MapZoneEditor({
     }
   }
 
+  /** Every draw-store id belonging to a zone: the zone id itself (polygon) plus
+   *  any `id~n` path features. Read from the STORE rather than from the zone
+   *  record so a removal still finds stale features after a path count change. */
+  function drawIdsForZone(id: string): string[] {
+    const draw = drawRef.current;
+    if (!draw) return [];
+    return draw
+      .getSnapshot()
+      .map((f) => String(f.id))
+      .filter((fid) => fid === id || zoneIdOfFeature(fid) === id);
+  }
+
   function removeZoneFromMap(id: string) {
     const draw = drawRef.current;
-    if (draw?.hasFeature(id)) withStoreOps(() => draw.removeFeatures([id]));
+    const ids = drawIdsForZone(id);
+    if (draw && ids.length) withStoreOps(() => draw.removeFeatures(ids));
     markersRef.current.get(id)?.remove();
     markersRef.current.delete(id);
   }
 
   function setEditing(id: string, zone: MapZone, on: boolean) {
     const draw = drawRef.current;
-    if (draw && zone.polygon && zone.polygon.length >= 3 && draw.hasFeature(id)) {
-      withStoreOps(() => (on ? draw.selectFeature(id) : draw.deselectFeature(id)));
+    // Terra-draw selects ONE feature at a time, so a multi-path street zone
+    // hands its handles to the first path. The others stay drawn and are still
+    // read back verbatim on save — only their vertices aren't draggable.
+    const target = zoneDrawFeatures(zone)[0]?.id;
+    if (draw && target != null && draw.hasFeature(target)) {
+      withStoreOps(() =>
+        on ? draw.selectFeature(target) : draw.deselectFeature(target),
+      );
     }
     const marker = markersRef.current.get(id);
     if (marker) {
@@ -311,7 +367,7 @@ export function MapZoneEditor({
     // A single terra-draw mode runs at a time: selecting disarms an armed draw.
     if (drawingRef.current) {
       drawRef.current?.setMode("select");
-      setDrawing(false);
+      setDrawing(null);
     }
     if (prev) {
       const prevZone = zonesRef.current.find((z) => z.id === prev);
@@ -331,10 +387,19 @@ export function MapZoneEditor({
     const map = mapRef.current;
     const maplibregl = maplibreRef.current;
     if (map && maplibregl) {
-      if (zone.polygon && zone.polygon.length >= 3) {
-        const first: [number, number] = [zone.polygon[0][1], zone.polygon[0][0]];
+      // Frame whatever geometry the zone actually has — a street zone has no
+      // polygon, and easing to its centre pin would leave most of the line off
+      // screen on a long street.
+      const framePts: [number, number][] =
+        zone.streetPaths?.length
+          ? zone.streetPaths.flat()
+          : zone.polygon && zone.polygon.length >= 3
+            ? zone.polygon
+            : [];
+      if (framePts.length > 0) {
+        const first: [number, number] = [framePts[0][1], framePts[0][0]];
         const bounds = new maplibregl.LngLatBounds(first, first);
-        for (const p of zone.polygon) bounds.extend([p[1], p[0]]);
+        for (const p of framePts) bounds.extend([p[1], p[0]]);
         map.fitBounds(bounds, { padding: 60, maxZoom: MAX_ZOOM });
       } else {
         map.easeTo({
@@ -389,6 +454,7 @@ export function MapZoneEditor({
 
         const {
           TerraDraw: TerraDrawCtor,
+          TerraDrawLineStringMode,
           TerraDrawPolygonMode,
           TerraDrawSelectMode,
           ValidateNotSelfIntersecting,
@@ -418,6 +484,19 @@ export function MapZoneEditor({
                 closingPointOutlineWidth: 2,
               },
             }),
+            // Curb centre lines. NO self-intersection validation, unlike
+            // polygons: a street that doubles back on itself (a loop road, a
+            // cul-de-sac approach) is a real shape, and rejecting it would
+            // block honest geometry. `line-offset` handles it fine.
+            new TerraDrawLineStringMode({
+              styles: {
+                lineStringColor: featureRuleColor,
+                lineStringWidth: 4,
+                closingPointColor: "#ffffff",
+                closingPointOutlineColor: "#16405e",
+                closingPointOutlineWidth: 2,
+              },
+            }),
             new TerraDrawSelectMode({
               // Selection is driven by the app (sidebar + hit-test click), so
               // the dirty-discard confirm stays authoritative.
@@ -429,6 +508,16 @@ export function MapZoneEditor({
                   feature: {
                     draggable: false, // zones reshape; they don't slide whole
                     selfIntersectable: false,
+                    coordinates: { midpoints: true, draggable: true, deletable: true },
+                  },
+                },
+                // Same handle set as polygons so the two feel identical:
+                // drag a vertex, click a midpoint to add one, right-click to
+                // remove. `draggable: false` for the same reason — a street
+                // line is re-traced, never slid wholesale off its street.
+                linestring: {
+                  feature: {
+                    draggable: false,
                     coordinates: { midpoints: true, draggable: true, deletable: true },
                   },
                 },
@@ -445,6 +534,8 @@ export function MapZoneEditor({
                 midPointColor: "#ffffff",
                 midPointOutlineColor: "#16405e",
                 midPointWidth: 4,
+                selectedLineStringColor: featureRuleColor,
+                selectedLineStringWidth: 5,
               },
             }),
           ],
@@ -461,7 +552,10 @@ export function MapZoneEditor({
         }
 
         draw.on("finish", (finishedId, context) => {
-          if (context.mode === "polygon" && context.action === "draw") {
+          if (
+            (context.mode === "polygon" || context.mode === "linestring") &&
+            context.action === "draw"
+          ) {
             handleDrawnRef.current(String(finishedId));
             return;
           }
@@ -477,7 +571,11 @@ export function MapZoneEditor({
           if (context && "origin" in context && context.origin === "api") return;
           if (context?.target === "properties") return;
           const sel = selectedIdRef.current;
-          if (sel && ids.some((i) => String(i) === sel)) setDirty(true);
+          // zoneIdOfFeature, not a bare compare: a street zone's edits arrive
+          // under `id~n`, and comparing raw ids would leave curb-line drags
+          // silently un-dirty — the Save button would stay disabled on a real
+          // change.
+          if (sel && ids.some((i) => zoneIdOfFeature(String(i)) === sel)) setDirty(true);
         });
 
         // Click-to-select via hit-test (manual selection is disabled above).
@@ -491,8 +589,9 @@ export function MapZoneEditor({
               ignoreClosingPoints: true,
               ignoreSnappingPoints: true,
             })
-            .find((f) => f.geometry.type === "Polygon" && f.properties?.mode === "polygon");
-          if (hit?.id != null) selectRef.current(String(hit.id));
+            .find(isZoneFeature);
+          // The hit may be a `id~n` path feature — select its ZONE.
+          if (hit?.id != null) selectRef.current(zoneIdOfFeature(String(hit.id)));
         });
 
         // Hover: name chip + pointer cursor over zone polygons (the Leaflet
@@ -515,8 +614,9 @@ export function MapZoneEditor({
               ignoreClosingPoints: true,
               ignoreSnappingPoints: true,
             })
-            .find((f) => f.geometry.type === "Polygon" && f.properties?.mode === "polygon");
-          const zone = hit ? zonesRef.current.find((z) => z.id === String(hit.id)) : undefined;
+            .find(isZoneFeature);
+          const hitZoneId = hit ? zoneIdOfFeature(String(hit.id)) : undefined;
+          const zone = hitZoneId ? zonesRef.current.find((z) => z.id === hitZoneId) : undefined;
           if (zone) {
             chip.textContent = zone.name;
             chip.style.display = "block";
@@ -537,9 +637,26 @@ export function MapZoneEditor({
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
             "line-color": ["get", "color"],
-            "line-width": 3,
-            "line-opacity": 0.55,
-            "line-dasharray": [2, 2],
+            // Wider and softer than terra-draw's editable centre line so the
+            // two read as what they are: this is the published curb stroke,
+            // that is the handle you drag.
+            "line-width": ["interpolate", ["linear"], ["zoom"], 13, 4, 16, 6, 18, 9],
+            "line-opacity": 0.45,
+            // The SAME data-driven sign × zoom-driven magnitude the public map
+            // uses (feature-map.tsx `curbOffset`). Kept numerically identical
+            // on purpose — an editor preview that offsets by a different amount
+            // would teach the admin the wrong thing about where the stroke lands.
+            "line-offset": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              13,
+              ["*", ["get", "offsetSign"], 1.5],
+              16,
+              ["*", ["get", "offsetSign"], 4.5],
+              18,
+              ["*", ["get", "offsetSign"], 10],
+            ],
           },
         });
 
@@ -570,35 +687,71 @@ export function MapZoneEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Keep the curb preview honest while the dropdown moves. Runs after the
+  // render that updated draftRef, which is why it cannot live inside
+  // patchDraft — that would read the previous draft.
+  useEffect(() => {
+    refreshStreetUnderlay();
+    // refreshStreetUnderlay reads refs, not props; re-running it on these keys
+    // is the whole intent.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft?.curb, selectedId, zones]);
+
   /* ---------------- draw new zone ---------------- */
 
   const handleDrawnRef = useRef<(tdId: string) => void>(() => {});
   handleDrawnRef.current = (tdId: string) => {
     const map = mapRef.current;
     const draw = drawRef.current;
-    setDrawing(false);
+    setDrawing(null);
     if (!draw) return;
     draw.setMode("select");
 
     const feat = draw.getSnapshotFeature(tdId);
     // Re-added under the zone's own id via addZoneToMap so wiring is uniform.
     withStoreOps(() => draw.removeFeatures([tdId]));
-    if (!feat || feat.geometry.type !== "Polygon") return;
-    const polygon = toStoredRing(feat.geometry.coordinates[0]);
-    if (!map || polygon.length < 3) return;
+    if (!feat || !map) return;
 
-    const id = `zone-${Math.random().toString(36).slice(2, 8)}`;
-    const zone: MapZone = {
-      id,
-      name: "New zone",
-      rule: "paid",
-      summary: "",
-      details: "",
-      confidence: "probable",
-      overnight: "confirm-first",
-      center: centroidOf(polygon),
-      polygon,
-    };
+    let zone: MapZone | null = null;
+    if (feat.geometry.type === "Polygon") {
+      const polygon = toStoredRing(feat.geometry.coordinates[0]);
+      if (polygon.length < 3) return;
+      zone = {
+        id: `zone-${Math.random().toString(36).slice(2, 8)}`,
+        name: "New zone",
+        rule: "paid",
+        summary: "",
+        details: "",
+        confidence: "probable",
+        overnight: "confirm-first",
+        center: centroidOf(polygon),
+        polygon,
+      };
+    } else if (feat.geometry.type === "LineString") {
+      const path = toStoredPath(feat.geometry.coordinates as number[][]);
+      if (path.length < 2) return;
+      zone = {
+        id: `street-${Math.random().toString(36).slice(2, 8)}`,
+        name: "New street",
+        // free-2hr, not the polygon default of `paid`: a drawn curb line is
+        // almost always a residential street, and downtown Kingston's streets
+        // are overwhelmingly free 2-hour. It is one dropdown to change.
+        rule: "free-2hr",
+        summary: "",
+        details: "",
+        // The whole reason to draw one by hand is standing in front of it, but
+        // "probable" is still the honest default — the admin flips it with the
+        // field-verified button once they have actually checked the signs.
+        confidence: "probable",
+        overnight: "confirm-first",
+        center: pathMidpoint(path),
+        streetPaths: [path],
+        // curb deliberately UNSET: a freshly traced centre line claims nothing
+        // about which side the rule covers until someone says so.
+      };
+    }
+    if (!zone) return;
+    const id = zone.id;
     unsavedIdsRef.current.add(id);
     zonesRef.current = [...zonesRef.current, zone];
     setZones(zonesRef.current);
@@ -615,27 +768,34 @@ export function MapZoneEditor({
     setDirty(true);
     setMessage({
       kind: "ok",
-      text: "Shape drawn — name it, set the rule, then Save to publish.",
+      text: zone.streetPaths
+        ? "Line drawn — name it, set the rule, pick the curb side, then Save to publish."
+        : "Shape drawn — name it, set the rule, then Save to publish.",
     });
   };
 
-  function toggleDraw() {
+  /** Arm (or disarm) one of the two draw modes. Pressing the armed one again
+   *  cancels; pressing the other switches, since only one mode runs at a time. */
+  function armDraw(kind: DrawKind) {
     const draw = drawRef.current;
     if (!draw) return;
-    if (drawing) {
+    if (drawing === kind) {
       draw.setMode("select");
-      setDrawing(false);
+      setDrawing(null);
       // Arming the draw dropped the zone's draw-selection — hand it back.
       const sel = selectedIdRef.current;
       const zone = sel ? zonesRef.current.find((z) => z.id === sel) : undefined;
       if (sel && zone) setEditing(sel, zone, true);
       return;
     }
-    draw.setMode("polygon");
-    setDrawing(true);
+    draw.setMode(kind);
+    setDrawing(kind);
     setMessage({
       kind: "ok",
-      text: "Click the map to place corners; click the first corner again to finish.",
+      text:
+        kind === "polygon"
+          ? "Click the map to place corners; click the first corner again to finish."
+          : "Click along the middle of the street; click the last point again to finish. Switch the base map to Satellite to trace the real kerb line.",
     });
   }
 
@@ -653,11 +813,33 @@ export function MapZoneEditor({
     const zone = zonesRef.current.find((z) => z.id === selectedId);
     if (!zone) return null;
 
+    const draw = drawRef.current;
+
     let polygon = zone.polygon;
-    const feat = drawRef.current?.getSnapshotFeature(selectedId);
+    const feat = draw?.getSnapshotFeature(selectedId);
     if (feat && feat.geometry.type === "Polygon") {
       polygon = toStoredRing(feat.geometry.coordinates[0]);
     }
+
+    /**
+     * Street geometry, read back from every `id~n` feature in INDEX ORDER.
+     *
+     * This must run for multi-path zones too, not just the selected path: the
+     * API rebuilds the zone from a field whitelist, so whatever this returns is
+     * the whole truth about the zone's lines afterwards. Sending back only the
+     * edited path would delete the others.
+     *
+     * The fallback to the stored value is what makes the whole thing safe: if
+     * the draw store has nothing (features rejected, style not loaded yet), the
+     * zone keeps the geometry it came in with rather than losing it. A SEED
+     * zone would survive that anyway — parking-store's withSeedStreetGeometry
+     * merges the seed's paths back on read — but a street zone drawn here has
+     * no seed, so for those the fallback is the only protection there is.
+     */
+    const streetPaths =
+      (draw && streetPathsFromFeatures(selectedId, draw.getSnapshot())) ??
+      zone.streetPaths;
+
     const marker = markersRef.current.get(selectedId);
     const center: [number, number] = marker
       ? [r6(marker.getLngLat().lat), r6(marker.getLngLat().lng)]
@@ -681,6 +863,10 @@ export function MapZoneEditor({
       images: draft.images.length ? draft.images : undefined,
       center,
       ...(polygon ? { polygon } : {}),
+      // MUST be sent: the API rebuilds from a whitelist, so omitting this drops
+      // the lines. A seed zone would be rescued on read by
+      // withSeedStreetGeometry; a street zone drawn in this editor would not.
+      ...(streetPaths?.length ? { streetPaths } : {}),
     };
   }
 
@@ -782,18 +968,42 @@ export function MapZoneEditor({
       <style>{PIN_CSS}</style>
       {/* Sidebar: zone list */}
       <div className="flex flex-col gap-3">
-        <button
-          type="button"
-          onClick={toggleDraw}
-          disabled={!mapReady}
-          className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50 ${
-            drawing
-              ? "border border-coral bg-coral/10 text-coral-deep"
-              : "bg-sound text-white hover:bg-sound-deep"
-          }`}
-        >
-          {drawing ? "✕ Cancel drawing" : "✎ Draw new zone"}
-        </button>
+        {/* Two shapes, two buttons: a LOT is an area you outline, a STREET is a
+            line you trace down the middle. They produce different geometry
+            (`polygon` vs `streetPaths`) and the public map renders them
+            differently — a fill versus curb-hugging strokes — so the choice
+            belongs here rather than in a mode buried behind one button. */}
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => armDraw("polygon")}
+            disabled={!mapReady}
+            className={`min-h-[44px] rounded-full px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50 ${
+              drawing === "polygon"
+                ? "border border-coral bg-coral/10 text-coral-deep"
+                : "bg-sound text-white hover:bg-sound-deep"
+            }`}
+          >
+            {drawing === "polygon" ? "✕ Cancel drawing" : "✎ Draw new lot"}
+          </button>
+          <button
+            type="button"
+            onClick={() => armDraw("linestring")}
+            disabled={!mapReady}
+            className={`min-h-[44px] rounded-full px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50 ${
+              drawing === "linestring"
+                ? "border border-coral bg-coral/10 text-coral-deep"
+                : "bg-sound text-white hover:bg-sound-deep"
+            }`}
+          >
+            {drawing === "linestring" ? "✕ Cancel drawing" : "╱ Draw new street line"}
+          </button>
+          <p className="px-1 text-xs text-ink-soft">
+            A <span className="font-semibold">lot</span> is an area you outline. A{" "}
+            <span className="font-semibold">street line</span> is traced down the middle of
+            the road — the map then draws the colour against the kerb you pick.
+          </p>
+        </div>
 
         <ul className="max-h-[560px] divide-y divide-sand overflow-y-auto rounded-2xl border border-sand bg-white">
           {zones.map((zone) => (
@@ -917,8 +1127,10 @@ export function MapZoneEditor({
                   </select>
                 </Field>
                 <p className="self-end text-xs text-ink-soft">
-                  Street zone: the dashed line is the OSM street centre line and is not
-                  drag-editable. Pick a side only after checking the signs on the ground.
+                  The thin line is the street centre — drag its dots to re-trace it. The
+                  thick soft line shows where the colour actually lands once you pick a
+                  side. Pick a side only after checking the signs on the ground; leave it
+                  Unknown and the map claims nothing.
                 </p>
               </div>
             ) : null}

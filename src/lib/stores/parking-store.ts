@@ -18,9 +18,11 @@ const seedById = new Map(seed.map((z) => [z.id, z]));
  * readMerged is a WHOLE-RECORD merge (overlay wins by id), so a street zone an
  * admin saved before `streetPaths`/`curb` existed — or restored to an old
  * version from the audit UI — would permanently mask the seeded geometry: the
- * zone would keep rendering as the old centre circle, and the editor could
- * never repair it (streetPaths aren't editable there; delete is a tombstone
- * that hides the zone, not a reset-to-seed). Instead of a one-off DB backfill
+ * zone would keep rendering as the old centre circle. The editor can now draw
+ * and reshape street lines, so an admin COULD retrace one by hand — but that is
+ * a manual re-survey of geometry we already have, for a record that looks
+ * merely stale rather than broken, and delete is a tombstone that hides the
+ * zone rather than resetting it to seed. Instead of a one-off DB backfill
  * this merges the seed's street geometry into any overlay record missing it,
  * on every read: idempotent, a no-op where no overlay row exists, and
  * self-healing — the next editor save writes the merged record through (the

@@ -414,16 +414,50 @@ Streets study; see [DATA_SOURCES.md](DATA_SOURCES.md)). What "v2" means concrete
 the `/api/admin/parking` routes re-check). A MapLibre GL + terra-draw canvas
 (E32a, ADR-0006) where the admin:
 
-- picks a zone from the sidebar list or the map → the map fits to it, its
-  polygon grows drag-able **corner handles** (terra-draw select mode: drag a
-  corner, click a midpoint to add one, right-click a corner to remove it, no
-  self-intersection), and its center **pin becomes draggable** (a MapLibre
-  HTML marker, outside the draw store);
-- edits name / rule / summary / details / overnight / confidence;
+- picks a zone from the sidebar list or the map → the map fits to it, its shape
+  grows drag-able **handles** (terra-draw select mode: drag a vertex, click a
+  midpoint to add one, right-click to remove it; polygons additionally reject
+  self-intersection), and its center **pin becomes draggable** (a MapLibre HTML
+  marker, outside the draw store);
+- edits name / rule / summary / details / overnight / confidence, attaches
+  photos, and on a street zone picks the **curb side**;
 - clicks **"✓ field-verified"** to flip confidence to `verified` (the whole
   point — replace probable schematic geometry with ground truth);
-- draws a brand-new zone, or deletes one (seed zones are tombstoned in the
-  overlay, not erased).
+- draws a brand-new zone with one of **two** buttons, or deletes one (seed zones
+  are tombstoned in the overlay, not erased).
+
+**Two geometry kinds, two draw buttons.** "Draw new lot" arms polygon mode and
+produces `polygon`; "Draw new street line" arms linestring mode and produces
+`streetPaths` — the public map renders those completely differently (a fill
+versus curb-hugging offset strokes), so the choice is an explicit button rather
+than a mode hidden behind one. A drawn street gets a `street-` id prefix, the
+`free-2hr` default rule (downtown Kingston's streets overwhelmingly are), and
+**no curb side** — a freshly traced centre line claims nothing about which side
+the rule covers until somebody checks the signs.
+
+**Street geometry is now editable here.** It used to be a read-only OSM underlay
+("not a drawable shape"). That changed because the Chamber needs streets OSM
+never split out, and because local eyes beat the import — the same principle the
+polygons always followed. `pe-streets` survives as a live **preview** of the
+offset result: it runs the same `curbOffsetSigns` + `line-offset` math as the
+public map, at numerically identical values, and it follows the UNSAVED dropdown
+so picking "east side" moves a stroke immediately instead of after a save.
+
+**Multi-path bookkeeping** (`src/lib/map/zone-draw.ts`). A terra-draw feature
+holds one geometry, but `streetPaths` is a LIST — `street-central-ave` and
+`street-washington-blvd` genuinely carry two stretches each. Each path becomes
+its own draw feature under `<zoneId>~<n>` and they are reassembled in index
+order on save. Selection hands handles to path 0; the rest stay drawn and are
+still read back verbatim. `streetPathsFromFeatures()` returns **null**, never
+`[]`, when the store holds nothing for a zone, so the caller falls back to the
+stored geometry rather than wiping it.
+
+> ⚠️ The whitelist trap again, and worse here. `buildZone()` must send
+> `streetPaths` back: the API rebuilds the zone from a field whitelist. For a
+> SEED street zone an omission is survivable — `withSeedStreetGeometry()` merges
+> the seed paths back on read — but a street **drawn in the editor** has no seed
+> row, so the same omission destroys the line permanently on the first re-save.
+> `tests/server/admin-parking-new-street.test.ts` exists for exactly that gap.
 
 Save (`POST /api/admin/parking`) reads geometry back from the terra-draw
 snapshot + pin and persists; `/parking` reflects it within a minute
@@ -495,7 +529,10 @@ segment-level midpoint thresholds where a street's rule changes block-to-block
 (NE 1st, Ohio, Iowa). Rule provenance is the 2015/2016 county Complete Streets
 study + Port policy; unresearched streets get `default` ("no known restriction;
 obey posted signs; RCW 46.55.085 24-hour rule"). It is **build-time tooling**,
-not a runtime endpoint — regenerate and commit the JSON when rules change. The
+not a runtime endpoint — regenerate and commit the JSON when rules change.
+Note it is no longer the ONLY way street geometry gets in: `/admin/map` can now
+draw a centre line for a street the generator never produced, and those live in
+the overlay store like any other admin edit. The
 client fetches the static file directly and orders segments so quiet
 (`default`) streets draw under rule-bearing ones.
 
