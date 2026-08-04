@@ -24,6 +24,7 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { BasemapSwitch } from "@/components/admin/basemap-switch";
 import { PhotoPicker } from "@/components/admin/photo-picker";
 import type { MediaItem } from "@/lib/media/refs";
 import { useRouter } from "next/navigation";
@@ -825,6 +826,7 @@ export function MapZoneEditor({
 
       {/* Map + fields */}
       <div className="flex flex-col gap-4">
+        <BasemapSwitch getMap={() => mapRef.current} />
         <div
           ref={containerRef}
           style={{ height: "460px" }}

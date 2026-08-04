@@ -28,6 +28,7 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { BasemapSwitch } from "@/components/admin/basemap-switch";
 import { useRouter } from "next/navigation";
 import type { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
 import type { GeoJSONStoreFeatures, TerraDraw } from "terra-draw";
@@ -2356,6 +2357,9 @@ export function MapBuilder({
       </div>
 
       {/* ---------------- canvas + floating panels ---------------- */}
+      <div className="mb-2">
+        <BasemapSwitch getMap={() => mapRef.current} />
+      </div>
       <div className="relative">
         <div
           ref={containerRef}

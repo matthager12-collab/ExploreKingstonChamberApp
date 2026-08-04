@@ -163,3 +163,35 @@ a third party, and both were rejected on the facts:
   under the fill is the information, so identity moves to the boundary. A first
   cut that raised fill opacity turned the Port lot into a flat purple rectangle
   with the cars invisible.
+
+## Amendment 2 — imagery withdrawn from the public site; editors keep it (2026-08-04)
+
+Owner decision (Mat, 2026-08-04, reversing Amendment 1's public default after
+seeing it live): **the Esri base is not good enough for visitors, and no
+keyless source is.** `/parking` returns to the vector base with no toggle;
+the imagery machinery stays wired but dormant.
+
+- **Why.** Esri's native ceiling over Kingston is z19 (Amendment 1); at the
+  zooms a parking map is actually used, cars are smeared blobs and stall
+  striping is illegible. Measured against the alternative: Kitsap County's
+  HXIP 2020 orthos (~0.10 m/px, `ags.kitsapgov.com` → `Imagery/
+  HXIP_2020_NAD83_GEOTIFF`) resolve individual stall lines. A side-by-side of
+  the same Port-lot extent made the call obvious.
+- **The upgrade path is a permission, not a provider hunt.** The county cache
+  is `Copyright Kitsap County, HxGN Content Program` and is published in
+  State Plane WA-North (wkid 102748), so using it means (a) written county
+  permission and (b) reprojecting/rehosting into Web Mercator tiles — which
+  the existing self-hosted PMTiles + `/api/map/tiles` seam already fits.
+  USGS stays too coarse (Amendment 1); do not re-litigate.
+- **Where imagery still shows: the two admin editors** (`/admin/map`,
+  `/admin/maps`) gain a Map ⟷ Imagery switch (`components/admin/
+  basemap-switch.tsx`). Tracing a curb against even soft imagery beats
+  tracing against abstract vectors, an admin tolerates quality a visitor
+  should not be handed, and both editors cap at z18 — under Esri's ceiling —
+  so they never render overzoomed mush. Esri attribution still renders
+  automatically while imagery is visible.
+- **Restoring the public option** (e.g. after a Kitsap yes) is deliberate and
+  small: `basemap="satellite" basemapToggle` on the `/parking` FeatureMap
+  line, plus pointing `SATELLITE_TILE_URL` at the licensed source. Everything
+  else — offline fallback, overlay contrast, styledata application — is
+  unchanged and still guard-tested.

@@ -547,22 +547,27 @@ Facts worth knowing:
   `public/fonts` (Noto Sans, OFL). No third-party requests, no API keys. The
   PMTiles build + refresh runbook is in
   [OPERATIONS.md](OPERATIONS.md) ("Basemap vector tiles").
-- **One third-party layer, on one page** ([ADR-0006 amendment 1](adr/ADR-0006-self-hosted-vector-basemap.md)).
-  The style also carries an **Esri World Imagery** raster source, shipped
+- **One third-party layer, admin-only** ([ADR-0006 amendments 1–2](adr/ADR-0006-self-hosted-vector-basemap.md)).
+  The style carries an **Esri World Imagery** raster source, shipped
   `visibility: "none"` — inert, and MapLibre fetches no tiles for a hidden
-  layer, so every other map stays fully self-hosted. `/parking` alone opens on
-  it (`<FeatureMap basemap="satellite" basemapToggle />`) because reading a lot
-  means reading painted stalls. `applyBasemapMode(map, mode)` in `basemap.ts` is
-  the only switch: it flips the raster layer, hides the vector SURFACE layers
+  layer, so every public map stays fully self-hosted. Since amendment 2
+  (2026-08-04) **no public page shows it**: Esri's keyless ceiling over
+  Kingston is native z19, which is too soft to read painted stalls, so the
+  `/parking` satellite default from amendment 1 was withdrawn until better
+  imagery is licensed (Kitsap County's ~0.10 m HXIP orthos are the identified
+  path — county permission + reprojection required). The two **admin editors**
+  (`/admin/map`, `/admin/maps`) offer a Map ⟷ Imagery switch
+  (`components/admin/basemap-switch.tsx`) for tracing; both cap at z18, under
+  the ceiling. `applyBasemapMode(map, mode)` in `basemap.ts` is still the only
+  switch: it flips the raster layer, hides the vector SURFACE layers
   (`VECTOR_SURFACE_LAYERS`), and repaints the three street-name layers
-  white-on-dark. Street names stay ON — the one thing an aerial cannot give you.
-  Three things there are load-bearing and documented in the amendment: the
-  source caps at **z19** (Esri serves a grey placeholder at z20 here, as a 200),
-  the mode is applied on **`styledata` not `load`** (so an R2 tile-proxy 502
-  cannot blank a page whose imagery is fine), and imagery **never works
-  offline** — `<FeatureMap>` falls back to the vector base and disables the
-  Satellite option when it is built with the network already gone, which is what
-  keeps the Phase 7 offline promise intact.
+  white-on-dark. The load-bearing details from amendment 1 all still hold —
+  source maxzoom **z19** (grey placeholder at z20, served as a 200), mode
+  applied on **`styledata` not `load`** (an R2 tile-proxy 502 must not blank a
+  page whose imagery is fine), and imagery **never works offline** —
+  `<FeatureMap>` keeps its dormant satellite capability plus that offline
+  fallback, so restoring a public imagery option is a two-prop change on the
+  page plus the licensed tile URL.
 - **No POI icons, structurally.** The style has no sprite, no `icon-image`,
   and no `pois` source-layer, so no church symbol (or any POI icon) can ever
   render — the guarantee is asserted by `src/lib/map/__tests__/basemap.test.ts`.
