@@ -8,8 +8,17 @@ import type { SurveyResponse } from "./types";
 
 export interface SurveyStore {
   save(response: SurveyResponse): Promise<void>;
-  /** Aggregate counts for the LTAC report — never raw rows with timestamps. */
-  summarize(): Promise<SurveySummary>;
+  /**
+   * Aggregate counts for the LTAC report — never raw rows with timestamps.
+   *
+   * `sinceIso` is the analytics BASELINE
+   * (src/lib/stores/analytics-baseline-store.ts), threaded through so survey
+   * figures honour the same counting window as the pageview figures they are
+   * rendered beside. The dashboard states one window over all of them; if this
+   * parameter is ever dropped at a call site, that statement becomes false for
+   * half the page.
+   */
+  summarize(sinceIso?: string): Promise<SurveySummary>;
 }
 
 export interface SurveySummary {
@@ -24,8 +33,8 @@ class DbSurveyStore implements SurveyStore {
     await appendSurveyResponse(response);
   }
 
-  async summarize(): Promise<SurveySummary> {
-    const rows = await readSurveyResponses<SurveyResponse>();
+  async summarize(sinceIso?: string): Promise<SurveySummary> {
+    const rows = await readSurveyResponses<SurveyResponse>(sinceIso);
     const byDistance: Record<string, number> = {};
     for (const r of rows) {
       byDistance[r.distanceBand] = (byDistance[r.distanceBand] ?? 0) + 1;

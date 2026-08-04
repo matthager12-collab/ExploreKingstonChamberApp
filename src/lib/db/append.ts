@@ -16,11 +16,24 @@ export async function appendAnalyticsEvent(event: unknown): Promise<void> {
   await getDb().insert(analyticsEvent).values({ event });
 }
 
-export async function readAnalyticsEvents<T>(): Promise<T[]> {
-  const rows = await getDb()
-    .select({ event: analyticsEvent.event })
-    .from(analyticsEvent)
-    .orderBy(asc(analyticsEvent.ts));
+/**
+ * Read logged analytics events, oldest first. `sinceIso` (optional) bounds the
+ * scan to rows appended at/after that instant — the analytics BASELINE
+ * (src/lib/stores/analytics-baseline-store.ts) passes the Chamber's chosen
+ * "count from here" watermark so a pre-launch log full of our own building
+ * never has to be read, let alone summed. Omitting it reads the full log (the
+ * behavior every caller had before the baseline existed).
+ *
+ * Filtered in SQL, not in the summarizer, for the same reason
+ * readFerryObservations takes this parameter: the rows excluded by a baseline
+ * are exactly the rows that accumulated while nobody was watching, so they are
+ * the ones you least want to pay to transfer and parse on every dashboard load.
+ */
+export async function readAnalyticsEvents<T>(sinceIso?: string): Promise<T[]> {
+  const base = getDb().select({ event: analyticsEvent.event }).from(analyticsEvent);
+  const rows = await (
+    sinceIso ? base.where(gte(analyticsEvent.ts, new Date(sinceIso))) : base
+  ).orderBy(asc(analyticsEvent.ts));
   return rows.map((r) => r.event as T);
 }
 
@@ -28,11 +41,19 @@ export async function appendSurveyResponse(response: unknown): Promise<void> {
   await getDb().insert(surveyResponse).values({ response });
 }
 
-export async function readSurveyResponses<T>(): Promise<T[]> {
-  const rows = await getDb()
-    .select({ response: surveyResponse.response })
-    .from(surveyResponse)
-    .orderBy(asc(surveyResponse.ts));
+/**
+ * Read logged survey responses, oldest first. `sinceIso` (optional) bounds the
+ * scan the same way readAnalyticsEvents does, and for the same reason: the
+ * admin dashboard renders survey counts beside pageview counts under one
+ * "counting window" heading, so they have to honour the same window. A survey
+ * total that quietly ignored the baseline would sit next to a reset pageview
+ * total under a sentence claiming both came from the same date.
+ */
+export async function readSurveyResponses<T>(sinceIso?: string): Promise<T[]> {
+  const base = getDb().select({ response: surveyResponse.response }).from(surveyResponse);
+  const rows = await (
+    sinceIso ? base.where(gte(surveyResponse.ts, new Date(sinceIso))) : base
+  ).orderBy(asc(surveyResponse.ts));
   return rows.map((r) => r.response as T);
 }
 

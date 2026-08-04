@@ -102,6 +102,12 @@ export async function GET() {
   const denied = await requireAdmin();
   if (denied) return denied;
 
-  const summary = await surveyStore.summarize();
+  // Windowed by the analytics baseline, because the doc comment above promises
+  // "the same numbers render on the gated /admin dashboard" — and that page is
+  // windowed. Two endpoints claiming to be the same numbers have to move
+  // together, or the promise quietly becomes a bug report from whoever
+  // compares them. Lazily imported for the same reason as the auth module.
+  const { getAnalyticsSince } = await import("@/lib/stores/analytics-baseline-store");
+  const summary = await surveyStore.summarize(await getAnalyticsSince());
   return Response.json(summary);
 }

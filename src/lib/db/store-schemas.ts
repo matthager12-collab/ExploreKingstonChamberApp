@@ -113,6 +113,15 @@ export const STORE_SCHEMAS: Record<string, z.ZodType> = {
   "site-pages": z.looseObject({ id: pagePathId }),
   "ferry-info": z.looseObject({ id: entityId }),
   "ferry-prediction": z.looseObject({ id: entityId }),
+  // The analytics baseline — one record, id "settings". `since` is nullable by
+  // design (null = count the whole log), so it is validated as "string or null"
+  // rather than an optional string: an absent key and an explicit null mean the
+  // same thing here, but a restored overlay that dropped the key entirely
+  // should still be readable.
+  "analytics-baseline": z.looseObject({
+    id: entityId,
+    since: z.string().nullable().optional(),
+  }),
   // E22 kiosk settings — one record, id "settings". Structural only, matching
   // its ferry-prediction sibling: the real validation is in kiosk-store.ts and
   // it runs on the way OUT as well as in, because these values configure an

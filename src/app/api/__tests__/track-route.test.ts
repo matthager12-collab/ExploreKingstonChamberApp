@@ -56,15 +56,21 @@ async function eventsFor(sessionId: string): Promise<Record<string, unknown>[]> 
 }
 
 /** The closed persisted shape per event type. Adding ANY field to stored
- *  events — ip, userAgent, coordinates, whatever — must break this table. */
+ *  events — ip, userAgent, coordinates, whatever — must break this table.
+ *
+ *  `source` is the which-client marker ("kiosk" | "internal"). It is a closed
+ *  enum whitelisted at the route, not free text, and it is present on every
+ *  type because any event can come from the dock panel or from us. It was
+ *  missing from this table until the internal marker landed — no case had ever
+ *  sent one, so the kiosk field was passing by never being exercised. */
 const ALLOWED_KEYS: Record<string, string[]> = {
-  pageview: ["ts", "type", "path", "sessionId", "geo"],
-  outbound: ["ts", "type", "path", "sessionId", "geo", "href", "label"],
-  "geo-ping": ["ts", "type", "path", "sessionId", "geo", "area"],
-  consent: ["ts", "type", "path", "sessionId", "geo", "noticeVersion", "consentPurpose"],
+  pageview: ["ts", "type", "path", "sessionId", "geo", "source"],
+  outbound: ["ts", "type", "path", "sessionId", "geo", "href", "label", "source"],
+  "geo-ping": ["ts", "type", "path", "sessionId", "geo", "area", "source"],
+  consent: ["ts", "type", "path", "sessionId", "geo", "noticeVersion", "consentPurpose", "source"],
   // A web vital carries a metric name + a number and NOTHING else — no
   // coordinate, no device string. The closed shape is what proves that.
-  webvital: ["ts", "type", "path", "sessionId", "geo", "metric", "value"],
+  webvital: ["ts", "type", "path", "sessionId", "geo", "metric", "value", "source"],
 };
 
 interface Case {
@@ -277,6 +283,62 @@ const CASES: Case[] = [
       sessionId: SID("wv-sens"),
     },
     persisted: false,
+  },
+
+  // ---- the internal marker: OUR traffic, kept out of the visitor numbers ----
+  {
+    name: "a device-flagged beacon is stored as internal, not as a visitor",
+    ip: "198.51.100.40",
+    body: { type: "pageview", path: "/eat", sessionId: SID("int-pv"), internal: true },
+    persisted: { type: "pageview", expect: { source: "internal" } },
+  },
+  {
+    name: "internal is STORED, never dropped — a filter you cannot see is a filter you cannot trust",
+    ip: "198.51.100.41",
+    body: {
+      type: "outbound",
+      path: "/eat",
+      sessionId: SID("int-ob"),
+      href: "https://example-restaurant.com/menu",
+      label: "Menu",
+      internal: true,
+    },
+    // Dropping at ingest would make "0 excluded" and "the marker broke" the
+    // same observation. summarize() keeps these out of every visitor figure
+    // and reports the count separately (tests/unit/internal-traffic-separation).
+    persisted: { type: "outbound", expect: { source: "internal", label: "Menu" } },
+  },
+  {
+    name: "internal OUTRANKS kiosk when a beacon claims both",
+    ip: "198.51.100.42",
+    body: {
+      type: "pageview",
+      path: "/kiosk",
+      sessionId: SID("int-kiosk"),
+      source: "kiosk",
+      internal: true,
+    },
+    // The panel gets set up and demoed by us before anyone walks up to it; in
+    // that window the taps are ours, and seeding the kiosk series with them
+    // corrupts the one number that series exists to produce.
+    persisted: { type: "pageview", expect: { source: "internal" } },
+  },
+  {
+    name: "a truthy-but-not-true internal value does NOT flag the event",
+    ip: "198.51.100.43",
+    body: { type: "pageview", path: "/eat", sessionId: SID("int-str"), internal: "yes" },
+    // Strict === true, matching how every other field here is read. A loose
+    // check would let `internal: 0`-style client bugs silently reclassify
+    // real visits, and this marker only ever removes rows from the count.
+    persisted: { type: "pageview", expect: { source: undefined } },
+  },
+  {
+    name: "an unflagged beacon stays a visitor and carries no source at all",
+    ip: "198.51.100.44",
+    body: { type: "pageview", path: "/eat", sessionId: SID("int-none") },
+    // Absence has to keep meaning "visitor" forever — every event ever written
+    // before this mechanism existed relies on it.
+    persisted: { type: "pageview", expect: { source: undefined } },
   },
 ];
 
