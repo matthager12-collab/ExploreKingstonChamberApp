@@ -58,6 +58,13 @@ const PARKING_RULE_COLORS: Record<string, string> = {
   "free-2hr": "#2e9e4f",
   "free-unrestricted": "#1E96C0",
   paid: "#7c4dbe",
+  // Deep magenta: the one hue the parking legend had left. Measured against
+  // every other rule colour before picking it (ΔE76 41.3 from its nearest
+  // neighbour, `paid` purple) — wider than ANY existing pair in the legend, so
+  // ADR-0007 §4's "zero confusable pairs" still holds. 3.65:1 on the worst base
+  // surface (greenspace) clears WCAG 1.4.11, and white on it is 6.89:1, a
+  // shade better than the P&R badge the ADR was written to fix.
+  "business-customer": "#9c2f6f",
   "park-and-ride-24h": "#8a4c22",
   prohibited: "#d43d3d",
   "load-zone": "#b8860b",
@@ -73,6 +80,7 @@ const PARKING_RULE_LABELS: Record<string, string> = {
   "free-2hr": "Free · 2-hour limit",
   "free-unrestricted": "Free · no time limit",
   paid: "Paid lot",
+  "business-customer": "Customer parking",
   "park-and-ride-24h": "Park & ride · 24 hr",
   prohibited: "No parking",
   "load-zone": "Load zone",

@@ -98,7 +98,7 @@ export interface MapFeature {
 }
 
 export type ParkingType =
-  | "paid" | "free" | "free-timed" | "permit" | "park-and-ride" | "load-zone" | "no-parking";
+  | "paid" | "free" | "free-timed" | "customer" | "permit" | "park-and-ride" | "load-zone" | "no-parking";
 
 // Colors track the zone-rule palette (ADR-0007 §4, "Evergreen & Sound"):
 // permit/park-and-ride/load-zone carry the same meanings as the MapZone rules,
@@ -107,6 +107,11 @@ export const PARKING_TYPES = [
   { key: "paid",          label: "Paid lot",            color: "#7c4dbe" },
   { key: "free",          label: "Free",                color: "#2e9e4f" },
   { key: "free-timed",    label: "Free · time-limited", color: "#1e96c0" },
+  // Mirrors the MapZone rule `business-customer` (same concept, same colour) —
+  // the two taxonomies are hand-synced, see docs/MAPS.md "Two divergent
+  // parking color maps". Added here as well so a business's own lot can be
+  // drawn as a CMS feature, not only as a built-in parking zone.
+  { key: "customer",      label: "Customer parking",    color: "#9c2f6f" },
   { key: "permit",        label: "Permit / commuter",   color: "#7a7468" },
   { key: "park-and-ride", label: "Park & ride",         color: "#8a4c22" },
   { key: "load-zone",     label: "Load / 15-min zone",  color: "#b8860b" },

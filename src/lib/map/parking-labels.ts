@@ -19,6 +19,7 @@ export const PARKING_RULE_LABELS: Record<string, string> = {
   "free-2hr": "Free · 2-hour limit",
   "free-unrestricted": "Free · no time limit",
   paid: "Paid lot",
+  "business-customer": "Customer parking",
   "park-and-ride-24h": "Park & ride · 24 hr",
   prohibited: "No parking",
   "load-zone": "Load zone",
@@ -48,6 +49,7 @@ export function parkingRuleLabel(rule: string): string {
  *   free-2hr            free, but strictly enforced 2-hour limit ($40 overstay)
  *   free-unrestricted   free, no time limit
  *   paid                paid lot (Port text-to-pay / Diamond)
+ *   business-customer   a business's own lot, free while you are visiting it
  *   park-and-ride-24h   Kitsap park & ride, free, 24 hr max
  *   permit              permit holders only — a visitor cannot park here at all
  *   load-zone           loading / dropoff only — not visitor parking
@@ -68,6 +70,9 @@ export function freeOrPaidFromRule(rule: string): CostValue | undefined {
     case "free-2hr":
     case "free-unrestricted":
     case "park-and-ride-24h":
+    // "business-customer" is FREE, and the call is closer than it looks — see
+    // the note below the switch.
+    case "business-customer":
       // "free-2hr" still reads plain "Free" even though its label says
       // "Free · 2-hour limit". The badge is the scannable money signal and is
       // meant to look identical everywhere; the label carries the nuance.
@@ -80,3 +85,30 @@ export function freeOrPaidFromRule(rule: string): CostValue | undefined {
       return undefined;
   }
 }
+
+/**
+ * WHY `business-customer` RETURNS "free" RATHER THAN `undefined`.
+ *
+ * It sits between the two groups above, so the reasoning is written down rather
+ * than left to be re-derived.
+ *
+ * It resembles `permit`, which returns `undefined` because a permit row is
+ * "free only to people who already hold a permit" — and customer parking is
+ * free only to people who are customers. That symmetry is real. The difference
+ * that decides it: a visitor can BECOME a customer on the spot simply by doing
+ * the thing the lot exists for, whereas nobody acquires a permit by walking in.
+ * The money question therefore genuinely applies here, and its answer is
+ * "nothing" — which is what this badge exists to say.
+ *
+ * It is also the same shape as `free-2hr`, whose badge reads a plain "Free"
+ * while its label carries the condition; suppressing the badge instead would
+ * make its ABSENCE mean two different things, the exact ambiguity the note
+ * above is guarding against.
+ *
+ * THE COST IF THIS IS WRONG, stated plainly because it is an owner call: a
+ * "Free" badge on a page whose readers are mostly ferry-bound could invite the
+ * all-day commuter parking these lots suffer from. The mitigations are that the
+ * label beside it reads "Customer parking" rather than "Free", and that each
+ * zone's summary carries its own warning. Flipping this is a one-line change —
+ * move the case down to the default and the badge disappears.
+ */

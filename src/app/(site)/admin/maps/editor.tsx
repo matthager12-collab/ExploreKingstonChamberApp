@@ -267,6 +267,7 @@ const PARKING_RULE_COLORS: Record<string, string> = {
   "free-2hr": "#2e9e4f",
   "free-unrestricted": "#1E96C0",
   paid: "#7c4dbe",
+  "business-customer": "#9c2f6f",
   "park-and-ride-24h": "#8a4c22",
   prohibited: "#d43d3d",
   "load-zone": "#b8860b",

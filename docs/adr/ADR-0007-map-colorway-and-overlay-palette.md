@@ -160,3 +160,69 @@ today's P&R orange, and only by lightness (ΔL* 22, on the threshold).
   are differentiated by colour at a uniform width. A quieter arterial leans
   harder on that missing width hierarchy; separate line layers per kind is the
   real fix.
+
+---
+
+## Amendment 1 — an eighth parking colour: `business-customer` (2026-08-04)
+
+**Status:** accepted (owner request, 2026-08-04).
+
+§4 above closed with *"zero confusable pairs inside the parking legend"*. Adding
+a colour is the one change that can quietly undo that, so the new entry was
+measured against every existing rule colour before it was picked, and the claim
+is now enforced rather than asserted (`tests/unit/parking-rule-palette.test.ts`).
+
+### The new rule
+
+| key | colour | label |
+| --- | --- | --- |
+| `business-customer` | `#9c2f6f` | "Customer parking" |
+
+A lot a business keeps for the people visiting it. It is deliberately its own
+rule rather than `free-unrestricted` plus a note: in Kingston the question a
+visitor needs answered is not *"does this cost money"* but *"am I the person
+this space is for"*, and only a distinct colour answers that at a glance.
+
+### Why this hue
+
+Deep magenta was the one region of the wheel the legend had left. Measured
+(CIE Lab ΔE76, against the base palette in `mapStyle()`):
+
+- **ΔE 41.3** from its nearest neighbour, `paid` purple `#7c4dbe` — *wider than
+  any pair already in the legend* (the tightest shipped pair is
+  `park-and-ride-24h` / `load-zone` at 36.3). It does not become the new worst
+  case, which is the specific thing the test now pins.
+- **3.65:1** against the worst base surface (greenspace `#aac4a4`), clearing
+  WCAG 1.4.11's 3:1 for graphical objects.
+- **6.89:1** for the white pill text in the popup — slightly better than the
+  `park-and-ride-24h` badge (6.69:1) that §4 was written to fix.
+
+Teal, indigo, orchid and olive were all measured and rejected: each landed
+within ΔE 28 of an existing rule, or under 3:1 on the base.
+
+### What this exposed, and did NOT change
+
+Measuring the whole legend showed that **five of the seven original rule colours
+already sit below 3:1 against the lightest base surfaces**, and three below
+4.5:1 for the white pill text:
+
+| bar | rules currently under it |
+| --- | --- |
+| 3:1 vs base surfaces (1.4.11) | `free-2hr`, `free-unrestricted`, `prohibited`, `load-zone`, `permit` |
+| 4.5:1 white pill text | `free-2hr`, `free-unrestricted`, `load-zone` |
+
+These predate this amendment and are **left alone** — they are §4's values, and
+repainting the parking legend is a colorway decision, not a side effect of
+adding a rule. The exact set is pinned in the test as a **ratchet**: a new
+colour cannot join it silently, and fixing one of them fails the test too, which
+is the prompt to amend this ADR deliberately. Worth scheduling on its own.
+
+### The cost badge
+
+`freeOrPaidFromRule("business-customer")` returns `"free"`. It is the closest
+call in that function — a customer lot is free only to customers, the same
+conditional shape that makes `permit` return `undefined` — and the reasoning
+either way is written out at the bottom of `src/lib/map/parking-labels.ts`. The
+deciding difference: a visitor becomes a customer by walking in, whereas nobody
+acquires a permit that way. Flipping it is a one-line change and the test that
+pins it names the tradeoff.

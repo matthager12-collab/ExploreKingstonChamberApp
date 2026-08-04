@@ -657,6 +657,20 @@ Facts worth knowing:
   before launch and listing photos are live in production, so migrating them is
   a post-launch refactor with a real regression surface and no visitor-visible
   gain. `photo-picker.tsx` is the destination when it happens.
+- **Adding a parking rule touches seven places.** The domain type +
+  `RULE_LABELS`, the visitor label table (`parking-labels.ts`), the frozen map
+  component's label AND colour tables, both admin editors' colour tables, the
+  admin API's validation whitelist, and the editor's dropdown array. The older
+  `parking-labels` spec only guards slugs the SEED DATA uses, so a rule the
+  Chamber assigns by hand (like `business-customer`, which ships with no seed
+  zone) slips through it — `tests/unit/parking-rule-palette.test.ts` walks the
+  declared union instead and fails until every copy knows about the new rule.
+  It also measures the legend for confusable pairs and holds a contrast
+  ratchet; see [ADR-0007 amendment 1](adr/ADR-0007-map-colorway-and-overlay-palette.md).
+- **Five parking colours sit below 3:1 on the base surfaces.** `free-2hr`,
+  `free-unrestricted`, `prohibited`, `load-zone` and `permit` predate the
+  measurement and are ADR-0007's to change; the exact set is pinned as a ratchet
+  so nothing new joins it silently. Worth a colorway pass on its own.
 - **Two divergent parking color maps.** `feature-map.tsx` colors built-in
   parking *zones* by `ParkingRule` (`free-2hr`, `paid`, …); CMS parking
   *features* color by `ParkingType` (`free`, `paid`, …). They're kept visually
