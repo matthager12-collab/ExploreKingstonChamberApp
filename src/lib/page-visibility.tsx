@@ -113,6 +113,13 @@ export async function getEffectiveHiddenPaths(): Promise<string[]> {
 /**
  * 404 for visitors when the page is hidden; admins pass through.
  * Returns true when the page is hidden-but-admin (show the banner).
+ *
+ * DYNAMIC ROUTES ONLY. The admin pass-through reads cookies() on the hidden
+ * branch, which cannot run during background revalidation — on an ISR page
+ * the 404 never bakes and "hide" silently does nothing (the /give find,
+ * 2026-08-03). Pages with `export const revalidate` use
+ * assertPageVisibleStatic instead; tests/unit/visibility-gate-guard.test.ts
+ * enforces this.
  */
 export async function assertPageVisible(path: string): Promise<boolean> {
   const hidden = await getEffectiveHiddenPaths();

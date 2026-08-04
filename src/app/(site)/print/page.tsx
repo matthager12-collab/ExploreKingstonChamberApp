@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { PrintButton } from "@/components/print-button";
 import { PageHeader, Section } from "@/components/ui";
 import { getFerryStatusSnapshot } from "@/lib/ferry-status";
-import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
+import { assertPageVisibleStatic } from "@/lib/page-visibility";
 import { copyText, getCopyOverrides } from "@/lib/stores/site-store";
 import { formatPacificDate, formatPacificTime } from "@/lib/time";
 import type { Sailing } from "@/lib/types";
@@ -96,7 +96,9 @@ function Departures({ label, list }: { label: string; list: string[] }) {
 }
 
 export default async function PrintPage() {
-  const hiddenPreview = await assertPageVisible("/print");
+  // ISR page: the cookie-free gate is the one that actually bakes the 404
+  // when hidden (see assertPageVisibleStatic + the /give find, 2026-08-03).
+  await assertPageVisibleStatic("/print");
   const [ferry, copy] = await Promise.all([getFerryStatusSnapshot(), getCopyOverrides()]);
 
   // "As of" is the moment this HTML was GENERATED — not the moment it was read.
@@ -111,7 +113,6 @@ export default async function PrintPage() {
 
   return (
     <>
-      {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
         title={copyText(copy, "print.header.title")}
         intro={copyText(copy, "print.header.intro")}

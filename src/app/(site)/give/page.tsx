@@ -3,7 +3,7 @@ import type { Charity, EventItem } from "@/lib/types";
 import { getCharities, getVolunteerNeeds } from "@/lib/stores/charity-store";
 import { getEvents } from "@/lib/stores/event-store";
 import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
-import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
+import { assertPageVisibleStatic } from "@/lib/page-visibility";
 import {
   PageHeader,
   Section,
@@ -46,7 +46,14 @@ function pacificDateKey(iso: string): string {
 export const revalidate = 60;
 
 export default async function GiveBackPage() {
-  const hiddenPreview = await assertPageVisible("/give");
+  // The STATIC variant, deliberately: this page is ISR (revalidate above),
+  // and assertPageVisible's admin pass-through reads cookies() on the hidden
+  // branch — which cannot work during background revalidation, so hiding the
+  // page never actually baked the 404 (found live 2026-08-03: /give hidden in
+  // admin yet serving 200). The trade is the in-place admin preview, which a
+  // cached route never delivered anyway; admins preview by unhiding, exactly
+  // like /line (see assertPageVisibleStatic's doc comment for the mechanics).
+  await assertPageVisibleStatic("/give");
   const [charities, volunteerNeeds, events, copy] = await Promise.all([
     getCharities(),
     getVolunteerNeeds(),
@@ -80,7 +87,6 @@ export default async function GiveBackPage() {
 
   return (
     <>
-      {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
         eyebrow={copyText(copy, "give.header.eyebrow")}
         title={copyText(copy, "give.header.title")}

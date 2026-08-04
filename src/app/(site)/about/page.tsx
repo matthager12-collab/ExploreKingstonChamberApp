@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { VisitorSurvey } from "@/components/visitor-survey";
 import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
-import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
+import { assertPageVisibleStatic } from "@/lib/page-visibility";
 import { Callout, Card, ExternalLink, PageHeader, Section } from "@/components/ui";
 
 export const metadata: Metadata = {
@@ -16,11 +16,12 @@ export const metadata: Metadata = {
 export const revalidate = 60;
 
 export default async function AboutPage() {
-  const hiddenPreview = await assertPageVisible("/about");
+  // ISR page: the cookie-free gate is the one that actually bakes the 404
+  // when hidden (see assertPageVisibleStatic + the /give find, 2026-08-03).
+  await assertPageVisibleStatic("/about");
   const copy = await getCopyOverrides();
   return (
     <>
-      {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
         eyebrow={copyText(copy, "about.header.eyebrow")}
         title={copyText(copy, "about.header.title")}

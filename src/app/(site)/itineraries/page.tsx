@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getItineraries } from "@/lib/stores/itinerary-store";
 import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
-import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
+import { assertPageVisibleStatic } from "@/lib/page-visibility";
 import { Badge, Card, PageHeader, Section } from "@/components/ui";
 
 // Itineraries are admin-editable (seed + overlay via the itinerary store);
@@ -22,11 +22,12 @@ const modeLabels: Record<string, { label: string; tone: "green" | "navy" | "teal
 };
 
 export default async function ItinerariesPage() {
-  const hiddenPreview = await assertPageVisible("/itineraries");
+  // ISR page: the cookie-free gate is the one that actually bakes the 404
+  // when hidden (see assertPageVisibleStatic + the /give find, 2026-08-03).
+  await assertPageVisibleStatic("/itineraries");
   const [itineraries, copy] = await Promise.all([getItineraries(), getCopyOverrides()]);
   return (
     <>
-      {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
         eyebrow={copyText(copy, "itineraries.header.eyebrow")}
         title={copyText(copy, "itineraries.header.title")}
