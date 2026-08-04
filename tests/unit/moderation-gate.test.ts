@@ -19,7 +19,7 @@ import { count, eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { audit } from "@/lib/db/schema";
-import { readRecords, writeRecord } from "@/lib/db/records";
+import { readRecordRows, readRecords, writeRecord } from "@/lib/db/records";
 import { charities as charitySeed } from "@/lib/data/charities";
 import { itineraries as itinerarySeed } from "@/lib/data/itineraries";
 import { lodging as lodgingSeed } from "@/lib/data/lodging";
@@ -723,5 +723,144 @@ describe("(e) lodging listing PUT: member holds, admin publishes, whitelist enfo
     expect(
       (await openModeration("lodging")).filter((i) => i.subjectId === otherLodging.id),
     ).toHaveLength(0);
+  });
+});
+
+/* --------------------- (f) directory listings (E16 portal) --------------------- */
+//
+// PUT /api/portal/listing routes directory ids through the ADMIN read (a
+// draft its owner cannot load is a listing they can never fill in) with a
+// status-dependent floor: a DRAFT has never been public, so the owner's
+// edits save in place — draft status preserved, no queue item, publishing
+// stays an explicit admin act — while an edit to a LIVE directory listing
+// holds for review exactly like restaurants and lodging. Name and category
+// stay Chamber-controlled either way.
+
+describe("(f) directory listing PUT: draft saves in place, live holds, whitelist enforced", () => {
+  const draftDoc = {
+    id: "portal-dir-draft",
+    name: "Imported Draft Co",
+    category: "services" as const,
+    description: "",
+    tags: [],
+    sourceCategories: ["Consulting"],
+  };
+  const liveDoc = {
+    id: "portal-dir-live",
+    name: "Published Directory Co",
+    category: "shop" as const,
+    description: "Already public.",
+    tags: [],
+  };
+
+  it("member edit of their DRAFT: saves in place, stays draft, no queue item, provenance intact", async () => {
+    await writeRecord("directory", draftDoc, {
+      actor: "import:growthzone",
+      source: "import",
+      status: "draft",
+      action: "import",
+    });
+
+    asMember(draftDoc.id);
+    const res = await listingPUT(
+      jsonReq("/api/portal/listing", "PUT", {
+        id: draftDoc.id,
+        description: "We fixed our own description.",
+        phone: "(360) 555-0177",
+        // Whitelist probes — a member must not be able to touch these:
+        name: "Renamed By Member",
+        category: "eat",
+      }),
+    );
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.draft).toBe(true);
+    expect(json.pending).toBeUndefined();
+
+    // Saved in place: the admin read sees the new text, status still draft…
+    const admin = (await getDirectoryListingsAdmin()).find((d) => d.id === draftDoc.id);
+    expect(admin?.description).toBe("We fixed our own description.");
+    expect(admin?.phone).toBe("(360) 555-0177");
+    expect(admin?.status).toBe("draft");
+    // …Chamber-controlled fields and import provenance survived…
+    expect(admin?.name).toBe(draftDoc.name);
+    expect(admin?.category).toBe(draftDoc.category);
+    expect(admin?.sourceCategories).toEqual(["Consulting"]);
+    // …the public read still hides it, and nothing landed in the queue.
+    expect((await getDirectoryListings()).map((d) => d.id)).not.toContain(draftDoc.id);
+    expect(await openModeration("directory")).toHaveLength(0);
+
+    // The member's save correctly ends importer refresh rights (updated_by
+    // is the precedence-law discriminator — a human touched this record).
+    const row = (await readRecordRows("directory")).find((r) => r.id === draftDoc.id);
+    expect(row?.updatedBy).toBe("member@example.test");
+    expect(row?.source).toBe("portal");
+  });
+
+  it("member edit of a LIVE directory listing: live record untouched, one open 'edit' item", async () => {
+    await writeRecord("directory", liveDoc, {
+      actor: "admin@example.test",
+      source: "admin",
+      status: "live",
+      action: "create",
+    });
+
+    asMember(liveDoc.id);
+    const res = await listingPUT(
+      jsonReq("/api/portal/listing", "PUT", {
+        id: liveDoc.id,
+        description: "A better public description, pending review",
+      }),
+    );
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.pending).toBe(true);
+    expect(json.draft).toBeUndefined();
+
+    const live = (await getDirectoryListings()).find((d) => d.id === liveDoc.id);
+    expect(live?.description).toBe(liveDoc.description);
+
+    const items = await openModeration("directory");
+    expect(items).toHaveLength(1);
+    expect(items[0].subjectId).toBe(liveDoc.id);
+    expect(items[0].payload).toMatchObject({ kind: "edit" });
+    expect(
+      (items[0].payload.proposed as { description: string }).description,
+    ).toBe("A better public description, pending review");
+  });
+
+  it("403s a member not linked to the directory listing", async () => {
+    asMember("some-other-listing");
+    const res = await listingPUT(
+      jsonReq("/api/portal/listing", "PUT", { id: draftDoc.id, description: "x" }),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("rejects a malformed website with a 400 and writes nothing", async () => {
+    asMember(draftDoc.id);
+    const res = await listingPUT(
+      jsonReq("/api/portal/listing", "PUT", { id: draftDoc.id, website: "not a url" }),
+    );
+    expect(res.status).toBe(400);
+    const admin = (await getDirectoryListingsAdmin()).find((d) => d.id === draftDoc.id);
+    expect(admin?.website).toBeUndefined();
+  });
+
+  it("admin edit preserves status — fixing a typo never publishes a draft", async () => {
+    asAdmin();
+    const res = await listingPUT(
+      jsonReq("/api/portal/listing", "PUT", {
+        id: draftDoc.id,
+        description: "Chamber-polished description.",
+        category: "community",
+      }),
+    );
+    expect(res.status).toBe(200);
+    const admin = (await getDirectoryListingsAdmin()).find((d) => d.id === draftDoc.id);
+    expect(admin?.description).toBe("Chamber-polished description.");
+    expect(admin?.category).toBe("community"); // admins MAY move the bucket
+    expect(admin?.status).toBe("draft"); // …but an edit never publishes
+    expect((await getDirectoryListings()).map((d) => d.id)).not.toContain(draftDoc.id);
   });
 });
