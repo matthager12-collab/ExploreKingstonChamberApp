@@ -30,6 +30,8 @@ type Zone = {
   name: string;
   center: [number, number];
   polygon?: [number, number][];
+  streetPaths?: [number, number][][];
+  curb?: string;
 };
 
 let browser: Browser;
@@ -66,9 +68,9 @@ async function putZone(zone: Zone): Promise<void> {
 async function openEditor(): Promise<void> {
   await page.goto(BASE_URL + "/admin/map", { waitUntil: "load" });
   await page.waitForSelector("text=" + ZONE_NAME, { timeout: 15_000 });
-  // "Draw new zone" enables only after the MapLibre load event + terra-draw
-  // start — it is the editor's own readiness signal.
-  await page.waitForSelector('button:has-text("Draw new zone"):not([disabled])', {
+  // The draw buttons enable only after the MapLibre load event + terra-draw
+  // start — they are the editor's own readiness signal.
+  await page.waitForSelector('button:has-text("Draw new lot"):not([disabled])', {
     timeout: 30_000,
   });
   await page
@@ -143,7 +145,11 @@ describe("admin parking-zone editor (MapLibre + terra-draw)", () => {
   it("renders the editor shell with the zone list", async () => {
     await page.goto(BASE_URL + "/admin/map", { waitUntil: "load" });
     await page.waitForSelector("text=" + ZONE_NAME, { timeout: 15_000 });
-    expect(await page.locator('button:has-text("Draw new zone")').count()).toBe(1);
+    // Two draw buttons, one per geometry kind: a lot is an area you outline, a
+    // street is a line you trace down the middle (they produce `polygon` vs
+    // `streetPaths`, which the public map renders completely differently).
+    expect(await page.locator('button:has-text("Draw new lot")').count()).toBe(1);
+    expect(await page.locator('button:has-text("Draw new street line")').count()).toBe(1);
     // No Leaflet/geoman remnants in the served page.
     const html = await page.content();
     expect(html).not.toContain("tile.openstreetmap.org");
@@ -243,7 +249,9 @@ describe("admin parking-zone editor (MapLibre + terra-draw)", () => {
       return { x0: w * 0.1, y0: h * 0.15 }; // fall back to the corner
     }, { w: mb.width, h: mb.height });
 
-    await page.click('button:has-text("Draw new zone")');
+    // "Draw new lot" since the street-line mode landed — the two draw buttons
+    // are deliberately distinct shapes, not one mode behind a toggle.
+    await page.click('button:has-text("Draw new lot")');
     const at = (dx: number, dy: number) =>
       [mb.x + region.x0 + dx, mb.y + region.y0 + dy] as const;
     const corners = [at(0, 0), at(110, 10), at(70, 90)];
@@ -277,6 +285,82 @@ describe("admin parking-zone editor (MapLibre + terra-draw)", () => {
       expect(await getZone(newId)).toBeUndefined();
     } finally {
       // Never strand a test zone in the shared per-run DB for later suites.
+      if (await getZone(newId)) {
+        await page.evaluate(
+          (id) => fetch(`/api/admin/parking?id=${encodeURIComponent(id)}`, { method: "DELETE" }),
+          newId,
+        );
+      }
+    }
+  });
+
+  it("draws a street CENTRE LINE and saves it as streetPaths, not a polygon", async (ctx) => {
+    if (!tilesAvailable) return ctx.skip();
+    await openEditor();
+    const map = page.locator('[aria-label="Editable map of Kingston parking zones"]');
+    const mb = (await map.boundingBox())!;
+
+    await page.click('button:has-text("Draw new street line")');
+    // Pacing as above: the terra-draw adapter discriminates double-clicks, so
+    // back-to-back synthetic clicks get partially swallowed.
+    const pts = [
+      [mb.x + mb.width * 0.34, mb.y + mb.height * 0.44],
+      [mb.x + mb.width * 0.48, mb.y + mb.height * 0.47],
+      [mb.x + mb.width * 0.6, mb.y + mb.height * 0.52],
+    ] as const;
+    for (const [x, y] of pts) {
+      await page.mouse.click(x, y);
+      await page.waitForTimeout(400);
+    }
+    await page.mouse.click(...pts[2]); // click the last point again to finish
+
+    try {
+      await page.waitForSelector("text=Line drawn", { timeout: 8_000 });
+    } catch (err) {
+      await page.screenshot({ path: "/tmp/e32-street-fail.png" });
+      throw err;
+    }
+    const idText = await page.locator("p:has-text('Editing') span").first().textContent();
+    const newId = idText?.trim() ?? "";
+    // A distinct id prefix from lots, so the sidebar and the audit log both
+    // read as what they are.
+    expect(newId.startsWith("street-")).toBe(true);
+
+    try {
+      // The curb control is street-only, so its presence proves the new zone
+      // really carries street geometry rather than a degenerate polygon.
+      const curb = page.locator("select").filter({ hasText: "Unknown" }).first();
+      expect(await curb.count()).toBe(1);
+      await curb.selectOption("east");
+
+      await page.click('button:has-text("Save zone")');
+      await page.waitForSelector("text=Saved — live on /parking", { timeout: 10_000 });
+
+      const saved = await getZone(newId);
+      expect(saved?.streetPaths?.length).toBe(1);
+      expect(saved?.streetPaths?.[0].length).toBe(3);
+      expect(saved?.curb).toBe("east");
+      // The public map branches on geometry kind — a stray polygon here would
+      // render the street as a filled blob instead of curb strokes.
+      expect(saved?.polygon).toBeUndefined();
+
+      // An UNRELATED later edit must not drop the line. There is no seed row
+      // behind a drawn street, so withSeedStreetGeometry cannot rescue a
+      // whitelist omission the way it does for the seeded ones.
+      //
+      // A real edit is required, not a second click: Save is disabled until the
+      // draft is dirty, so clicking twice would prove nothing.
+      // getByLabel, not input[type="text"]: the field renders a bare <input>
+      // with no type attribute, so that CSS selector matches nothing.
+      await page.getByLabel("Name", { exact: true }).fill("Renamed street");
+      await page.click('button:has-text("Save zone")');
+      await page.waitForSelector("text=Saved — live on /parking", { timeout: 10_000 });
+      const after = await getZone(newId);
+      expect(after?.name).toBe("Renamed street");
+      expect(after?.streetPaths, "the drawn line must survive an unrelated save").toEqual(
+        saved?.streetPaths,
+      );
+    } finally {
       if (await getZone(newId)) {
         await page.evaluate(
           (id) => fetch(`/api/admin/parking?id=${encodeURIComponent(id)}`, { method: "DELETE" }),
