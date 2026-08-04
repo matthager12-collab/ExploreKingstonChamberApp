@@ -56,8 +56,14 @@ export default async function ParkingPage() {
         title="The map"
         subtitle={copyText(copy, "parking.map.subtitle")}
       >
+        {/* Opens on aerial imagery (owner, 2026-08-03): the questions this map
+            answers — which row is the free one, where the lot edge actually is,
+            which stalls are angled — are questions about paint on the ground,
+            and only a photograph shows those. The switch back to the vector map
+            is always one tap away, and matters: imagery does not render offline
+            in the PWA, and street names read better on the vector base. */}
         {parkingMap ? (
-          <FeatureMap resolved={parkingMap} height="500px" />
+          <FeatureMap resolved={parkingMap} height="500px" basemap="satellite" basemapToggle />
         ) : (
           <Card>
             <p className="text-sm text-ink-soft">Parking map unavailable right now.</p>
@@ -107,6 +113,33 @@ export default async function ParkingPage() {
                     {parkingRuleLabel(z.rule)}
                     {z.summary ? ` — ${z.summary}` : ""}
                   </p>
+                  {/* The map popup shows one photo (it has no room for more);
+                      the full set lives here, where a visitor can actually look
+                      at them — and where they print and survive with images
+                      off, because the alt text is real. */}
+                  {z.photos && z.photos.length > 0 && (
+                    <ul className="mt-2 flex flex-wrap gap-2">
+                      {z.photos.map((p) => (
+                        <li key={p.name}>
+                          {/* eslint-disable-next-line @next/next/no-img-element --
+                              the media library stores no intrinsic dimensions,
+                              and next/image needs width/height for a local src.
+                              Same call as listing-photo.tsx and the admin grid. */}
+                          <img
+                            src={p.src}
+                            alt={p.alt}
+                            loading="lazy"
+                            className="h-24 w-32 rounded-lg border border-sand object-cover"
+                          />
+                          {p.credit && (
+                            <span className="mt-0.5 block text-xs text-ink-soft">
+                              Photo: {p.credit}
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               ))}
             </ul>

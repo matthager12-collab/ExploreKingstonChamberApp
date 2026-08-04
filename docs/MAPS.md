@@ -212,6 +212,21 @@ Rendering details worth knowing:
 - All popup text is HTML-escaped (`esc()`); parking payment links and feature
   links open in a new tab with `rel="noopener noreferrer"`.
 
+#### Overlay contrast over imagery
+
+The ADR-0007 overlay palette is **unchanged** by the satellite work — it is
+still the authority on every hue. What changes over imagery is the *treatment*,
+in `applyOverlayContrast()`:
+
+- every coloured line/outline gains a **white casing** layer (`fm-*-casing`),
+  which ships with the overlay always and simply sits at `line-opacity: 0` on
+  the vector base;
+- area fills get **weaker**, not stronger (`IMAGERY_FILL_OPACITY`, ~45% of the
+  vector value). This direction is the whole point: on a photograph the content
+  *under* the fill is the information, so identity has to move from the fill to
+  the boundary. Raising it instead — the first attempt — turned the Port lot
+  into a flat purple rectangle with the parked cars invisible.
+
 ### The `/map` public page
 
 `src/app/(site)/map/page.tsx` lists only **published** views and hands them to
@@ -416,6 +431,46 @@ snapshot + pin and persists; `/parking` reflects it within a minute
 `/api/admin/parking` — see [ARCHITECTURE.md](ARCHITECTURE.md); it is not part of
 the `map-features`/`map-views` routes.)
 
+### Zone photos — the shared media library
+
+`MapZone.images` holds **shared media-library names** (`<sha1>.<ext>`, see
+`src/lib/media/refs.ts`) — not a parking-specific upload path. The library
+already content-addresses the bytes, strips EXIF (a phone photo of a lot carries
+GPS), and keeps alt text and credit beside the image, which is exactly what a
+popup needs. Admins pick them in `/admin/map` via the shared
+`<PhotoPicker>` (`src/components/admin/photo-picker.tsx`); upload happens under
+`/admin/media`.
+
+`resolve.ts` turns the names into `{src, alt, credit}` **server-side**
+(`src/lib/map/parking-photos.ts`), because the map popup is built as an HTML
+string in `feature-map.tsx` and cannot reach the media store. A name the library
+no longer holds is **dropped**, not rendered — the restore case, where a broken
+image inside a popup would be worse than one fewer photo. The **map popup shows
+`photos[0]` only** (a 230px box anchored to a pin); the full set renders in the
+page's "Every lot, in words" list, which has the room.
+
+`resolveParkingPhotoAlt()` owns the one product decision here: what an
+undescribed photo announces. It currently falls back to the zone's name — see
+the comment there for the alternatives and why. `<PhotoPicker>` flags an
+undescribed photo, which is the only thing that gets the gap fixed.
+
+> ⚠️ `POST /api/admin/parking` rebuilds the zone from a **field whitelist**, so
+> `images` had to be added there too — a field missing from that list is
+> silently wiped by any later save, including one that only dragged a pin.
+> `tests/server/admin-parking-photos.test.ts` pins the round-trip, the same way
+> the curb suite does (see [PARKING-PAY-LINKS.md](PARKING-PAY-LINKS.md) §2).
+
+### Publishing an admin edit
+
+`POST`/`DELETE /api/admin/parking` call `revalidatePath("/parking")` after a
+successful write, so a rate fix, a dragged footprint or a newly attached photo is
+on the public page on the next request rather than up to `revalidate = 60`
+later. Only `/parking` needs it: `/kiosk/map` and `/kiosk/parking` are dynamic,
+and the public `/map` fetches its views client-side from the dynamic
+`/api/map/[viewId]`. A REJECTED save deliberately does not revalidate — a
+validation error must not cost the public site its cached render.
+`tests/server/admin-parking-revalidate.test.ts` asserts all three.
+
 ### How `/parking` renders
 
 `src/app/(site)/parking/page.tsx` calls `resolveMapView("parking-cash")` server-side
@@ -492,6 +547,22 @@ Facts worth knowing:
   `public/fonts` (Noto Sans, OFL). No third-party requests, no API keys. The
   PMTiles build + refresh runbook is in
   [OPERATIONS.md](OPERATIONS.md) ("Basemap vector tiles").
+- **One third-party layer, on one page** ([ADR-0006 amendment 1](adr/ADR-0006-self-hosted-vector-basemap.md)).
+  The style also carries an **Esri World Imagery** raster source, shipped
+  `visibility: "none"` — inert, and MapLibre fetches no tiles for a hidden
+  layer, so every other map stays fully self-hosted. `/parking` alone opens on
+  it (`<FeatureMap basemap="satellite" basemapToggle />`) because reading a lot
+  means reading painted stalls. `applyBasemapMode(map, mode)` in `basemap.ts` is
+  the only switch: it flips the raster layer, hides the vector SURFACE layers
+  (`VECTOR_SURFACE_LAYERS`), and repaints the three street-name layers
+  white-on-dark. Street names stay ON — the one thing an aerial cannot give you.
+  Three things there are load-bearing and documented in the amendment: the
+  source caps at **z19** (Esri serves a grey placeholder at z20 here, as a 200),
+  the mode is applied on **`styledata` not `load`** (so an R2 tile-proxy 502
+  cannot blank a page whose imagery is fine), and imagery **never works
+  offline** — `<FeatureMap>` falls back to the vector base and disables the
+  Satellite option when it is built with the network already gone, which is what
+  keeps the Phase 7 offline promise intact.
 - **No POI icons, structurally.** The style has no sprite, no `icon-image`,
   and no `pois` source-layer, so no church symbol (or any POI icon) can ever
   render — the guarantee is asserted by `src/lib/map/__tests__/basemap.test.ts`.
@@ -538,6 +609,12 @@ Facts worth knowing:
   ("no ATM at the dock; nearest cash machines up in downtown Kingston"), not on
   a map. (`ParkingArea` and the `parkingAreas` flat list are already gone —
   retired by the E31 phase-6 curb-model work.)
+- **The admin photo picker exists twice.** `src/components/admin/photo-picker.tsx`
+  is the shared one (parking zones); `record-editor.tsx` still has an inline
+  copy for listing photos. Left alone deliberately — the picker landed days
+  before launch and listing photos are live in production, so migrating them is
+  a post-launch refactor with a real regression surface and no visitor-visible
+  gain. `photo-picker.tsx` is the destination when it happens.
 - **Two divergent parking color maps.** `feature-map.tsx` colors built-in
   parking *zones* by `ParkingRule` (`free-2hr`, `paid`, …); CMS parking
   *features* color by `ParkingType` (`free`, `paid`, …). They're kept visually

@@ -94,6 +94,19 @@ export interface MapZone {
   streetPaths?: [number, number][][];
   /** See CurbSide. SEED VALUES ONLY WHERE A SOURCE NAMES THE SIDE. */
   curb?: CurbSide;
+  /**
+   * Photos of the lot, as SHARED MEDIA LIBRARY names ("<sha1>.jpg" — see
+   * src/lib/media/refs.ts), newest-first order chosen by the admin.
+   *
+   * The library rather than a parking-specific upload path, deliberately: it
+   * already content-addresses the bytes, strips EXIF (a phone photo of a lot
+   * carries GPS), and holds the alt text and credit next to the image, which is
+   * exactly what a popup needs and what a bare filename cannot give. A photo of
+   * the pay station reused on a listing page is then genuinely one object.
+   *
+   * Seed zones ship without photos: the Chamber takes these on the ground.
+   */
+  images?: string[];
 }
 
 export const RULE_LABELS: Record<ParkingRule, string> = {

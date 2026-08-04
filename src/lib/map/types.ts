@@ -11,6 +11,7 @@
 
 import type { CostValue } from "@/lib/cost";
 import type { CurbSide } from "@/lib/data/parking";
+import type { ParkingPhoto } from "@/lib/map/parking-photos";
 
 export type FeatureKind = "marker" | "line" | "trail" | "area";
 
@@ -303,6 +304,10 @@ export interface ResolvedMapView {
       streetPaths?: [number, number][][];
       /** Curb side the rule applies to (E31 phase 6); unset = side unknown. */
       curb?: CurbSide;
+      /** Library photos of the lot, already resolved to src + alt text
+       *  server-side (see src/lib/map/parking-photos.ts). Absent when the zone
+       *  has none — the common case for seed zones. */
+      photos?: ParkingPhoto[];
     }[];
     streets?: boolean; // client fetches /geo/street-parking.json itself when true
   };

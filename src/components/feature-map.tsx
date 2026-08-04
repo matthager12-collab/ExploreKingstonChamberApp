@@ -34,7 +34,8 @@ import {
   type LabelShow,
   type LabelDir,
 } from "@/lib/map/types";
-import { mapStyle } from "@/lib/map/basemap";
+import { applyBasemapMode, mapStyle, type BasemapMode } from "@/lib/map/basemap";
+import type { ParkingPhoto } from "@/lib/map/parking-photos";
 import { basemapArchiveUrl, loadMapLibre } from "@/lib/map/maplibre";
 import { fixMarkerA11y } from "@/lib/map/marker-a11y";
 import { MapTouchLockOverlay, useMapTouchLock } from "@/components/map-touch-lock";
@@ -175,6 +176,76 @@ const BOUNDARY_COLOR = "#324A6D";
 const LINE_COLOR = "#2a7f8a";
 const TRAIL_COLOR = "#4a7c59";
 const AREA_COLOR = "#2a7f8a";
+
+/* ---- overlay contrast on aerial imagery -------------------------------- */
+//
+// The ADR-0007 overlay palette is a set of DARK, saturated hues, chosen to sit
+// on the light desaturated vector base. Dropped straight onto an aerial photo
+// they lose their meaning: a purple paid-lot outline over dark asphalt is a
+// smudge, and WCAG 1.4.11's 3:1 for graphical objects cannot be promised at all
+// against arbitrary photographic pixels.
+//
+// The fix is the cartographic standard rather than a colour change: keep every
+// hue exactly as the ADR specifies and put a white CASING under it, so each
+// stroke carries its own light backdrop wherever it lands. Casing layers ship
+// with the overlay always and are simply held at opacity 0 on the vector base —
+// cheaper and far less fragile than adding and removing layers on every toggle.
+
+const CASING_COLOR = "#ffffff";
+
+/** Casing layers, each added immediately BELOW the coloured layer it backs. */
+const CASING_LAYERS = [
+  "fm-fills-casing",
+  "fm-curbs-casing",
+  "fm-lines-casing",
+  "fm-dashed-casing",
+] as const;
+
+const BASE_FILL_OPACITY: ExpressionSpecification = ["coalesce", ["get", "opacity"], 0.22];
+
+/**
+ * The same per-feature opacity, roughly HALVED for imagery — and the direction
+ * is the whole point, so it is worth stating plainly: an area fill gets
+ * *weaker* over satellite, not stronger.
+ *
+ * On the vector base a translucent fill is the cheapest way to say "this area
+ * means X", because there is nothing underneath worth preserving. Over aerial
+ * photography the content beneath the fill IS the information — the painted
+ * stalls, the angled rows, where the asphalt actually ends — so identity has to
+ * move off the fill and onto the white-cased boundary above. Measured at the
+ * first cut: a 0.5 fill turned the Port lot into a flat purple rectangle with
+ * the cars invisible, which is the exact opposite of why /parking opens on
+ * imagery at all.
+ *
+ * The floor keeps a faint area from disappearing entirely; the multiplier keeps
+ * a deliberately-heavier fill proportionally heavier.
+ */
+const IMAGERY_FILL_OPACITY: ExpressionSpecification = [
+  "max",
+  0.12,
+  ["*", ["coalesce", ["get", "opacity"], 0.22], 0.45],
+];
+
+/** Re-tune the app's own overlay for the base underneath it. Guarded per layer:
+ *  a view with no areas has no `fm-fills`, and that must be a no-op. */
+function applyOverlayContrast(map: MapLibreMap, mode: BasemapMode): void {
+  const satellite = mode === "satellite";
+  for (const id of CASING_LAYERS) {
+    if (map.getLayer(id)) map.setPaintProperty(id, "line-opacity", satellite ? 0.9 : 0);
+  }
+  if (map.getLayer("fm-fills")) {
+    map.setPaintProperty(
+      "fm-fills",
+      "fill-opacity",
+      satellite ? IMAGERY_FILL_OPACITY : BASE_FILL_OPACITY,
+    );
+  }
+  if (map.getLayer("fm-circles")) {
+    // The circles already carry a white stroke on the vector base; over
+    // imagery it has to do real separation work, so it thickens.
+    map.setPaintProperty("fm-circles", "circle-stroke-width", satellite ? 3 : 2);
+  }
+}
 
 interface StreetSegment {
   name: string;
@@ -345,6 +416,25 @@ function parkingBlockHtml(p: NonNullable<MapFeature["parking"]>): string {
   return rows.join("");
 }
 
+/**
+ * Photos for a built-in parking-zone popup. Escapes all user text.
+ *
+ * ONE photo, not the whole set: a map popup is a 230px box anchored to a pin,
+ * and a stack of images inside it pushes the rule — the thing the visitor
+ * tapped for — off the bottom of the screen on a phone. The rest of a zone's
+ * photos are shown in the page's "Every lot, in words" list, which has the room
+ * for them. `alt` is resolved server-side (src/lib/map/parking-photos.ts), and
+ * carried through to the img so a popup is not a hole in the a11y story.
+ */
+function zonePhotosHtml(photos: ParkingPhoto[] | undefined): string {
+  const first = photos?.[0];
+  if (!first) return "";
+  const credit = first.credit
+    ? `<p style="margin:2px 0 0;font-size:0.68rem;color:#6b7683;">Photo: ${esc(first.credit)}</p>`
+    : "";
+  return `<img src="${esc(first.src)}" alt="${esc(first.alt)}" loading="lazy" style="display:block;width:100%;max-width:210px;border-radius:6px;margin-top:6px;" />${credit}`;
+}
+
 /** Shared popup body for a custom feature. Escapes all user text. */
 function featurePopupHtml(f: MapFeature): string {
   const parts: string[] = [
@@ -422,6 +512,8 @@ export function FeatureMap({
   resolved,
   height = "460px",
   className = "",
+  basemap = "map",
+  basemapToggle = false,
 }: {
   /** View slug to fetch client-side from /api/map/<view>. */
   view?: string;
@@ -434,6 +526,14 @@ export function FeatureMap({
   resolved?: ResolvedMapView | null;
   height?: string;
   className?: string;
+  /**
+   * Which base layer to open on. Defaults to the self-hosted vector map, so
+   * every existing caller is unchanged and makes no third-party request.
+   * "satellite" is /parking's default — see SATELLITE_TILE_URL in basemap.ts.
+   */
+  basemap?: BasemapMode;
+  /** Show the on-map Map/Satellite switch. */
+  basemapToggle?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -454,6 +554,50 @@ export function FeatureMap({
   // the hook's callbacks are stable, the object it returns is not, so naming
   // the callback keeps the dependency honest without re-running on every render.
   const { locked: touchLocked, applyTo: applyTouchLock, unlock: unlockTouch } = useMapTouchLock();
+  // The visitor's PREFERENCE. What actually renders is `effectiveMode` below,
+  // which can override it when there is no network to fetch imagery over.
+  const [mode, setMode] = useState<BasemapMode>(basemap);
+  /**
+   * False when the map was built with the network already gone.
+   *
+   * Satellite tiles are third-party, and public/sw.js only ever intercepts
+   * SAME-ORIGIN requests — so no service worker can cache them and imagery
+   * simply cannot paint offline. The vector base can: E31 Phase 7 precaches a
+   * downtown slice for exactly this moment (a visitor who loses signal at the
+   * ferry dock and still needs the parking map). Falling back to it is what
+   * keeps that promise intact now that /parking opens on satellite.
+   *
+   * Decided ONCE at init, matching basemapArchiveUrl()'s documented rule and
+   * for the same reason: swapping a base layer mid-session re-fetches the world
+   * for an edge nobody is standing in. A session that started online keeps the
+   * imagery option even if the network drops (already-loaded tiles stay up);
+   * a reload is what re-evaluates.
+   */
+  const [imageryAvailable, setImageryAvailable] = useState(true);
+  const effectiveMode: BasemapMode = imageryAvailable ? mode : "map";
+  // The build effect below must NOT re-run on a toggle — rebuilding the map
+  // would drop every pin and re-fit the view just to change the base layer — so
+  // it reads the current mode through a ref instead of taking it as a dependency.
+  const modeRef = useRef<BasemapMode>(basemap);
+
+  // Follow the prop if a parent changes it.
+  useEffect(() => {
+    setMode(basemap);
+  }, [basemap]);
+
+  // Apply a mode change to the LIVE map. Before the style has loaded there are
+  // no layers to flip, and draw() applies modeRef.current once there are.
+  useEffect(() => {
+    modeRef.current = effectiveMode;
+    const map = mapRef.current;
+    if (!map) return;
+    // Deliberately NOT gated on isStyleLoaded(): that returns false while ANY
+    // source is still unloaded, so a stalled or failing vector archive would
+    // make the toggle silently do nothing. Both helpers guard every layer
+    // lookup themselves, which is the precondition that actually matters.
+    applyBasemapMode(map, effectiveMode);
+    applyOverlayContrast(map, effectiveMode);
+  }, [effectiveMode]);
 
   // When a server-resolved payload is supplied, render it directly (no fetch).
   useEffect(() => {
@@ -502,6 +646,14 @@ export function FeatureMap({
     };
 
     const init = async () => {
+      // Same single check, at the same moment, as basemapArchiveUrl() — which
+      // is already choosing the precached offline slice on this exact signal.
+      // Written to the ref as well as to state so draw() cannot race a render
+      // and light up an imagery layer that has no network to fetch from.
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        modeRef.current = "map";
+        setImageryAvailable(false);
+      }
       const maplibregl = await loadMapLibre();
       if (cancelled || !containerRef.current || mapRef.current) return;
 
@@ -513,6 +665,25 @@ export function FeatureMap({
         scrollZoom: false, // don't hijack page scroll; pinch/± still zoom
       });
       mapRef.current = map;
+
+      // Bring the chosen base up as soon as the STYLE has parsed, rather than
+      // waiting for draw() — which runs on `load`, and `load` waits for EVERY
+      // source to finish. The vector archive (R2, via our proxy) and the
+      // imagery (Esri) are independent services with independent failure
+      // modes, and this app has already had one R2 outage that 502'd the tile
+      // proxy. Without this, that outage would blank /parking completely even
+      // though the imagery it defaults to was serving fine.
+      //
+      // `on`, not `once`: the style can re-parse, and both helpers are cheap
+      // no-ops when nothing changed (MapLibre's set*Property early-returns on
+      // an unchanged value). Overlay contrast still has to run again at the end
+      // of draw(), where the fm-* layers finally exist.
+      const applyBase = () => {
+        if (mapRef.current !== map) return;
+        applyBasemapMode(map, modeRef.current);
+        applyOverlayContrast(map, modeRef.current);
+      };
+      map.on("styledata", applyBase);
       // MapLibre names every canvas region "Map"; two maps on one page then
       // fail axe's landmark-unique (seen on /ferry and /line, which render the
       // vessel map and the SR-104 map together). Each map component sets its
@@ -795,6 +966,7 @@ export function FeatureMap({
           <p style="margin:0;font-weight:600;font-size:0.95rem;">${esc(z.name)}</p>
           <p style="margin:4px 0 0;">${esc(z.summary)}</p>
           ${curbRow}
+          ${zonePhotosHtml(z.photos)}
         </div>`;
 
         if (z.rule === "park-and-ride-24h") {
@@ -1002,7 +1174,10 @@ export function FeatureMap({
 
         if (fills.length) {
           addGeo("fm-fills", fills);
-          map.addLayer({ id: "fm-fills", type: "fill", source: "fm-fills", paint: { "fill-color": ["get", "color"], "fill-opacity": ["coalesce", ["get", "opacity"], 0.22] } });
+          map.addLayer({ id: "fm-fills", type: "fill", source: "fm-fills", paint: { "fill-color": ["get", "color"], "fill-opacity": BASE_FILL_OPACITY } });
+          // White casing under the outline — inert (opacity 0) on the vector
+          // base, lit by applyOverlayContrast() over imagery.
+          map.addLayer({ id: "fm-fills-casing", type: "line", source: "fm-fills", layout: { "line-join": "round" }, paint: { "line-color": CASING_COLOR, "line-width": 5, "line-opacity": 0 } });
           map.addLayer({ id: "fm-fills-outline", type: "line", source: "fm-fills", paint: { "line-color": ["get", "color"], "line-width": 2 } });
           wirePopup("fm-fills");
         }
@@ -1067,6 +1242,20 @@ export function FeatureMap({
             16, ["*", ["get", "offsetSign"], 4.5],
             18, ["*", ["get", "offsetSign"], 10],
           ];
+          // Curb casing: same offset expression, a little wider, so the white
+          // backing tracks the drawn curb exactly instead of drifting off it.
+          map.addLayer({
+            id: "fm-curbs-casing",
+            type: "line",
+            source: "fm-curbs",
+            layout: { "line-cap": "round", "line-join": "round" },
+            paint: {
+              "line-color": CASING_COLOR,
+              "line-width": ["interpolate", ["linear"], ["zoom"], 13, 5, 16, 7, 18, 9.5],
+              "line-opacity": 0,
+              "line-offset": curbOffset,
+            },
+          });
           map.addLayer({
             id: "fm-curbs",
             type: "line",
@@ -1096,11 +1285,17 @@ export function FeatureMap({
         }
         if (solidLines.length) {
           addGeo("fm-lines", solidLines);
+          map.addLayer({ id: "fm-lines-casing", type: "line", source: "fm-lines", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": CASING_COLOR, "line-width": ["+", ["coalesce", ["get", "width"], 4], 3], "line-opacity": 0 } });
           map.addLayer({ id: "fm-lines", type: "line", source: "fm-lines", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["get", "color"], "line-width": ["coalesce", ["get", "width"], 4], "line-opacity": ["coalesce", ["get", "opacity"], 0.85] } });
           wirePopup("fm-lines");
         }
         if (dashedLines.length) {
           addGeo("fm-dashed", dashedLines);
+          // Deliberately UNdashed: a solid white backing under coloured dashes
+          // is the classic cased-dash treatment and keeps the dash pattern
+          // readable over photography, where a dashed casing would just add
+          // more noise to noise.
+          map.addLayer({ id: "fm-dashed-casing", type: "line", source: "fm-dashed", layout: { "line-cap": "butt", "line-join": "round" }, paint: { "line-color": CASING_COLOR, "line-width": ["+", ["coalesce", ["get", "width"], 3], 3], "line-opacity": 0 } });
           map.addLayer({ id: "fm-dashed", type: "line", source: "fm-dashed", layout: { "line-cap": "butt", "line-join": "round" }, paint: { "line-color": ["get", "color"], "line-width": ["coalesce", ["get", "width"], 3], "line-opacity": ["coalesce", ["get", "opacity"], 0.7], "line-dasharray": [2, 3] } });
           wirePopup("fm-dashed");
         }
@@ -1134,6 +1329,11 @@ export function FeatureMap({
           const spanKm = distM(bounds.getWest(), bounds.getNorth(), bounds.getEast(), bounds.getSouth()) / 1000;
           if (spanKm <= 4) map.fitBounds(bounds, { padding: 32, maxZoom: 16, duration: 0 });
         }
+
+        // Base layer LAST, once every overlay layer exists — applyOverlayContrast
+        // walks the fm-* layers, so running it earlier would silently skip them.
+        applyBasemapMode(map, modeRef.current);
+        applyOverlayContrast(map, modeRef.current);
 
         // Labels: measure once, place at the fitted zoom, re-declutter on move.
         measureLabels();
@@ -1275,8 +1475,82 @@ export function FeatureMap({
         {status === "ready" && touchLocked && (
           <MapTouchLockOverlay onUnlock={unlockTouch} />
         )}
+        {/* Above the touch-lock overlay (z-450) on purpose: on a phone the lock
+            covers the whole canvas, and having to unlock the map before you can
+            change what it shows would be a trap. Switching the base layer is
+            not panning, so it does not need the map unlocked. */}
+        {status === "ready" && basemapToggle && (
+          <BasemapSwitch
+            mode={effectiveMode}
+            onChange={setMode}
+            imageryAvailable={imageryAvailable}
+          />
+        )}
       </div>
       {status === "ready" && legend.length > 0 && <MapLegend entries={legend} />}
+    </div>
+  );
+}
+
+/**
+ * The Map / Satellite switch.
+ *
+ * A radio GROUP, not a single toggle button: with two named options a screen
+ * reader announces both the choice and which one is active, where a lone
+ * "Satellite" button would leave "pressed or not?" to be inferred. Top-LEFT
+ * because MapLibre's zoom control owns top-right.
+ *
+ * Sized to the E14 floor (44px min target) and painted opaque — it sits over
+ * aerial photography half the time, so nothing here may depend on the map
+ * pixels behind it.
+ */
+function BasemapSwitch({
+  mode,
+  onChange,
+  imageryAvailable,
+}: {
+  mode: BasemapMode;
+  onChange: (m: BasemapMode) => void;
+  imageryAvailable: boolean;
+}) {
+  const options: { key: BasemapMode; label: string }[] = [
+    { key: "map", label: "Map" },
+    { key: "satellite", label: "Satellite" },
+  ];
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Base map style"
+      className="absolute left-3 top-3 z-[460] flex overflow-hidden rounded-full border border-sand bg-white shadow-md"
+    >
+      {options.map((o) => {
+        const active = mode === o.key;
+        // Offline, satellite is not a choice that can be honoured — say so on
+        // the control rather than letting a tap produce an empty grey map and
+        // leave the visitor wondering what they broke.
+        const unavailable = o.key === "satellite" && !imageryAvailable;
+        return (
+          <button
+            key={o.key}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            disabled={unavailable}
+            title={unavailable ? "Satellite view needs an internet connection" : undefined}
+            onClick={() => onChange(o.key)}
+            className={`min-h-[44px] px-4 text-sm font-semibold transition-colors ${
+              active
+                ? "bg-sound-deep text-white"
+                : unavailable
+                  ? "cursor-not-allowed bg-white text-ink-soft"
+                  : "bg-white text-ink hover:bg-shell"
+            }`}
+          >
+            {o.label}
+            {unavailable && <span className="sr-only"> (needs an internet connection)</span>}
+          </button>
+        );
+      })}
     </div>
   );
 }

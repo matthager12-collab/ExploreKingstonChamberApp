@@ -11,6 +11,7 @@
 
 import type { Metadata } from "next";
 import { getParkingZones } from "@/lib/stores/parking-store";
+import { getMediaItems } from "@/lib/stores/media-store";
 import { PageHeader, Section } from "@/components/ui";
 import { MapZoneEditor } from "./editor";
 
@@ -23,7 +24,7 @@ export const metadata: Metadata = {
 };
 
 export default async function AdminMapPage() {
-  const zones = await getParkingZones();
+  const [zones, mediaLibrary] = await Promise.all([getParkingZones(), getMediaItems()]);
 
   return (
     <>
@@ -36,7 +37,7 @@ export default async function AdminMapPage() {
         title="Zones"
         subtitle="Click a zone in the list (or on the map) to edit it. Drag the white corner handles to reshape, drag the pin to move the map label, or draw a brand-new zone."
       >
-        <MapZoneEditor initialZones={zones} />
+        <MapZoneEditor initialZones={zones} mediaLibrary={mediaLibrary} />
       </Section>
       {/* E09: the zone editor is a frozen monolith, so its change history
           lives in the audit browser — pick a zone there to see and restore

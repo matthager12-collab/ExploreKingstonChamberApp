@@ -8,8 +8,11 @@
 //
 // 401 signed out · 403 signed in but not admin. The /admin layout gates the
 // editor UI; these handlers re-check because API routes bypass layouts.
+//
+// Every write revalidates /parking — see revalidateParkingSurfaces() below.
 
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { getSessionUser, requireAdmin } from "@/lib/auth";
 import { CURB_SIDES, type CurbSide, type MapZone, type ParkingRule } from "@/lib/data/parking";
 import {
@@ -19,6 +22,7 @@ import {
   saveParkingZone,
 } from "@/lib/stores/parking-store";
 import { RecordValidationError } from "@/lib/db/store-schemas";
+import { isMediaName } from "@/lib/media/refs";
 
 const RULES: ParkingRule[] = [
   "free-2hr",
@@ -31,6 +35,30 @@ const RULES: ParkingRule[] = [
 ];
 const OVERNIGHT: MapZone["overnight"][] = ["yes", "no", "confirm-first"];
 const CONFIDENCE: MapZone["confidence"][] = ["verified", "probable", "unverified"];
+
+/**
+ * Push a zone write to the public page instead of making the Chamber wait out
+ * an ISR window.
+ *
+ * `/parking` is prerendered with `revalidate = 60`, so without this an admin who
+ * fixes a rate, drags a lot onto its real footprint, or attaches a photo sees no
+ * change for up to a minute — and the natural reading of that is "the save
+ * didn't work", which invites a second save. This matches the principle already
+ * applied to approvals, takedowns and admin saves elsewhere, and to
+ * /api/admin/kiosk.
+ *
+ * ONLY `/parking`. The other surfaces that read parking zones need nothing:
+ * `/kiosk/map` and `/kiosk/parking` are dynamic (rendered per request), and the
+ * public `/map` is a shell whose views are fetched client-side from the dynamic
+ * `/api/map/[viewId]`. Revalidating those would be cargo cult.
+ *
+ * Deliberately NOT inside saveParkingZone(): the store is imported by scripts
+ * and the importer, where `revalidatePath` is out of a request scope. This is
+ * the request layer's job.
+ */
+function revalidateParkingSurfaces(): void {
+  revalidatePath("/parking");
+}
 
 // Greater Kingston, WA — anything outside this box is a data-entry mistake.
 const LAT_MIN = 47.5;
@@ -156,6 +184,21 @@ export async function POST(request: NextRequest) {
     curb = body.curb as CurbSide;
   }
 
+  // Photos: shared-library names only. isMediaName() is the same gate the media
+  // routes use, so a hand-rolled POST cannot smuggle a path ("../secrets") into
+  // a record that later becomes an <img src> on a public page.
+  let images: string[] | undefined;
+  if (body.images != null) {
+    if (!Array.isArray(body.images) || !body.images.every(isMediaName)) {
+      return NextResponse.json(
+        { error: "images must be an array of media library names" },
+        { status: 400 },
+      );
+    }
+    const unique = [...new Set(body.images as string[])];
+    if (unique.length) images = unique;
+  }
+
   const summary = typeof body.summary === "string" ? body.summary.trim() : "";
   const details = typeof body.details === "string" ? body.details.trim() : "";
   const sourceUrl =
@@ -181,6 +224,7 @@ export async function POST(request: NextRequest) {
     ...(curb ? { curb } : {}),
     ...(sourceUrl ? { sourceUrl } : {}),
     ...(sourceNote ? { sourceNote } : {}),
+    ...(images ? { images } : {}),
   };
 
   try {
@@ -191,6 +235,9 @@ export async function POST(request: NextRequest) {
     }
     throw err;
   }
+  // After the write, and only on success: a rejected save must not drop the
+  // cached page and make the public site pay for a validation error.
+  revalidateParkingSurfaces();
   return NextResponse.json({ ok: true, zone });
 }
 
@@ -214,5 +261,8 @@ export async function DELETE(request: NextRequest) {
     }
     throw err;
   }
+  // A takedown is the case where the delay is least acceptable: the zone was
+  // removed because it is WRONG, and a stale page keeps publishing it.
+  revalidateParkingSurfaces();
   return NextResponse.json({ ok: true });
 }

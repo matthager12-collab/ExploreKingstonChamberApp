@@ -5,7 +5,11 @@
 // admin) now renders the self-hosted vector base below, and the legacy OSM
 // raster config + Leaflet are gone from the tree.
 
-import type { ExpressionSpecification, StyleSpecification } from "maplibre-gl";
+import type {
+  ExpressionSpecification,
+  Map as MapLibreMap,
+  StyleSpecification,
+} from "maplibre-gl";
 
 import streetAbbrevs from "./street-abbrevs.json";
 
@@ -66,6 +70,89 @@ function streetTextField(): ExpressionSpecification {
 export const VECTOR_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · <a href="https://protomaps.com">Protomaps</a>';
 
+// --- Satellite imagery (the ONE third-party layer — ADR-0006 amendment 1) ----
+
+/**
+ * Which base layer a map is showing. "map" is the self-hosted vector style
+ * below; "satellite" swaps the vector SURFACES for aerial imagery and keeps
+ * the street-name labels on top of it.
+ */
+export type BasemapMode = "map" | "satellite";
+
+/**
+ * Esri World Imagery, keyless XYZ.
+ *
+ * This is the deliberate, single exception to ADR-0006's "no third-party tile
+ * requests" rule, amended by the owner on 2026-08-03 for /parking: reading a
+ * parking lot needs to show the ACTUAL painted stalls and lot edges, and no
+ * public-domain source has the resolution. Verified over the Port lot: ~30 cm,
+ * individual cars and stall stripes legible at z19. The public-domain
+ * alternatives were measured and rejected — USGS `USGSImageryOnly` caches only
+ * to ~1.6 m/px (a parking lot is one grey smear), and Kitsap County's 10 cm
+ * HXIP orthos are HxGN-licensed, so rehosting them needs county permission.
+ *
+ * What this costs, recorded so it is never a surprise:
+ *  - a visitor's IP reaches Esri whenever imagery is showing (nothing else
+ *    does — the vector base, glyphs and PMTiles all stay same-origin);
+ *  - it needs `img-src`/`connect-src` carve-outs in the CSP (next.config.ts);
+ *  - imagery does NOT work offline. The service worker only handles
+ *    same-origin requests, so these tiles fall through to the network and
+ *    simply do not paint when the PWA is offline. That is why "map" — not
+ *    satellite — remains the default everywhere except /parking.
+ */
+export const SATELLITE_TILE_URL =
+  "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+
+/**
+ * Plain TEXT, deliberately — no anchor.
+ *
+ * Esri's requirement is that the imagery be credited, which this does. Making
+ * "Esri" a link instead adds another node to the `link-in-text-block` axe
+ * violation MapLibre's own attribution bar already trips (links inside a run of
+ * text, distinguishable only by colour). /parking is outside the axe gate
+ * because its live data makes the scan flaky, so nothing would have caught it —
+ * measured by hand on 2026-08-03 and fixed by simply not adding the link.
+ */
+export const SATELLITE_ATTRIBUTION =
+  "Imagery &copy; Esri, Maxar, Earthstar Geographics, and the GIS User Community";
+
+/**
+ * Hard cap at 19, and it is load-bearing: Esri serves a grey
+ * "Map data not yet available" PLACEHOLDER at z20 over Kingston (verified
+ * 2026-08-03), not a 404. Declaring the source maxzoom makes MapLibre overzoom
+ * — upscale real z19 pixels — past this instead of painting that placeholder,
+ * which is what a visitor pinching into a lot will do constantly.
+ */
+export const SATELLITE_MAX_ZOOM = 19;
+
+export const SATELLITE_SOURCE_ID = "satellite";
+export const SATELLITE_LAYER_ID = "satellite";
+
+/**
+ * The vector SURFACE layers, hidden while imagery is showing — the aerial
+ * already shows land, water, buildings and road asphalt, and leaving them on
+ * would just paint flat colour over the photograph.
+ *
+ * Note what is NOT here: the three `road-*` SYMBOL layers. Street names are the
+ * one thing an aerial cannot give you, so they stay on and get repainted for a
+ * dark backdrop (see applyBasemapMode).
+ */
+export const VECTOR_SURFACE_LAYERS = [
+  "earth",
+  "landcover",
+  "landuse",
+  "water",
+  "buildings",
+  "roads",
+] as const;
+
+/** The street-name layers, in style order. Repainted per basemap mode. */
+export const ROAD_LABEL_LAYERS = [
+  "road-names-overview",
+  "road-labels-minor",
+  "road-labels",
+] as const;
+
 /**
  * "Evergreen & Sound" basemap palette. The STRUCTURE (named PALETTE constant,
  * derive-from-brand-tokens doctrine) is E31 phase 7; the VALUES are the
@@ -111,15 +198,70 @@ const PALETTE = {
   labelMain: "#3f4b45", // toward ink
 } as const;
 
+/** Street-label paint over imagery: white on a near-black halo — the hybrid-map
+ *  convention, and the only pairing that holds up over both a bright rooftop
+ *  and dark asphalt without knowing which pixel a label will land on. */
+const IMAGERY_LABEL = { color: "#ffffff", halo: "#0f161c" } as const;
+
+/**
+ * Switch a live map between the vector base and aerial imagery.
+ *
+ * A visibility flip, NOT `map.setStyle()`. setStyle tears down every source and
+ * layer added imperatively — which on our maps is all of them (pins, curb
+ * strokes, fills, member buildings) — so a toggle built on it would have to
+ * rebuild the entire overlay on every press. Shipping both bases inside one
+ * style and flipping `visibility` keeps the overlay untouched and makes the
+ * toggle instant.
+ *
+ * Every lookup is guarded: this runs against maps whose style may still be
+ * loading, and a missing layer must be a no-op rather than a throw.
+ */
+export function applyBasemapMode(map: MapLibreMap, mode: BasemapMode): void {
+  const satellite = mode === "satellite";
+
+  if (map.getLayer(SATELLITE_LAYER_ID)) {
+    map.setLayoutProperty(SATELLITE_LAYER_ID, "visibility", satellite ? "visible" : "none");
+  }
+  for (const id of VECTOR_SURFACE_LAYERS) {
+    if (map.getLayer(id)) {
+      map.setLayoutProperty(id, "visibility", satellite ? "none" : "visible");
+    }
+  }
+  for (const id of ROAD_LABEL_LAYERS) {
+    if (!map.getLayer(id)) continue;
+    const main = id === "road-labels";
+    map.setPaintProperty(
+      id,
+      "text-color",
+      satellite ? IMAGERY_LABEL.color : main ? PALETTE.labelMain : PALETTE.labelMinor,
+    );
+    map.setPaintProperty(
+      id,
+      "text-halo-color",
+      satellite ? IMAGERY_LABEL.halo : PALETTE.bg,
+    );
+    // A wider halo over imagery: the backdrop is photographic noise, not a
+    // flat fill, so the letterform needs more separation to stay readable.
+    map.setPaintProperty(id, "text-halo-width", satellite ? 1.9 : main ? 1.4 : 1.3);
+  }
+}
+
 /**
  * MapLibre base style for the self-hosted Kingston vector tiles (ADR-0006).
  *
- * Fully self-hosted: tiles come from our same-origin `/api/map/tiles` route
- * and street-name glyphs from `public/fonts` (Noto Sans, OFL — the Protomaps
- * basemaps glyph set). There is still NO sprite, NO icon, and NO `pois`
- * source-layer, which is why no church symbol (or any POI icon) can appear —
- * the only symbol layers are street-name TEXT from the roads layer (names
- * USPS-abbreviated through the generated match table, see streetTextField).
+ * Self-hosted by default: tiles come from our same-origin `/api/map/tiles`
+ * route and street-name glyphs from `public/fonts` (Noto Sans, OFL — the
+ * Protomaps basemaps glyph set). There is still NO sprite, NO icon, and NO
+ * `pois` source-layer, which is why no church symbol (or any POI icon) can
+ * appear — the only symbol layers are street-name TEXT from the roads layer
+ * (names USPS-abbreviated through the generated match table, see
+ * streetTextField).
+ *
+ * The style also CARRIES an Esri imagery raster layer, shipped
+ * `visibility: "none"` — see SATELLITE_TILE_URL for why that exception exists.
+ * It is inert until applyBasemapMode() turns it on, so a map that never asks
+ * for satellite makes no third-party request at all: MapLibre does not fetch
+ * tiles for a hidden layer.
  *
  * `pmtilesUrl` is the absolute `pmtiles://…` archive URL; callers build it from
  * `TILES_PMTILES_PATH` + `location.origin` (this module stays window-free —
@@ -131,9 +273,36 @@ export function mapStyle(pmtilesUrl: string): StyleSpecification {
     glyphs: `${new URL(pmtilesUrl).origin}/fonts/{fontstack}/{range}.pbf`,
     sources: {
       kingston: { type: "vector", url: `pmtiles://${pmtilesUrl}`, attribution: VECTOR_ATTRIBUTION },
+      [SATELLITE_SOURCE_ID]: {
+        type: "raster",
+        tiles: [SATELLITE_TILE_URL],
+        tileSize: 256,
+        maxzoom: SATELLITE_MAX_ZOOM,
+        attribution: SATELLITE_ATTRIBUTION,
+      },
     },
     layers: [
       { id: "bg", type: "background", paint: { "background-color": PALETTE.bg } },
+      {
+        // Bottom of the stack, directly over the paper background, so every
+        // overlay the app draws still lands on top of it. Hidden until asked
+        // for — MapLibre issues no tile requests for an invisible layer.
+        id: SATELLITE_LAYER_ID,
+        type: "raster",
+        source: SATELLITE_SOURCE_ID,
+        layout: { visibility: "none" },
+        paint: {
+          // Aerial photography is darker and more saturated than anything the
+          // ADR-0007 overlay palette was tuned against, and those overlay hues
+          // are DARK on purpose (they were designed to sit on a light base).
+          // Lifting the black point and pulling a little saturation out gives
+          // the parking colours somewhere to be seen without washing the
+          // imagery into a scrim — the stall stripes are the whole point.
+          "raster-brightness-min": 0.1,
+          "raster-saturation": -0.15,
+          "raster-contrast": -0.08,
+        },
+      },
       { id: "earth", type: "fill", source: "kingston", "source-layer": "earth", paint: { "fill-color": PALETTE.earth } },
       {
         id: "landcover", type: "fill", source: "kingston", "source-layer": "landcover",
