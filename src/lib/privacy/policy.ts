@@ -125,6 +125,18 @@ export const RETENTION_POLICY: RetentionRule[] = [
     ownedElsewhere: true,
   },
   {
+    store: "volunteer_signup",
+    description:
+      "Volunteer shift signups (a name and one contact — email or phone). The name and contact are removed 45 days after the shift date; the anonymous signup record is kept so organizations can see aggregate turnout.",
+    label: "45 days after the shift date, then anonymized",
+    windowDays: 45,
+    // Executed by the E20 volunteer sweep (/api/volunteer/reminders), not
+    // the generic purge job: the window is SHIFT-date-relative, which
+    // scripts/privacy-retention.ts's created-at arithmetic cannot model.
+    action: "self-pruning",
+    ownedElsewhere: true,
+  },
+  {
     store: "audit",
     description:
       "The append-only operations audit trail (who changed what, when — the Chamber's records floor). Never purged, never edited.",

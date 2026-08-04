@@ -203,6 +203,9 @@ export interface VolunteerNeed {
   slotsTotal: number;
   slotsFilled: number;
   description: string;
+  /** "HH:MM" 24-hour Pacific — the machine-readable start the free-text
+   *  timeRange never reliably gave us (E20; powers the T-2h reminder). */
+  startTime?: string;
 }
 
 export interface HuntStop {

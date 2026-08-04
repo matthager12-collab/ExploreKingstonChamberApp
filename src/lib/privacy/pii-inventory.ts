@@ -20,6 +20,10 @@
 
 import { getCharities } from "@/lib/stores/charity-store";
 import {
+  anonymizeSignupsByEmail,
+  findSignupsByEmail,
+} from "@/lib/db/volunteer-signups";
+import {
   anonymizeInvitesByEmail,
   anonymizeUser,
   findInvitesByEmail,
@@ -233,10 +237,48 @@ function noIdentifierStore(store: string, description: string, note: string): Pi
   };
 }
 
+// E20: volunteer signups — name + one contact string, retention-limited.
+const volunteerSignups: PiiStore = {
+  store: "volunteer_signup",
+  description:
+    "Volunteer shift signups: a name and ONE contact string (email or phone). " +
+    "Anonymized 45 days after the shift date by the volunteer sweep " +
+    "(state kept for aggregate no-show stats). Phone-contact rows have no " +
+    "email identifier, so this lookup cannot reach them — the sweep is what " +
+    "bounds their lifetime.",
+  hasEmailIdentifier: true,
+  async findByIdentifier(email) {
+    return findSignupsByEmail(email);
+  },
+  async exportRecords(email) {
+    const rows = await findSignupsByEmail(email);
+    return {
+      store: "volunteer_signup",
+      records: rows.map((r) => ({
+        id: r.id,
+        shiftId: r.shiftId,
+        name: r.name,
+        contact: r.contact,
+        state: r.state,
+        createdAt: r.createdAt,
+      })),
+    };
+  },
+  async deleteOrAnonymize(email, actor) {
+    const affected = await anonymizeSignupsByEmail(email, actor);
+    return {
+      store: "volunteer_signup",
+      affected,
+      note: "Anonymized (name/contact removed; the signup's slot accounting is preserved).",
+    };
+  },
+};
+
 export const PII_STORES: PiiStore[] = [
   users,
   invites,
   charities,
+  volunteerSignups,
   worklistContacts,
   noIdentifierStore(
     "hunt-submissions",
