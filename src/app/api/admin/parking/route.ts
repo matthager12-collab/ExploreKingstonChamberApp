@@ -28,6 +28,7 @@ const RULES: ParkingRule[] = [
   "free-2hr",
   "free-unrestricted",
   "paid",
+  "business-customer",
   "park-and-ride-24h",
   "prohibited",
   "load-zone",

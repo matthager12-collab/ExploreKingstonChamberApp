@@ -53,6 +53,7 @@ export type ParkingRule =
   | "free-2hr"
   | "free-unrestricted"
   | "paid"
+  | "business-customer"
   | "park-and-ride-24h"
   | "prohibited"
   | "load-zone"
@@ -113,11 +114,33 @@ export const RULE_LABELS: Record<ParkingRule, string> = {
   "free-2hr": "Free — 2-hour limit",
   "free-unrestricted": "Free — no time limit",
   paid: "Paid",
+  "business-customer": "Customer parking — while you're at the business",
   "park-and-ride-24h": "Park & ride — 24 hr max",
   prohibited: "No parking",
   "load-zone": "Loading / dropoff only",
   permit: "Permit holders only",
 };
+
+/**
+ * `business-customer` (owner request, 2026-08-04): a lot a business keeps for
+ * the people visiting it — park while you're in the shop, the café, the salon.
+ *
+ * It is deliberately NOT `free-unrestricted` with a note. In Kingston the whole
+ * problem these lots have is ferry riders leaving a car all day, and the
+ * distinction a visitor needs is not "does it cost money" but "am I the person
+ * this space is for". Giving it its own rule is what lets the map answer that
+ * in one colour, and what lets a business owner see their lot marked as theirs.
+ *
+ * The nearest neighbours, and why it is neither:
+ *   - `permit`  — you must hold something issued in advance; a visitor cannot
+ *     qualify on the spot. Here, walking into the shop IS qualifying.
+ *   - `free-2hr` — a public space with a clock on it. Here the limit is not
+ *     time, it is patronage: five minutes is fine if you are not a customer.
+ *
+ * Per-lot specifics (which businesses, any posted time cap, whether tow signs
+ * are up) belong in the zone's `summary`/`details`, exactly as the free 2-hour
+ * row carries "the Port says do NOT use it for ferry travel".
+ */
 
 const STUDY_NOTE = "Per 2015 county study — obey posted signs.";
 const STUDY_URL =
