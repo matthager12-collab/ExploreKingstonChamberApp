@@ -301,3 +301,44 @@ describe("mergeCalendar — containment pass (town-prefixed feed titles)", () =>
     expect(merged).toHaveLength(2);
   });
 });
+
+describe("venue vs address — the fields the two sides disagree about", () => {
+  // The real Concerts on the Cove pair, verbatim from production on
+  // 2026-08-07. Both are Mike Wallace Park; only one of them says so.
+  const START = "2026-08-09T00:00:00.000Z"; // 8/8 17:00 PDT
+
+  const curated = ev({
+    source: "in-app",
+    externalId: "cotc-abracadabra",
+    title: "Concerts on the Cove: Abracadabra Trip",
+    venue: "Mike Wallace Park",
+    address: "25864 Washington Blvd",
+    startIso: START,
+  });
+  const feed = ev({
+    source: "ams-ical",
+    externalId: "e.3508.1563873",
+    title: "Kingston's Concerts On The Cove - Abracadabra Trip",
+    // No separate address field upstream: the street IS the location.
+    venue: "25864 Washington Blvd. Kingston WA 98346",
+    startIso: START,
+  });
+
+  it("merges a pair whose only common ground is the street address", () => {
+    // Venue-to-venue, "mike wallace park" and "25864 washington blvd kingston
+    // wa 98346" share no token at all — which used to veto the merge AND hide
+    // the pair from the admin review list.
+    expect(mergeCalendar([curated, feed])).toHaveLength(1);
+  });
+
+  it("still keeps genuinely different places apart", () => {
+    const alehouse = ev({
+      source: "ams-ical",
+      externalId: "e.999",
+      title: "Kingston's Concerts On The Cove - Abracadabra Trip",
+      venue: "Kingston Ale House, 11225 NE State Hwy 104",
+      startIso: START,
+    });
+    expect(mergeCalendar([curated, alehouse])).toHaveLength(2);
+  });
+});
