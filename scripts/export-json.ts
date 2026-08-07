@@ -52,6 +52,7 @@ async function main(): Promise<void> {
   console.log(`quarantine        ${String(db.quarantine.length).padStart(6)}`);
   console.log(`analytics_event   ${String(db.analytics_event.length).padStart(6)}`);
   console.log(`survey_response   ${String(db.survey_response.length).padStart(6)}`);
+  console.log(`event_going       ${String((db.event_going ?? []).length).padStart(6)}`);
   console.log(`ferry_observation ${String(db.ferry_observation.length).padStart(6)}`);
 }
 

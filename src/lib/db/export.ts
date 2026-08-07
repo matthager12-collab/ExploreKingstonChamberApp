@@ -30,6 +30,7 @@ import {
   analyticsAreaRollup,
   analyticsEvent,
   audit,
+  eventGoing,
   feedbackResponse,
   ferryObservation,
   invites,
@@ -95,6 +96,14 @@ export type SurveyResponseRow = { ts: string; response: unknown };
  *  ids the admin delete control and any outstanding deletion request use. */
 export type FeedbackResponseRow = { id: number; ts: string; response: unknown };
 export type FerryObservationRow = { ts: string; obs: unknown };
+/** An "I'm going" tally. Keyed by (eventId, zip) rather than a surrogate id —
+ *  the table holds counts, not rows about people, so the pair IS the key. */
+export type EventGoingRow = {
+  eventId: string;
+  zip: string;
+  count: number;
+  updatedAt: string;
+};
 
 // --- Auth tables (E06) ------------------------------------------------------
 // Before E06 accounts lived in `record` under the "auth-users" store, so they
@@ -165,6 +174,9 @@ export type DbSection = {
   /** Page feedback. Optional on READ for the same reason as the two above:
    *  every bundle taken before this table existed must still restore. */
   feedback_response?: FeedbackResponseRow[];
+  /** "I'm going" tallies. Optional on READ for the same reason as the rest:
+   *  a bundle taken before this table existed must still restore. */
+  event_going?: EventGoingRow[];
 };
 
 export type RestoreCounts = {
@@ -174,6 +186,7 @@ export type RestoreCounts = {
   analytics_event: number;
   survey_response: number;
   feedback_response: number;
+  event_going: number;
   ferry_observation: number;
   orgs: number;
   users: number;
@@ -230,6 +243,10 @@ export async function serializeDb(): Promise<DbSection> {
     .select()
     .from(feedbackResponse)
     .orderBy(asc(feedbackResponse.id));
+  const goingRows = await db
+    .select()
+    .from(eventGoing)
+    .orderBy(asc(eventGoing.eventId), asc(eventGoing.zip));
   const ferryRows = await db
     .select()
     .from(ferryObservation)
@@ -273,6 +290,12 @@ export async function serializeDb(): Promise<DbSection> {
       id: r.id,
       ts: toIso(r.ts),
       response: r.response,
+    })),
+    event_going: goingRows.map((r) => ({
+      eventId: r.eventId,
+      zip: r.zip,
+      count: r.count,
+      updatedAt: toIso(r.updatedAt),
     })),
     ferry_observation: ferryRows.map((r) => ({ ts: toIso(r.ts), obs: r.obs })),
     analytics_area_rollup: rollupRows.map((r) => ({
@@ -387,6 +410,7 @@ export async function restoreDb(
   const legalHoldRows = section.legal_hold ?? [];
   // Bundles taken before the feedback tab shipped carry no section; empty = fine.
   const feedbackRows = section.feedback_response ?? [];
+  const goingRows = section.event_going ?? [];
 
   await db.transaction(async (tx) => {
     // Orgs FIRST: users.org_id and invites.org_id reference them.
@@ -507,6 +531,16 @@ export async function restoreDb(
         .insert(surveyResponse)
         .values(batch.map((r) => ({ ts: new Date(r.ts), response: r.response })));
     }
+    for (const batch of chunks(goingRows)) {
+      await tx.insert(eventGoing).values(
+        batch.map((r) => ({
+          eventId: r.eventId,
+          zip: r.zip,
+          count: r.count,
+          updatedAt: new Date(r.updatedAt),
+        })),
+      );
+    }
     for (const batch of chunks(feedbackRows)) {
       await tx
         .insert(feedbackResponse)
@@ -556,6 +590,7 @@ export async function restoreDb(
     analytics_event: section.analytics_event.length,
     survey_response: section.survey_response.length,
     feedback_response: feedbackRows.length,
+    event_going: goingRows.length,
     ferry_observation: section.ferry_observation.length,
     orgs: orgRows.length,
     users: userRows.length,

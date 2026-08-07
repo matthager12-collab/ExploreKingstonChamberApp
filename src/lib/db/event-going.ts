@@ -28,8 +28,16 @@ import { eventGoing } from "./schema";
  *  put a value in the LTAC column that no one can interpret. */
 export function normalizeZip(raw: unknown): string {
   if (typeof raw !== "string") return "";
-  const digits = raw.trim().slice(0, 5);
-  return /^\d{5}$/.test(digits) ? digits : "";
+  const trimmed = raw.trim();
+  if (/^\d{5}$/.test(trimmed)) return trimmed;
+  // ZIP+4 is a real thing a person may paste; the last four are finer than
+  // anything here needs, so keep the five and drop them.
+  const plusFour = /^(\d{5})-\d{4}$/.exec(trimmed);
+  if (plusFour) return plusFour[1];
+  // Everything else is refused WHOLE. Slicing first would turn "983461234"
+  // into "98346" — a real Kingston ZIP the visitor never typed, and the kind
+  // of wrong that looks right in a report.
+  return "";
 }
 
 /** Record one "I'm going" tap. Returns the event's new total. */
