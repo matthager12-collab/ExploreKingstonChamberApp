@@ -16,6 +16,7 @@ import { randomBytes } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { can, getOrg, getSessionUser } from "@/lib/auth";
 import { normalizedToEventItem } from "@/lib/events/normalize";
+import { isPresetRRule, MAX_SKIPPED_DATES } from "@/lib/events/recurrence";
 import { unifiedEventsSharingDate } from "@/lib/events/unified";
 import {
   deleteEvent,
@@ -152,6 +153,30 @@ export async function POST(request: NextRequest) {
       ? body.url.trim()
       : undefined;
 
+  // Repeat rule. VALIDATED here, not dropped like `url` above: silently
+  // discarding a repeat hands the owner one occurrence when they asked for a
+  // series, and nobody finds out until someone reads the calendar. A dropped
+  // link is a missing link; a dropped rule is a wrong calendar.
+  const rawRrule =
+    typeof body.rrule === "string" && body.rrule.trim()
+      ? body.rrule.trim().toUpperCase()
+      : "";
+  if (rawRrule && !isPresetRRule(rawRrule)) {
+    return NextResponse.json(
+      { error: "that repeat pattern isn't one this form can set" },
+      { status: 400 },
+    );
+  }
+  const rrule = rawRrule || undefined;
+  const exdateList = Array.isArray(body.exdates)
+    ? body.exdates
+        .filter((x): x is string => typeof x === "string" && Boolean(x.trim()))
+        .slice(0, MAX_SKIPPED_DATES)
+    : [];
+  // Skipped dates without a rule to subtract from are meaningless — drop them
+  // rather than storing a set that would revive if the series ever came back.
+  const exdates = rrule && exdateList.length > 0 ? exdateList : undefined;
+
   let event: EventItem;
   let storedStatus: "live" | "pending" | "other" | "none" = "none";
   if (typeof body.id === "string" && body.id) {
@@ -179,6 +204,8 @@ export async function POST(request: NextRequest) {
       organizer,
       url,
       ownerId,
+      rrule,
+      exdates,
     };
   } else {
     event = {
@@ -192,6 +219,8 @@ export async function POST(request: NextRequest) {
       organizer,
       url,
       ownerId,
+      rrule,
+      exdates,
     };
   }
 

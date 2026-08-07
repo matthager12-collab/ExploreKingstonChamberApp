@@ -49,6 +49,7 @@ export type WorklistAuditAction =
   | "worklist-update"
   | "worklist-claim"
   | "worklist-due"
+  | "worklist-escalate"
   | "worklist-resolve"
   | "worklist-dismiss";
 
@@ -412,6 +413,29 @@ export async function claimItem(
     ACTIVE_STATES,
     "worklist-claim",
     () => ({ assigneeUserId: userId, state: "in_progress" as WorklistState }),
+    meta,
+  );
+}
+
+/**
+ * Hand an unanswered assigned task back to the Chamber: clears the assignee
+ * and returns the item to `open`, so it appears in the unassigned queue.
+ *
+ * The counterpart to claimItem, for work that was assigned TO someone rather
+ * than claimed BY them. A business owner who never opens the portal must not
+ * be able to park a task indefinitely by doing nothing — the deadline passing
+ * is itself the answer, and the Chamber picks it up. Whether a deadline has
+ * passed is the caller's judgement; this only performs the handover.
+ */
+export async function escalateItem(
+  id: string,
+  meta?: WorklistWriteMeta,
+): Promise<WorklistItemRow | null> {
+  return mutateItem(
+    id,
+    ACTIVE_STATES,
+    "worklist-escalate",
+    () => ({ assigneeUserId: null, state: "open" as WorklistState }),
     meta,
   );
 }

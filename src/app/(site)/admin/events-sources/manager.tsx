@@ -33,6 +33,9 @@ interface OverrideRecord {
   id: string;
   keyA: string;
   keyB: string;
+  /** Absent on records written before the same-event verdict existed — those
+   *  are all splits, so the fallback below reads them correctly. */
+  verdict?: "not-duplicate" | "same-event";
   setBy: string;
   setAt: string;
 }
@@ -47,6 +50,12 @@ interface Cluster {
   survivor: ClusterMember;
   members: ClusterMember[];
 }
+/** A pair the matcher left apart that looks like it might be one event. */
+interface Candidate {
+  a: ClusterMember;
+  b: ClusterMember;
+  score: number;
+}
 interface OrgRow {
   id: string;
   name: string;
@@ -59,6 +68,7 @@ export interface EventsSourcesState {
   overrides: OverrideRecord[];
   mergedCount: number;
   clusters: Cluster[];
+  candidates: Candidate[];
   orgs: OrgRow[];
 }
 
@@ -120,7 +130,7 @@ export function EventsSourcesManager({ initial }: { initial: EventsSourcesState 
     }
   }
 
-  const { flag, sources, overrides, clusters, orgs, mergedCount } = state;
+  const { flag, sources, overrides, clusters, candidates, orgs, mergedCount } = state;
 
   return (
     <div className="grid gap-6">
@@ -243,12 +253,13 @@ export function EventsSourcesManager({ initial }: { initial: EventsSourcesState 
         </ul>
       </Card>
 
-      {/* ---- dedupe review ---- */}
+      {/* ---- dedupe review: what we MERGED ---- */}
       <Card>
-        <p className="text-lg font-semibold text-sound-deep">Possible duplicates</p>
+        <p className="text-lg font-semibold text-sound-deep">Merged into one entry</p>
         <p className="mt-1 text-sm text-ink-soft">
-          Events merged into one calendar entry. If two of these are actually different
-          events, mark them &ldquo;not a duplicate&rdquo; and they&rsquo;ll both show.
+          These showed up on more than one calendar, so the site shows them once. If two
+          of them are actually different events, mark them &ldquo;not a duplicate&rdquo;
+          and they&rsquo;ll both show.
         </p>
         {clusters.length === 0 ? (
           <p className="mt-3 text-sm text-ink-soft">No merged clusters right now.</p>
@@ -302,7 +313,7 @@ export function EventsSourcesManager({ initial }: { initial: EventsSourcesState 
               {overrides.map((o) => (
                 <li key={o.id} className="flex items-center justify-between gap-2 text-xs text-ink-soft">
                   <span className="min-w-0 truncate">
-                    {o.keyA} ≠ {o.keyB} · by {o.setBy}
+                    {o.keyA} {o.verdict === "same-event" ? "=" : "≠"} {o.keyB} · by {o.setBy}
                   </span>
                   <button
                     type="button"
@@ -316,6 +327,83 @@ export function EventsSourcesManager({ initial }: { initial: EventsSourcesState 
               ))}
             </ul>
           </div>
+        )}
+      </Card>
+
+      {/* ---- dedupe review: what we did NOT merge ---- */}
+      <Card>
+        <p className="text-lg font-semibold text-sound-deep">Possible duplicates</p>
+        <p className="mt-1 text-sm text-ink-soft">
+          Same day, compatible place, similar wording — but different enough that the
+          site is still showing them as two separate events. If a pair is really one
+          event, merge it and the calendar will show it once. Either button settles the
+          pair for good, so it stops coming back to this list.
+        </p>
+        {candidates.length === 0 ? (
+          <p className="mt-3 text-sm text-ink-soft">
+            Nothing to review — no near-misses on the calendar right now.
+          </p>
+        ) : (
+          <ul className="mt-4 grid gap-4">
+            {candidates.map((c) => (
+              <li
+                key={`${c.a.occurrenceKey}|${c.b.occurrenceKey}`}
+                className="rounded-xl border border-sand p-4"
+              >
+                <ul className="grid gap-2">
+                  {[c.a, c.b].map((m) => (
+                    <li key={m.occurrenceKey} className="text-sm">
+                      <Badge tone={m.source === "in-app" ? "teal" : "sand"}>{m.source}</Badge>{" "}
+                      {m.title}
+                      {m.venue ? ` — ${m.venue}` : ""}{" "}
+                      <span className="text-xs text-ink-soft">{fmtWhen(m.startIso)}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs text-ink-soft">
+                    {Math.round(c.score * 100)}% of the words match
+                  </span>
+                  <span className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={busy !== null}
+                      onClick={() =>
+                        act(
+                          {
+                            action: "same-event",
+                            keyA: c.a.occurrenceKey,
+                            keyB: c.b.occurrenceKey,
+                          },
+                          `merge-${c.a.occurrenceKey}`,
+                        )
+                      }
+                      className={`${btn} bg-sound text-xs text-white hover:bg-sound-deep`}
+                    >
+                      {busy === `merge-${c.a.occurrenceKey}` ? "Saving…" : "Merge these"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy !== null}
+                      onClick={() =>
+                        act(
+                          {
+                            action: "not-duplicate",
+                            keyA: c.a.occurrenceKey,
+                            keyB: c.b.occurrenceKey,
+                          },
+                          `keep-${c.a.occurrenceKey}`,
+                        )
+                      }
+                      className={`${btn} border border-sand bg-white text-xs text-ink hover:border-tide`}
+                    >
+                      {busy === `keep-${c.a.occurrenceKey}` ? "Saving…" : "Not a duplicate"}
+                    </button>
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
         )}
       </Card>
 

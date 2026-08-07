@@ -21,7 +21,13 @@ import { getEvents } from "@/lib/stores/event-store";
 import { getEnabledSourceIds } from "@/lib/stores/calendar-sources-store";
 import { getExternalEvents } from "@/lib/stores/external-events-store";
 import { listDedupeOverrides } from "@/lib/stores/event-overrides-store";
-import { mergeCalendar, reviewClusters, type EventCluster } from "./dedupe";
+import {
+  candidatePairs,
+  mergeCalendar,
+  reviewClusters,
+  type DuplicateCandidate,
+  type EventCluster,
+} from "./dedupe";
 import { eventItemToNormalized } from "./normalize";
 import { expandEvents } from "./rrule-expand";
 import { pacificDateKey } from "./tz";
@@ -42,16 +48,23 @@ export async function getUnifiedEvents(now: Date = new Date()): Promise<Normaliz
 }
 
 /** The admin dedupe-review view (FR-EVT-02): every multi-member cluster in
- *  the current merge, plus the merged list — the /admin/events-sources
- *  preview surface (session-gated there; this function itself is not). */
+ *  the current merge, the pairs that ALMOST merged, plus the merged list — the
+ *  /admin/events-sources preview surface (session-gated there; this function
+ *  itself is not).
+ *
+ *  `clusters` and `candidates` are the two halves of the same review: what the
+ *  matcher joined (split it if it was wrong) and what it left apart (merge it
+ *  if it was wrong). */
 export async function getUnifiedReview(now: Date = new Date()): Promise<{
   merged: NormalizedEvent[];
   clusters: EventCluster[];
+  candidates: DuplicateCandidate[];
 }> {
   const { expanded, overrides } = await expandedCalendar(now);
   return {
     merged: mergeCalendar(expanded, overrides),
     clusters: reviewClusters(expanded, overrides),
+    candidates: candidatePairs(expanded, overrides),
   };
 }
 

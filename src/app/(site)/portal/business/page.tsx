@@ -14,6 +14,10 @@ import { getSessionUser } from "@/lib/auth";
 import { getRestaurants } from "@/lib/stores/business-store";
 import { getLodging } from "@/lib/stores/listing-stores";
 import { getDirectoryListingsAdmin } from "@/lib/stores/directory-store";
+import { getEvents } from "@/lib/stores/event-store";
+import { listWorklistItems } from "@/lib/stores/worklist-store";
+import { describeRepeat, rruleToPreset } from "@/lib/events/recurrence";
+import { SeriesChecks, type SeriesCheck } from "./series-checks";
 import type { Lodging } from "@/lib/types";
 import { OpenBadge } from "@/components/open-badge";
 import { Badge, Callout, Card, PageHeader, Section } from "@/components/ui";
@@ -64,6 +68,38 @@ export default async function BusinessPortalPage() {
       : allLodging.filter((l) => user.editableIds.includes(l.id));
   const directory = allDirectory.filter((d) => user.editableIds.includes(d.id));
 
+  // Quarterly series checks assigned to THIS account. Scoped by assignee, not
+  // by listing: after an escalation the task belongs to the Chamber, and it
+  // should leave this page the moment that happens.
+  const assigned = await listWorklistItems({
+    type: "staleness",
+    subjectStore: "events",
+    assigneeUserId: user.id,
+    state: ["open", "in_progress"],
+  });
+  let seriesChecks: SeriesCheck[] = [];
+  if (assigned.length > 0) {
+    const events = await getEvents();
+    const byId = new Map(events.map((e) => [e.id, e]));
+    seriesChecks = assigned.flatMap((item) => {
+      const event = byId.get(item.subjectId);
+      // An event that has since been taken down leaves a task with nothing to
+      // confirm; the Chamber's queue still shows it, so it is not lost.
+      if (!event) return [];
+      const preset = rruleToPreset(event.rrule);
+      return [
+        {
+          itemId: item.id,
+          eventId: event.id,
+          title: event.title,
+          repeat: preset ? describeRepeat(preset) : "Repeats",
+          ...(event.ownerId ? { listingId: event.ownerId } : {}),
+          dueAt: item.dueAt?.toISOString() ?? null,
+        },
+      ];
+    });
+  }
+
   return (
     <>
       <PageHeader
@@ -71,6 +107,11 @@ export default async function BusinessPortalPage() {
         title="My business"
         intro="Update once, and it's everywhere — your hours, menus, and events flow straight to the public pages, the open-now badge, and the town calendar."
       />
+      {seriesChecks.length > 0 && (
+        <Section>
+          <SeriesChecks checks={seriesChecks} />
+        </Section>
+      )}
       <Section>
         {restaurants.length === 0 && lodging.length === 0 && directory.length === 0 ? (
           <Callout title="No listings linked to this account yet" tone="coral">

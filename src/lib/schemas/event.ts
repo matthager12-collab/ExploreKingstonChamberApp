@@ -14,6 +14,10 @@
 
 import { z } from "zod";
 import type { FieldDef } from "./form";
+// recurrence.ts is deliberately dependency-light (no `rrule` package) so this
+// schema can validate a repeat rule without pulling an expander into every
+// bundle that carries a form.
+import { isPresetRRule, MAX_SKIPPED_DATES } from "@/lib/events/recurrence";
 import {
   httpUrlOptional,
   idSchema,
@@ -101,6 +105,27 @@ export const eventSchema = z.object({
   charityId: optionalTrimmed(),
   /** Portal ownership: the listing/org id whose account manages this event. */
   ownerId: optionalTrimmed(),
+  /** Repeat rule (RFC 5545 RRULE, no prefix). Gated to the shapes the repeat
+   *  form can build AND reopen — see isPresetRRule. A rule outside that set is
+   *  rejected rather than stored, because the alternative is an event whose
+   *  series nobody can edit afterwards. */
+  rrule: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() ? v.trim().toUpperCase() : undefined),
+    z
+      .string()
+      .max(200, "repeat rule is too long")
+      .refine(isPresetRRule, "that repeat pattern isn't one this form can set")
+      .optional(),
+  ),
+  /** Cancelled occurrences. Bounded by the per-series expansion cap — a series
+   *  cannot have more skipped dates than it has dates. */
+  exdates: z.preprocess(
+    (v) => (Array.isArray(v) && v.length > 0 ? v : undefined),
+    z
+      .array(z.string().min(1), { message: "skipped dates must be a list" })
+      .max(MAX_SKIPPED_DATES, "too many skipped dates")
+      .optional(),
+  ),
 });
 
 export const eventFields: FieldDef[] = [
@@ -119,6 +144,14 @@ export const eventFields: FieldDef[] = [
     kind: "text",
     optional: true,
     placeholder: "2026-08-01T18:00",
+  },
+  {
+    key: "rrule",
+    label: "Repeats",
+    kind: "repeat",
+    optional: true,
+    wide: true,
+    help: "Weekly markets, monthly meetings, seasonal concert series. Leave as \"Does not repeat\" for a one-off.",
   },
   { key: "venue", label: "Venue", kind: "text", required: true },
   { key: "address", label: "Address", kind: "text", optional: true, wide: true },

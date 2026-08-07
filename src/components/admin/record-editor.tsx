@@ -20,6 +20,16 @@ import { mediaUrl, type MediaItem } from "@/lib/media/refs";
 import { Badge, Card } from "@/components/ui";
 import { Provenance } from "@/components/admin/provenance";
 import { RecordHistory } from "@/components/admin/record-history";
+import { RepeatField } from "@/components/repeat-field";
+import {
+  buildRecord,
+  ID_FIELD_KEY,
+  newRecordDraft,
+  parseRepeatDraft,
+  recordToDraft,
+  serializeRepeatDraft,
+  type Draft,
+} from "@/components/admin/record-draft";
 
 const INPUT =
   "w-full rounded-lg border border-sand bg-white px-3 py-2 text-sm text-ink focus:border-tide focus:outline-none";
@@ -34,100 +44,6 @@ function slugify(text: string): string {
     .slice(0, 64);
 }
 
-/** Record field → editable string/boolean per the field kind. */
-function toDraftValue(field: FieldDef, value: unknown): string | boolean {
-  if (field.kind === "checkbox") return Boolean(value);
-  if (field.kind === "csv-tags" || field.kind === "photos") {
-    return Array.isArray(value) ? (value as unknown[]).map(String).join(", ") : "";
-  }
-  if (value == null) return field.defaultValue ?? "";
-  return String(value);
-}
-
-type Draft = {
-  domain: string;
-  id: string;
-  idTouched: boolean;
-  isNew: boolean;
-  values: Record<string, string | boolean>;
-};
-
-function recordToDraft(domain: DomainDef, record: GenericRecord): Draft {
-  const values: Record<string, string | boolean> = {};
-  for (const f of domain.fields) values[f.key] = toDraftValue(f, record[f.key]);
-  return { domain: domain.key, id: record.id, idTouched: true, isNew: false, values };
-}
-
-function newRecordDraft(domain: DomainDef): Draft {
-  const values: Record<string, string | boolean> = {};
-  for (const f of domain.fields) {
-    values[f.key] = f.kind === "checkbox" ? false : (f.defaultValue ?? "");
-  }
-  return { domain: domain.key, id: "", idTouched: false, isNew: true, values };
-}
-
-/** The id control is synthesised by the editor rather than declared by the
- *  domain, so it needs a reserved key for the id/aria-describedby plumbing. */
-const ID_FIELD_KEY = "id";
-
-type BuildResult =
-  | { ok: true; record: GenericRecord }
-  /** `fieldKey` is "" when the failure can't be pinned to one control. */
-  | { ok: false; fieldKey: string; text: string };
-
-/** Draft → validated record via the domain schema. Returns the parsed record
- *  (canonical: trimmed strings, coerced numbers, empty optionals omitted) or
- *  the offending field plus its message. The schema is the same object the API
- *  route parses with, so the form now surfaces every server rule — numeric
- *  ranges included — before the round-trip.
- *
- *  E14: the failure keeps its `fieldKey` instead of collapsing to a flat
- *  string, so the editor can mark that control `aria-invalid`, describe it with
- *  the message, and move focus there. */
-function buildRecord(domain: DomainDef, draft: Draft): BuildResult {
-  const id = draft.id.trim();
-  if (!/^[a-z0-9][a-z0-9-]{0,63}$/i.test(id)) {
-    return {
-      ok: false,
-      fieldKey: ID_FIELD_KEY,
-      text: "Id is required: letters, numbers, and dashes (e.g. point-casino-hotel).",
-    };
-  }
-  const record: GenericRecord = { id };
-  for (const f of domain.fields) {
-    const raw = draft.values[f.key];
-    if (f.kind === "checkbox") {
-      record[f.key] = Boolean(raw);
-      continue;
-    }
-    const text = typeof raw === "string" ? raw.trim() : "";
-    if (f.kind === "csv-tags" || f.kind === "photos") {
-      record[f.key] = text
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean);
-    } else if (f.kind === "number") {
-      // Pass the text through only when present — the schema coerces numeric
-      // strings; an empty required number then fails with its range message.
-      if (text !== "") record[f.key] = text;
-    } else {
-      record[f.key] = text;
-    }
-  }
-  const parsed = domain.schema.safeParse(record);
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    const fieldKey = typeof issue?.path[0] === "string" ? issue.path[0] : "";
-    const field = domain.fields.find((f) => f.key === fieldKey);
-    const message = issue?.message ?? `Could not validate the ${domain.noun}.`;
-    return {
-      ok: false,
-      fieldKey: field ? fieldKey : "",
-      text: field ? `${field.label}: ${message}` : message,
-    };
-  }
-  return { ok: true, record: parsed.data as GenericRecord };
-}
 
 /** E14: explicit `htmlFor`/`id` association. Help and error text sit OUTSIDE
  *  the `<label>` and reach the control through `aria-describedby` — nested in
@@ -340,6 +256,30 @@ export function RecordEditor({
       "aria-invalid": invalid || undefined,
       "aria-describedby": describedBy,
     } as const;
+
+    if (f.kind === "repeat") {
+      // The series anchor is the record's own start field. Without it the
+      // preview has nothing to count from, so the control asks for it rather
+      // than rendering dates relative to nothing.
+      const startIso = typeof draft?.values.start === "string" ? draft.values.start : "";
+      if (startIso.length < 16) {
+        return (
+          <p className="text-sm text-ink-soft">
+            Set a start date and time above to make this event repeat.
+          </p>
+        );
+      }
+      return (
+        <RepeatField
+          startIso={startIso}
+          value={parseRepeatDraft(raw)}
+          onChange={(next) => patchValue(f.key, serializeRepeatDraft(next))}
+          idPrefix={id}
+          inputClass={INPUT}
+          labelClass="block text-sm font-medium text-sound-deep"
+        />
+      );
+    }
 
     if (f.kind === "checkbox") {
       return (

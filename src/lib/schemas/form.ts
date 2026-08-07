@@ -17,7 +17,10 @@ export type FieldKind =
   | "select"
   | "checkbox"
   | "csv-tags"
-  | "photos";
+  | "photos"
+  /** Event repeat rule. Spans TWO record keys (`rrule` + `exdates`); its draft
+   *  value is the pair as JSON. See src/components/admin/record-draft.ts. */
+  | "repeat";
 
 /** One record as the editor sees it — id plus whatever the domain's type holds. */
 export type GenericRecord = { id: string } & Record<string, unknown>;

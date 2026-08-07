@@ -9,6 +9,12 @@
 // "website2" input is a honeypot; humans never see it.
 
 import { useRef, useState, type FormEvent } from "react";
+import {
+  BUSINESS_KIND_LABEL,
+  BUSINESS_KIND_ORDER,
+  OTHER_BUSINESS_VALUE,
+  type BusinessOption,
+} from "@/lib/businesses";
 
 // Client-side hints only — the /api/events/suggest route is the real gate.
 const MAX_FILES = 5;
@@ -20,11 +26,21 @@ const inputClass =
   "placeholder:text-ink-soft/60 focus:border-tide focus:outline-none";
 const labelClass = "block text-sm font-medium text-sound-deep";
 
-export function SuggestEventForm() {
+export function SuggestEventForm({ businesses }: { businesses: BusinessOption[] }) {
   const [phase, setPhase] = useState<"idle" | "busy" | "done">("idle");
   const [error, setError] = useState<string | null>(null);
   const [files, setFiles] = useState<File[]>([]);
+  // "" = not answered, a picker value = a Chamber listing, OTHER = type it in.
+  const [business, setBusiness] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Grouped so a 300-member directory reads as a list of places rather than
+  // one flat scroll. Empty groups are skipped, so this degrades to a plain
+  // list on a store that only has restaurants in it.
+  const grouped = BUSINESS_KIND_ORDER.map((kind) => ({
+    kind,
+    options: businesses.filter((b) => b.kind === kind),
+  })).filter((g) => g.options.length > 0);
 
   function addFiles(selected: FileList | null) {
     if (!selected) return;
@@ -64,6 +80,8 @@ export function SuggestEventForm() {
       "description",
       "url",
       "eventContact",
+      "businessValue",
+      "businessOther",
       "submitterName",
       "contact",
       "website2",
@@ -185,6 +203,52 @@ export function SuggestEventForm() {
         />
         <p className="mt-1 text-xs text-ink-soft">
           Shown on the event so people ask the organizer directly. This is public.
+        </p>
+      </div>
+
+      {/* Which business or organization is running it.
+          A PICKER, not a text box: this value is what the /events business
+          filter groups by, and "Filling Station", "The Filling Station" and
+          "Filling Station LLC" typed by three different people are three
+          filter entries for one business. The "Other" branch keeps the form
+          open to everyone — plenty of events are run by a person, a club, or
+          a business that isn't a Chamber member. */}
+      <div>
+        <label className={labelClass} htmlFor="suggest-business">
+          Business or organization running it
+        </label>
+        <select
+          id="suggest-business"
+          name="businessValue"
+          value={business}
+          onChange={(e) => setBusiness(e.target.value)}
+          className={inputClass}
+        >
+          <option value="">Choose one (optional)</option>
+          {grouped.map((group) => (
+            <optgroup key={group.kind} label={BUSINESS_KIND_LABEL[group.kind]}>
+              {group.options.map((b) => (
+                <option key={b.value} value={b.value}>
+                  {b.label}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+          <option value={OTHER_BUSINESS_VALUE}>Other — not on this list</option>
+        </select>
+        {business === OTHER_BUSINESS_VALUE && (
+          <input
+            name="businessOther"
+            required
+            maxLength={120}
+            placeholder="Who's running it?"
+            aria-label="Name of the business or organization"
+            className={`${inputClass} mt-2`}
+          />
+        )}
+        <p className="mt-1 text-xs text-ink-soft">
+          Helps people filter the calendar by who&rsquo;s hosting. Leave it blank if
+          you&rsquo;re not sure.
         </p>
       </div>
 
