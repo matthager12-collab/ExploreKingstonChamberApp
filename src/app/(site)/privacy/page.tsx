@@ -42,6 +42,11 @@ export default function PrivacyPage() {
               We never record visits to food or health assistance resources — those taps are
               dropped and never stored.
             </li>
+            <li>
+              The <strong>feedback tab</strong> asks for a rating and a comment, never for your
+              name or contact details. If you type personal details into the comment anyway, we
+              don&rsquo;t use them to identify you and you can have them deleted — see below.
+            </li>
             <li>Everything we keep is on a published schedule and then deleted (see below).</li>
             <li>
               You can ask to see or delete your data at any time — no account required. We respond
@@ -144,6 +149,50 @@ export default function PrivacyPage() {
             organizers on purpose, so it is kept for 12 months (see the schedule above). To have a
             submission removed sooner, use the delete form below.
           </p>
+        </Card>
+      </Section>
+
+      <Section title="Feedback you send us">
+        <Card>
+          <p className="text-sm text-ink-soft">
+            The feedback tab on the side of each page asks two things: a star rating, and whatever
+            you want to tell us. It also records <em>which page</em> you were on when you opened it,
+            so we can tell which part of the site you meant. It does not ask for your name, your
+            email, or any way to reach you — there is no field for any of those, and if a
+            submission arrives carrying one anyway, our server discards it before anything is
+            saved.
+          </p>
+          <p className="mt-3 text-sm text-ink-soft">
+            That leaves one gap we can&rsquo;t close by design, so we will be plain about it
+            instead: <strong>a comment box will accept anything you type into it</strong>, including
+            your own name or phone number. If you put personal details in there, this is what
+            happens to them:
+          </p>
+          <ul className="mt-3 space-y-2 text-sm text-ink-soft">
+            <li>
+              <strong>We don&rsquo;t use them to identify you.</strong> Feedback isn&rsquo;t linked
+              to an account, a profile, or anything else you did on this site — there is no
+              identifier stored next to it to link it to.
+            </li>
+            <li>
+              <strong>We don&rsquo;t reply from it</strong> and we don&rsquo;t add you to any list.
+              If you want an answer, contact the Chamber directly.
+            </li>
+            <li>
+              <strong>Only Chamber administrators can read it.</strong> Feedback is never published
+              on the site, never shown to other visitors, and never sold or shared.
+            </li>
+            <li>
+              <strong>It is deleted after 12 months</strong> — the shortest window on the schedule
+              above. It is set short for exactly this reason.
+            </li>
+            <li>
+              <strong>You can have it removed sooner.</strong> Use the form below and quote the
+              wording you remember writing. Because feedback is stored without any identifier,
+              that quote is the only way we can locate your entry — but with it, we can find it and
+              delete it.
+            </li>
+          </ul>
         </Card>
       </Section>
 

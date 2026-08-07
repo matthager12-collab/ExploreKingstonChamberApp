@@ -44,6 +44,18 @@ storing it. Adding a contact field to that route would make this an identified
 store and require real `findByIdentifier` / `exportRecords` /
 `deleteOrAnonymize` handlers, not the no-identifier entry it has today.
 
+**The published notice states this gap rather than papering over it** (notice
+version `2026-08`, its "Feedback you send us" section). Four of the five
+promises there are structural and already enforced in code — not linked to an
+identifier, never published, admin-read only, deleted at 12 months. The fifth
+is an **operator commitment with no automation behind it**: if a visitor quotes
+wording they wrote, the Chamber finds that row on `/admin/feedback` and deletes
+it by hand. There is no by-identifier lookup that could do it for them, which
+is exactly why the promise is worded around quoting the text. Whoever fulfils a
+feedback deletion request does it manually — treat that as part of the
+access/delete workflow even though `PII_STORES` reports the store as
+no-identifier.
+
 **Web vitals are page measurements, not people measurements.** A `webvital`
 row carries a metric name (`LCP`/`CLS`/`INP`) and a number the browser
 produced about the PAGE — how long the largest element took to paint, how much

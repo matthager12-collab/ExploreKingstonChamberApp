@@ -10,8 +10,21 @@
 // a star average with no comments attached tells the Chamber nothing it can act
 // on. Both readers are admin-gated at every call site.
 
-import { appendFeedbackResponse, readFeedbackResponses } from "./db/append";
+import {
+  appendFeedbackResponse,
+  deleteFeedbackResponseById,
+  readFeedbackResponseRows,
+  readFeedbackResponses,
+} from "./db/append";
 import { FEEDBACK_MAX_RATING, FEEDBACK_MIN_RATING, type FeedbackResponse } from "./types";
+
+/** A stored submission plus the surrogate id that addresses it. The id is the
+ *  only field that uniquely names one row (see schema.ts) and is what the
+ *  admin delete control deletes by. */
+export interface FeedbackRow {
+  id: number;
+  response: FeedbackResponse;
+}
 
 /** Aggregate counts for the admin page. */
 export interface FeedbackSummary {
@@ -35,6 +48,14 @@ export interface FeedbackStore {
    *  log is unbounded between retention runs and this is free text, so an
    *  unbounded read would eventually be a very slow page full of essays. */
   list(sinceIso?: string, limit?: number): Promise<FeedbackResponse[]>;
+  /** Same list, carrying the id each row is addressed by. */
+  listRows(sinceIso?: string, limit?: number): Promise<FeedbackRow[]>;
+  /**
+   * Delete one submission by id. Returns true when a row was actually removed —
+   * false means it was already gone (a double-click, or the retention purge got
+   * there first), which is a different answer to give the person who asked.
+   */
+  remove(id: number): Promise<boolean>;
 }
 
 /** Rows the admin page renders before paging. */
@@ -103,6 +124,15 @@ class DbFeedbackStore implements FeedbackStore {
   async list(sinceIso?: string, limit = FEEDBACK_PAGE_SIZE): Promise<FeedbackResponse[]> {
     const rows = await readFeedbackResponses<FeedbackResponse>(sinceIso);
     return rows.slice(0, limit);
+  }
+
+  async listRows(sinceIso?: string, limit = FEEDBACK_PAGE_SIZE): Promise<FeedbackRow[]> {
+    const rows = await readFeedbackResponseRows<FeedbackResponse>(sinceIso);
+    return rows.slice(0, limit);
+  }
+
+  async remove(id: number): Promise<boolean> {
+    return (await deleteFeedbackResponseById(id)) > 0;
   }
 }
 

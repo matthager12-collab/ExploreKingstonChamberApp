@@ -188,6 +188,17 @@ export const ferryObservation = pgTable("ferry_observation", {
  *  shortest of any store here) rather than the survey's 36, and why the route
  *  never accepts a contact field. See docs/PRIVACY.md. */
 export const feedbackResponse = pgTable("feedback_response", {
+  /** Surrogate key — the ONLY thing in this table that uniquely addresses a
+   *  row. The three logs above have no key because nothing ever deletes ONE of
+   *  their rows; this one does, because the privacy notice promises a visitor
+   *  their comment can be removed on request.
+   *
+   *  `ts` cannot serve that purpose: `DEFAULT now()` is
+   *  transaction_timestamp(), so two rows written in the same instant are
+   *  genuinely indistinguishable by it — and an admin deleting one comment
+   *  would silently take the other visitor's with it. That is a data-loss bug
+   *  wearing a privacy feature's clothes, so the key is explicit. */
+  id: bigserial("id", { mode: "number" }).primaryKey(),
   ts: timestamp("ts", { withTimezone: true }).notNull().defaultNow(),
   response: jsonb("response").notNull(),
 });

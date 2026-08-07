@@ -7,7 +7,7 @@
 
 import "server-only";
 
-import { asc, count, desc, gte, sql } from "drizzle-orm";
+import { asc, count, desc, eq, gte, sql } from "drizzle-orm";
 
 import { getDb } from "./client";
 import {
@@ -16,6 +16,21 @@ import {
   ferryObservation,
   surveyResponse,
 } from "./schema";
+
+/**
+ * Rows a DELETE/UPDATE actually touched.
+ *
+ * node-postgres reports `rowCount`; PGlite (the unit-test substrate) reports
+ * `affectedRows` and leaves `rowCount` undefined. Reading only `rowCount`
+ * therefore returns 0 under test for a statement that really did delete a row
+ * — a false negative that makes a working delete look broken, and would make
+ * "we deleted your comment" unverifiable in the suite. Same shape as the
+ * helper in privacy-retention.ts, which is why every purge there is trustworthy.
+ */
+function mutatedRows(res: unknown): number {
+  const r = res as { rowCount?: number; affectedRows?: number };
+  return r.rowCount ?? r.affectedRows ?? 0;
+}
 
 export async function appendAnalyticsEvent(event: unknown): Promise<void> {
   await getDb().insert(analyticsEvent).values({ event });
@@ -81,8 +96,53 @@ export async function readFeedbackResponses<T>(sinceIso?: string): Promise<T[]> 
   const base = getDb().select({ response: feedbackResponse.response }).from(feedbackResponse);
   const rows = await (
     sinceIso ? base.where(gte(feedbackResponse.ts, new Date(sinceIso))) : base
-  ).orderBy(desc(feedbackResponse.ts));
+    // By id, matching readFeedbackResponseRows: ts is transaction_timestamp()
+    // and ties are unordered, so ordering by it would reshuffle equal-timestamp
+    // rows between reloads.
+  ).orderBy(desc(feedbackResponse.id));
   return rows.map((r) => r.response as T);
+}
+
+/**
+ * Feedback rows WITH the surrogate id that addresses them, newest first.
+ *
+ * The plain reader above drops the id because a summary doesn't need it. This
+ * one keeps it because the admin delete control has to name ONE row, and `id`
+ * is the only field that can (see the note on the column in schema.ts — `ts`
+ * is transaction_timestamp() and genuinely collides).
+ *
+ * Ordered by id, not ts, for the same reason: with colliding timestamps, ORDER
+ * BY ts has no defined order among them, so "newest first" would shuffle
+ * between reloads and paging could show the same row twice while skipping
+ * another. id is monotonic per insert, so it is both stable and correct.
+ */
+export async function readFeedbackResponseRows<T>(
+  sinceIso?: string,
+): Promise<{ id: number; response: T }[]> {
+  const base = getDb()
+    .select({ id: feedbackResponse.id, response: feedbackResponse.response })
+    .from(feedbackResponse);
+  const rows = await (
+    sinceIso ? base.where(gte(feedbackResponse.ts, new Date(sinceIso))) : base
+  ).orderBy(desc(feedbackResponse.id));
+  return rows.map((r) => ({ id: r.id, response: r.response as T }));
+}
+
+/**
+ * Delete the single feedback row with this id, and report how many rows went.
+ * Fulfils a visitor's deletion request against a store with no identifier to
+ * look THEM up by (see docs/PRIVACY.md) — the admin finds the row by the
+ * wording the visitor quotes, then deletes it by id.
+ *
+ * The count is returned rather than swallowed so the caller can tell "deleted
+ * it" from "it was already gone" — a difference that matters when you are
+ * answering the person who asked.
+ */
+export async function deleteFeedbackResponseById(id: number): Promise<number> {
+  const res = await getDb()
+    .delete(feedbackResponse)
+    .where(eq(feedbackResponse.id, id));
+  return mutatedRows(res);
 }
 
 export async function appendFerryObservation(obs: unknown): Promise<void> {

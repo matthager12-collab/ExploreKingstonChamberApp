@@ -220,6 +220,10 @@ describe("backup/restore roundtrip", () => {
     // The comment text itself has to survive, not just the row count — the
     // words are the entire value of a feedback row.
     expect(section.feedback_response).toHaveLength(1);
+    // The id rides along: it is the primary key the admin delete control and
+    // any outstanding visitor deletion request address the row by, so a restore
+    // that renumbered rows would silently invalidate both.
+    expect(typeof section.feedback_response![0].id).toBe("number");
     expect(section.feedback_response![0].response).toMatchObject({
       rating: 4,
       comment: "parking map helped",

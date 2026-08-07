@@ -90,7 +90,10 @@ export type LegalHoldBackupRow = {
   setAt: string;
 };
 export type SurveyResponseRow = { ts: string; response: unknown };
-export type FeedbackResponseRow = { ts: string; response: unknown };
+/** Carries `id` because feedback_response has a primary key (the other append
+ *  logs do not). Preserving it keeps a restored bundle addressable by the same
+ *  ids the admin delete control and any outstanding deletion request use. */
+export type FeedbackResponseRow = { id: number; ts: string; response: unknown };
 export type FerryObservationRow = { ts: string; obs: unknown };
 
 // --- Auth tables (E06) ------------------------------------------------------
@@ -226,7 +229,7 @@ export async function serializeDb(): Promise<DbSection> {
   const feedbackRows = await db
     .select()
     .from(feedbackResponse)
-    .orderBy(asc(feedbackResponse.ts));
+    .orderBy(asc(feedbackResponse.id));
   const ferryRows = await db
     .select()
     .from(ferryObservation)
@@ -266,7 +269,11 @@ export async function serializeDb(): Promise<DbSection> {
     })),
     analytics_event: analyticsRows.map((r) => ({ ts: toIso(r.ts), event: r.event })),
     survey_response: surveyRows.map((r) => ({ ts: toIso(r.ts), response: r.response })),
-    feedback_response: feedbackRows.map((r) => ({ ts: toIso(r.ts), response: r.response })),
+    feedback_response: feedbackRows.map((r) => ({
+      id: r.id,
+      ts: toIso(r.ts),
+      response: r.response,
+    })),
     ferry_observation: ferryRows.map((r) => ({ ts: toIso(r.ts), obs: r.obs })),
     analytics_area_rollup: rollupRows.map((r) => ({
       month: r.month,
@@ -503,7 +510,16 @@ export async function restoreDb(
     for (const batch of chunks(feedbackRows)) {
       await tx
         .insert(feedbackResponse)
-        .values(batch.map((r) => ({ ts: new Date(r.ts), response: r.response })));
+        .values(batch.map((r) => ({ id: r.id, ts: new Date(r.ts), response: r.response })));
+    }
+    // Restoring explicit ids leaves the bigserial sequence at 1, so the FIRST
+    // feedback submitted after a restore collides with a restored row's primary
+    // key and 500s. Same fix, same reason, as the audit table's setval above.
+    if (feedbackRows.length > 0) {
+      const maxId = feedbackRows.reduce((m, r) => Math.max(m, r.id), 0);
+      await tx.execute(
+        sql`SELECT setval(pg_get_serial_sequence('feedback_response', 'id'), ${maxId})`,
+      );
     }
     for (const batch of chunks(section.ferry_observation)) {
       await tx
