@@ -1,6 +1,6 @@
 {
-  "id": "3b51c1ea-c3bf-48cf-87d8-d0cfe6cc7b9d",
-  "prevId": "4b3b6a3e-7145-4bef-b129-fbeb616e997f",
+  "id": "86da96c8-4c3b-408f-a35b-a4257ad8dd1e",
+  "prevId": "3b51c1ea-c3bf-48cf-87d8-d0cfe6cc7b9d",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -253,6 +253,12 @@
       "name": "feedback_response",
       "schema": "",
       "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
         "ts": {
           "name": "ts",
           "type": "timestamp with time zone",
