@@ -1025,9 +1025,10 @@ export function MapZoneEditor({
       images: draft.images.length ? draft.images : undefined,
       // Same whitelist rule as streetPaths above: omitting this deletes the
       // lot's payment hand-off, including on a save that only moved a shape.
-      // Sent explicitly (not via `...zone`) so emptying the list persists as
-      // removed rather than silently restoring the old value.
-      pay: draft.pay.length ? draft.pay : undefined,
+      // ALWAYS the array, never undefined — an emptied list must persist as []
+      // so parking-store's withSeedPay() reads it as "the admin cleared this"
+      // rather than "this record predates the field" and restores the seed.
+      pay: draft.pay,
       center,
       ...(polygon ? { polygon } : {}),
       // MUST be sent: the API rebuilds from a whitelist, so omitting this drops

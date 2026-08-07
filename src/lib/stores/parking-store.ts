@@ -43,8 +43,33 @@ export function withSeedStreetGeometry(zone: MapZone): MapZone {
   };
 }
 
+/**
+ * Restore the seed's payment hand-off onto an overlay record that predates it.
+ *
+ * Same trap as withSeedStreetGeometry above, and it shipped broken: the merge is
+ * whole-record, and every Port zone already had an overlay row (the Chamber had
+ * attached lot photos), so the seeded `pay` was masked and every pay card on
+ * /parking silently vanished.
+ *
+ * THE DIFFERENCE FROM streetPaths, and why absence alone cannot be the marker:
+ * an admin can legitimately remove a lot's last hand-off, and that has to keep
+ * persisting as removed. So the two states are distinguished explicitly —
+ * `undefined` means "this record predates the field", an empty ARRAY means "an
+ * admin cleared it". The editor always sends the array (JSON.stringify drops
+ * `undefined`, so an omitted key really does mean "not specified"), and the
+ * admin API preserves `[]` rather than folding it back to undefined.
+ */
+export function withSeedPay(zone: MapZone): MapZone {
+  if (zone.pay !== undefined) return zone;
+  const seedZone = seedById.get(zone.id);
+  if (!seedZone?.pay?.length) return zone;
+  return { ...zone, pay: seedZone.pay };
+}
+
 export async function getParkingZones(): Promise<MapZone[]> {
-  return (await readMerged<MapZone>(STORE, seed)).map(withSeedStreetGeometry);
+  return (await readMerged<MapZone>(STORE, seed))
+    .map(withSeedStreetGeometry)
+    .map(withSeedPay);
 }
 
 export async function getParkingZone(id: string): Promise<MapZone | undefined> {

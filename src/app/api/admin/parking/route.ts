@@ -80,8 +80,11 @@ const PAY_VENDORS: PayVendor[] = ["t2", "parkmobile", "paybyphone"];
  * DROPPED rather than repaired — a half-valid payment instruction is worse than
  * none, because a visitor will act on it.
  *
- * Returns undefined for "no hand-offs", which the caller spreads away, so a
- * zone that legitimately has none stays clean rather than carrying `pay: []`.
+ * Returns undefined ONLY when the key was absent — that is the marker for "this
+ * record predates the field", which parking-store's withSeedPay() heals from the
+ * seed. An empty array is preserved as an empty array, because that is an admin
+ * deliberately clearing the last hand-off and healing it would put the code
+ * straight back.
  */
 function sanitizePay(input: unknown): PayHandoff[] | undefined {
   if (!Array.isArray(input)) return undefined;
@@ -110,7 +113,7 @@ function sanitizePay(input: unknown): PayHandoff[] | undefined {
       ...(label ? { label } : {}),
     });
   }
-  return out.length ? out : undefined;
+  return out;
 }
 
 // Greater Kingston, WA — anything outside this box is a data-entry mistake.
@@ -283,7 +286,11 @@ export async function POST(request: NextRequest) {
     // Without this line every save wipes the lot's payment hand-off — including
     // a save that only dragged the shape. The rebuild above is a whitelist, so
     // omission is deletion, not "leave it alone".
-    ...(pay ? { pay } : {}),
+    //
+    // `!= null`, not a truthiness check: `[]` is falsy and is the meaningful
+    // value "an admin removed the last hand-off". Folding it to undefined would
+    // make withSeedPay() restore the code they just deleted.
+    ...(pay != null ? { pay } : {}),
   };
 
   try {
