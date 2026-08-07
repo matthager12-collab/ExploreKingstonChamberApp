@@ -7,6 +7,15 @@ import {
   Callout,
 } from "@/components/ui";
 import { FeatureMap } from "@/components/feature-map";
+import { RichText } from "@/components/rich-text";
+import {
+  ParkingPayCard,
+  payCardNote,
+  payCardTitle,
+  spacesLabel,
+} from "@/components/parking-pay-card";
+import { payGroupKey } from "@/lib/parking/pay-links";
+import type { MapZone } from "@/lib/data/parking";
 import { freeOrPaidFromRule, parkingRuleLabel } from "@/lib/map/parking-labels";
 import { CostBadge } from "@/components/cost-badge";
 import { resolveMapView } from "@/lib/map/resolve";
@@ -41,9 +50,20 @@ export default async function ParkingPage() {
   const ferryInfo = await getFerryInfo();
   // E31 phase 6 — the park & rides get their own callout. Merged store, not
   // the seed import, so admin edits (routes, rules, names) show here too.
-  const parkAndRides = (await getParkingZones()).filter(
-    (z) => z.rule === "park-and-ride-24h",
-  );
+  const allZones = await getParkingZones();
+  const parkAndRides = allZones.filter((z) => z.rule === "park-and-ride-24h");
+
+  // One card per distinct hand-off, in seed order. Zones that share a code
+  // (the three POKPARK rows) collapse; the day the Port gives one of them its
+  // own code it separates on its own, with no edit here.
+  const payGroups: { key: string; zones: MapZone[] }[] = [];
+  for (const z of allZones) {
+    if (!z.pay?.length) continue;
+    const key = payGroupKey(z.pay);
+    const existing = payGroups.find((g) => g.key === key);
+    if (existing) existing.zones.push(z);
+    else payGroups.push({ key, zones: [z] });
+  }
 
   return (
     <>
@@ -199,6 +219,48 @@ export default async function ParkingPage() {
           </div>
         </Section>
       )}
+
+      {/* The mobile win: a ferry rider scans a short list and taps once.
+          Grouped by hand-off, so the Port's three POKPARK polygons collapse
+          into the one card a visitor actually needs — see payGroupKey. Built
+          from the MERGED store, so a Chamber edit to a code shows here. */}
+      {payGroups.length > 0 && (
+        <Section
+          title={copyText(copy, "parking.pay.title")}
+          subtitle={copyText(copy, "parking.pay.subtitle")}
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
+            {payGroups.map(({ key, zones: group }) => (
+              <ParkingPayCard
+                key={key}
+                title={payCardTitle(group)}
+                spaces={spacesLabel(group)}
+                pay={group[0].pay!}
+                note={payCardNote(group[0])}
+              />
+            ))}
+          </div>
+          <p className="mt-3 max-w-2xl text-xs text-ink-soft">
+            <RichText text={copyText(copy, "parking.pay.footer")} />
+          </p>
+        </Section>
+      )}
+
+      {/* Placed directly under the map, above the ferry-queue callout: this is
+          the question a visitor has while standing at the machine, and it is
+          the one the app could not answer before. The Port's own sign is the
+          source (photographed at the lot, 2026-08-06). */}
+      <Section title={copyText(copy, "parking.help.title")}>
+        <Callout title="Marina Office — 360-297-3545" tone="teal">
+          {copyText(copy, "parking.help.body")
+            .split("\n\n")
+            .map((para, i) => (
+              <p key={i} className={i === 0 ? undefined : "mt-2"}>
+                <RichText text={para} />
+              </p>
+            ))}
+        </Callout>
+      </Section>
 
       <Section title="Before you park for the ferry">
         <Callout title="The line of cars on SR 104 is the ferry queue — not parking" tone="coral">

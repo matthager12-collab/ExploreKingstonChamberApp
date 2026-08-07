@@ -30,6 +30,24 @@ export default async function KioskParkingPage() {
         </p>
       </div>
 
+      {/* The Port's "NEED HELP?" sign, on the screen whose audience is most
+          likely to need it: someone standing at a kiosk rather than looking at
+          their own phone is disproportionately the person text-to-pay fails.
+          A phone number and a procedure, not a pay link — the no-pay-links rule
+          in this file's header is about payment flows on a shared device, and
+          this is the opposite: it hands the problem to a human at the Port. */}
+      <KioskCard
+        title={copyText(copy, "parking.help.title")}
+        badge={<KioskBadge tone="info">Marina Office · 360-297-3545</KioskBadge>}
+        meta="Open 8 am – 5 pm. Outside those hours, call and leave a message."
+        body={
+          "Leave your space number, your license plate number, the time you parked, " +
+          "and how many hours you are parking. Port staff return the call in business " +
+          "hours to take the payment. The Port's posted sign says you will not be " +
+          "ticketed or towed as long as you leave that message."
+        }
+      />
+
       {zones.length === 0 ? (
         <KioskEmpty>
           Parking information is briefly unavailable. Signs are posted at each lot entrance.

@@ -209,6 +209,52 @@ export const COPY_BLOCKS = [
       "The Chamber keeps this parking map up to date. Tap any lot to see what kind it is, who owns it, how to pay, and how long you can stay. The color of each lot shows its parking type.",
   },
   {
+    key: "parking.pay.title",
+    page: "Parking",
+    label: "Pay for parking — section title",
+    fallback: "Pay for parking",
+  },
+  {
+    key: "parking.pay.subtitle",
+    page: "Parking",
+    label: "Pay for parking — section subtitle",
+    multiline: true,
+    fallback:
+      "The Port lots take payment by text. Tap the button, or send the message yourself — the code works either way, and it is the same code posted on the sign at the lot. The Diamond commuter lot uses ParkMobile or PayByPhone.",
+  },
+  {
+    key: "parking.pay.footer",
+    page: "Parking",
+    label: "Pay for parking — footnote under the cards",
+    multiline: true,
+    rich: true,
+    fallback:
+      "Rates and codes belong to the lot operators — the Port of Kingston, and Diamond Parking for the D515 commuter lot — not to the Chamber, and they change. **The sign at the lot is always the authority.** To get a list of every Port lot on your phone, text **PARKATPOK** to **25023**.",
+  },
+
+  // The Port's own "NEED HELP?" sign, photographed at the lot 2026-08-06. This
+  // is the fallback path for the visitor text-to-pay leaves stranded — no
+  // smartphone, no signal, a QR that will not scan — and until now the app
+  // published the Marina Office hours and number but not what to do outside
+  // them. The four bullets are the Port's list verbatim, in the Port's order:
+  // a message missing one of them is not the message the sign promises will
+  // keep you from being ticketed.
+  {
+    key: "parking.help.title",
+    page: "Parking",
+    label: "Trouble paying — section title",
+    fallback: "Can't pay? Here's what the Port says to do",
+  },
+  {
+    key: "parking.help.body",
+    page: "Parking",
+    label: "Trouble paying — body",
+    multiline: true,
+    rich: true,
+    fallback:
+      "No smartphone, or the QR code and text-to-pay will not work? Call or stop by the **Marina Office at 360-297-3545**, open **8 am – 5 pm**.\n\nOutside those hours, call the same number and leave a message with your **space number**, your **license plate number**, the **time you parked**, and **how many hours you are parking**. Port staff return the call in business hours to take the payment. The Port's posted sign says you will not be ticketed or towed as long as you leave that message.",
+  },
+  {
     key: "parking.pr.title",
     page: "Parking",
     label: "Park & ride section title",
