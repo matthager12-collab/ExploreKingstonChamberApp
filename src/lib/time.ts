@@ -3,9 +3,21 @@
 
 const TZ = "America/Los_Angeles";
 
+/**
+ * A Kingston calendar day as "YYYY-MM-DD".
+ *
+ * The en-CA locale is what makes this SORTABLE, which is the whole reason it
+ * exists alongside formatPacificDate(): comparing two days with `<` needs the
+ * ISO-ordered form, not "Thu, Jul 2". Callers that only need to know whether
+ * two instants fall on the same day can keep using formatPacificDate equality.
+ */
+export function pacificDay(instant: string | number | Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date(instant));
+}
+
 /** Today's date in Kingston as "YYYY-MM-DD". */
 export function todayPacific(): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date());
+  return pacificDay(new Date());
 }
 
 /** Convert a Pacific wall time ("YYYY-MM-DD", "HH:mm") to a real ISO instant. */
