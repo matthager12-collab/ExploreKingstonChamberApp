@@ -226,3 +226,59 @@ either way is written out at the bottom of `src/lib/map/parking-labels.ts`. The
 deciding difference: a visitor becomes a customer by walking in, whereas nobody
 acquires a permit that way. Flipping it is a one-line change and the test that
 pins it names the tradeoff.
+
+---
+
+## Amendment — the Port bay palette (E34, 2026-08-06)
+
+The bay layer (`docs/MAPS.md`, "The Port bay layer") draws the Port lot's 302
+individual spaces coloured by **which text-to-pay code applies**, which is a
+distinction the `ParkingRule` palette cannot express: POKPARK, POKHILL and
+POKTT are all `rule: "paid"` and rendered as one purple, hiding the only
+decision a driver at the lot actually has to make.
+
+### What was measured
+
+The first pass used the brand tokens raw. Measuring them against this ADR's own
+two tests found that **none of them qualified**:
+
+| bay colour | token | nearest legend colour | ΔE76 | worst contrast on PALETTE bases |
+| --- | --- | --- | --- | --- |
+| POKPARK | tide-deep `#16758f` | `free-unrestricted` `#1E96C0` | 15.4 | **2.80:1 — fails 1.4.11** |
+| POKHILL | fern `#4a7c59` | `permit` `#7a7468` | 26.0 | **2.58:1 — fails 1.4.11** |
+| POKTT | coral `#a85c28` | `park-and-ride-24h` `#8a4c22` | **11.4** | 3.6:1 |
+| disabled | sound `#324a6d` | `ferry-holding` `#3f5473` | **5.2** | 5.9:1 |
+| port-use | `#7d2740` | `business-customer` `#9c2f6f` | 22.5 | 5.6:1 |
+
+Two of those are outright defects: `disabled` at ΔE 5.2 from `ferry-holding` is
+the same navy, and the two contrast failures put small filled shapes under the
+3:1 that WCAG 1.4.11 requires for graphics.
+
+### Decision
+
+1. **Contrast is the hard floor.** Each pay-code colour moved to the nearest
+   value to its brand token clearing **≥3:1 on every base surface** and **ΔE76
+   ≥30 from the other bay colours**: POKPARK `#096f8a`, POKHILL `#3f6f4e`,
+   POKTT `#9c511e`, disabled `#33395d`. Drift from the tokens is ΔE 2.5–8.7 —
+   not visible side by side.
+2. **Port-use and KCYC reuse `permit` `#7a7468`** instead of taking a seventh
+   hue. Both mean "you need something you do not have", which is what `permit`
+   already says. The Port's map splits them; a visitor's decision does not.
+3. **Free-2hr green and permit taupe are unchanged** on bays, so a bay and the
+   zone it sits in agree.
+
+### Open — the call to review
+
+Judged against the **full** parking legend rather than against each other, two
+pairs still sit under 30: POKPARK is ΔE 15.4 from `free-unrestricted`, and
+POKHILL is ΔE 26.0 from `permit`. They differ in form — small filled bays
+against a street stroke and a zone wash — and this ADR's own Context section
+says to judge on hue, value and chroma together rather than on one number. That
+argument is real on the canvas and weaker inside one flat legend, where a reader
+sees swatches with no form to distinguish them.
+
+So §4's "zero confusable pairs inside the parking legend" **no longer holds as
+written**. The honest options are to accept these two on form, to regroup the
+legend so the bay palette reads as its own question, or to move
+`free-unrestricted` and `permit`. That is a design decision, recorded here
+rather than settled quietly.

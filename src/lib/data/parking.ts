@@ -68,6 +68,39 @@ export type CurbSide = "both" | "east" | "west" | "north" | "south";
 
 export const CURB_SIDES: CurbSide[] = ["both", "east", "west", "north", "south"];
 
+/**
+ * Who actually takes the money for a lot. We integrate with none of them — the
+ * app hands the visitor off to the rail the operator already runs.
+ */
+export type PayVendor = "t2" | "parkmobile" | "paybyphone";
+
+/**
+ * One way to pay for a lot.
+ *
+ * SEED DEFAULTS ONLY. The Port revises codes and Diamond reprices, and the
+ * research note in docs/PARKING-PAY-LINKS.md flags every value here as
+ * verify-before-relying — so these are editable in /admin/map and the merged
+ * store is the source of truth, never this file.
+ */
+export interface PayHandoff {
+  vendor: PayVendor;
+  /** T2 keyword ("POKHILL") or a ParkMobile/PayByPhone numeric zone. */
+  code: string;
+  /** T2 short code, e.g. "25023". Omitted for app/web vendors. */
+  shortCode?: string;
+  /** Button label override, e.g. "Pay with ParkMobile". */
+  label?: string;
+}
+
+/**
+ * The Port's lot-wide "see other lots" keyword, from the PAY HERE sign
+ * photographed at the lot on 2026-08-06 ("To See Other Lots, Text PARKATPOK To
+ * 25023"). Not a zone code — it lists every Port lot rather than starting a
+ * session, which is why it is a constant here and not a PayHandoff on any zone.
+ */
+export const PORT_LOT_INDEX_CODE = "PARKATPOK";
+export const PORT_SHORT_CODE = "25023";
+
 export interface MapZone {
   id: string;
   name: string;
@@ -108,6 +141,15 @@ export interface MapZone {
    * Seed zones ship without photos: the Chamber takes these on the ground.
    */
   images?: string[];
+  /**
+   * How to pay, in preferred order. Omitted for free, permit, prohibited and
+   * park & ride zones — a money answer would be wrong there, and an empty
+   * "Pay now" button on a free lot is worse than no button.
+   *
+   * SEED DEFAULT ONLY — admin-editable at /admin/map. Read the MERGED store
+   * (getParkingZones()), never this array, or Chamber edits will not show.
+   */
+  pay?: PayHandoff[];
 }
 
 export const RULE_LABELS: Record<ParkingRule, string> = {
@@ -198,6 +240,7 @@ export const parkingZones: MapZone[] = [
     sourceUrl: PORT_PARKING_URL,
     sourceNote: PORT_GEO_NOTE,
     overnight: "confirm-first",
+    pay: [{ vendor: "t2", code: "POKPARK", shortCode: PORT_SHORT_CODE }],
     center: [47.796677, -122.497454],
     polygon: [
       [47.796936, -122.497085],
@@ -224,6 +267,7 @@ export const parkingZones: MapZone[] = [
     sourceUrl: PORT_PARKING_URL,
     sourceNote: PORT_GEO_NOTE,
     overnight: "confirm-first",
+    pay: [{ vendor: "t2", code: "POKPARK", shortCode: PORT_SHORT_CODE }],
     center: [47.796658, -122.498459],
     polygon: [
       [47.797102, -122.498579],
@@ -247,6 +291,7 @@ export const parkingZones: MapZone[] = [
     sourceUrl: PORT_PARKING_URL,
     sourceNote: PORT_GEO_NOTE,
     overnight: "confirm-first",
+    pay: [{ vendor: "t2", code: "POKPARK", shortCode: PORT_SHORT_CODE }],
     center: [47.797108, -122.498495],
     polygon: [
       [47.797247, -122.49855],
@@ -267,6 +312,7 @@ export const parkingZones: MapZone[] = [
     sourceUrl: PORT_PARKING_URL,
     sourceNote: PORT_GEO_NOTE,
     overnight: "confirm-first",
+    pay: [{ vendor: "t2", code: "POKHILL", shortCode: PORT_SHORT_CODE }],
     center: [47.797685, -122.498838],
     polygon: [
       [47.79824, -122.49903],
@@ -287,6 +333,7 @@ export const parkingZones: MapZone[] = [
     sourceUrl: PORT_PARKING_URL,
     sourceNote: PORT_GEO_NOTE,
     overnight: "confirm-first",
+    pay: [{ vendor: "t2", code: "POKTT", shortCode: PORT_SHORT_CODE }],
     center: [47.79682, -122.49901],
     polygon: [
       [47.79712, -122.49897],
@@ -409,6 +456,10 @@ export const parkingZones: MapZone[] = [
     sourceUrl:
       "https://wsdot.com/ferries/vesselwatch/terminaldetail.aspx?terminalid=12",
     overnight: "yes",
+    pay: [
+      { vendor: "parkmobile", code: "97599515", label: "Pay with ParkMobile" },
+      { vendor: "paybyphone", code: "", label: "Pay with PayByPhone" },
+    ],
     center: [47.798685, -122.496815],
     // NO POLYGON ON PURPOSE. The four corners that used to sit here described a
     // 98 m × 0.21 m sliver — 21 m² of area for a 73-stall lot that needs ~1,900 m².

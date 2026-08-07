@@ -11,12 +11,17 @@
 
 import type { CostValue } from "@/lib/cost";
 import type { CurbSide } from "@/lib/data/parking";
+import type { BayTransform } from "@/lib/map/bay-transform";
 import type { ParkingPhoto } from "@/lib/map/parking-photos";
 
 export type FeatureKind = "marker" | "line" | "trail" | "area";
 
 /** Built-in data layers a view can include without re-entering data. */
-export type BuiltInSource = "restaurants" | "parking-zones" | "streets";
+export type BuiltInSource =
+  | "restaurants"
+  | "parking-zones"
+  | "streets"
+  | "port-stalls";
 
 export interface MapView {
   id: string; // slug, e.g. "food-drink"
@@ -315,5 +320,18 @@ export interface ResolvedMapView {
       photos?: ParkingPhoto[];
     }[];
     streets?: boolean; // client fetches /geo/street-parking.json itself when true
+    /**
+     * Port-lot bay geometry. Flagged, not inlined — the client fetches the
+     * static /geo/port-stalls.json itself, exactly like `streets`, because it
+     * is 84 KB of generated geometry that would otherwise ride on every view
+     * payload.
+     *
+     * `transforms` is the one part that CANNOT be static: it is the admin's
+     * per-zone nudge, read from the "port-bay-transforms" overlay at request
+     * time and keyed by MapZone id. Bundled with the flag rather than sitting
+     * beside it so the layer and its corrections can never arrive apart.
+     * Absent key = draw that zone's bays exactly as generated.
+     */
+    portStalls?: { transforms: Record<string, BayTransform> };
   };
 }

@@ -356,12 +356,14 @@ const SOURCE_OPTIONS: { key: string; label: string }[] = [
   { key: "restaurants", label: "Restaurants" },
   { key: "parking-zones", label: "Parking zones" },
   { key: "streets", label: "Street overlay" },
+  { key: "port-stalls", label: "Port parking bays" },
 ];
 
 const SOURCE_SHORT: Record<string, string> = {
   restaurants: "🍽",
   "parking-zones": "🅿️",
   streets: "🛣",
+  "port-stalls": "🅿",
 };
 
 /** Everything one context render put on the map, so the next one (or unmount)

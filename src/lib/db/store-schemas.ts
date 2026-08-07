@@ -102,6 +102,19 @@ export const STORE_SCHEMAS: Record<string, z.ZodType> = {
   webcams: DOMAIN_SCHEMAS.webcams,
   itineraries: DOMAIN_SCHEMAS.itineraries,
   "parking-zones": z.looseObject({ id: entityId, name: nonempty }),
+  // Per-zone display nudge for the generated Port bay geometry. Strict from
+  // birth: the store is new, and every field is a number that ends up in a
+  // coordinate. `finite()` is the load-bearing part — JSON cannot carry NaN,
+  // but a hand-rolled POST body can, and a NaN reaching the transform would
+  // propagate into every bay's coordinates rather than failing loudly here.
+  // Range clamping stays in clampBayTransform(); this is the structural floor.
+  "port-bay-transforms": z.looseObject({
+    id: entityId,
+    dx: z.number().finite(),
+    dy: z.number().finite(),
+    rotateDeg: z.number().finite(),
+    scale: z.number().finite().positive(),
+  }),
   "map-views": z.looseObject({ id: entityId, name: nonempty }),
   "map-features": z.looseObject({ id: entityId, title: nonempty }),
   // expiresAt: optional "YYYY-MM-DD" auto-restore date (site-store.activeRows).

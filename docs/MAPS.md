@@ -84,6 +84,7 @@ A view pulls existing app data in by listing sources — nothing is re-entered:
 | `restaurants` | live restaurant listings (hidden ones filtered out), each mapped to a marker category server-side by cuisine/tags so coffee → ☕ and bars → 🍺 rather than everything 🍽️ (`restaurantCategory()` in `resolve.ts`) | category-aware teardrop pins |
 | `parking-zones` | the `MapZone` parking dataset (polygons + centers colored by rule) | filled polygons, or a circle marker when a zone has only a center |
 | `streets` | the color-coded street-parking overlay | flagged, not inlined — the client fetches `/geo/street-parking.json` itself |
+| `port-stalls` | the Port lot's 302 individual parking bays, coloured by which code you text | flagged like `streets` — the client fetches `/geo/port-stalls.json`; only the per-zone nudge rides on the payload (see "The Port bay layer" below) |
 
 So the **Food & Drink** view is literally `sources: ["restaurants"]` and stays
 in sync with the listings automatically.
@@ -95,7 +96,7 @@ in sync with the listings automatically.
   | id | name | `sources` | features come from |
   | --- | --- | --- | --- |
   | `food-drink` | Food & Drink | `["restaurants"]` | the restaurant listings, live |
-  | `parking-cash` | Parking | `["parking-zones"]` | the `MapZone` store (seeded, **not** a blank canvas — see the comment in the seed; this once shipped empty under copy promising markers) |
+  | `parking-cash` | Parking | `["parking-zones", "port-stalls"]` | the `MapZone` store (seeded, **not** a blank canvas — see the comment in the seed; this once shipped empty under copy promising markers) |
   | `explore` | Explore Kingston | `[]` | drawn features |
   | `trails` | Trails & Walks | `[]` | drawn features |
   | `amenities` | Restrooms & Amenities | `[]` | drawn features (E27) |
@@ -671,6 +672,54 @@ Facts worth knowing:
   `free-unrestricted`, `prohibited`, `load-zone` and `permit` predate the
   measurement and are ADR-0007's to change; the exact set is pinned as a ratchet
   so nothing new joins it silently. Worth a colorway pass on its own.
+---
+
+## The Port bay layer (E34)
+
+The `/parking` map used to draw the Port as five translucent zone blobs, and
+because POKPARK, POKHILL and POKTT are all `rule: "paid"`, all three rendered in
+one purple — hiding the single decision a driver actually has to make. This
+layer draws the individual bays instead, coloured by pay code.
+
+**Where the geometry comes from.** `scripts/gen-port-stalls.py` reads the Port's
+official map PDF — vector art, not a scan, so the row blocks and legend colours
+read out exactly — and emits `public/geo/port-stalls.json`: 302 bays, 223 of them
+numbered, matching the ranges the Port prints (1–4 … 301–318).
+
+**Why the fit is piecewise.** Fitting the whole sheet to the world at once lands
+**RMS 9.6 m, worst case 16.2 m** — about six stall widths — because the schematic
+straightens rows and regularises spacing. So rotation comes from the sheet (it is
+one drawing, so it has one bearing) while extent and position come per zone from
+the aerial-snapped polygons in `parking.ts`. Bays are generated inside their own
+zone and cannot drift outside it. The script's header carries the full reasoning
+and the two fits that were rejected.
+
+**What it does not claim.** A bay is a uniform subdivision of a row, which is how
+the Port draws them and not how asphalt works. Everything inherits the zone's
+`probable` confidence. Do not relabel it verified without a field survey.
+
+**Adjusting it** (`/admin/map`, per zone): offset, rotation and scale, applied to
+the zone's bays as one rigid group and previewed live before saving.
+
+- Pure maths: `src/lib/map/bay-transform.ts` (shared by the public map, the
+  editor preview and the tests, so the three cannot drift).
+- Stored in its own overlay store, `src/lib/stores/bay-transform-store.ts`,
+  **not** as a field on `MapZone` — `POST /api/admin/parking` rebuilds the zone
+  from a field whitelist, so a nudge living there would be wiped by the next save
+  that so much as dragged a pin.
+- Written via `POST /api/admin/bay-transform`; clamped in one place
+  (`clampBayTransform`) on write, on read, and in the editor preview.
+- Whole-zone only, deliberately. A single bay's position is not independently
+  known, so dragging one would manufacture precision the source never had. What
+  is knowable on the ground is that a whole row sits a few metres off.
+
+The palette is private to this layer (`STALL_COLORS` in `feature-map.tsx`) rather
+than an extension of `ParkingRule`: that union is hand-synced across seven files
+and pinned by `tests/unit/parking-rule-palette.test.ts`, and the bay layer answers
+"which code do I text", not "what is the rule".
+
+---
+
 - **Two divergent parking color maps.** `feature-map.tsx` colors built-in
   parking *zones* by `ParkingRule` (`free-2hr`, `paid`, …); CMS parking
   *features* color by `ParkingType` (`free`, `paid`, …). They're kept visually
