@@ -192,6 +192,23 @@ export async function deleteSurveyResponsesBefore(cutoffIso: string): Promise<nu
   return mutated(res);
 }
 
+export async function countFeedbackResponsesBefore(cutoffIso: string): Promise<number> {
+  const res = await getDb().execute(
+    sql`SELECT count(*)::int AS n FROM feedback_response WHERE ts < ${cutoffIso}::timestamptz`,
+  );
+  return rows<{ n: number }>(res)[0]?.n ?? 0;
+}
+
+/** Hard-delete feedback past its 12-month window. No rollup step and no
+ *  tombstone: the comment text IS the sensitive part, so there is nothing
+ *  worth keeping a shell of. */
+export async function deleteFeedbackResponsesBefore(cutoffIso: string): Promise<number> {
+  const res = await getDb().execute(
+    sql`DELETE FROM feedback_response WHERE ts < ${cutoffIso}::timestamptz`,
+  );
+  return mutated(res);
+}
+
 /** Rollup rows, ordered — E18's read path and the tests use this. */
 export async function readAreaRollups(): Promise<
   { month: string; area: string; pings: number; sessions: number }[]

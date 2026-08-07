@@ -251,3 +251,40 @@ export interface SurveyResponse {
   partySize?: number;
   primaryReason?: string;
 }
+
+/** Lowest and highest star a feedback submission may carry. Exported because
+ *  the widget renders this many stars, the route validates against it, and the
+ *  admin page buckets by it — three places that must never disagree. */
+export const FEEDBACK_MIN_RATING = 1;
+export const FEEDBACK_MAX_RATING = 5;
+
+/** Longest comment the route stores. Anything past this is truncated, not
+ *  rejected — a visitor who wrote an essay still gets their point across, and
+ *  a rejection would lose the whole submission. */
+export const FEEDBACK_COMMENT_MAX = 2_000;
+
+/** One in-app feedback submission from the site-wide side tab.
+ *
+ *  NO contact field, by design: the widget never asks for one, so the store
+ *  holds no identifier to look a person up by. `comment` is still free text a
+ *  visitor can type anything into, so this is treated as the app's
+ *  highest-PII-risk log — 12-month retention, never exported to anyone but an
+ *  admin. Do not add an email field here without also giving feedback_response
+ *  real find/export/delete handlers in PII_STORES. */
+export interface FeedbackResponse {
+  submittedAt: string;
+  /** 1–5. Always present — the widget cannot submit without a rating. */
+  rating: number;
+  /** The open text answer. Absent when the visitor rated without writing. */
+  comment?: string;
+  /** In-app path the tab was opened from, e.g. "/ferry" — never a full URL,
+   *  query string, or hash. `REDACTED_PATH` when the page is a sensitive
+   *  destination (src/lib/privacy/policy.ts). */
+  path: string;
+}
+
+/** Stand-in stored instead of a real path when feedback comes from a page in
+ *  SENSITIVE_PATHS. The submission is kept — a visitor who chose to tell the
+ *  Chamber something should be heard — but the page that would reveal they
+ *  were seeking food or health assistance is not. */
+export const REDACTED_PATH = "(withheld)";

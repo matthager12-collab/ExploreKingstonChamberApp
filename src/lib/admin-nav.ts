@@ -46,6 +46,17 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     capability: "view-reports",
   },
   {
+    id: "feedback",
+    href: "/admin/feedback",
+    title: "Page feedback",
+    navLabel: "Feedback",
+    blurb: "Star ratings and comments visitors sent, and which page they were on.",
+    // view-reports, not manage-site: reading what visitors said is a reporting
+    // activity, and keying it this way means a future board-designee or viewer
+    // role sees it alongside Insights and History without a change here.
+    capability: "view-reports",
+  },
+  {
     id: "content",
     href: "/admin/content",
     title: "Site content",

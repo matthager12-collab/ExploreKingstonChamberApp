@@ -30,6 +30,7 @@ import {
   analyticsAreaRollup,
   analyticsEvent,
   audit,
+  feedbackResponse,
   ferryObservation,
   invites,
   legalHold,
@@ -89,6 +90,7 @@ export type LegalHoldBackupRow = {
   setAt: string;
 };
 export type SurveyResponseRow = { ts: string; response: unknown };
+export type FeedbackResponseRow = { ts: string; response: unknown };
 export type FerryObservationRow = { ts: string; obs: unknown };
 
 // --- Auth tables (E06) ------------------------------------------------------
@@ -157,6 +159,9 @@ export type DbSection = {
   /** E11. Optional on READ so pre-E11 bundles still restore. */
   analytics_area_rollup?: AreaRollupRow[];
   legal_hold?: LegalHoldBackupRow[];
+  /** Page feedback. Optional on READ for the same reason as the two above:
+   *  every bundle taken before this table existed must still restore. */
+  feedback_response?: FeedbackResponseRow[];
 };
 
 export type RestoreCounts = {
@@ -165,6 +170,7 @@ export type RestoreCounts = {
   quarantine: number;
   analytics_event: number;
   survey_response: number;
+  feedback_response: number;
   ferry_observation: number;
   orgs: number;
   users: number;
@@ -217,6 +223,10 @@ export async function serializeDb(): Promise<DbSection> {
     .select()
     .from(surveyResponse)
     .orderBy(asc(surveyResponse.ts));
+  const feedbackRows = await db
+    .select()
+    .from(feedbackResponse)
+    .orderBy(asc(feedbackResponse.ts));
   const ferryRows = await db
     .select()
     .from(ferryObservation)
@@ -256,6 +266,7 @@ export async function serializeDb(): Promise<DbSection> {
     })),
     analytics_event: analyticsRows.map((r) => ({ ts: toIso(r.ts), event: r.event })),
     survey_response: surveyRows.map((r) => ({ ts: toIso(r.ts), response: r.response })),
+    feedback_response: feedbackRows.map((r) => ({ ts: toIso(r.ts), response: r.response })),
     ferry_observation: ferryRows.map((r) => ({ ts: toIso(r.ts), obs: r.obs })),
     analytics_area_rollup: rollupRows.map((r) => ({
       month: r.month,
@@ -367,6 +378,8 @@ export async function restoreDb(
   // Pre-E11 bundles carry no privacy sections; empty = fine.
   const rollupRows = section.analytics_area_rollup ?? [];
   const legalHoldRows = section.legal_hold ?? [];
+  // Bundles taken before the feedback tab shipped carry no section; empty = fine.
+  const feedbackRows = section.feedback_response ?? [];
 
   await db.transaction(async (tx) => {
     // Orgs FIRST: users.org_id and invites.org_id reference them.
@@ -487,6 +500,11 @@ export async function restoreDb(
         .insert(surveyResponse)
         .values(batch.map((r) => ({ ts: new Date(r.ts), response: r.response })));
     }
+    for (const batch of chunks(feedbackRows)) {
+      await tx
+        .insert(feedbackResponse)
+        .values(batch.map((r) => ({ ts: new Date(r.ts), response: r.response })));
+    }
     for (const batch of chunks(section.ferry_observation)) {
       await tx
         .insert(ferryObservation)
@@ -521,6 +539,7 @@ export async function restoreDb(
     quarantine: section.quarantine.length,
     analytics_event: section.analytics_event.length,
     survey_response: section.survey_response.length,
+    feedback_response: feedbackRows.length,
     ferry_observation: section.ferry_observation.length,
     orgs: orgRows.length,
     users: userRows.length,

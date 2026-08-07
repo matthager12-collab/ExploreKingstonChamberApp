@@ -193,11 +193,18 @@ function requestInitFor(entry: OutboxEntry): RequestInit {
  * POST `payload` to `url` now, or queue it for the next flush if the device
  * is offline. See the contract block at the top of this file — in particular,
  * an HTTP response of ANY status counts as "sent".
+ *
+ * `httpStatus` on the "sent" branch is how a caller ACTS on the contract's
+ * "retry policy for a 5xx belongs to the caller" clause — before it existed,
+ * the caller was handed responsibility for a decision it had no input to, so
+ * every non-2xx (a 429 from the rate limiter, a 400 from validation) rendered
+ * as success and the visitor was told their submission landed when it had
+ * not. Purely additive: callers that only read `.status` are unaffected.
  */
 export async function submitOrQueue(
   url: string,
   payload: unknown,
-): Promise<{ status: "sent" } | { status: "queued" }> {
+): Promise<{ status: "sent"; httpStatus: number } | { status: "queued" }> {
   const entry: OutboxEntry = {
     id: newIdempotencyKey(),
     url,
@@ -207,11 +214,11 @@ export async function submitOrQueue(
     attempts: 0,
   };
   try {
-    await fetch(url, requestInitFor(entry));
+    const res = await fetch(url, requestInitFor(entry));
     // Reached the server. Even a 500 stays out of the queue: the caller owns
     // that retry decision, and blind re-queueing of server errors is how a
     // poison-pill loop starts.
-    return { status: "sent" };
+    return { status: "sent", httpStatus: res.status };
   } catch {
     // fetch threw — DNS/transport failure, i.e. genuinely offline.
     await putEntry(entry);

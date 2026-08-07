@@ -13,6 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
   appendAnalyticsEvent,
+  appendFeedbackResponse,
   appendFerryObservation,
   appendSurveyResponse,
 } from "@/lib/db/append";
@@ -22,6 +23,7 @@ import {
   analyticsAreaRollup,
   analyticsEvent,
   audit,
+  feedbackResponse,
   ferryObservation,
   invites,
   legalHold,
@@ -70,6 +72,7 @@ beforeAll(async () => {
   });
   await appendAnalyticsEvent({ type: "pageview", path: "/ferry" });
   await appendSurveyResponse({ q1: "came for the ferry" });
+  await appendFeedbackResponse({ rating: 4, comment: "parking map helped", path: "/parking" });
   await appendFerryObservation({ vessel: "Spokane", pct: 42 });
 
   // E06 auth tables. Accounts no longer ride inside `record`, so a bundle that
@@ -127,6 +130,7 @@ async function tableCounts(tdb: TestDb) {
       | typeof quarantine
       | typeof analyticsEvent
       | typeof surveyResponse
+      | typeof feedbackResponse
       | typeof ferryObservation
       | typeof orgs
       | typeof users
@@ -143,6 +147,7 @@ async function tableCounts(tdb: TestDb) {
     quarantine: await one(quarantine),
     analytics_event: await one(analyticsEvent),
     survey_response: await one(surveyResponse),
+    feedback_response: await one(feedbackResponse),
     ferry_observation: await one(ferryObservation),
     orgs: await one(orgs),
     users: await one(users),
@@ -159,10 +164,14 @@ describe("backup/restore roundtrip", () => {
     // without these three a bundle restores to a site nobody can log in to.
     // E11 added analytics_area_rollup/legal_hold — the retention rollups are
     // E18's read surface and holds must survive a restore (FR-A92).
+    // feedback_response is here for the plainest reason of all: it is what
+    // visitors told the Chamber, and a restore that silently came back without
+    // it would look like a working restore.
     expect(Object.keys(section).sort()).toEqual([
       "analytics_area_rollup",
       "analytics_event",
       "audit",
+      "feedback_response",
       "ferry_observation",
       "invites",
       "legal_hold",
@@ -208,6 +217,14 @@ describe("backup/restore roundtrip", () => {
     expect(section.analytics_event).toHaveLength(1);
     expect(section.survey_response).toHaveLength(1);
     expect(section.ferry_observation).toHaveLength(1);
+    // The comment text itself has to survive, not just the row count — the
+    // words are the entire value of a feedback row.
+    expect(section.feedback_response).toHaveLength(1);
+    expect(section.feedback_response![0].response).toMatchObject({
+      rating: 4,
+      comment: "parking map helped",
+      path: "/parking",
+    });
   });
 
   it("restoreDb into a fresh database reproduces every per-table count and the docs byte-for-byte", async () => {
