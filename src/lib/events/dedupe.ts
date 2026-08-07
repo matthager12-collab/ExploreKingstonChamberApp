@@ -119,9 +119,29 @@ function containmentMatch(a: NormalizedEvent, b: NormalizedEvent): boolean {
   return titleContains(longer, shorter);
 }
 
+/**
+ * Where an event is, as tokens — VENUE AND ADDRESS TOGETHER.
+ *
+ * The two sides do not agree on which field holds what. A curated record names
+ * the place ("Mike Wallace Park") and puts the street in `address`; the AMS
+ * feed has no separate address field, so its LOCATION carries the street
+ * ("25864 Washington Blvd. Kingston WA 98346"). Comparing venue-to-venue found
+ * nothing in common and declared the same park two different places — which is
+ * why the town's own concert series showed twice, and why the pair never even
+ * reached the admin's possible-duplicates list.
+ *
+ * Pooling both fields is what makes them meet, on the street address they
+ * actually share.
+ */
+function placeTokens(e: NormalizedEvent): string[] {
+  return [...venueTokens(e.venue), ...venueTokens(e.address ?? "")];
+}
+
 function venuesCompatible(a: NormalizedEvent, b: NormalizedEvent): boolean {
-  const ta = venueTokens(a.venue);
-  const tb = venueTokens(b.venue);
+  const ta = placeTokens(a);
+  const tb = placeTokens(b);
+  // An event that says nothing about where it is cannot contradict one that
+  // does — the wildcard behavior the AMS feed's blank LOCATIONs rely on.
   if (ta.length === 0 || tb.length === 0) return true;
   const set = new Set(ta);
   return tb.some((t) => set.has(t));
