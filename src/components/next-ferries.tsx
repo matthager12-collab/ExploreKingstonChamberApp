@@ -7,7 +7,8 @@
 //
 // Receives server-fetched data as props (so it renders instantly and works
 // without JS), then polls /api/ferry/status every 60s and ticks the countdown
-// every 20s. Pauses polling while the tab is hidden.
+// every 20s. Pauses polling while the tab is hidden, and re-fetches on every
+// wake signal (see useWakeRefresh in lib/ferry-refresh).
 //
 // `tone` themes it for its surroundings: "light" = a white card (the original
 // look, kept for reuse on pale backgrounds); "dark" = bare, light-on-navy so it
@@ -16,6 +17,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { isStaleDay, useWakeRefresh } from "@/lib/ferry-refresh";
 import { formatPacificDate, formatPacificTime } from "@/lib/time";
 import type { WaterSide } from "@/lib/side";
 import {
@@ -60,6 +62,7 @@ const THEME: Record<
     boarding: string;
     alert: string;
     stale: string;
+    dayStale: string;
     dirLabel: string;
     delayLate: string;
     delayOnTime: string;
@@ -96,6 +99,12 @@ const THEME: Record<
     // service alert" and "your copy of this board is stale" are different claims
     // and must stay independently tunable.
     stale: "bg-amber-50 text-amber-900",
+    // Day rollover. Coral rather than the staleness amber because it is the
+    // louder claim of the two — not "this copy is a few minutes old" but "every
+    // number below is about a day that has ended". Values lifted verbatim from
+    // `boarding` in both tones, which is already the contrast-vetted coral
+    // banner; this deliberately does not invent a new pairing.
+    dayStale: "bg-coral/10 text-coral-deep",
     dirLabel: "text-sound-deep",
     delayLate: "bg-coral/15 text-coral-deep",
     delayOnTime: "bg-fern text-white",
@@ -120,6 +129,7 @@ const THEME: Record<
     boarding: "bg-coral/25 text-white",
     alert: "bg-amber-300/15 text-amber-100",
     stale: "bg-amber-300/15 text-amber-100",
+    dayStale: "bg-coral/25 text-white",
     dirLabel: "text-white",
     delayLate: "bg-coral text-white",
     delayOnTime: "bg-fern/25 text-white",
@@ -226,6 +236,7 @@ function DirectionColumn({
   now,
   expanded,
   armed,
+  staleDay,
   onToggleNotify,
   t,
 }: {
@@ -237,6 +248,8 @@ function DirectionColumn({
   now: number;
   expanded: boolean;
   armed: Set<string>;
+  /** Payload is from a Kingston day that has ended — see isStaleDay(). */
+  staleDay: boolean;
   onToggleNotify: (dir: FerryDir, departs: string) => void;
   t: Theme;
 }) {
@@ -263,7 +276,11 @@ function DirectionColumn({
         )}
       </div>
       {shown.length === 0 ? (
-        <p className={`mt-2 text-sm ${t.done}`}>Done for today</p>
+        // Short: both columns are empty when the day has rolled over, so the
+        // explanation lives in the single banner above rather than twice here.
+        <p className={`mt-2 text-sm ${t.done}`}>
+          {staleDay ? "Times out of date" : "Done for today"}
+        </p>
       ) : (
         <ul className="mt-2 space-y-2">
           {shown.map((s) => {
@@ -340,6 +357,12 @@ export function NextFerries({
   // treatment as the sibling ferry-board.tsx.
   const lastGoodRef = useRef<string>(serverNow);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // The wake signals live outside the polling effect but must call the SAME
+  // refresh() — the one that owns the lastGoodRef bookkeeping. Handed out
+  // through a ref so refresh() can stay inside that effect, for the
+  // empty-dep-array reason spelled out on lastGoodRef above.
+  const refreshRef = useRef<() => void>(() => {});
+  useWakeRefresh(() => refreshRef.current());
   // Opt-in in-page reminders: `armed` holds "dir|departs" keys; `firedRef` keeps
   // a fired reminder from re-firing across the 20s ticks. Notifications only work
   // while this tab is open — the calendar (.ics) link is the reliable path.
@@ -490,6 +513,7 @@ export function NextFerries({
         startPoll();
       }
     }
+    refreshRef.current = refresh;
     startPoll();
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
@@ -498,6 +522,10 @@ export function NextFerries({
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
+
+  // Dated from the car ferry, the only route that runs every single day: an
+  // empty list there is always a data problem, never a fact about the timetable.
+  const staleDay = isStaleDay(data.carFerry.sailings, now);
 
   return (
     <div className={t.root}>
@@ -524,6 +552,28 @@ export function NextFerries({
           Full schedule →
         </Link>
       </div>
+
+      {/* Day rollover — a LOUDER claim than the E13 staleness banner below it,
+          and a different one: not "this copy may be a few minutes old" but
+          "every time under here is about a day that has already ended". The
+          case it was written for is a tab left open overnight, where the widget
+          used to print a confident "Done for today" with no warning at all.
+          Both banners can legitimately show at once. */}
+      {staleDay && (
+        <p role="status" className={`mt-3 rounded-lg px-3 py-2 text-sm ${t.dayStale}`}>
+          <span className="font-semibold">These times are from an earlier day.</span> Today&rsquo;s
+          sailings haven&rsquo;t loaded — reload the page, or confirm at{" "}
+          <a
+            href="https://wsdot.wa.gov/travel/washington-state-ferries"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={t.noteLink}
+          >
+            wsdot.wa.gov/ferries
+          </a>
+          .
+        </p>
+      )}
 
       {/* E13 transport freshness — "how old is this copy of the page?". That is a
           different question from the !live note at the bottom of this component,
@@ -588,6 +638,7 @@ export function NextFerries({
               now={now}
               expanded={expanded}
               armed={armed}
+              staleDay={staleDay}
               onToggleNotify={toggleNotify}
               t={t}
             />
@@ -603,6 +654,7 @@ export function NextFerries({
               now={now}
               expanded={expanded}
               armed={armed}
+              staleDay={staleDay}
               onToggleNotify={toggleNotify}
               t={t}
             />
