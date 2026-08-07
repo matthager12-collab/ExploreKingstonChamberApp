@@ -220,6 +220,11 @@ export function eventItemToNormalized(e: EventItem): NormalizedEvent {
     charityId: e.charityId,
     eventContact: e.eventContact,
     attachments: e.attachments,
+    // Series-level fields ride through to rrule-expand, exactly as the iCal
+    // path above does. An in-app event with no rrule expands to itself, so
+    // this is a no-op for every single-occurrence event.
+    rrule: e.rrule,
+    exdates: e.exdates,
   };
 }
 

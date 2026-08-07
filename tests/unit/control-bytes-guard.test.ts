@@ -132,6 +132,10 @@ describe("previously affected files stay plain text", () => {
       "utf8",
     );
     const separators = src.match(/\\u0000/g) ?? [];
-    expect(separators.length).toBe(6);
+    // 6 until 2026-08-06, when candidatePairs added two more composite-key
+    // sites (the "already ruled on" pair set, built and read once each).
+    // Bump this deliberately when a pass is added; a DROP means someone
+    // replaced an escape with a literal.
+    expect(separators.length).toBe(10);
   });
 });

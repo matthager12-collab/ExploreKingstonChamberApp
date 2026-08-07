@@ -163,6 +163,14 @@ export interface EventItem {
   charityId?: string;
   /** portal ownership: the listing/org id whose account manages this event */
   ownerId?: string;
+  /** RFC 5545 RRULE (no "RRULE:" prefix) when this event repeats — the same
+   *  field the ingested feeds carry, so one expander serves both. Built from
+   *  the closed preset set in src/lib/events/recurrence.ts; `start` is the
+   *  series anchor (DTSTART). Absent = a single occurrence. */
+  rrule?: string;
+  /** Dates lifted out of the series ("no market that Saturday"), as instants
+   *  matching the occurrence they cancel. Only meaningful alongside `rrule`. */
+  exdates?: string[];
 }
 
 export interface ItineraryStop {
