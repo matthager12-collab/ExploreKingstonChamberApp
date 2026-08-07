@@ -77,18 +77,23 @@ export default async function ParkingPage() {
         title="The map"
         subtitle={copyText(copy, "parking.map.subtitle")}
       >
-        {/* Vector base only (ADR-0006 amendment 2, owner 2026-08-04 —
-            reverses the 2026-08-03 imagery-default decision): Esri's keyless
-            imagery tops out at native z19 over Kingston, which smears cars
-            into blobs at the zooms stalls need, so the satellite option is
-            withdrawn from the public page until better imagery is licensed
-            (Kitsap County's ~0.10 m HXIP orthos are the identified upgrade
-            path — permission required). FeatureMap keeps the imagery
-            capability dormant; restoring it is `basemap="satellite"
-            basemapToggle` on the line below. The admin editors still offer
-            imagery for tracing. */}
+        {/* Imagery is available here again (owner decision 2026-08-07),
+            reversing ADR-0006 amendment 2 of 2026-08-04.
+            
+            That amendment withdrew satellite because Esri's keyless imagery
+            tops out at native z19 over Kingston and "smears cars into blobs at
+            the zooms stalls need". The stall-level bay overlay it was written
+            about is no longer drawn on this view, so the objection no longer
+            applies: at lot level the imagery is sharp enough to show where the
+            asphalt is, which is what a visitor is asking. The z19 cap and the
+            Kitsap County ~0.10 m HXIP orthos as the upgrade path both still
+            stand — see docs/MAPS.md.
+
+            Vector stays the DEFAULT: it is self-hosted, makes no third-party
+            request, and paints faster on a phone. Satellite is one tap away on
+            the toggle. Make it the default with `basemap="satellite"`. */}
         {parkingMap ? (
-          <FeatureMap resolved={parkingMap} height="500px" />
+          <FeatureMap resolved={parkingMap} height="500px" basemapToggle />
         ) : (
           <Card>
             <p className="text-sm text-ink-soft">Parking map unavailable right now.</p>

@@ -11,6 +11,8 @@ import { createTestDb, type TestDb } from "../setup/pglite-db";
 import { BAY_TRANSFORM_LIMITS } from "@/lib/map/bay-transform";
 import { getBayTransforms, saveBayTransform } from "@/lib/stores/bay-transform-store";
 import { resolveMapView } from "@/lib/map/resolve";
+import { saveMapView } from "@/lib/stores/map-store";
+import type { MapView } from "@/lib/map/types";
 
 let tdb: TestDb;
 beforeAll(async () => {
@@ -66,13 +68,26 @@ describe("bay-transform store", () => {
   });
 });
 
-describe("the parking view carries bay transforms to the client", () => {
-  it("flags port-stalls and includes the saved nudges", async () => {
+describe("a view that lists port-stalls carries the transforms to the client", () => {
+  // parking-cash no longer lists the source (owner decision 2026-08-07), so
+  // this builds a view that does — which is what /admin/maps produces when the
+  // "Port parking bays" box is ticked. Asserting against parking-cash would
+  // only re-test the seed's source list, and would go quiet the moment anyone
+  // re-enabled the layer somewhere else.
+  const VIEW: MapView = {
+    id: "bay-test",
+    name: "Bay test",
+    center: [47.7972, -122.498],
+    zoom: 17,
+    sources: ["port-stalls"],
+    published: false,
+  };
+
+  it("includes the saved nudges", async () => {
     await saveBayTransform("port-pokhill", { dx: 6, dy: 0, rotateDeg: 0, scale: 1 });
-    const resolved = await resolveMapView("parking-cash");
+    await saveMapView(VIEW);
+    const resolved = await resolveMapView("bay-test");
     expect(resolved).not.toBeNull();
-    // Present at all = the seeded view lists the source. If this fails, the
-    // bay layer silently stops rendering on /parking.
     expect(resolved!.builtins.portStalls).toBeDefined();
     expect(resolved!.builtins.portStalls!.transforms["port-pokhill"].dx).toBe(6);
   });
@@ -80,8 +95,14 @@ describe("the parking view carries bay transforms to the client", () => {
   // The 84 KB of bay geometry must stay a static file the client fetches. If it
   // ever gets inlined here it rides on every view payload.
   it("does not inline the bay geometry itself", async () => {
-    const resolved = await resolveMapView("parking-cash");
+    await saveMapView(VIEW);
+    const resolved = await resolveMapView("bay-test");
     const keys = Object.keys(resolved!.builtins.portStalls!);
     expect(keys).toEqual(["transforms"]);
+  });
+
+  it("parking-cash does NOT list the source — the public map stays clean", async () => {
+    const resolved = await resolveMapView("parking-cash");
+    expect(resolved!.builtins.portStalls).toBeUndefined();
   });
 });
