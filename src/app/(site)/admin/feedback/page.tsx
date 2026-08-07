@@ -17,6 +17,7 @@ import { Callout, Card, PageHeader, Section } from "@/components/ui";
 import { feedbackStore, FEEDBACK_PAGE_SIZE } from "@/lib/feedback-store";
 import { getAnalyticsBaseline } from "@/lib/stores/analytics-baseline-store";
 import { FEEDBACK_MAX_RATING, FEEDBACK_MIN_RATING, REDACTED_PATH } from "@/lib/types";
+import { CommentList } from "./comment-list";
 
 export const metadata: Metadata = {
   title: "Page feedback",
@@ -83,7 +84,9 @@ export default async function AdminFeedbackPage() {
   const since = baseline?.since ?? undefined;
   const [summary, recent] = await Promise.all([
     feedbackStore.summarize(since),
-    feedbackStore.list(since),
+    // Rows, not bare responses: each carries the `ts` the delete control
+    // addresses it by (feedback_response is a log with no id).
+    feedbackStore.listRows(since),
   ]);
 
   // Descending stars: people scan a rating distribution from best to worst,
@@ -94,7 +97,7 @@ export default async function AdminFeedbackPage() {
   }
   const maxRatingCount = Math.max(1, ...ratingRows.map((r) => r.count));
 
-  const withComment = recent.filter((r) => r.comment);
+  const withComment = recent.filter((r) => r.response.comment);
   const topPaths = summary.byPath.slice(0, TOP_N);
 
   return (
@@ -220,40 +223,10 @@ export default async function AdminFeedbackPage() {
         title="Comments"
         subtitle="Newest first. Read these — the star average tells you there's a problem; these tell you what it is."
       >
-        {withComment.length === 0 ? (
-          <EmptyNote>
-            No written comments yet — only ratings.
-          </EmptyNote>
-        ) : (
-          <ul className="space-y-3">
-            {withComment.map((row, i) => (
-              // Nothing in the row is guaranteed unique (two visitors can send
-              // the same words from the same page in the same second), so the
-              // index is the honest key for a list that is read-only and never
-              // reordered.
-              <li key={i}>
-                <Card>
-                  <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2 text-sm">
-                    <Stars rating={row.rating} />
-                    <span className="flex flex-wrap items-baseline gap-2 text-xs text-ink-soft">
-                      <PathCell path={row.path} />
-                      <span>
-                        {new Date(row.submittedAt).toLocaleString("en-US", {
-                          dateStyle: "medium",
-                          timeStyle: "short",
-                        })}
-                      </span>
-                    </span>
-                  </div>
-                  {/* whitespace-pre-line so a visitor's line breaks survive;
-                      break-words so an unbroken 2,000-character string cannot
-                      blow out the page width. */}
-                  <p className="whitespace-pre-line break-words text-ink">{row.comment}</p>
-                </Card>
-              </li>
-            ))}
-          </ul>
-        )}
+        {/* Client component: each row carries a Delete control, which is the
+            mechanism behind the privacy notice's promise that a visitor can
+            have their comment removed before the 12-month window elapses. */}
+        <CommentList rows={withComment} />
         {recent.length >= FEEDBACK_PAGE_SIZE && (
           <p className="mt-3 text-xs text-ink-soft">
             Showing the most recent {FEEDBACK_PAGE_SIZE} submissions.

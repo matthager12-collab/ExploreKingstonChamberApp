@@ -26,7 +26,7 @@
  * E16/R3 membership-records tense flip relies on exactly that behavior.
  * Format: "YYYY-MM" of the notice revision.
  */
-export const PRIVACY_NOTICE_VERSION = "2026-07";
+export const PRIVACY_NOTICE_VERSION = "2026-08";
 
 export interface PrivacyNoticeChange {
   version: string;
@@ -36,6 +36,12 @@ export interface PrivacyNoticeChange {
 
 /** Rendered on /privacy; newest first. */
 export const PRIVACY_NOTICE_CHANGELOG: PrivacyNoticeChange[] = [
+  {
+    version: "2026-08",
+    date: "2026-08-06",
+    summary:
+      "Page feedback: a rating, a comment, and the page it was sent from, kept 12 months. Added because the comment box is free text — the notice now says plainly what happens to personal details typed into it, and how to have them deleted.",
+  },
   {
     version: "2026-07",
     date: "2026-07-20",
