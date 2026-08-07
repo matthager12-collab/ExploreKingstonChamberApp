@@ -1,0 +1,154 @@
+name: Deploy watch
+
+# Turns a FAILED PRODUCTION DEPLOY into a red X on the commit that caused it.
+#
+# ── Why this exists ───────────────────────────────────────────────────────────
+# Render auto-deploys `main` and does not wait for GitHub checks, so `ci` going
+# green says the code is good — NOT that the release shipped. Nothing else
+# watches the deploy itself, and a failed one is completely silent: the site
+# keeps serving the previous release (runMigrations() rejects before the server
+# takes traffic, so a bad release fails closed), which is exactly why nobody
+# notices.
+#
+# On 2026-08-07 a rewritten migration broke the boot at 16:31 UTC. The failure
+# went unseen for ~90 minutes, and a second PR merged on top of the broken chain
+# in the meantime — its deploy failed too, also silently. Both would have been
+# caught within a minute of the merge by this workflow.
+#
+# ── What it does ──────────────────────────────────────────────────────────────
+# Render's GitHub integration posts a Deployment + DeploymentStatus for every
+# push to main. This waits for the deployment belonging to THIS commit, follows
+# it to a terminal state, and fails the job if it did not succeed. On success it
+# additionally checks /api/health, because "Render reported success" and "the app
+# is actually serving" are different claims.
+#
+# Keyless: the deployments API is readable with the built-in GITHUB_TOKEN, and
+# the health check is an unauthenticated GET. No secrets to rotate.
+#
+# ── If this job goes red ──────────────────────────────────────────────────────
+#  * "deployment FAILED"     → open the log_url it prints (Render dashboard).
+#                              A boot-time migration error is the usual cause —
+#                              see docs/OPERATIONS.md and the note in
+#                              src/lib/db/migrate.ts. main will not ship again
+#                              until it is fixed.
+#  * "no deployment created" → Render never heard about the push. Check the
+#                              service's Auto-Deploy setting and that the GitHub
+#                              app is still installed. The code is fine; the
+#                              pipeline is not.
+#  * "still in progress"     → the deploy outlived the window below. Usually a
+#                              slow Docker build rather than a failure; re-run
+#                              this job to keep watching.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Commit SHA to watch (defaults to the current one)"
+        required: false
+        type: string
+
+# Read-only, and only the deployments API. No checkout — this workflow never
+# touches the repository contents.
+permissions:
+  deployments: read # the Deployment/DeploymentStatus records Render posts
+  contents: read # some API reads resolve the repo first on private repos
+
+# One watcher per commit. Never cancel-in-progress: a superseded run would
+# report nothing, which is the silence this workflow exists to remove.
+concurrency:
+  group: deploy-watch-${{ github.event.inputs.sha || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    # Comfortably longer than the observed deploy time (a Docker build plus
+    # boot-time migrations has run ~2-20 min), and shorter than leaving a
+    # runner parked for an hour.
+    timeout-minutes: 35
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SHA: ${{ github.event.inputs.sha || github.sha }}
+      HEALTH_URL: https://explore-kingston.onrender.com/api/health
+    steps:
+      - name: Wait for Render to report the deployment
+        id: watch
+        run: |
+          set -uo pipefail
+          echo "Watching deploy of ${SHA:0:7} …"
+
+          # 1. Wait for the Deployment record. Render creates it within seconds
+          #    of the push, but allow for webhook lag.
+          dep=""
+          for i in $(seq 1 30); do
+            dep=$(gh api "repos/${GITHUB_REPOSITORY}/deployments?sha=${SHA}" \
+                    --jq '.[0].id' 2>/dev/null || true)
+            [ -n "$dep" ] && [ "$dep" != "null" ] && break
+            sleep 10
+          done
+
+          if [ -z "$dep" ] || [ "$dep" = "null" ]; then
+            echo "::error::no deployment created for ${SHA:0:7} after 5 min — Render never saw this push. Check the service's Auto-Deploy setting and that the GitHub app is installed."
+            exit 1
+          fi
+          echo "deployment id: $dep"
+
+          # 2. Follow it to a terminal state. `queued`/`in_progress` are not
+          #    terminal; `pending` is the initial GitHub state before Render
+          #    picks it up.
+          state=""
+          log=""
+          for i in $(seq 1 180); do   # 180 × 10s = 30 min
+            read -r state log < <(gh api "repos/${GITHUB_REPOSITORY}/deployments/${dep}/statuses" \
+              --jq '.[0] | "\(.state) \(.log_url // "-")"' 2>/dev/null || echo "unknown -")
+            case "$state" in
+              success|failure|error|inactive) break ;;
+            esac
+            sleep 10
+          done
+
+          echo "final state: $state"
+          echo "log: $log"
+          {
+            echo "### Deploy of \`${SHA:0:7}\`"
+            echo ""
+            echo "- state: **$state**"
+            echo "- log: $log"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          case "$state" in
+            success)
+              echo "deployment succeeded" ;;
+            failure|error)
+              echo "::error::deployment FAILED ($state) for ${SHA:0:7} — main is not shipping until this is fixed. Log: $log"
+              exit 1 ;;
+            inactive)
+              echo "::error::deployment went inactive for ${SHA:0:7} (superseded or cancelled). Log: $log"
+              exit 1 ;;
+            *)
+              echo "::error::deployment still in progress after 30 min (last state: ${state:-unknown}). Usually a slow build rather than a failure — re-run this job to keep watching. Log: $log"
+              exit 1 ;;
+          esac
+
+      # "Render reported success" and "the app is serving" are different claims.
+      # The health route returns 200 only when Postgres answers, so this also
+      # catches a release that booted against a broken database.
+      - name: Confirm the app is actually serving
+        run: |
+          set -uo pipefail
+          for i in $(seq 1 20); do
+            body=$(curl -sf -m 20 "$HEALTH_URL" || true)
+            if [ -n "$body" ]; then
+              echo "health: $body"
+              case "$body" in
+                *'"ok":true'*)
+                  echo "app is serving" >> "$GITHUB_STEP_SUMMARY"
+                  exit 0 ;;
+              esac
+            fi
+            sleep 15
+          done
+          echo "::error::deploy reported success but $HEALTH_URL never returned ok:true — the release is up but not healthy (most likely the database)."
+          exit 1
