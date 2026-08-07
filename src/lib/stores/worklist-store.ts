@@ -10,6 +10,7 @@ export {
   claimItem,
   createWorklistItem,
   dismissItem,
+  escalateItem,
   getWorklistCounts,
   getWorklistItem,
   listWorklistItems,
@@ -33,14 +34,23 @@ export {
  *  - lodging 180 / webcams 180 / charities 180: contact details and links
  *    drift slowly; twice a year keeps the sweep queue small;
  *  - itineraries 365: editorial content, reviewed annually before the season;
- *  - events and volunteer-needs are date-bound (they expire on their own) and
- *    hunt submissions are reviewed once — none of them belong here. */
+ *  - events 90: REPEATING series only — see the note below;
+ *  - volunteer-needs are date-bound (they expire on their own) and hunt
+ *    submissions are reviewed once — neither belongs here.
+ *
+ *  WHY EVENTS ARE HERE NOW. They were excluded on the reasoning that an event
+ *  is date-bound and expires on its own. That is true of a single occurrence
+ *  and false of a series: a weekly market never expires, it just quietly stops
+ *  being right — the hours move, the season ends, the organizer changes. So
+ *  the sweep takes events at a quarter, and skips any event with no `rrule`,
+ *  which leaves one-off events exactly as exempt as they were. */
 export const STALENESS_DEFAULTS: Record<string, number> = {
   restaurants: 90,
   lodging: 180,
   webcams: 180,
   charities: 180,
   itineraries: 365,
+  events: 90,
   // E17 directory listings: import-seeded contact details, reviewed yearly.
   // Only live rows enter the sweep, so the imported draft pile costs nothing.
   directory: 365,

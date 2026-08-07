@@ -8,7 +8,7 @@ import { NextRequest } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { record } from "@/lib/db/schema";
+import { record, worklistItem } from "@/lib/db/schema";
 import { listVerifyDue, markRecordVerified, writeRecord } from "@/lib/db/records";
 import { restaurants as restaurantSeed } from "@/lib/data/restaurants";
 import { STALENESS_DEFAULTS, listWorklistItems, resolveItem } from "@/lib/stores/worklist-store";
@@ -22,6 +22,9 @@ function restaurantDoc(id: string, name: string) {
 
 const authState = vi.hoisted(() => ({
   user: null as null | { id: string; role: string; email: string },
+  /** What listUsers() returns — the sweep maps an event's ownerId (an org)
+   *  onto the account that should answer for it. */
+  users: [] as { id: string; orgId: string | null }[],
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -31,6 +34,7 @@ vi.mock("@/lib/auth", () => ({
       ? null
       : Response.json({ error: "Sign in first" }, { status: 401 }),
   ),
+  listUsers: vi.fn(async () => authState.users),
 }));
 
 import { POST as sweepPOST } from "@/app/api/admin/worklist/sweep/route";
@@ -113,11 +117,14 @@ describe("sweep behavior", () => {
     expect(openAfter).toHaveLength(2);
   });
 
-  it("the pending record and the non-participating store were never swept", async () => {
+  it("the pending record and the one-off event were never swept", async () => {
     const all = await listWorklistItems({ type: "staleness" });
     expect(all.map((i) => i.subjectId)).not.toContain("stale-pending");
+    // `events` IS a participating store now (repeating series go stale while
+    // still on the calendar), but a single-occurrence event expires on its own
+    // and is skipped at the sweep — same outcome as before, different reason.
+    expect(STALENESS_DEFAULTS.events).toBe(90);
     expect(all.map((i) => i.subjectId)).not.toContain("old-event");
-    expect(STALENESS_DEFAULTS.events).toBeUndefined();
   });
 
   it("verified resolution stamps last_verified_at and removes the record from the next sweep", async () => {
@@ -172,5 +179,98 @@ describe("sweep behavior", () => {
 
   it("markRecordVerified returns false for a record with no overlay row (seed-only)", async () => {
     expect(await markRecordVerified("restaurants", "never-written-id")).toBe(false);
+  });
+});
+
+// A repeating event is the case the events store was added to the sweep for:
+// it never expires on its own, so nothing else would ever ask whether the
+// weekly market is still running at the time the calendar claims.
+describe("repeating events — the quarterly owner check", () => {
+  beforeAll(async () => {
+    await writeRecord(
+      "events",
+      {
+        id: "weekly-market",
+        title: "Kingston Public Market",
+        start: "2026-05-02T09:00:00-07:00",
+        rrule: "FREQ=WEEKLY;BYDAY=SA",
+        ownerId: "org-1",
+      },
+      { status: "live" },
+    );
+    await writeRecord(
+      "events",
+      {
+        id: "ownerless-series",
+        title: "Chamber Coffee Hour",
+        start: "2026-05-05T08:00:00-07:00",
+        rrule: "FREQ=MONTHLY;BYDAY=1TU",
+      },
+      { status: "live" },
+    );
+    await backdate("events", "weekly-market", 120);
+    await backdate("events", "ownerless-series", 120);
+  });
+
+  it("assigns an owned series to the owner's account with a deadline", async () => {
+    authState.user = { id: "admin-1", role: "admin", email: "admin@example.test" };
+    authState.users = [{ id: "owner-1", orgId: "org-1" }];
+
+    const body = await (await sweep()).json();
+    expect(body.assignedToOwner).toBeGreaterThanOrEqual(1);
+
+    const [item] = await listWorklistItems({
+      type: "staleness",
+      subjectStore: "events",
+      assigneeUserId: "owner-1",
+    });
+    expect(item).toBeDefined();
+    expect(item.subjectId).toBe("weekly-market");
+    // 14 days out, give or take the seconds this test took to run.
+    const days = (item.dueAt!.getTime() - Date.now()) / 86_400_000;
+    expect(days).toBeGreaterThan(13.9);
+    expect(days).toBeLessThan(14.1);
+  });
+
+  it("leaves an ownerless series unassigned — straight to the Chamber", async () => {
+    const items = await listWorklistItems({
+      type: "staleness",
+      subjectStore: "events",
+    });
+    const ownerless = items.find((i) => i.subjectId === "ownerless-series");
+    expect(ownerless).toBeDefined();
+    expect(ownerless!.assigneeUserId).toBeNull();
+    // No owner means no one to wait on, so no deadline to escalate against.
+    expect(ownerless!.dueAt).toBeNull();
+  });
+
+  it("hands the task back to the Chamber once the deadline passes", async () => {
+    authState.user = { id: "admin-1", role: "admin", email: "admin@example.test" };
+    const [assigned] = await listWorklistItems({
+      type: "staleness",
+      subjectStore: "events",
+      assigneeUserId: "owner-1",
+    });
+    expect(assigned).toBeDefined();
+
+    // The owner did nothing for 15 days.
+    await tdb.db
+      .update(worklistItem)
+      .set({ dueAt: new Date(Date.now() - 86_400_000) })
+      .where(eq(worklistItem.id, assigned.id));
+
+    const body = await (await sweep()).json();
+    expect(body.escalated).toBe(1);
+
+    const after = await listWorklistItems({
+      type: "staleness",
+      subjectStore: "events",
+    });
+    const moved = after.find((i) => i.subjectId === "weekly-market");
+    // Same item, now nobody's — which is what puts it in the Chamber's
+    // unassigned queue. Doing nothing must not park a task forever.
+    expect(moved!.id).toBe(assigned.id);
+    expect(moved!.assigneeUserId).toBeNull();
+    expect(moved!.state).toBe("open");
   });
 });
