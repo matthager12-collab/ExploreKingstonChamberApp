@@ -49,6 +49,7 @@ export default async function EventsSourcesPage() {
           overrides,
           mergedCount: review.merged.length,
           clusters: review.clusters,
+          candidates: review.candidates,
           orgs: orgs.map((o) => ({
             id: o.id,
             name: o.name,

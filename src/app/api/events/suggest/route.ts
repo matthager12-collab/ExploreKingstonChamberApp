@@ -27,6 +27,8 @@ import { checkRateLimit, clientKey } from "@/lib/rate-limit";
 import { hasBlob } from "@/lib/blob-store";
 import { RecordValidationError } from "@/lib/db/store-schemas";
 import { eventSchema, firstZodMessage, MAX_ATTACHMENTS } from "@/lib/schemas";
+import { OTHER_BUSINESS_VALUE } from "@/lib/businesses";
+import { getBusinessOptions } from "@/lib/stores/business-options";
 import {
   attachmentExtension,
   MAX_ATTACHMENT_BYTES,
@@ -114,9 +116,28 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Who is running it. The form offers the Chamber's own listings plus an
+  // "other" free-text branch, so resolve in that order and fall back to the
+  // submitter's name — the pre-picker behavior, and still right for someone
+  // suggesting their own backyard event.
+  //
+  // The picked VALUE is resolved to its label server-side rather than trusting
+  // a label posted from the browser: the stored organizer must be a name the
+  // Chamber actually has on file, or the /events business filter drifts apart
+  // from the directory again.
+  const businessValue = field(form, "businessValue");
+  let organizer = submitterName;
+  if (businessValue === OTHER_BUSINESS_VALUE) {
+    const typed = field(form, "businessOther");
+    if (typed) organizer = typed.slice(0, MAX_NAME);
+  } else if (businessValue) {
+    const hit = (await getBusinessOptions()).find((b) => b.value === businessValue);
+    if (hit) organizer = hit.label;
+  }
+
   // Event fields validate through the ONE events schema (E07 rule: never a
   // parallel validator). The intake supplies what the public form doesn't ask:
-  // a fresh id, the default category, and organizer = submitter name.
+  // a fresh id, the default category, and the resolved organizer.
   const candidate = {
     id: `${slugify(field(form, "title"))}-${randomBytes(3).toString("hex")}`,
     title: form.get("title"),
@@ -125,7 +146,7 @@ export async function POST(request: NextRequest) {
     venue: form.get("venue"),
     description: form.get("description"),
     category: "community",
-    organizer: submitterName,
+    organizer,
     url: form.get("url"),
     eventContact,
   };

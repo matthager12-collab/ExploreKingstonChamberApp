@@ -11,6 +11,7 @@
 
 import type { Metadata } from "next";
 import { getParkingZones } from "@/lib/stores/parking-store";
+import { parkingZones } from "@/lib/data/parking";
 import { getMediaItems } from "@/lib/stores/media-store";
 import { PageHeader, Section } from "@/components/ui";
 import { MapZoneEditor } from "./editor";
@@ -26,6 +27,19 @@ export const metadata: Metadata = {
 export default async function AdminMapPage() {
   const [zones, mediaLibrary] = await Promise.all([getParkingZones(), getMediaItems()]);
 
+  // Seed lots that have been DELETED. A delete writes a tombstone that hides
+  // the seed row, and until now there was no way back: the editor lists the
+  // merged zones, a tombstoned lot is not in that list, so there is nothing to
+  // click. Restoring from /admin/audit does not work either — a delete stores
+  // only `{id}` with the `deleted` column set (writeRecord strips `_deleted`
+  // from the audited doc), so replaying that snapshot would resurrect an empty
+  // record and the schema would reject it.
+  //
+  // Deriving the list here needs no new store API: anything in the git seed
+  // that survived the merge is live, so anything missing was tombstoned.
+  const liveIds = new Set(zones.map((z) => z.id));
+  const deletedSeedZones = parkingZones.filter((z) => !liveIds.has(z.id));
+
   return (
     <>
       <PageHeader
@@ -37,7 +51,11 @@ export default async function AdminMapPage() {
         title="Zones"
         subtitle="Click a zone in the list (or on the map) to edit it. Drag the white corner handles to reshape, drag the pin to move the map label, or draw a brand-new zone."
       >
-        <MapZoneEditor initialZones={zones} mediaLibrary={mediaLibrary} />
+        <MapZoneEditor
+          initialZones={zones}
+          mediaLibrary={mediaLibrary}
+          deletedSeedZones={deletedSeedZones}
+        />
       </Section>
       {/* E09: the zone editor is a frozen monolith, so its change history
           lives in the audit browser — pick a zone there to see and restore

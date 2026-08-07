@@ -203,9 +203,12 @@ type DrawKind = "polygon" | "linestring";
 
 export function MapZoneEditor({
   initialZones,
+  deletedSeedZones = [],
   mediaLibrary,
 }: {
   initialZones: MapZone[];
+  /** Seed lots hidden by a tombstone — restorable, see the page comment. */
+  deletedSeedZones?: MapZone[];
   mediaLibrary: MediaItem[];
 }) {
   const router = useRouter();
@@ -262,6 +265,8 @@ export function MapZoneEditor({
   const [nudge, setNudge] = useState<BayTransform>(IDENTITY_BAY_TRANSFORM);
   const [nudgeDirty, setNudgeDirty] = useState(false);
   const [nudgeSaving, setNudgeSaving] = useState(false);
+  /** Ids restored in this session — hides the row without a full reload. */
+  const [restored, setRestored] = useState<Set<string>>(new Set());
   /** Saved nudges by zone id, so switching zones restores the stored value. */
   const savedNudgesRef = useRef<Record<string, BayTransform>>({});
   const nudgeRef = useRef(nudge);
@@ -1058,6 +1063,41 @@ export function MapZoneEditor({
    * Its own endpoint and its own store — this never touches the MapZone, so it
    * cannot be undone by a later zone save, and a zone save cannot undo it.
    */
+  /**
+   * Bring a deleted seed lot back.
+   *
+   * Writes the SEED document through the ordinary admin save, which upserts
+   * with `deleted: false` and audits as a normal edit. No new endpoint and no
+   * un-delete primitive — the tombstone is simply overwritten by real content.
+   */
+  async function restoreZone(zone: MapZone) {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/admin/parking", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(zone),
+      });
+      const data = (await res.json()) as { zone?: MapZone; error?: string };
+      if (!res.ok || !data.zone) {
+        setMessage({ kind: "error", text: data.error ?? "Could not restore that lot." });
+        return;
+      }
+      setZones((zs) => [...zs, data.zone!].sort((a, b) => a.name.localeCompare(b.name)));
+      setRestored((r) => new Set(r).add(zone.id));
+      setMessage({
+        kind: "ok",
+        text: `Restored "${zone.name}" — live on /parking within a minute.`,
+      });
+      router.refresh();
+    } catch {
+      setMessage({ kind: "error", text: "Could not reach the server — is the app running?" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function saveNudge() {
     const id = selectedIdRef.current;
     if (!id) return;
@@ -1254,6 +1294,44 @@ export function MapZoneEditor({
             </li>
           ))}
         </ul>
+
+        {/* Deleted lots. A delete hides a seeded lot with no way back — the
+            editor lists merged zones, and a tombstoned lot is not in that list.
+            Restoring from /admin/audit does not work either: a delete stores
+            only the id, so replaying it would resurrect an empty record. This
+            re-saves the original, which overwrites the tombstone with real
+            content and audits as an ordinary edit. */}
+        {deletedSeedZones.filter((z) => !restored.has(z.id)).length > 0 && (
+          <div className="mt-4 rounded-2xl border border-sand bg-shell/60 p-4">
+            <p className="text-sm font-medium text-ink">Deleted lots</p>
+            <p className="mt-1 text-xs text-ink-soft">
+              These came with the map and have been deleted. Their parking spaces may
+              still be drawn for visitors, so restore any that were removed by mistake.
+            </p>
+            <ul className="mt-3 space-y-2">
+              {deletedSeedZones
+                .filter((z) => !restored.has(z.id))
+                .map((zone) => (
+                  <li key={zone.id} className="flex items-center justify-between gap-3">
+                    <span className="min-w-0 text-sm text-ink">
+                      <span className="block truncate font-medium">{zone.name}</span>
+                      <span className="block truncate text-xs text-ink-soft">
+                        {RULE_LABELS[zone.rule]}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => restoreZone(zone)}
+                      disabled={saving}
+                      className="shrink-0 rounded-full border border-fern/40 bg-fern/10 px-3 py-1.5 text-sm font-semibold whitespace-nowrap text-fern transition-colors hover:bg-fern/20 disabled:opacity-50"
+                    >
+                      Restore
+                    </button>
+                  </li>
+                ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       {/* Map + fields */}

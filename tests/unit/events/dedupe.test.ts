@@ -195,6 +195,44 @@ describe("mergeCalendar — admin overrides", () => {
     expect(clusters[0].members).toHaveLength(2);
     expect(clusters[0].survivor.source).toBe("in-app");
   });
+
+  it("a same-event verdict merges a pair the matcher leaves apart", () => {
+    const a = ev({ source: "in-app", externalId: "gala", title: "Harbor Gala", venue: "Village Green" });
+    const b = ev({
+      source: "ams-ical",
+      externalId: "e.9001",
+      title: "Annual Fundraiser Dinner",
+      venue: "Community Center",
+    });
+    expect(mergeCalendar([a, b])).toHaveLength(2);
+    const overrides: DedupeOverride[] = [
+      { keyA: a.occurrenceKey, keyB: b.occurrenceKey, verdict: "same-event" },
+    ];
+    const merged = mergeCalendar([a, b], overrides);
+    expect(merged).toHaveLength(1);
+    // Precedence still picks the survivor — the verdict says "one event", not
+    // "keep this row".
+    expect(merged[0].source).toBe("in-app");
+  });
+
+  it("a not-a-duplicate verdict beats a transitive chain of same-event verdicts", () => {
+    const a = ev({ source: "in-app", externalId: "a", title: "Harbor Gala", venue: "Village Green" });
+    const b = ev({ source: "ams-ical", externalId: "b", title: "Annual Fundraiser Dinner", venue: "Community Center" });
+    const c = ev({
+      source: "tribe-portofkingston",
+      externalId: "c",
+      title: "Dock Cleanup Morning",
+      venue: "Port Dock",
+    });
+    const overrides: DedupeOverride[] = [
+      { keyA: a.occurrenceKey, keyB: b.occurrenceKey, verdict: "same-event" },
+      { keyA: b.occurrenceKey, keyB: c.occurrenceKey, verdict: "same-event" },
+      { keyA: a.occurrenceKey, keyB: c.occurrenceKey, verdict: "not-duplicate" },
+    ];
+    // a+b merge; pulling c in would put the pinned-apart pair together, so it
+    // is refused. Two survivors, not one.
+    expect(mergeCalendar([a, b, c], overrides)).toHaveLength(2);
+  });
 });
 
 describe("mergeCalendar — idempotent re-merge", () => {
@@ -209,5 +247,57 @@ describe("mergeCalendar — idempotent re-merge", () => {
     const drifted = { ...ams, title: "Fireworks Extravaganza (renamed upstream)" };
     const secondMerge = mergeCalendar([...firstMerge, drifted]);
     expect(secondMerge).toEqual(firstMerge);
+  });
+});
+
+describe("mergeCalendar — containment pass (town-prefixed feed titles)", () => {
+  // 2026-08-08 17:00 PDT — the real Concerts on the Cove slot that showed twice
+  // on /events before this pass existed.
+  const START = "2026-08-09T00:00:00.000Z";
+  const at = (
+    source: EventSource,
+    externalId: string,
+    title: string,
+    startIso: string = START,
+  ) => ev({ source, externalId, title, venue: "Mike Wallace Park", startIso });
+
+  it("merges the town-prefixed feed title with the curated one", () => {
+    const merged = mergeCalendar([
+      at("in-app", "cotc-abracadabra", "Concerts on the Cove: Abracadabra Trip"),
+      at("ams-ical", "e.3508.1563873", "Kingston's Concerts On The Cove - Abracadabra Trip"),
+    ]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].source).toBe("in-app");
+  });
+
+  it("leaves two different acts in the same series apart", () => {
+    // The case a similarity SCORE gets wrong: four of six tokens shared, but
+    // neither title is a token run inside the other.
+    const merged = mergeCalendar([
+      at("in-app", "cotc-allswell", "Concerts on the Cove: Allswell"),
+      at("in-app", "cotc-lumberjax", "Concerts on the Cove: The Lumberjax"),
+    ]);
+    expect(merged).toHaveLength(2);
+  });
+
+  it("ignores a containment too short to be evidence", () => {
+    const merged = mergeCalendar([
+      at("in-app", "market-generic", "Market"),
+      at("ams-ical", "e.market", "Farmers Market"),
+    ]);
+    expect(merged).toHaveLength(2);
+  });
+
+  it("requires the same start instant, not merely the same Pacific day", () => {
+    const merged = mergeCalendar([
+      at("in-app", "cotc", "Concerts on the Cove: Abracadabra Trip"),
+      at(
+        "ams-ical",
+        "e.later",
+        "Kingston's Concerts On The Cove - Abracadabra Trip",
+        "2026-08-09T02:00:00.000Z",
+      ),
+    ]);
+    expect(merged).toHaveLength(2);
   });
 });

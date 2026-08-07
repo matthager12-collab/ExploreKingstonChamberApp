@@ -6,6 +6,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getUnifiedCalendarAccess } from "@/lib/stores/unified-calendar-store";
+import { getBusinessOptions } from "@/lib/stores/business-options";
 import { PageHeader, Section } from "@/components/ui";
 import { SuggestEventForm } from "./suggest-form";
 
@@ -20,6 +21,7 @@ export const dynamic = "force-dynamic";
 export default async function SuggestEventPage() {
   const access = await getUnifiedCalendarAccess();
   if (!access.enabled && !access.adminPreview) notFound();
+  const businesses = await getBusinessOptions();
 
   return (
     <>
@@ -38,7 +40,7 @@ export default async function SuggestEventPage() {
             see this page yet.
           </p>
         )}
-        <SuggestEventForm />
+        <SuggestEventForm businesses={businesses} />
       </Section>
     </>
   );

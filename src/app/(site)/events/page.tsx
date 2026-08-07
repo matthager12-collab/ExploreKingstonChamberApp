@@ -8,6 +8,9 @@ import { getEvents } from "@/lib/stores/event-store";
 import { getUnifiedCalendarEnabled } from "@/lib/stores/unified-calendar-store";
 import { getCopyOverrides, copyText } from "@/lib/stores/site-store";
 import { assertPageVisibleStatic } from "@/lib/page-visibility";
+import { matchOrganizer, OTHER_BUSINESS_VALUE } from "@/lib/businesses";
+import { getBusinessOptions } from "@/lib/stores/business-options";
+import { EventsBrowser, type BrowseItem } from "./events-browser";
 import { formatPacificDate, formatPacificTime, todayPacific } from "@/lib/time";
 import { ReportInaccurate } from "@/components/report-inaccurate";
 import { EventJsonLd } from "@/components/json-ld";
@@ -65,14 +68,6 @@ function upcomingDates(count: number): string[] {
   return Array.from({ length: count }, (_, i) =>
     new Date(noonUtc + i * 86_400_000).toISOString().slice(0, 10),
   );
-}
-
-function monthLabel(monthKey: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(`${monthKey}-01T12:00:00Z`));
 }
 
 function timeLabel(event: EventItem): string {
@@ -208,15 +203,20 @@ export default async function EventsPage() {
     .sort((a, b) => a.start.localeCompare(b.start));
 
   const weekendWindow = upcomingDates(4);
-  const thisWeekend = upcoming.filter((event) =>
-    weekendWindow.includes(dateOf(event.start)),
-  );
 
-  const byMonth = new Map<string, EventItem[]>();
-  for (const event of upcoming) {
-    const key = dateOf(event.start).slice(0, 7);
-    byMonth.set(key, [...(byMonth.get(key) ?? []), event]);
-  }
+  // The filter's business list. Matching is exact-after-normalization
+  // (src/lib/businesses.ts): an organizer we can't place is "other" rather than
+  // a guess, so nothing is filed under the wrong member.
+  const businesses = await getBusinessOptions();
+  const items: BrowseItem[] = upcoming.map((event) => ({
+    id: event.id,
+    category: event.category,
+    dateKey: dateOf(event.start),
+    business: event.organizer
+      ? (matchOrganizer(event.organizer, businesses) ?? OTHER_BUSINESS_VALUE)
+      : null,
+    organizer: event.organizer ?? "",
+  }));
 
   return (
     <>
@@ -233,7 +233,7 @@ export default async function EventsPage() {
         intro={copyText(copy, "events.header.intro")}
       />
 
-      {thisWeekend.length === 0 && byMonth.size === 0 && (
+      {upcoming.length === 0 && (
         <Section>
           <Card>
             <p className="font-semibold text-sound-deep">Nothing on the calendar right now.</p>
@@ -252,28 +252,21 @@ export default async function EventsPage() {
         </Section>
       )}
 
-      {thisWeekend.length > 0 && (
-        <Section
-          title="This weekend"
-          subtitle="Coming up in the next few days — no planning required."
+      {/* Cards are rendered HERE, on the server, and handed down as children —
+          the browser only chooses which of them to show. Nothing about the card
+          (or its data) reaches the client bundle. */}
+      {upcoming.length > 0 && (
+        <EventsBrowser
+          items={items}
+          businesses={businesses}
+          today={today}
+          weekendDates={weekendWindow}
         >
-          <div className="grid gap-4">
-            {thisWeekend.map((event) => (
-              <EventCard key={event.id} event={event} external={externalIds.has(event.id)} />
-            ))}
-          </div>
-        </Section>
+          {upcoming.map((event) => (
+            <EventCard key={event.id} event={event} external={externalIds.has(event.id)} />
+          ))}
+        </EventsBrowser>
       )}
-
-      {[...byMonth.entries()].map(([monthKey, monthEvents]) => (
-        <Section key={monthKey} title={monthLabel(monthKey)}>
-          <div className="grid gap-4">
-            {monthEvents.map((event) => (
-              <EventCard key={event.id} event={event} external={externalIds.has(event.id)} />
-            ))}
-          </div>
-        </Section>
-      ))}
 
       <Section>
         {unified ? (

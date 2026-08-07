@@ -7,7 +7,8 @@
 //        { action: "set-flag", enabled }            flip the ship-dark flag
 //        { action: "set-source", id, enabled }      enable/disable a source
 //        { action: "sync-now" }                     run ingest server-side
-//        { action: "not-duplicate", keyA, keyB }    record a dedupe verdict
+//        { action: "not-duplicate", keyA, keyB }    split a merged pair
+//        { action: "same-event", keyA, keyB }       merge a pair we missed
 //        { action: "remove-override", id }          undo a verdict
 //        { action: "set-trusted-org", orgId, trusted }  FR-EVT-04 bypass flag
 //
@@ -62,6 +63,11 @@ async function snapshot() {
       survivor: c.survivor,
       members: c.members,
     })),
+    candidates: review.candidates.map((c) => ({
+      a: c.a,
+      b: c.b,
+      score: c.score,
+    })),
     orgs: orgs.map((o) => ({
       id: o.id,
       name: o.name,
@@ -112,13 +118,16 @@ export async function POST(request: NextRequest) {
         const perSource = await runIngest(user.email);
         return NextResponse.json({ ok: true, perSource, ...(await snapshot()) });
       }
-      case "not-duplicate": {
+      // The two directions of one ruling — they share a record id, so the
+      // later verdict replaces the earlier one for that pair.
+      case "not-duplicate":
+      case "same-event": {
         const keyA = typeof body.keyA === "string" ? body.keyA : "";
         const keyB = typeof body.keyB === "string" ? body.keyB : "";
         if (!keyA || !keyB || keyA === keyB) {
           return NextResponse.json({ error: "two distinct keys required" }, { status: 400 });
         }
-        await addEventOverride(keyA, keyB, setBy, meta);
+        await addEventOverride(keyA, keyB, setBy, body.action, meta);
         break;
       }
       case "remove-override": {
