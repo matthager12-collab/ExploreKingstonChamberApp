@@ -31,16 +31,22 @@ export const mapViews: MapView[] = [
     //
     // Admins still draw on top in /admin/maps; overlay edits win by id.
     //
-    // "port-stalls" (E34) draws the individual numbered bays inside the Port
-    // zones, coloured by which code you text. Seeded for the same reason
-    // "parking-zones" is: it is the layer that distinguishes POKPARK from
-    // POKHILL from POKTT, and losing it silently would put the map back to one
-    // undifferentiated colour over the Port's three pay zones. The zone fills
-    // remain underneath, so unticking this degrades rather than breaks.
+    // "port-stalls" (E34) draws the Port lot's individual bays. It is NOT
+    // listed here — owner decision 2026-08-07, reversing the one that shipped
+    // it: at the zoom a visitor actually reads this map, 302 small shapes read
+    // as clutter over the zone fills rather than as rows of stalls, and the
+    // information they add is already carried by the pay cards and the zone
+    // colours. Satellite imagery on the public map (see /parking) does the job
+    // the bays were meant to do, with no drawing of ours to be wrong.
+    //
+    // The layer, its generator and its per-zone adjustment all remain — tick
+    // "Port parking bays" on any view in /admin/maps to bring it back. Kept
+    // rather than deleted because the geometry is only worth regenerating
+    // while the Port's 12-30-25 sheet is current.
     description: "Where to park in Kingston — built by the Chamber.",
     center: [47.7972, -122.498],
     zoom: 17,
-    sources: ["parking-zones", "port-stalls"],
+    sources: ["parking-zones"],
     published: true,
   },
   {

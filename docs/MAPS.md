@@ -84,7 +84,7 @@ A view pulls existing app data in by listing sources — nothing is re-entered:
 | `restaurants` | live restaurant listings (hidden ones filtered out), each mapped to a marker category server-side by cuisine/tags so coffee → ☕ and bars → 🍺 rather than everything 🍽️ (`restaurantCategory()` in `resolve.ts`) | category-aware teardrop pins |
 | `parking-zones` | the `MapZone` parking dataset (polygons + centers colored by rule) | filled polygons, or a circle marker when a zone has only a center |
 | `streets` | the color-coded street-parking overlay | flagged, not inlined — the client fetches `/geo/street-parking.json` itself |
-| `port-stalls` | the Port lot's 302 individual parking bays, coloured by which code you text | flagged like `streets` — the client fetches `/geo/port-stalls.json`; only the per-zone nudge rides on the payload (see "The Port bay layer" below) |
+| `port-stalls` | the Port lot's 302 individual parking bays, coloured by which code you text | flagged like `streets` — the client fetches `/geo/port-stalls.json`; only the per-zone nudge rides on the payload. **Not listed on any seeded view** — see "The Port bay layer" below |
 
 So the **Food & Drink** view is literally `sources: ["restaurants"]` and stays
 in sync with the listings automatically.
@@ -674,7 +674,20 @@ Facts worth knowing:
   so nothing new joins it silently. Worth a colorway pass on its own.
 ---
 
-## The Port bay layer (E34)
+## The Port bay layer (E34) — built, and switched off
+
+**Status: not on any seeded view (owner decision 2026-08-07).** At the zoom a
+visitor actually reads `/parking`, 302 small shapes read as clutter over the
+zone fills rather than as rows of stalls, and what they added is already
+carried by the pay cards and the zone colours. Satellite imagery on the public
+map now does the job the bays were meant to do — with no drawing of ours to be
+wrong about.
+
+Everything below still works. Tick **Port parking bays** on any view in
+`/admin/maps` to bring it back; the per-zone adjustment in `/admin/map` stays
+live either way. It is kept rather than deleted because the geometry is only
+worth regenerating while the Port's 12-30-25 sheet is current — and because the
+measurement in it (below) is the reusable part.
 
 The `/parking` map used to draw the Port as five translucent zone blobs, and
 because POKPARK, POKHILL and POKTT are all `rule: "paid"`, all three rendered in
