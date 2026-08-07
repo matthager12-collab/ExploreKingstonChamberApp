@@ -19,6 +19,10 @@ import { MAX_OCCURRENCES_PER_SERIES } from "@/lib/events/rrule-expand";
 // 2026-08-08 17:00 PDT — a Saturday.
 const SATURDAY_5PM = "2026-08-09T00:00:00.000Z";
 
+/** The preview returns instants too (the form needs them to write EXDATEs);
+ *  most assertions here only care about the dates a person would read. */
+const dateKeys = (occurrences: { dateKey: string }[]) => occurrences.map((o) => o.dateKey);
+
 describe("the skipped-date cap tracks the expander's cap", () => {
   it("MAX_SKIPPED_DATES equals MAX_OCCURRENCES_PER_SERIES", () => {
     // recurrence.ts duplicates this number to stay free of the `rrule`
@@ -159,7 +163,7 @@ describe("previewOccurrences", () => {
 
   it("lists the next dates of a weekly series", () => {
     const rule = presetToRRule({ kind: "weekly", interval: 1, weekdays: ["SA"] })!;
-    expect(previewOccurrences(rule, SATURDAY_5PM, [], 4, NOW)).toEqual([
+    expect(dateKeys(previewOccurrences(rule, SATURDAY_5PM, [], 4, NOW))).toEqual([
       "2026-08-08",
       "2026-08-15",
       "2026-08-22",
@@ -169,12 +173,14 @@ describe("previewOccurrences", () => {
 
   it("skips an exdate", () => {
     const rule = presetToRRule({ kind: "weekly", interval: 1, weekdays: ["SA"] })!;
-    const preview = previewOccurrences(
-      rule,
-      SATURDAY_5PM,
-      ["2026-08-16T00:00:00.000Z"], // the 8/15 Pacific occurrence
-      4,
-      NOW,
+    const preview = dateKeys(
+      previewOccurrences(
+        rule,
+        SATURDAY_5PM,
+        ["2026-08-16T00:00:00.000Z"], // the 8/15 Pacific occurrence
+        4,
+        NOW,
+      ),
     );
     expect(preview).not.toContain("2026-08-15");
     expect(preview.slice(0, 3)).toEqual(["2026-08-08", "2026-08-22", "2026-08-29"]);
@@ -187,7 +193,7 @@ describe("previewOccurrences", () => {
       weekdays: ["SA"],
       until: "2026-08-22",
     })!;
-    expect(previewOccurrences(rule, SATURDAY_5PM, [], 6, NOW)).toEqual([
+    expect(dateKeys(previewOccurrences(rule, SATURDAY_5PM, [], 6, NOW))).toEqual([
       "2026-08-08",
       "2026-08-15",
       "2026-08-22",
@@ -199,12 +205,12 @@ describe("previewOccurrences", () => {
     // drifts an hour on 2026-11-01 and the series lands on the wrong day at
     // the wrong time. Dates either side of the flip must stay Saturdays.
     const rule = presetToRRule({ kind: "weekly", interval: 1, weekdays: ["SA"] })!;
-    const dates = previewOccurrences(rule, SATURDAY_5PM, [], 20, NOW);
+    const dates = dateKeys(previewOccurrences(rule, SATURDAY_5PM, [], 20, NOW));
     expect(dates).toContain("2026-10-31");
     expect(dates).toContain("2026-11-07");
   });
 
   it("a null rule previews as the single start date", () => {
-    expect(previewOccurrences(null, SATURDAY_5PM, [], 6, NOW)).toEqual(["2026-08-08"]);
+    expect(dateKeys(previewOccurrences(null, SATURDAY_5PM, [], 6, NOW))).toEqual(["2026-08-08"]);
   });
 });

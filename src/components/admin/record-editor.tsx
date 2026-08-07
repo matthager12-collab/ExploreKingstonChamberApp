@@ -50,12 +50,26 @@ type Draft = {
   idTouched: boolean;
   isNew: boolean;
   values: Record<string, string | boolean>;
+  /** Stored keys this form does not render, carried through a save untouched.
+   *
+   *  A form can only express what it shows. Rebuilding the record from the
+   *  field list alone means every key the domain gained without also gaining a
+   *  control is silently deleted the next time an admin presses Save — which
+   *  is how an event's repeat rule would vanish because someone fixed a typo
+   *  in its title. Clearing a rendered field still clears it; that is the
+   *  form speaking. Dropping an unrendered one is the form guessing. */
+  carried: Record<string, unknown>;
 };
 
 function recordToDraft(domain: DomainDef, record: GenericRecord): Draft {
   const values: Record<string, string | boolean> = {};
   for (const f of domain.fields) values[f.key] = toDraftValue(f, record[f.key]);
-  return { domain: domain.key, id: record.id, idTouched: true, isNew: false, values };
+  const rendered = new Set(domain.fields.map((f) => f.key));
+  const carried: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (key !== "id" && !rendered.has(key)) carried[key] = value;
+  }
+  return { domain: domain.key, id: record.id, idTouched: true, isNew: false, values, carried };
 }
 
 function newRecordDraft(domain: DomainDef): Draft {
@@ -63,7 +77,7 @@ function newRecordDraft(domain: DomainDef): Draft {
   for (const f of domain.fields) {
     values[f.key] = f.kind === "checkbox" ? false : (f.defaultValue ?? "");
   }
-  return { domain: domain.key, id: "", idTouched: false, isNew: true, values };
+  return { domain: domain.key, id: "", idTouched: false, isNew: true, values, carried: {} };
 }
 
 /** The id control is synthesised by the editor rather than declared by the
@@ -93,7 +107,8 @@ function buildRecord(domain: DomainDef, draft: Draft): BuildResult {
       text: "Id is required: letters, numbers, and dashes (e.g. point-casino-hotel).",
     };
   }
-  const record: GenericRecord = { id };
+  // Unrendered keys first, so a rendered field always wins the collision.
+  const record: GenericRecord = { ...draft.carried, id };
   for (const f of domain.fields) {
     const raw = draft.values[f.key];
     if (f.kind === "checkbox") {

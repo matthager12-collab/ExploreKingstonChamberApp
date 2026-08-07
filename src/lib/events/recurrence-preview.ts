@@ -18,9 +18,20 @@ import type { NormalizedEvent } from "./types";
  *  per-series cap in rrule-expand still bounds the work. */
 const PREVIEW_WINDOW_DAYS = 365;
 
+export interface PreviewOccurrence {
+  /** The occurrence's real instant — what an EXDATE must match to cancel it. */
+  startIso: string;
+  /** Pacific calendar date, for display. */
+  dateKey: string;
+}
+
 /**
- * The next `count` Pacific dates a rule produces, exdates already removed.
+ * The next `count` occurrences a rule produces, exdates already removed.
  * A null rule previews as the single start date.
+ *
+ * Returns the INSTANT as well as the display date because the form's "skip
+ * this one" button needs the exact value to write as an EXDATE — deriving it
+ * from the date alone would guess at the time and cancel nothing.
  *
  * `now` is injected so the caller (and the tests) control the clock.
  */
@@ -30,8 +41,8 @@ export function previewOccurrences(
   exdates: string[] = [],
   count = 6,
   now: Date = new Date(),
-): string[] {
-  if (!rrule) return [pacificDateKey(startIso)];
+): PreviewOccurrence[] {
+  if (!rrule) return [{ startIso, dateKey: pacificDateKey(startIso) }];
 
   const series: NormalizedEvent = {
     title: "preview",
@@ -55,5 +66,5 @@ export function previewOccurrences(
 
   return events
     .slice(0, Math.min(count, MAX_OCCURRENCES_PER_SERIES))
-    .map((e) => pacificDateKey(e.startIso));
+    .map((e) => ({ startIso: e.startIso, dateKey: pacificDateKey(e.startIso) }));
 }

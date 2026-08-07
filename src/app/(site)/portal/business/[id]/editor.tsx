@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "re
 import type { EventCategory, EventItem, Restaurant, WeeklyHours } from "@/lib/types";
 import { getOpenStatus } from "@/lib/hours";
 import { Badge, Callout, Card, Section } from "@/components/ui";
+import { RepeatField, type RepeatValue } from "@/components/repeat-field";
 import {
   HoursEditor,
   emptyWeeklyHours,
@@ -207,6 +208,8 @@ interface EventDraft {
   description: string;
   category: EventCategory;
   url: string;
+  /** Repeat rule + skipped dates, straight from RepeatField. */
+  repeat: RepeatValue;
 }
 
 // ---------- the editor ----------
@@ -342,6 +345,7 @@ export function BusinessEditor({
       description: "",
       category: "community",
       url: "",
+      repeat: {},
     };
   }
 
@@ -349,6 +353,7 @@ export function BusinessEditor({
     setDraft({
       id: ev.id,
       title: ev.title,
+      repeat: { ...(ev.rrule ? { rrule: ev.rrule } : {}), ...(ev.exdates ? { exdates: ev.exdates } : {}) },
       start: ev.start.slice(0, 16),
       end: ev.end ? ev.end.slice(0, 16) : "",
       venue: ev.venue,
@@ -382,6 +387,8 @@ export function BusinessEditor({
           url: current.url || undefined,
           ownerId: initial.id,
           organizer: initial.name,
+          rrule: current.repeat.rrule,
+          exdates: current.repeat.exdates,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as {
@@ -727,6 +734,24 @@ export function BusinessEditor({
                     className={inputClass}
                   />
                 </Field>
+
+                {/* Repeat. Sits after the one-off details on purpose: you
+                    describe the event first, then say how often it happens —
+                    and the preview needs a start date to be meaningful. */}
+                {draft.start.length >= 16 ? (
+                  <RepeatField
+                    startIso={draft.start}
+                    value={draft.repeat}
+                    onChange={(repeat) => setDraft((d) => (d ? { ...d, repeat } : d))}
+                    idPrefix="portal-repeat"
+                    inputClass={inputClass}
+                    labelClass="block text-sm font-medium text-sound-deep"
+                  />
+                ) : (
+                  <p className="text-sm text-ink-soft">
+                    Set a start date and time above to make this event repeat.
+                  </p>
+                )}
 
                 {conflicts.length > 0 && (
                   <Callout
