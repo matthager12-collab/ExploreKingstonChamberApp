@@ -13,6 +13,7 @@ import { getBusinessOptions } from "@/lib/stores/business-options";
 import { EventsBrowser, type BrowseItem } from "./events-browser";
 import { formatPacificDate, formatPacificTime, todayPacific } from "@/lib/time";
 import { ReportInaccurate } from "@/components/report-inaccurate";
+import { GoingButton, GoingCounts } from "@/components/going-button";
 import { EventJsonLd } from "@/components/json-ld";
 import {
   Badge,
@@ -165,6 +166,7 @@ function EventCard({ event, external }: { event: EventItem; external?: boolean }
               Questions about this event? {event.eventContact}
             </p>
           )}
+          <GoingButton eventId={event.id} />
           {/* External (ingested) events aren't records in the events store —
               corrections belong upstream, so no report intake for them. */}
           {!external && (
@@ -256,6 +258,7 @@ export default async function EventsPage() {
           the browser only chooses which of them to show. Nothing about the card
           (or its data) reaches the client bundle. */}
       {upcoming.length > 0 && (
+        <GoingCounts ids={upcoming.map((e) => e.id)}>
         <EventsBrowser
           items={items}
           businesses={businesses}
@@ -266,6 +269,7 @@ export default async function EventsPage() {
             <EventCard key={event.id} event={event} external={externalIds.has(event.id)} />
           ))}
         </EventsBrowser>
+        </GoingCounts>
       )}
 
       <Section>

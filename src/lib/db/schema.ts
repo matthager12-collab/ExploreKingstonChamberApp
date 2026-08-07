@@ -170,6 +170,40 @@ export const surveyResponse = pgTable("survey_response", {
   response: jsonb("response").notNull(),
 });
 
+/**
+ * "I'm going" tallies for LTAC reporting.
+ *
+ * A COUNT per (event, ZIP) — never a row per visitor. There is no session id,
+ * no coordinate, no user agent, no timestamp of an individual tap: nothing
+ * here can be traced to a person because nothing here is ABOUT a person. That
+ * is the whole design, and it is why this table needs no delete-by-identifier
+ * path (see noIdentifierStore in src/lib/privacy/pii-inventory.ts).
+ *
+ * The ZIP is SELF-REPORTED and optional — an empty string means the visitor
+ * tapped without answering, which still counts toward attendance. It is not
+ * derived from a coordinate or an IP: browser geolocation reports where
+ * someone is standing, and IP geolocation is wrong at ZIP level
+ * (src/lib/analytics-store.ts), while LTAC needs where they travelled FROM.
+ * Asking is the only method that answers the question being asked.
+ *
+ * `updatedAt` is the retention clock for the whole tally, not a record of when
+ * any one person tapped.
+ */
+export const eventGoing = pgTable(
+  "event_going",
+  {
+    eventId: text("event_id").notNull(),
+    /** 5-digit ZIP, or "" when the visitor skipped the question. */
+    zip: text("zip").notNull(),
+    count: integer("count").notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.eventId, t.zip] }),
+    index("event_going_event_idx").on(t.eventId),
+  ],
+);
+
 /** Edmonds–Kingston sailing-fullness snapshots — irreplaceable dataset (WSF
  *  never archives terminalsailingspace); migrated verbatim, count-verified. */
 export const ferryObservation = pgTable("ferry_observation", {

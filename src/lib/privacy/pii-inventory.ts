@@ -286,6 +286,11 @@ export const PII_STORES: PiiStore[] = [
     "Hunt submissions carry no account identifier — they are looked up by the submission id/date the requester supplies, then deleted via the retention/fulfillment path (photo first, then the row).",
   ),
   noIdentifierStore(
+    "event_going",
+    "\u201cI\u2019m going\u201d tallies: a count per event and self-reported ZIP.",
+    "A counter, not a log \u2014 there is no row per visitor, no session id, and no coordinate, so no field ties a tap to a person. Nothing to find, export, or delete by identifier.",
+  ),
+  noIdentifierStore(
     "survey_response",
     "Anonymous LTAC visitor-survey answers.",
     "Structurally anonymous — no field ties a survey response to a person, so there is nothing to find, export, or delete by identifier.",

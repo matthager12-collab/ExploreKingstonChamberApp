@@ -24,6 +24,7 @@ import {
 } from "@/lib/db/privacy-retention";
 import { appendPrivacyAudit, heldRecordIds } from "@/lib/db/privacy-delete";
 import { deleteSubmission, listSubmissions } from "@/lib/hunt-store";
+import { countGoingBefore, deleteGoingBefore } from "@/lib/stores/event-going-store";
 
 export interface RetentionLine {
   store: string;
@@ -119,6 +120,20 @@ export async function runRetention(opts: {
           planned,
           ...(applied !== undefined ? { applied } : {}),
           note: `${opts.apply ? "deleted" : "would delete"} ${planned} pageview/outbound/consent event(s) past ${rule.label}`,
+        });
+        break;
+      }
+
+      case "event-going": {
+        const cutoff = cutoffFor(rule, now).toISOString();
+        const planned = await countGoingBefore(cutoff);
+        const applied = opts.apply ? await deleteGoingBefore(cutoff) : undefined;
+        lines.push({
+          store: rule.store,
+          action: rule.action,
+          planned,
+          ...(applied !== undefined ? { applied } : {}),
+          note: `${opts.apply ? "deleted" : "would delete"} ${planned} going tally/tallies past ${rule.label}`,
         });
         break;
       }

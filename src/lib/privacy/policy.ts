@@ -101,6 +101,14 @@ export const RETENTION_POLICY: RetentionRule[] = [
     action: "rollup-then-delete",
   },
   {
+    store: "event-going",
+    description:
+      "\u201cI\u2019m going\u201d tallies for lodging-tax reporting: a count per event plus the ZIP you optionally tell us you are visiting from. A running total, not a record of individual taps \u2014 nothing identifies who pressed the button.",
+    label: "36 months",
+    windowDays: 1095,
+    action: "delete",
+  },
+  {
     store: "analytics-events",
     description:
       "Anonymous page views, outbound-link taps, and consent confirmations (a session id that resets when your browser closes; no cookies, no IP addresses).",
