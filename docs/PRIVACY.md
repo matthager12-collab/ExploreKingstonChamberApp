@@ -23,6 +23,7 @@ implements `findByIdentifier` / `exportRecords` / `deleteOrAnonymize`; the
 | `worklist_item` | payload `contact` | Privacy/accuracy request contact (OPEN items only) | scrubbed at resolution | Postgres `worklist_item` |
 | `hunt-submissions` | *(no identifier)* | Photo + optional precise check-in location | 12 months | `record` + fs/blob photos |
 | `survey_response` | *(none — anonymous)* | LTAC survey answers | 36 months | Postgres `survey_response` |
+| `feedback_response` | *(no identifier)* | Page feedback: 1–5 star rating, free-text comment, source path | 12 months | Postgres `feedback_response` |
 | `analytics_event` | *(none — anonymous)* | Pageviews / outbound / geo-ping (area only) / consent / web vital (page timing) | 90 days (geo) / 25 months | Postgres `analytics_event` |
 | `quarantine` | *(none)* | Importer-parked failed-validation docs (may carry legacy contact fields) | resolved via runbook | Postgres `quarantine` |
 
@@ -30,6 +31,18 @@ implements `findByIdentifier` / `exportRecords` / `deleteOrAnonymize`; the
 row to a person (a per-browser session id that resets on close is not one). A
 delete request against them is fulfilled by explanation, surfaced in the
 fulfillment UI.
+
+**`feedback_response` is a weaker claim than that, deliberately.** It collects
+no name, email, or device id, so there is no key to search it by — but its
+comment is a free-text box, and a visitor can type their own phone number into
+one no matter what the form asks. So it is *unindexed*, not *provably
+anonymous*: a request can only be matched by quoting the wording back, and what
+actually bounds the exposure is the window. That is why it carries 12 months,
+the shortest in `RETENTION_POLICY` and a third of the survey's 36, and why
+`/api/feedback` drops any contact-shaped field a client sends rather than
+storing it. Adding a contact field to that route would make this an identified
+store and require real `findByIdentifier` / `exportRecords` /
+`deleteOrAnonymize` handlers, not the no-identifier entry it has today.
 
 **Web vitals are page measurements, not people measurements.** A `webvital`
 row carries a metric name (`LCP`/`CLS`/`INP`) and a number the browser

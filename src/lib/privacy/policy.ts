@@ -9,6 +9,16 @@
 // windows and K_FLOOR below are the Chamber's published numbers. Changing any
 // of them is a human decision that shows up on the public privacy page —
 // never tune them in passing.
+//
+// feedback-responses added 2026-08-06 at 12 months, confirmed by Mat under the
+// same rule. Deliberately the shortest window in the schedule, and a third of
+// the survey's 36 months: survey answers are structurally anonymous by
+// construction, but a feedback comment is free text a visitor can type their
+// own phone number into — the one store where the LENGTH of the window is
+// itself the risk. NOTE: this added a data category to the published schedule
+// without bumping PRIVACY_NOTICE_VERSION, because that bump re-prompts every
+// version-gated consent (the geo card). Whether the Chamber wants that prompt
+// is their call, not a side effect of shipping a widget.
 
 /**
  * Version of the public privacy notice. Bumping this re-prompts every
@@ -98,6 +108,14 @@ export const RETENTION_POLICY: RetentionRule[] = [
       "Anonymous visitor-survey answers (distance band, overnight stay, party size). Never tied to a person or device.",
     label: "36 months",
     windowMonths: 36,
+    action: "delete",
+  },
+  {
+    store: "feedback-responses",
+    description:
+      "Ratings and comments you send through the feedback tab, with the page you sent them from. The form never asks who you are; please don't type your name or contact details into it.",
+    label: "12 months",
+    windowMonths: 12,
     action: "delete",
   },
   {

@@ -291,6 +291,17 @@ export const PII_STORES: PiiStore[] = [
     "Structurally anonymous — no field ties a survey response to a person, so there is nothing to find, export, or delete by identifier.",
   ),
   noIdentifierStore(
+    "feedback_response",
+    "In-app page feedback: a 1–5 star rating, an open comment, and the page it was sent from.",
+    // Deliberately a different explanation from the survey's. The survey is
+    // anonymous by CONSTRUCTION — there is no free-text field to hide in. This
+    // store has no identifier FIELD, but its comment is unstructured text a
+    // visitor can type anything into, so an honest answer says the lookup is
+    // impossible rather than implying the store is provably clean. The 12-month
+    // window (the shortest published) is what actually bounds that exposure.
+    "The feedback form collects no name, email, or device identifier, so there is no key to search by — a comment can only be located by its own wording. If you recognise text you wrote, quote it in your request and the Chamber will find and delete that row by hand; otherwise everything here is deleted automatically 12 months after it was sent.",
+  ),
+  noIdentifierStore(
     "analytics_event",
     "Anonymous page/outbound/geo-ping/consent events.",
     "Structurally anonymous — a per-browser session id that resets on close, no coordinates, no cross-session identifier. Nothing is retrievable by a personal identifier.",

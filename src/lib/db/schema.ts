@@ -177,6 +177,21 @@ export const ferryObservation = pgTable("ferry_observation", {
   obs: jsonb("obs").notNull(),
 });
 
+/** In-app "Give feedback" side-tab submissions: a 1–5 star rating, one open
+ *  text answer, and the in-app path it was sent from
+ *  (src/lib/feedback-store.ts).
+ *
+ *  Same log posture as the three above — no audit rows, no writeRecord — but
+ *  NOT structurally anonymous the way survey_response is: the comment is free
+ *  text a visitor can type anything into, including their own name or phone
+ *  number. That is why it carries a 12-month window in RETENTION_POLICY (the
+ *  shortest of any store here) rather than the survey's 36, and why the route
+ *  never accepts a contact field. See docs/PRIVACY.md. */
+export const feedbackResponse = pgTable("feedback_response", {
+  ts: timestamp("ts", { withTimezone: true }).notNull().defaultNow(),
+  response: jsonb("response").notNull(),
+});
+
 // ---------------------------------------------------------------------------
 // E11 privacy tables.
 // ---------------------------------------------------------------------------

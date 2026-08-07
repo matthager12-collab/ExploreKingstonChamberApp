@@ -7,10 +7,15 @@
 
 import "server-only";
 
-import { asc, count, gte, sql } from "drizzle-orm";
+import { asc, count, desc, gte, sql } from "drizzle-orm";
 
 import { getDb } from "./client";
-import { analyticsEvent, ferryObservation, surveyResponse } from "./schema";
+import {
+  analyticsEvent,
+  feedbackResponse,
+  ferryObservation,
+  surveyResponse,
+} from "./schema";
 
 export async function appendAnalyticsEvent(event: unknown): Promise<void> {
   await getDb().insert(analyticsEvent).values({ event });
@@ -54,6 +59,29 @@ export async function readSurveyResponses<T>(sinceIso?: string): Promise<T[]> {
   const rows = await (
     sinceIso ? base.where(gte(surveyResponse.ts, new Date(sinceIso))) : base
   ).orderBy(asc(surveyResponse.ts));
+  return rows.map((r) => r.response as T);
+}
+
+export async function appendFeedbackResponse(response: unknown): Promise<void> {
+  await getDb().insert(feedbackResponse).values({ response });
+}
+
+/**
+ * Read logged feedback submissions, NEWEST FIRST — the opposite order of the
+ * three readers around it, deliberately. Those feed aggregate summaries where
+ * order is irrelevant; this one feeds a list of free text a human actually
+ * reads, and the useful end of that list is the recent end.
+ *
+ * `sinceIso` bounds the scan the same way readSurveyResponses does. The admin
+ * page threads the analytics baseline through it so the feedback count sits
+ * under the same "counting window" sentence as every other figure on the
+ * dashboard it links to.
+ */
+export async function readFeedbackResponses<T>(sinceIso?: string): Promise<T[]> {
+  const base = getDb().select({ response: feedbackResponse.response }).from(feedbackResponse);
+  const rows = await (
+    sinceIso ? base.where(gte(feedbackResponse.ts, new Date(sinceIso))) : base
+  ).orderBy(desc(feedbackResponse.ts));
   return rows.map((r) => r.response as T);
 }
 

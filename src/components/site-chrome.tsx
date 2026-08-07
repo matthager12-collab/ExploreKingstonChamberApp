@@ -24,6 +24,7 @@ import type { ReactNode } from "react";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
 import { Tracker, WebVitals } from "@/components/tracker";
+import { FeedbackTab } from "@/components/feedback-tab";
 import PwaClient from "@/components/pwa";
 import { getCopyOverrides } from "@/lib/stores/site-store";
 import { getEffectiveHiddenPaths } from "@/lib/page-visibility";
@@ -75,6 +76,17 @@ export async function SiteChrome({ children }: { children: ReactNode }) {
           {children}
         </main>
         <SiteFooter hiddenPaths={hiddenPaths} copy={copyOverrides} />
+        {/* Site-wide page feedback. Mounted here rather than per-page so every
+            public route (and the branded 404 that also renders this chrome)
+            carries it — the per-page breakdown on /admin/feedback is only
+            meaningful if no page is quietly missing the tab. It hides itself on
+            the staff and print routes; see isFeedbackHidden().
+
+            AFTER <main>, deliberately: a fixed-position control that comes
+            FIRST in the DOM is the first thing a keyboard user tabs into on
+            every page load, ahead of the site's own navigation. Visually it is
+            pinned to the right edge either way. */}
+        <FeedbackTab />
       </CopyProvider>
     </>
   );

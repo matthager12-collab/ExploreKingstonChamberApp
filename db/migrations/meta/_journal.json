@@ -71,6 +71,13 @@
       "when": 1785823811225,
       "tag": "0009_purple_junta",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786076947232,
+      "tag": "0010_kind_morph",
+      "breakpoints": true
     }
   ]
 }

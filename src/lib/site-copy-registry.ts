@@ -781,6 +781,64 @@ export const COPY_BLOCKS = [
     multiline: true,
     fallback: "Saved — we'll send it when you're back online.",
   },
+  // Page feedback tab (client) — the site-wide right-edge "Give feedback"
+  // affordance. Registered here like every other block so the Chamber can
+  // reword the ask from /admin/content without a deploy; the wording of a
+  // feedback prompt is exactly the sort of thing they will want to tune once
+  // they see what people actually send.
+  {
+    key: "feedback.tab.label",
+    page: "Page feedback (client)",
+    label: "Side-tab label",
+    fallback: "Give feedback",
+  },
+  {
+    key: "feedback.panel.title",
+    page: "Page feedback (client)",
+    label: "Panel title",
+    fallback: "How's this page working?",
+  },
+  {
+    key: "feedback.panel.intro",
+    page: "Page feedback (client)",
+    label: "Panel intro",
+    multiline: true,
+    fallback: "Tell the Chamber what's working and what isn't. Anonymous — don't include your name or contact details.",
+  },
+  {
+    key: "feedback.rating.legend",
+    page: "Page feedback (client)",
+    label: "Star-rating question",
+    fallback: "How would you rate this page?",
+  },
+  {
+    key: "feedback.comment.label",
+    page: "Page feedback (client)",
+    label: "Open-text question",
+    fallback: "What would make it better?",
+  },
+  {
+    key: "feedback.submit",
+    page: "Page feedback (client)",
+    label: "Submit button",
+    fallback: "Send feedback",
+  },
+  {
+    key: "feedback.thankyou",
+    page: "Page feedback (client)",
+    label: "Thank-you message",
+    multiline: true,
+    fallback: "Thanks — the Chamber reads every one of these.",
+  },
+  {
+    // Shown instead of feedback.thankyou when the submission went to the
+    // offline outbox: it is saved on the device and replays later.
+    key: "feedback.queued",
+    page: "Page feedback (client)",
+    label: "Thank-you message (saved offline)",
+    multiline: true,
+    fallback: "Saved — we'll send it when you're back online.",
+  },
   // Map switcher (client)
   {
     key: "mapswitcher.empty",

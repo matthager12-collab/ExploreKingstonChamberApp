@@ -12,9 +12,11 @@
 
 import { RETENTION_POLICY, BELOW_K_BUCKET, K_FLOOR, type RetentionRule } from "./policy";
 import {
+  countFeedbackResponsesBefore,
   countGeoPingsInMonths,
   countNonGeoEventsBefore,
   countSurveyResponsesBefore,
+  deleteFeedbackResponsesBefore,
   deleteNonGeoEventsBefore,
   deleteSurveyResponsesBefore,
   expiredGeoPingMonths,
@@ -131,6 +133,20 @@ export async function runRetention(opts: {
           planned,
           ...(applied !== undefined ? { applied } : {}),
           note: `${opts.apply ? "deleted" : "would delete"} ${planned} survey row(s) past ${rule.label}`,
+        });
+        break;
+      }
+
+      case "feedback-responses": {
+        const cutoff = cutoffFor(rule, now).toISOString();
+        const planned = await countFeedbackResponsesBefore(cutoff);
+        const applied = opts.apply ? await deleteFeedbackResponsesBefore(cutoff) : undefined;
+        lines.push({
+          store: rule.store,
+          action: rule.action,
+          planned,
+          ...(applied !== undefined ? { applied } : {}),
+          note: `${opts.apply ? "deleted" : "would delete"} ${planned} feedback row(s) past ${rule.label}`,
         });
         break;
       }
