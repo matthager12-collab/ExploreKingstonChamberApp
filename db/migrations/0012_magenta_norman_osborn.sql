@@ -1,0 +1,1 @@
+ALTER TABLE "feedback_response" ADD COLUMN "id" bigserial PRIMARY KEY NOT NULL;
