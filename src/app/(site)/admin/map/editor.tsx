@@ -114,6 +114,29 @@ type BayFeature = {
   properties: { zone: string; rule: string; code: string | null; range: string | null };
 };
 
+/**
+ * A readable name for a bay group, from the BAYS rather than from a MapZone.
+ *
+ * Group ids are generation-time provenance (`port-pokpark-north-rows`), not
+ * foreign keys, and treating them as foreign keys is what broke: the Chamber
+ * deleted several of those lots and redrew their own, so three groups pointed
+ * at nothing. The bays themselves still carry the Port's pay code and printed
+ * space ranges, which is both stable and what an admin actually recognises —
+ * "POKPARK 181–190, 201–213" beats a slug for a lot that no longer exists.
+ */
+function bayGroupLabel(zoneId: string, bays: BayFeature[]): string {
+  const mine = bays.filter((b) => b.properties.zone === zoneId);
+  const code = mine.find((b) => b.properties.code)?.properties.code;
+  const ranges = [...new Set(mine.map((b) => b.properties.range).filter(Boolean))];
+  if (code && ranges.length) return `${code} · spaces ${ranges.join(", ")}`;
+  if (code) return `${code} · ${mine.length} spaces`;
+  // Unnumbered groups (free 2-hour, KCYC, tenant, disabled) have no code or
+  // range printed on the Port's map, so fall back to the rule and a count.
+  const rule = mine[0]?.properties.rule ?? "";
+  const pretty = zoneId.replace(/^port-/, "").replace(/-/g, " ");
+  return `${pretty} · ${mine.length} spaces${rule ? ` (${rule})` : ""}`;
+}
+
 /** Bay fill in the editor preview — one flat colour, not the public palette.
  *  The editor question is "are these in the right PLACE", and seven hues would
  *  only compete with the zone shapes and pins the admin is aiming at. */
@@ -259,6 +282,11 @@ export function MapZoneEditor({
    * are editable here. */
   const bayFeaturesRef = useRef<BayFeature[] | null>(null);
   const [bayZones, setBayZones] = useState<Set<string>>(new Set());
+  /** Which bay group the sliders act on. Independent of the zone sidebar so a
+   *  group whose MapZone was deleted is still reachable. */
+  const [bayGroup, setBayGroup] = useState<string | null>(null);
+  const bayGroupRef = useRef(bayGroup);
+  bayGroupRef.current = bayGroup;
   const [nudge, setNudge] = useState<BayTransform>(IDENTITY_BAY_TRANSFORM);
   const [nudgeDirty, setNudgeDirty] = useState(false);
   const [nudgeSaving, setNudgeSaving] = useState(false);
@@ -327,32 +355,56 @@ export function MapZoneEditor({
   }
 
   /**
-   * The bay preview for the SELECTED zone only.
+   * EVERY bay, with the group being nudged flagged as `active`.
    *
-   * Only the selected zone, deliberately: the admin is aiming one zone's rows
-   * at the aerial underneath, and drawing the other 250 bays would bury the
-   * thing being aimed. It reads `nudgeRef`, so it shows the UNSAVED value — the
-   * whole point is to see the correction before committing it.
+   * All of them, not just the selected zone's. The first cut drew only the
+   * selected zone's bays and it was wrong twice over: the admin could not see
+   * the bay layer at all until they happened to select a zone that had one, and
+   * — the real defect — bay groups whose MapZone the Chamber has DELETED
+   * (port-pokpark-north-rows, port-free-2hr-row, port-15min-dropoff, 79 bays
+   * between them) were unreachable forever, because there was no row left in
+   * the sidebar to select. They still draw on the public map. Something visible
+   * to a visitor and unreachable by an admin is the one outcome the nudge
+   * controls existed to prevent.
+   *
+   * Reads `nudgeRef`, so the active group shows the UNSAVED value.
    */
   function bayPreviewData(): GeoJSON.FeatureCollection {
-    const zoneId = selectedIdRef.current;
     const all = bayFeaturesRef.current;
-    if (!zoneId || !all) return { type: "FeatureCollection", features: [] };
-    const bays = all.filter((b) => b.properties.zone === zoneId);
-    if (bays.length === 0) return { type: "FeatureCollection", features: [] };
+    if (!all) return { type: "FeatureCollection", features: [] };
+    const active = bayGroupRef.current;
     const t = clampBayTransform(nudgeRef.current);
-    const pivot = bayPivot(bays.flatMap((b) => b.geometry.coordinates[0]));
-    return {
-      type: "FeatureCollection",
-      features: bays.map((b) => ({
-        type: "Feature",
-        properties: {},
-        geometry: {
-          type: "Polygon",
-          coordinates: [transformRing(b.geometry.coordinates[0], pivot, t)],
-        },
-      })) as GeoJSON.Feature[],
-    };
+    const byGroup = new Map<string, BayFeature[]>();
+    for (const b of all) {
+      const g = byGroup.get(b.properties.zone);
+      if (g) g.push(b);
+      else byGroup.set(b.properties.zone, [b]);
+    }
+    const feats: GeoJSON.Feature[] = [];
+    for (const [zone, bays] of byGroup) {
+      const isActive = zone === active;
+      // Saved nudges are applied to the inactive groups too, so what the admin
+      // sees here matches what /parking renders. Only the active group takes
+      // the live, unsaved value.
+      const applied = isActive ? t : savedNudgesRef.current[zone];
+      const pivot = applied
+        ? bayPivot(bays.flatMap((b) => b.geometry.coordinates[0]))
+        : null;
+      for (const b of bays) {
+        const ring = b.geometry.coordinates[0];
+        feats.push({
+          type: "Feature",
+          properties: { active: isActive },
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              pivot && applied ? transformRing(ring, pivot, applied) : ring,
+            ],
+          },
+        } as GeoJSON.Feature);
+      }
+    }
+    return { type: "FeatureCollection", features: feats };
   }
 
   function refreshBayPreview() {
@@ -721,17 +773,27 @@ export function MapZoneEditor({
         // terra-draw handles both stay on top of it — the bays are the thing
         // being aimed, not the thing being grabbed.
         map.addSource("pe-bays", { type: "geojson", data: bayPreviewData() });
+        // Two tiers: every group is drawn so the layer is never invisible, but
+        // the one being nudged is solid and the rest recede — otherwise 302
+        // bays bury the row the admin is actually aiming.
         map.addLayer({
           id: "pe-bays",
           type: "fill",
           source: "pe-bays",
-          paint: { "fill-color": BAY_PREVIEW_COLOR, "fill-opacity": 0.55 },
+          paint: {
+            "fill-color": BAY_PREVIEW_COLOR,
+            "fill-opacity": ["case", ["get", "active"], 0.6, 0.18],
+          },
         });
         map.addLayer({
           id: "pe-bays-line",
           type: "line",
           source: "pe-bays",
-          paint: { "line-color": "#ffffff", "line-width": 0.7, "line-opacity": 0.7 },
+          paint: {
+            "line-color": "#ffffff",
+            "line-width": ["case", ["get", "active"], 0.8, 0.4],
+            "line-opacity": ["case", ["get", "active"], 0.75, 0.35],
+          },
         });
 
         map.addSource("pe-streets", { type: "geojson", data: streetUnderlayData() });
@@ -842,22 +904,30 @@ export function MapZoneEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Switching zones loads that zone's saved nudge and clears any unsaved edit —
-  // an offset means nothing once a different zone is selected.
+  // Selecting a zone that HAS bays follows through to that bay group — the
+  // common case, and it keeps the two selections feeling like one. Selecting a
+  // zone with no bays leaves the picker alone rather than blanking it.
+  useEffect(() => {
+    if (selectedId && bayZones.has(selectedId)) setBayGroup(selectedId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, bayZones]);
+
+  // Switching bay groups loads that group's saved nudge and drops any unsaved
+  // edit — an offset means nothing once a different group is being aimed.
   useEffect(() => {
     setNudge(
-      (selectedId && savedNudgesRef.current[selectedId]) || IDENTITY_BAY_TRANSFORM,
+      (bayGroup && savedNudgesRef.current[bayGroup]) || IDENTITY_BAY_TRANSFORM,
     );
     setNudgeDirty(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId]);
+  }, [bayGroup]);
 
   // Redraw the preview after the render that updated nudgeRef — same reason the
   // curb preview cannot live inside patchDraft.
   useEffect(() => {
     refreshBayPreview();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nudge, selectedId, mapReady, bayZones]);
+  }, [nudge, bayGroup, selectedId, mapReady, bayZones]);
 
   /* ---------------- draw new zone ---------------- */
 
@@ -1059,7 +1129,9 @@ export function MapZoneEditor({
    * cannot be undone by a later zone save, and a zone save cannot undo it.
    */
   async function saveNudge() {
-    const id = selectedIdRef.current;
+    // The bay GROUP, not the selected zone — they are usually the same, but a
+    // group whose lot was deleted has no selected zone to borrow an id from.
+    const id = bayGroupRef.current;
     if (!id) return;
     setNudgeSaving(true);
     setMessage(null);
@@ -1433,15 +1505,35 @@ export function MapZoneEditor({
 
             {/* Bay nudge (E34) — only for zones that actually have generated
                 bays, so the panel never appears on a street or a park & ride. */}
-            {selectedZone && bayZones.has(selectedZone.id) ? (
+            {bayZones.size > 0 ? (
               <div className="mt-4 rounded-xl border border-sand bg-shell/60 p-4">
                 <p className="text-sm font-medium text-ink">Parking bay position</p>
                 <p className="mt-1 text-xs text-ink-soft">
-                  The individual spaces are drawn from the Port&apos;s map, fitted inside
-                  this zone&apos;s outline. If they sit off the real rows, move the whole
-                  set here — the shapes stay rigid, so you are correcting the fit, not
+                  The individual spaces are drawn from the Port&apos;s map, fitted to the
+                  lot outlines. If a row sits off the real spaces, move the whole set
+                  here — the shapes stay rigid, so you are correcting the fit, not
                   redrawing stalls. Switch the basemap to satellite to aim them.
                 </p>
+                <div className="mt-3">
+                  <Field label="Which set of spaces">
+                    <select
+                      className={INPUT}
+                      value={bayGroup ?? ""}
+                      onChange={(e) => setBayGroup(e.target.value || null)}
+                    >
+                      <option value="">Choose a set…</option>
+                      {[...bayZones].sort().map((z) => (
+                        <option key={z} value={z}>
+                          {bayGroupLabel(z, bayFeaturesRef.current ?? [])}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  {/* Listed independently of the sidebar on purpose: some sets
+                      belong to lots that were deleted from the map, and there is
+                      no row left to click — but their spaces still draw for
+                      visitors, so they still have to be adjustable. */}
+                </div>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <Field label={`East / west — ${nudge.dx > 0 ? `${nudge.dx} m east` : nudge.dx < 0 ? `${-nudge.dx} m west` : "centred"}`}>
                     <input
@@ -1451,6 +1543,7 @@ export function MapZoneEditor({
                       max={BAY_TRANSFORM_LIMITS.offset}
                       step={0.5}
                       value={nudge.dx}
+                      disabled={!bayGroup}
                       onChange={(e) => patchNudge({ dx: Number(e.target.value) })}
                     />
                   </Field>
@@ -1462,6 +1555,7 @@ export function MapZoneEditor({
                       max={BAY_TRANSFORM_LIMITS.offset}
                       step={0.5}
                       value={nudge.dy}
+                      disabled={!bayGroup}
                       onChange={(e) => patchNudge({ dy: Number(e.target.value) })}
                     />
                   </Field>
@@ -1473,6 +1567,7 @@ export function MapZoneEditor({
                       max={BAY_TRANSFORM_LIMITS.rotate}
                       step={0.5}
                       value={nudge.rotateDeg}
+                      disabled={!bayGroup}
                       onChange={(e) => patchNudge({ rotateDeg: Number(e.target.value) })}
                     />
                   </Field>
@@ -1484,6 +1579,7 @@ export function MapZoneEditor({
                       max={BAY_TRANSFORM_LIMITS.scaleMax}
                       step={0.01}
                       value={nudge.scale}
+                      disabled={!bayGroup}
                       onChange={(e) => patchNudge({ scale: Number(e.target.value) })}
                     />
                   </Field>
@@ -1492,7 +1588,7 @@ export function MapZoneEditor({
                   <button
                     type="button"
                     onClick={saveNudge}
-                    disabled={nudgeSaving || !nudgeDirty}
+                    disabled={nudgeSaving || !nudgeDirty || !bayGroup}
                     className="rounded-full bg-sound px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-sound-deep disabled:opacity-50"
                   >
                     {nudgeSaving ? "Saving…" : "Save bay position"}
@@ -1500,7 +1596,7 @@ export function MapZoneEditor({
                   <button
                     type="button"
                     onClick={() => patchNudge(IDENTITY_BAY_TRANSFORM)}
-                    disabled={nudgeSaving || isIdentityBayTransform(nudge)}
+                    disabled={nudgeSaving || isIdentityBayTransform(nudge) || !bayGroup}
                     className="text-sm font-semibold text-tide-deep underline disabled:opacity-40"
                   >
                     Reset to generated
