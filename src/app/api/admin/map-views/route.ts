@@ -15,7 +15,12 @@ import type { BuiltInSource, MapView } from "@/lib/map/types";
 import { deleteMapView, getMapView, getMapViews, saveMapView } from "@/lib/stores/map-store";
 import { RecordValidationError } from "@/lib/db/store-schemas";
 
-const SOURCES: BuiltInSource[] = ["restaurants", "parking-zones", "streets"];
+const SOURCES: BuiltInSource[] = [
+  "restaurants",
+  "parking-zones",
+  "streets",
+  "port-stalls",
+];
 
 // Greater Kingston, WA — anything outside this box is a data-entry mistake.
 const LAT_MIN = 47.5;

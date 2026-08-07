@@ -30,10 +30,17 @@ export const mapViews: MapView[] = [
     // drop the alternative. tests/unit/parking-seed-source.test.ts holds this.
     //
     // Admins still draw on top in /admin/maps; overlay edits win by id.
+    //
+    // "port-stalls" (E34) draws the individual numbered bays inside the Port
+    // zones, coloured by which code you text. Seeded for the same reason
+    // "parking-zones" is: it is the layer that distinguishes POKPARK from
+    // POKHILL from POKTT, and losing it silently would put the map back to one
+    // undifferentiated colour over the Port's three pay zones. The zone fills
+    // remain underneath, so unticking this degrades rather than breaks.
     description: "Where to park in Kingston — built by the Chamber.",
     center: [47.7972, -122.498],
     zoom: 17,
-    sources: ["parking-zones"],
+    sources: ["parking-zones", "port-stalls"],
     published: true,
   },
   {

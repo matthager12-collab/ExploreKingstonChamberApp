@@ -10,6 +10,7 @@ import { restaurantCategory } from "./restaurant-category";
 import { getMapView, getFeaturesForView } from "../stores/map-store";
 import { getRestaurants } from "../stores/business-store";
 import { getParkingZones } from "../stores/parking-store";
+import { getBayTransforms } from "../stores/bay-transform-store";
 import { getMediaItems } from "../stores/media-store";
 import { resolveParkingPhotos } from "./parking-photos";
 
@@ -59,6 +60,15 @@ export async function resolveMapView(viewId: string): Promise<ResolvedMapView | 
 
   if (view.sources.includes("streets")) {
     builtins.streets = true;
+  }
+
+  // Port bay geometry: the 84 KB of generated polygons stays a static file the
+  // client fetches, exactly like streets. Only the admin's per-zone nudges
+  // travel on the view payload, because they are the one part that can change
+  // without a deploy. Read even when empty so the client can tell "no
+  // corrections" from "corrections not loaded".
+  if (view.sources.includes("port-stalls")) {
+    builtins.portStalls = { transforms: await getBayTransforms() };
   }
 
   return { view, features, builtins };

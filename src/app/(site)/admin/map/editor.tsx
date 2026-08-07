@@ -40,11 +40,24 @@ import type { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
 import type { GeoJSONStoreFeatures, TerraDraw } from "terra-draw";
 import {
   CURB_SIDES,
+  PORT_SHORT_CODE,
   RULE_LABELS,
   type CurbSide,
   type MapZone,
   type ParkingRule,
+  type PayHandoff,
+  type PayVendor,
 } from "@/lib/data/parking";
+import { payHref, payInstruction } from "@/lib/parking/pay-links";
+import {
+  BAY_TRANSFORM_LIMITS,
+  IDENTITY_BAY_TRANSFORM,
+  bayPivot,
+  clampBayTransform,
+  isIdentityBayTransform,
+  transformRing,
+  type BayTransform,
+} from "@/lib/map/bay-transform";
 import { mapStyle, TILES_PMTILES_PATH } from "@/lib/map/basemap";
 import { loadMapLibre, pmtilesUrl } from "@/lib/map/maplibre";
 import { editorIdStrategy, loadTerraDraw } from "@/lib/map/terradraw";
@@ -95,6 +108,17 @@ const RULES: ParkingRule[] = [
 const INPUT =
   "w-full rounded-lg border border-sand bg-white px-3 py-2 text-sm text-ink focus:border-tide focus:outline-none";
 
+/** One generated bay from /geo/port-stalls.json. */
+type BayFeature = {
+  geometry: { type: "Polygon"; coordinates: number[][][] };
+  properties: { zone: string; rule: string; code: string | null; range: string | null };
+};
+
+/** Bay fill in the editor preview — one flat colour, not the public palette.
+ *  The editor question is "are these in the right PLACE", and seven hues would
+ *  only compete with the zone shapes and pins the admin is aiming at. */
+const BAY_PREVIEW_COLOR = "#16758f";
+
 function ruleColor(rule: string): `#${string}` {
   return (RULE_COLORS[rule] ?? "#7a7468") as `#${string}`;
 }
@@ -129,6 +153,8 @@ type Draft = {
   curb: CurbSide | "";
   /** Shared-library photo names, in display order. */
   images: string[];
+  /** Payment hand-offs. Editable here so a Port code change needs no deploy. */
+  pay: PayHandoff[];
 };
 
 function toDraft(zone: MapZone): Draft {
@@ -141,6 +167,7 @@ function toDraft(zone: MapZone): Draft {
     confidence: zone.confidence,
     curb: zone.curb ?? "",
     images: zone.images ?? [],
+    pay: zone.pay ?? [],
   };
 }
 
@@ -218,6 +245,28 @@ export function MapZoneEditor({
   drawingRef.current = drawing;
   const selectRef = useRef<(id: string) => void>(() => {});
 
+  /* ---------------- Port bay nudge (E34) ----------------
+   *
+   * Kept entirely separate from `draft`/`dirty`/`save`, which belong to the
+   * MapZone and POST to /api/admin/parking. The nudge is a different record in
+   * a different store with its own endpoint, so it gets its own dirty flag and
+   * its own Save. That is not fussiness: it means adjusting bays can never
+   * round-trip a MapZone through the parking whitelist, which is where fields
+   * go to be silently wiped.
+   *
+   * Bays themselves are static — fetched once per mount, exactly like the
+   * sibling CMS editor's street geometry — because only the four nudge numbers
+   * are editable here. */
+  const bayFeaturesRef = useRef<BayFeature[] | null>(null);
+  const [bayZones, setBayZones] = useState<Set<string>>(new Set());
+  const [nudge, setNudge] = useState<BayTransform>(IDENTITY_BAY_TRANSFORM);
+  const [nudgeDirty, setNudgeDirty] = useState(false);
+  const [nudgeSaving, setNudgeSaving] = useState(false);
+  /** Saved nudges by zone id, so switching zones restores the stored value. */
+  const savedNudgesRef = useRef<Record<string, BayTransform>>({});
+  const nudgeRef = useRef(nudge);
+  nudgeRef.current = nudge;
+
   /** Run a programmatic draw-store mutation without tripping dirty tracking. */
   function withStoreOps<T>(fn: () => T): T {
     suppressRef.current = true;
@@ -275,6 +324,43 @@ export function MapZoneEditor({
       | { setData: (d: GeoJSON.FeatureCollection) => void }
       | undefined;
     src?.setData(streetUnderlayData());
+  }
+
+  /**
+   * The bay preview for the SELECTED zone only.
+   *
+   * Only the selected zone, deliberately: the admin is aiming one zone's rows
+   * at the aerial underneath, and drawing the other 250 bays would bury the
+   * thing being aimed. It reads `nudgeRef`, so it shows the UNSAVED value — the
+   * whole point is to see the correction before committing it.
+   */
+  function bayPreviewData(): GeoJSON.FeatureCollection {
+    const zoneId = selectedIdRef.current;
+    const all = bayFeaturesRef.current;
+    if (!zoneId || !all) return { type: "FeatureCollection", features: [] };
+    const bays = all.filter((b) => b.properties.zone === zoneId);
+    if (bays.length === 0) return { type: "FeatureCollection", features: [] };
+    const t = clampBayTransform(nudgeRef.current);
+    const pivot = bayPivot(bays.flatMap((b) => b.geometry.coordinates[0]));
+    return {
+      type: "FeatureCollection",
+      features: bays.map((b) => ({
+        type: "Feature",
+        properties: {},
+        geometry: {
+          type: "Polygon",
+          coordinates: [transformRing(b.geometry.coordinates[0], pivot, t)],
+        },
+      })) as GeoJSON.Feature[],
+    };
+  }
+
+  function refreshBayPreview() {
+    const map = mapRef.current;
+    const src = map?.getSource("pe-bays") as
+      | { setData: (d: GeoJSON.FeatureCollection) => void }
+      | undefined;
+    src?.setData(bayPreviewData());
   }
 
   function pinEl(zone: MapZone, selected: boolean): HTMLDivElement {
@@ -631,6 +717,23 @@ export function MapZoneEditor({
           }
         });
 
+        // Bay preview, added BEFORE pe-streets so curb strokes and the
+        // terra-draw handles both stay on top of it — the bays are the thing
+        // being aimed, not the thing being grabbed.
+        map.addSource("pe-bays", { type: "geojson", data: bayPreviewData() });
+        map.addLayer({
+          id: "pe-bays",
+          type: "fill",
+          source: "pe-bays",
+          paint: { "fill-color": BAY_PREVIEW_COLOR, "fill-opacity": 0.55 },
+        });
+        map.addLayer({
+          id: "pe-bays-line",
+          type: "line",
+          source: "pe-bays",
+          paint: { "line-color": "#ffffff", "line-width": 0.7, "line-opacity": 0.7 },
+        });
+
         map.addSource("pe-streets", { type: "geojson", data: streetUnderlayData() });
         map.addLayer({
           id: "pe-streets",
@@ -698,6 +801,63 @@ export function MapZoneEditor({
     // is the whole intent.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft?.curb, selectedId, zones]);
+
+  // Load the generated bays and any saved nudges, once per mount. Both are
+  // progressive enhancement: a failure here hides the nudge panel and leaves
+  // every other editor function working.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [baysRes, tRes] = await Promise.all([
+          fetch("/geo/port-stalls.json"),
+          fetch("/api/admin/bay-transform"),
+        ]);
+        if (cancelled) return;
+        if (baysRes.ok) {
+          const data = (await baysRes.json()) as { features: BayFeature[] };
+          const feats = (data.features ?? []).filter(
+            (f) => f?.geometry?.type === "Polygon" && f.properties?.zone,
+          );
+          bayFeaturesRef.current = feats;
+          if (!cancelled) setBayZones(new Set(feats.map((f) => f.properties.zone)));
+        }
+        if (tRes.ok) {
+          const data = (await tRes.json()) as { transforms?: Record<string, BayTransform> };
+          savedNudgesRef.current = data.transforms ?? {};
+          const id = selectedIdRef.current;
+          if (id && !cancelled) {
+            setNudge(savedNudgesRef.current[id] ?? IDENTITY_BAY_TRANSFORM);
+          }
+        }
+        if (!cancelled) refreshBayPreview();
+      } catch {
+        // No bays and no nudge panel; the rest of the editor is unaffected.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Static per mount, exactly like the sibling editor's street geometry.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Switching zones loads that zone's saved nudge and clears any unsaved edit —
+  // an offset means nothing once a different zone is selected.
+  useEffect(() => {
+    setNudge(
+      (selectedId && savedNudgesRef.current[selectedId]) || IDENTITY_BAY_TRANSFORM,
+    );
+    setNudgeDirty(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
+
+  // Redraw the preview after the render that updated nudgeRef — same reason the
+  // curb preview cannot live inside patchDraft.
+  useEffect(() => {
+    refreshBayPreview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nudge, selectedId, mapReady, bayZones]);
 
   /* ---------------- draw new zone ---------------- */
 
@@ -863,6 +1023,11 @@ export function MapZoneEditor({
       // then rebuild the zone from the whitelist without images and the old
       // ones would quietly come back on the next read.
       images: draft.images.length ? draft.images : undefined,
+      // Same whitelist rule as streetPaths above: omitting this deletes the
+      // lot's payment hand-off, including on a save that only moved a shape.
+      // Sent explicitly (not via `...zone`) so emptying the list persists as
+      // removed rather than silently restoring the old value.
+      pay: draft.pay.length ? draft.pay : undefined,
       center,
       ...(polygon ? { polygon } : {}),
       // MUST be sent: the API rebuilds from a whitelist, so omitting this drops
@@ -870,6 +1035,60 @@ export function MapZoneEditor({
       // withSeedStreetGeometry; a street zone drawn in this editor would not.
       ...(streetPaths?.length ? { streetPaths } : {}),
     };
+  }
+
+  /** Edit one hand-off in place, leaving the others alone. */
+  function patchPay(index: number, patch: Partial<PayHandoff>) {
+    const next = draftRef.current?.pay.map((p, i) =>
+      i === index ? { ...p, ...patch } : p,
+    );
+    if (next) patchDraft({ pay: next });
+  }
+
+  function patchNudge(patch: Partial<BayTransform>) {
+    setNudge((n) => clampBayTransform({ ...n, ...patch }));
+    setNudgeDirty(true);
+    setMessage(null);
+  }
+
+  /**
+   * Persist the selected zone's bay nudge.
+   *
+   * Its own endpoint and its own store — this never touches the MapZone, so it
+   * cannot be undone by a later zone save, and a zone save cannot undo it.
+   */
+  async function saveNudge() {
+    const id = selectedIdRef.current;
+    if (!id) return;
+    setNudgeSaving(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/admin/bay-transform", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, ...clampBayTransform(nudgeRef.current) }),
+      });
+      const data = (await res.json()) as { transform?: BayTransform; error?: string };
+      if (!res.ok || !data.transform) {
+        setMessage({ kind: "error", text: data.error ?? "Could not save the bay position." });
+        return;
+      }
+      // Store what the SERVER returned, not what we sent: it has been clamped
+      // and rounded, and the panel should show the value that actually persisted.
+      savedNudgesRef.current[id] = data.transform;
+      setNudge(data.transform);
+      setNudgeDirty(false);
+      setMessage({
+        kind: "ok",
+        text: isIdentityBayTransform(data.transform)
+          ? "Bays reset to their generated position."
+          : "Bay position saved — live on /parking within a minute.",
+      });
+    } catch {
+      setMessage({ kind: "error", text: "Could not reach the server — is the app running?" });
+    } finally {
+      setNudgeSaving(false);
+    }
   }
 
   async function save() {
@@ -1134,6 +1353,161 @@ export function MapZoneEditor({
                   side. Pick a side only after checking the signs on the ground; leave it
                   Unknown and the map claims nothing.
                 </p>
+              </div>
+            ) : null}
+
+            {/* Payment hand-offs. The Port revises codes and Diamond reprices,
+                and docs/PARKING-PAY-LINKS.md flags every value as
+                verify-before-relying — so they have to be changeable here
+                rather than in a deploy. */}
+            <div className="mt-4 rounded-xl border border-sand bg-shell/60 p-4">
+              <p className="text-sm font-medium text-ink">How people pay for this lot</p>
+              <p className="mt-1 text-xs text-ink-soft">
+                Leave this empty for free, permit and no-parking zones — a
+                &ldquo;pay now&rdquo; button on a free lot tells a visitor they owe money
+                for a space the Port gives away.
+              </p>
+              {draft.pay.map((p, i) => (
+                <div key={i} className="mt-3 grid gap-2 sm:grid-cols-[150px_1fr_120px_auto]">
+                  <select
+                    className={INPUT}
+                    value={p.vendor}
+                    aria-label="Payment vendor"
+                    onChange={(e) => patchPay(i, { vendor: e.target.value as PayVendor })}
+                  >
+                    <option value="t2">Text-to-pay</option>
+                    <option value="parkmobile">ParkMobile</option>
+                    <option value="paybyphone">PayByPhone</option>
+                  </select>
+                  <input
+                    className={INPUT}
+                    placeholder="Code (POKHILL / 97599515)"
+                    aria-label="Payment code"
+                    value={p.code}
+                    onChange={(e) => patchPay(i, { code: e.target.value })}
+                  />
+                  {p.vendor === "t2" ? (
+                    <input
+                      className={INPUT}
+                      placeholder="Text to (25023)"
+                      aria-label="Short code"
+                      value={p.shortCode ?? ""}
+                      onChange={(e) => patchPay(i, { shortCode: e.target.value })}
+                    />
+                  ) : (
+                    <span />
+                  )}
+                  <button
+                    type="button"
+                    aria-label="Remove this payment option"
+                    onClick={() => patchDraft({ pay: draft.pay.filter((_, j) => j !== i) })}
+                    className="self-center px-2 text-lg font-semibold text-coral-deep"
+                  >
+                    ✕
+                  </button>
+                  {/* What the visitor will see and what the button will open.
+                      Shown before saving so a typo is caught here rather than
+                      by somebody standing in the lot. */}
+                  <p className="text-xs break-all text-ink-soft sm:col-span-4">
+                    {payInstruction(p)} · opens{" "}
+                    <code className="text-ink">{payHref(p)}</code>
+                  </p>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() =>
+                  patchDraft({
+                    pay: [
+                      ...draft.pay,
+                      { vendor: "t2", code: "", shortCode: PORT_SHORT_CODE },
+                    ],
+                  })
+                }
+                className="mt-3 text-sm font-semibold text-tide-deep underline"
+              >
+                ＋ Add a way to pay
+              </button>
+            </div>
+
+            {/* Bay nudge (E34) — only for zones that actually have generated
+                bays, so the panel never appears on a street or a park & ride. */}
+            {selectedZone && bayZones.has(selectedZone.id) ? (
+              <div className="mt-4 rounded-xl border border-sand bg-shell/60 p-4">
+                <p className="text-sm font-medium text-ink">Parking bay position</p>
+                <p className="mt-1 text-xs text-ink-soft">
+                  The individual spaces are drawn from the Port&apos;s map, fitted inside
+                  this zone&apos;s outline. If they sit off the real rows, move the whole
+                  set here — the shapes stay rigid, so you are correcting the fit, not
+                  redrawing stalls. Switch the basemap to satellite to aim them.
+                </p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <Field label={`East / west — ${nudge.dx > 0 ? `${nudge.dx} m east` : nudge.dx < 0 ? `${-nudge.dx} m west` : "centred"}`}>
+                    <input
+                      type="range"
+                      className="w-full"
+                      min={-BAY_TRANSFORM_LIMITS.offset}
+                      max={BAY_TRANSFORM_LIMITS.offset}
+                      step={0.5}
+                      value={nudge.dx}
+                      onChange={(e) => patchNudge({ dx: Number(e.target.value) })}
+                    />
+                  </Field>
+                  <Field label={`North / south — ${nudge.dy > 0 ? `${nudge.dy} m north` : nudge.dy < 0 ? `${-nudge.dy} m south` : "centred"}`}>
+                    <input
+                      type="range"
+                      className="w-full"
+                      min={-BAY_TRANSFORM_LIMITS.offset}
+                      max={BAY_TRANSFORM_LIMITS.offset}
+                      step={0.5}
+                      value={nudge.dy}
+                      onChange={(e) => patchNudge({ dy: Number(e.target.value) })}
+                    />
+                  </Field>
+                  <Field label={`Rotation — ${nudge.rotateDeg}°`}>
+                    <input
+                      type="range"
+                      className="w-full"
+                      min={-BAY_TRANSFORM_LIMITS.rotate}
+                      max={BAY_TRANSFORM_LIMITS.rotate}
+                      step={0.5}
+                      value={nudge.rotateDeg}
+                      onChange={(e) => patchNudge({ rotateDeg: Number(e.target.value) })}
+                    />
+                  </Field>
+                  <Field label={`Size — ${Math.round(nudge.scale * 100)}%`}>
+                    <input
+                      type="range"
+                      className="w-full"
+                      min={BAY_TRANSFORM_LIMITS.scaleMin}
+                      max={BAY_TRANSFORM_LIMITS.scaleMax}
+                      step={0.01}
+                      value={nudge.scale}
+                      onChange={(e) => patchNudge({ scale: Number(e.target.value) })}
+                    />
+                  </Field>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={saveNudge}
+                    disabled={nudgeSaving || !nudgeDirty}
+                    className="rounded-full bg-sound px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-sound-deep disabled:opacity-50"
+                  >
+                    {nudgeSaving ? "Saving…" : "Save bay position"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => patchNudge(IDENTITY_BAY_TRANSFORM)}
+                    disabled={nudgeSaving || isIdentityBayTransform(nudge)}
+                    className="text-sm font-semibold text-tide-deep underline disabled:opacity-40"
+                  >
+                    Reset to generated
+                  </button>
+                  {nudgeDirty && (
+                    <span className="text-xs text-ink-soft">Unsaved — the map above is the preview.</span>
+                  )}
+                </div>
               </div>
             ) : null}
 
