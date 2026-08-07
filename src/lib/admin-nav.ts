@@ -148,10 +148,20 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     capability: "moderate",
   },
   {
+    id: "events",
+    href: "/admin/events",
+    title: "Events",
+    navLabel: "Events",
+    blurb:
+      "Every event on the town calendar, whoever created it — including repeating series.",
+    capability: "manage-site",
+  },
+  {
     id: "events-sources",
     href: "/admin/events-sources",
     title: "Events sources",
-    navLabel: "Events",
+    // "Events" is the workbench above; this one is the plumbing behind it.
+    navLabel: "Event feeds",
     blurb:
       "Which community calendars feed the unified events list, duplicate review, and the go-live switch.",
     capability: "manage-site",

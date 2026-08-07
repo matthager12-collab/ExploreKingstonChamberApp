@@ -11,6 +11,7 @@
 import { and, asc, count, eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { recordGoing } from "@/lib/stores/event-going-store";
 import {
   appendAnalyticsEvent,
   appendFeedbackResponse,
@@ -23,6 +24,7 @@ import {
   analyticsAreaRollup,
   analyticsEvent,
   audit,
+  eventGoing,
   feedbackResponse,
   ferryObservation,
   invites,
@@ -74,6 +76,11 @@ beforeAll(async () => {
   await appendSurveyResponse({ q1: "came for the ferry" });
   await appendFeedbackResponse({ rating: 4, comment: "parking map helped", path: "/parking" });
   await appendFerryObservation({ vessel: "Spokane", pct: 42 });
+  // An "I'm going" tally. Seeded through the real store so the roundtrip
+  // exercises the upsert, not a hand-built row.
+  await recordGoing("summer-market-2026", "98346");
+  await recordGoing("summer-market-2026", "98346");
+  await recordGoing("summer-market-2026", "");
 
   // E06 auth tables. Accounts no longer ride inside `record`, so a bundle that
   // omitted these would restore to a site with zero users — the reason these
@@ -131,6 +138,7 @@ async function tableCounts(tdb: TestDb) {
       | typeof analyticsEvent
       | typeof surveyResponse
       | typeof feedbackResponse
+      | typeof eventGoing
       | typeof ferryObservation
       | typeof orgs
       | typeof users
@@ -148,6 +156,7 @@ async function tableCounts(tdb: TestDb) {
     analytics_event: await one(analyticsEvent),
     survey_response: await one(surveyResponse),
     feedback_response: await one(feedbackResponse),
+    event_going: await one(eventGoing),
     ferry_observation: await one(ferryObservation),
     orgs: await one(orgs),
     users: await one(users),
@@ -171,6 +180,7 @@ describe("backup/restore roundtrip", () => {
       "analytics_area_rollup",
       "analytics_event",
       "audit",
+      "event_going",
       "feedback_response",
       "ferry_observation",
       "invites",
