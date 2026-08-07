@@ -1,8 +1,10 @@
 // Admin content-records API — one endpoint for the remaining seed-backed
-// content domains: itineraries, lodging, webcams, and restaurants. Backs the
+// content domains: itineraries, lodging, webcams, restaurants, directory, and
+// events. Backs the
 // /admin/itineraries builder and the /admin/listings workbench.
 //
-// GET    ?domain=itineraries|lodging|webcams|restaurants  — merged records.
+// GET    ?domain=itineraries|lodging|webcams|restaurants|directory|events
+//                                             — merged records.
 // POST   { domain, record }                   — validate via the domain schema, save.
 // DELETE ?domain=X&id=Y                        — tombstone (hides seed too).
 //
@@ -42,6 +44,15 @@ import {
   saveDirectoryListing,
 } from "@/lib/stores/directory-store";
 import { RecordValidationError } from "@/lib/db/store-schemas";
+import { normalizeEventTimestamp } from "@/lib/time";
+import type { EventItem } from "@/lib/types";
+import { eventSchema } from "@/lib/schemas/event";
+import {
+  deleteEvent,
+  getEventAdmin,
+  getEventsAdmin,
+  saveEvent,
+} from "@/lib/stores/event-store";
 import { revalidatePublicPathsForStore } from "@/lib/public-paths";
 import {
   directoryListingSchema,
@@ -56,7 +67,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const DOMAINS = ["itineraries", "lodging", "webcams", "restaurants", "directory"] as const;
+const DOMAINS = ["itineraries", "lodging", "webcams", "restaurants", "directory", "events"] as const;
 type Domain = (typeof DOMAINS)[number];
 
 function bad(error: string): NextResponse {
@@ -86,7 +97,9 @@ export async function GET(request: NextRequest) {
           ? await getWebcamsAdmin()
           : domain === "directory"
             ? await getDirectoryListingsAdmin()
-            : await getRestaurantsAdmin();
+            : domain === "events"
+              ? await getEventsAdmin()
+              : await getRestaurantsAdmin();
 
   return NextResponse.json({ records });
 }
@@ -162,6 +175,32 @@ export async function POST(request: NextRequest) {
       });
       return saved(record);
     }
+    if (domain === "events") {
+      // Timestamps get the Pacific offset attached HERE, exactly as the portal
+      // route does it, so an admin-entered "2026-08-08T09:00" is the same
+      // instant as the same value typed by a business owner. Read-time
+      // normalization in unified.ts is a safety net, not a substitute — two
+      // write paths storing different shapes is how the two disagree later.
+      const formFields = { ...raw };
+      if (typeof formFields.start === "string" && formFields.start.trim()) {
+        formFields.start = normalizeEventTimestamp(formFields.start.trim());
+      }
+      if (typeof formFields.end === "string" && formFields.end.trim()) {
+        formFields.end = normalizeEventTimestamp(formFields.end.trim());
+      }
+      const parsed = eventSchema.safeParse(formFields);
+      if (!parsed.success) return bad(firstZodMessage(parsed.error));
+      const record = parsed.data as EventItem;
+      // Attachments are uploaded through the suggest/portal paths and have no
+      // control on this form — carry them over so an admin edit never drops
+      // a flyer (same reasoning as restaurants' structured hours below).
+      const existing = await getEventAdmin(record.id);
+      if (existing?.attachments && !record.attachments) {
+        record.attachments = existing.attachments;
+      }
+      await saveEvent(record, meta);
+      return saved(record);
+    }
     if (domain === "restaurants") {
       // The form can't edit structured hours, and this endpoint has never read
       // them from the request — drop them before validation, then carry the
@@ -208,7 +247,9 @@ export async function DELETE(request: NextRequest) {
           ? await getWebcamsAdmin()
           : domain === "directory"
             ? await getDirectoryListingsAdmin()
-            : await getRestaurantsAdmin();
+            : domain === "events"
+              ? await getEventsAdmin()
+              : await getRestaurantsAdmin();
   if (!records.some((r) => r.id === id)) {
     return NextResponse.json({ error: "Record not found" }, { status: 404 });
   }
@@ -219,6 +260,7 @@ export async function DELETE(request: NextRequest) {
     else if (domain === "lodging") await deleteLodging(id, meta);
     else if (domain === "webcams") await deleteWebcam(id, meta);
     else if (domain === "directory") await deleteDirectoryListing(id, meta);
+    else if (domain === "events") await deleteEvent(id, meta);
     else await deleteRestaurant(id, meta);
   } catch (err) {
     if (err instanceof RecordValidationError) return bad(err.message);
