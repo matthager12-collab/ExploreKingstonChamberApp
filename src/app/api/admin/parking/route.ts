@@ -14,7 +14,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getSessionUser, requireAdmin } from "@/lib/auth";
-import { CURB_SIDES, type CurbSide, type MapZone, type ParkingRule } from "@/lib/data/parking";
+import {
+  CURB_SIDES,
+  type CurbSide,
+  type MapZone,
+  type ParkingRule,
+  type PayHandoff,
+  type PayVendor,
+} from "@/lib/data/parking";
 import {
   deleteParkingZone,
   getParkingZone,
@@ -59,6 +66,51 @@ const CONFIDENCE: MapZone["confidence"][] = ["verified", "probable", "unverified
  */
 function revalidateParkingSurfaces(): void {
   revalidatePath("/parking");
+}
+
+const PAY_VENDORS: PayVendor[] = ["t2", "parkmobile", "paybyphone"];
+
+/**
+ * Validate the payment hand-offs on a zone.
+ *
+ * Tighter than the other string fields on purpose: `code` is interpolated into
+ * an `sms:` body and `shortCode` becomes the RECIPIENT of that message. A code
+ * carrying punctuation could reshape the URL, so the character class is an
+ * allowlist rather than a blocklist, and a hand-off that fails any check is
+ * DROPPED rather than repaired — a half-valid payment instruction is worse than
+ * none, because a visitor will act on it.
+ *
+ * Returns undefined for "no hand-offs", which the caller spreads away, so a
+ * zone that legitimately has none stays clean rather than carrying `pay: []`.
+ */
+function sanitizePay(input: unknown): PayHandoff[] | undefined {
+  if (!Array.isArray(input)) return undefined;
+  const out: PayHandoff[] = [];
+  for (const raw of input.slice(0, 4)) {
+    if (!raw || typeof raw !== "object") continue;
+    const r = raw as Record<string, unknown>;
+    const vendor = r.vendor as PayVendor;
+    if (!PAY_VENDORS.includes(vendor)) continue;
+    const code = typeof r.code === "string" ? r.code.trim().slice(0, 32) : "";
+    // PayByPhone has no zone code at all, so empty is legal — but anything
+    // present must be plain.
+    if (code && !/^[A-Za-z0-9 -]+$/.test(code)) continue;
+    // T2 needs a recipient. Without one the link would text the empty string.
+    const shortCodeRaw = typeof r.shortCode === "string" ? r.shortCode.trim() : "";
+    const shortCode = /^[0-9]{3,8}$/.test(shortCodeRaw) ? shortCodeRaw : undefined;
+    if (vendor === "t2" && (!code || !shortCode)) continue;
+    const label =
+      typeof r.label === "string" && r.label.trim()
+        ? r.label.trim().slice(0, 40)
+        : undefined;
+    out.push({
+      vendor,
+      code,
+      ...(shortCode ? { shortCode } : {}),
+      ...(label ? { label } : {}),
+    });
+  }
+  return out.length ? out : undefined;
 }
 
 // Greater Kingston, WA — anything outside this box is a data-entry mistake.
@@ -211,6 +263,8 @@ export async function POST(request: NextRequest) {
       ? body.sourceNote.trim()
       : undefined;
 
+  const pay = sanitizePay(body.pay);
+
   const zone: MapZone = {
     id,
     name,
@@ -226,6 +280,10 @@ export async function POST(request: NextRequest) {
     ...(sourceUrl ? { sourceUrl } : {}),
     ...(sourceNote ? { sourceNote } : {}),
     ...(images ? { images } : {}),
+    // Without this line every save wipes the lot's payment hand-off — including
+    // a save that only dragged the shape. The rebuild above is a whitelist, so
+    // omission is deletion, not "leave it alone".
+    ...(pay ? { pay } : {}),
   };
 
   try {
