@@ -392,9 +392,9 @@ This resolves the earlier contradiction: there is **one** aggregate schema, it c
 - **Behavioral thresholds** (`CORRIDOR_M`/per-segment, `DWELL_MIN`, `BEHAVIORAL_MIN`) and `SPACING_M` are field-calibrated against self-mark/QR labels **before behavioral is trusted beyond admin preview.**
 - **Precedent to watch:** the planner's first accuracy sample showed the heuristic over-predicts busyness on near-empty early-July-evening boats (bias ≈ +22). The queue signal may *correct* that once probes arrive — validate before enabling public.
 
-**Cron (reuse the exact pattern of `ferry-observe.yml` / `ferry-accuracy.yml`):**
-- `.github/workflows/queue-observe.yml` → `GET /api/ferry/queue/observe?token=FERRY_OBSERVE_TOKEN` every 5–10 min during service hours (~5 AM–12:30 AM Pacific). Token-gated identically to `/api/ferry/observe` (`src/app/api/ferry/observe/route.ts` lines 22–32; `permissions:{}`, curl-with-retries workflow). **This cron flushes the roll-up; it is unrelated to live probe ingest.**
-- `.github/workflows/queue-accuracy.yml` → runs post-observe to update the accuracy snapshot against the label sources above.
+**Cron (reuse the exact pattern of the `ferry-observe` / `ferry-accuracy` Render crons in `render.yaml` — app crons live on Render since E15 slice 4, service-hours-gated so overnight polls don't keep the Neon compute awake):**
+- `queue-observe` Render cron → `GET /api/ferry/queue/observe?token=FERRY_OBSERVE_TOKEN` every 5–10 min during service hours (~5 AM–12:30 AM Pacific). Token-gated identically to `/api/ferry/observe` (`src/app/api/ferry/observe/route.ts` lines 22–32; curl-image cron with retries). **This cron flushes the roll-up; it is unrelated to live probe ingest.**
+- `queue-accuracy` Render cron → runs post-observe to update the accuracy snapshot against the label sources above.
 
 ---
 
@@ -489,7 +489,7 @@ Overlay `store="ferry-queue-sensing", id="settings"`, record `{ enabled, setAt, 
 | `src/components/queue-self-mark.tsx` | Self-mark UX, purpose-specific consent, heartbeat, auto-clear | `components/near-me.tsx` |
 | `src/app/queue/page.tsx` | Public `/queue` surface (gated), band/EWMA display, post-consent qr-scan POST | — |
 | `src/app/(site)/admin/queue-sensing/page.tsx` + `src/app/api/admin/queue-sensing/route.ts` | Sign list, QR/deep-link generation, thresholds, on/off toggle, accuracy | `api/admin/boarding-pass/route.ts` |
-| `.github/workflows/queue-observe.yml`, `.github/workflows/queue-accuracy.yml` | Crons | `ferry-observe.yml`, `ferry-accuracy.yml` |
+| `queue-observe`, `queue-accuracy` Render crons in `render.yaml` | Crons | `ferry-observe`, `ferry-accuracy` Render crons |
 
 ### Modified
 | File | Change |

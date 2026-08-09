@@ -186,8 +186,10 @@ services:
         sync: false
 
   # E12 hourly events ingest — the FIRST Render cron in this blueprint (the
-  # binding v2 decision: crons live on Render; the two legacy ferry crons in
-  # .github/workflows/ stay put until E25 migrates them). Prebuilt curl image:
+  # binding v2 decision: crons live on Render; the legacy ferry/worklist
+  # workflows in .github/workflows/ were deleted once these took over —
+  # only backup-offsite and the dark privacy-retention remain on Actions).
+  # Prebuilt curl image:
   # the job only POSTs the token-gated ingest endpoint on the web service
   # above — the app itself does the work. Runs regardless of the
   # unified-calendar flag (data flows dark; render paths are flag-gated).
@@ -203,10 +205,16 @@ services:
       -H "Authorization: Bearer $EVENTS_INGEST_TOKEN"
       https://explore-kingston.onrender.com/api/events/ingest
     envVars:
-      # Same value as the web service's EVENTS_INGEST_TOKEN (set both in the
-      # dashboard; sync:false keeps it out of git).
+      # Read from the web service's own EVENTS_INGEST_TOKEN on every Blueprint
+      # sync — ONE dashboard entry, no copy to drift. This replaced sync:false
+      # on 2026-08-08: the cron's dashboard copy was never set, so every run
+      # 401'd and hourly ingest had NEVER fired from cron (only the admin
+      # "Sync now" button ever ingested).
       - key: EVENTS_INGEST_TOKEN
-        sync: false
+        fromService:
+          type: web
+          name: explore-kingston
+          envVarKey: EVENTS_INGEST_TOKEN
 
   # ── App crons: moved off GitHub Actions in E15 slice 4 ────────────────────
   #
@@ -222,18 +230,30 @@ services:
   # because `runtime: image` mounts no repo — and the blueprint is in git, so
   # it is just as reviewable.
   #
-  # Each token must ALSO be set on the web service; the request is authorised
-  # by src/proxy.ts's MACHINE_TOKEN_ROUTES table, which maps the exact path to
-  # the env var holding its token. A cron hitting an /api/admin route that is
-  # missing from that table 404s no matter how good the token is — that is the
-  # bug that silently broke nightly backups once.
+  # TOKENS: the web service OWNS each token (one dashboard entry, on it);
+  # every cron reads the same value via fromService at each Blueprint sync.
+  # Never retype a token into a cron's own env — the crons originally shipped
+  # with sync:false dashboard copies that were never filled in, so every run
+  # 401'd for weeks and nothing announced it (found 2026-08-08). The request
+  # is authorised by src/proxy.ts's MACHINE_TOKEN_ROUTES table, which maps the
+  # exact path to the env var holding its token. A cron hitting an /api/admin
+  # route that is missing from that table 404s no matter how good the token
+  # is — that is the bug that silently broke nightly backups once.
 
   - type: cron
     name: ferry-observe
     runtime: image
     image:
       url: docker.io/curlimages/curl:8.10.1
-    schedule: "*/15 * * * *" # every 15 min (UTC)
+    # Every 15 min DURING FERRY SERVICE HOURS only. Edmonds–Kingston sails
+    # ~04:45–23:55 Pacific; hours 8–10 UTC fall inside the overnight gap in
+    # BOTH winter (00:00–02:59 PST) and summer (01:00–03:59 PDT), with margin
+    # for a late last boat. Observing then logs nothing — but each poll still
+    # woke the Neon compute (scale-to-zero needs ~5 quiet min), so the dark
+    # hours were pure compute spend. Skipping 08–10 UTC gives the DB a
+    # guaranteed nightly sleep window; resuming at 11:00 UTC is still ≥45 min
+    # before the first sailing in either DST regime.
+    schedule: "*/15 0-7,11-23 * * *"
     region: oregon
     # The endpoint dedupes server-side over ~10 min, so an overlapping or
     # double firing is harmless — which is what made the Actions→Render
@@ -245,7 +265,10 @@ services:
       https://explore-kingston.onrender.com/api/ferry/observe
     envVars:
       - key: FERRY_OBSERVE_TOKEN
-        sync: false
+        fromService:
+          type: web
+          name: explore-kingston
+          envVarKey: FERRY_OBSERVE_TOKEN
 
   - type: cron
     name: ferry-accuracy
@@ -261,7 +284,10 @@ services:
       https://explore-kingston.onrender.com/api/ferry/accuracy
     envVars:
       - key: FERRY_OBSERVE_TOKEN
-        sync: false
+        fromService:
+          type: web
+          name: explore-kingston
+          envVarKey: FERRY_OBSERVE_TOKEN
 
   - type: cron
     name: worklist-sweep
@@ -277,7 +303,10 @@ services:
       https://explore-kingston.onrender.com/api/admin/worklist/sweep
     envVars:
       - key: WORKLIST_SWEEP_TOKEN
-        sync: false
+        fromService:
+          type: web
+          name: explore-kingston
+          envVarKey: WORKLIST_SWEEP_TOKEN
 
   # NOT MOVED, deliberately:
   #  - backup-offsite (.github/workflows/backup-offsite.yml) stays on Actions.

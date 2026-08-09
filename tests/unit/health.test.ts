@@ -11,8 +11,10 @@ import { createTestDb, type TestDb } from "../setup/pglite-db";
 
 type HealthBody = { ok: boolean; db: boolean; storage: string; time: string };
 
-// dbHealthy memoizes its probe for ~60s; fake timers let the suite step past
-// the window between the healthy and unhealthy cases.
+// dbHealthy memoizes its probe (15 min for a healthy result, 60s for a
+// failure — see src/lib/db/records.ts); fake timers step past the LONGER
+// window between cases so every GET below re-probes.
+const PAST_MEMO_MS = 16 * 60_000;
 let tdb: TestDb;
 beforeAll(async () => {
   vi.useFakeTimers({ now: Date.now(), toFake: ["Date"] });
@@ -22,7 +24,7 @@ afterAll(async () => {
   await tdb.close();
 });
 afterEach(() => {
-  vi.setSystemTime(Date.now() + 61_000);
+  vi.setSystemTime(Date.now() + PAST_MEMO_MS);
   vi.unstubAllEnvs();
 });
 
@@ -52,7 +54,7 @@ describe("/api/health", () => {
     expect(body.storage).toBe("fs");
     expect(body.ok).toBe(true); // storage mode does not affect ok
 
-    vi.setSystemTime(Date.now() + 61_000);
+    vi.setSystemTime(Date.now() + PAST_MEMO_MS);
     vi.stubEnv("R2_IMAGES_ENDPOINT", "https://acct.r2.cloudflarestorage.com");
     vi.stubEnv("R2_IMAGES_BUCKET", "b");
     vi.stubEnv("R2_IMAGES_ACCESS_KEY_ID", "k");
@@ -61,7 +63,7 @@ describe("/api/health", () => {
     expect(body.storage).toBe("r2"); // R2 wins over the disk
     expect(body.ok).toBe(true);
 
-    vi.setSystemTime(Date.now() + 61_000);
+    vi.setSystemTime(Date.now() + PAST_MEMO_MS);
     vi.unstubAllEnvs();
     vi.stubEnv("DATA_DIR", ""); // no disk, no R2 -> the red-flag state
     body = (await GET().then((r) => r.json())) as HealthBody;
