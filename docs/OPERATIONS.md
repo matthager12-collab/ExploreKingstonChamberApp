@@ -630,11 +630,9 @@ for every live record past its window — restaurants 90 days,
 lodging/webcams/charities 180, itineraries 365 (a record-level
 `verify_interval_days` overrides; events and volunteer shifts expire on their
 own and are exempt). The sweep is idempotent — run it as often as you like.
-Schedule it either as a **Render Cron Job** (dashboard → New → Cron Job,
-`curl -fsS -X POST -H "Authorization: Bearer $WORKLIST_SWEEP_TOKEN"
-https://<production-host>/api/admin/worklist/sweep`, weekly is plenty) or as
-a GitHub Actions cron following the ferry-observe pattern
-(`.github/workflows/ferry-observe.yml`). The token is env-only
+It is scheduled as the `worklist-sweep` **Render cron in `render.yaml`**
+(Mondays 14:00 UTC, same curl-image pattern as the ferry crons — E15 slice 4
+moved every app cron off GitHub Actions). The token is env-only
 (`WORKLIST_SWEEP_TOKEN`, §1 and §12); with it unset the sweep still works
 from any signed-in admin session — the button-free fallback is hitting the
 URL while signed in. Note: **seed records** (content that ships in git and
@@ -1098,7 +1096,7 @@ not run.**
 | Job | Where | Schedule (UTC) | Calls | Token |
 |---|---|---|---|---|
 | `events-ingest` | Render cron | `23 * * * *` hourly | `POST /api/events/ingest` | `EVENTS_INGEST_TOKEN` |
-| `ferry-observe` | Render cron | `*/15 * * * *` | `POST /api/ferry/observe` | `FERRY_OBSERVE_TOKEN` |
+| `ferry-observe` | Render cron | `*/15 0-7,11-23 * * *` (every 15 min in service hours; 08–10 UTC skipped — overnight ferry gap, lets Neon suspend) | `POST /api/ferry/observe` | `FERRY_OBSERVE_TOKEN` |
 | `ferry-accuracy` | Render cron | `0 8 * * *` (~1 AM Pacific) | `POST /api/ferry/accuracy` | `FERRY_OBSERVE_TOKEN` |
 | `worklist-sweep` | Render cron | `0 14 * * 1` Mondays (~7 AM Pacific) | `POST /api/admin/worklist/sweep` | `WORKLIST_SWEEP_TOKEN` |
 | `backup-offsite` | **GitHub Actions** | `23 9 * * *` daily | `GET /api/admin/backup` | `BACKUP_TOKEN` |

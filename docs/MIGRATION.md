@@ -241,11 +241,9 @@ Record here once done:
    GH_TOKEN=$(grep -m1 GITHUB_TOKEN .env.git | cut -d= -f2) \
      gh workflow run ci.yml -R matthager12-collab/ExploreKingstonChamberApp
    GH_TOKEN=$(grep -m1 GITHUB_TOKEN .env.git | cut -d= -f2) \
-     gh workflow run ferry-observe.yml -R matthager12-collab/ExploreKingstonChamberApp
-   GH_TOKEN=$(grep -m1 GITHUB_TOKEN .env.git | cut -d= -f2) \
-     gh workflow run ferry-accuracy.yml -R matthager12-collab/ExploreKingstonChamberApp
-   GH_TOKEN=$(grep -m1 GITHUB_TOKEN .env.git | cut -d= -f2) \
      gh workflow run backup-offsite.yml -R matthager12-collab/ExploreKingstonChamberApp
+   # (ferry-observe / ferry-accuracy / worklist-sweep run as Render crons
+   # since E15 slice 4 — there is nothing to trigger for them on Actions.)
    ```
 4. **Done — proven many times over.** Production auto-deploys `main` from the
    new repo on every merge, and `/api/health` returns 200 with `dbOk: true`.

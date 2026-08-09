@@ -186,8 +186,10 @@ services:
         sync: false
 
   # E12 hourly events ingest — the FIRST Render cron in this blueprint (the
-  # binding v2 decision: crons live on Render; the two legacy ferry crons in
-  # .github/workflows/ stay put until E25 migrates them). Prebuilt curl image:
+  # binding v2 decision: crons live on Render; the legacy ferry/worklist
+  # workflows in .github/workflows/ were deleted once these took over —
+  # only backup-offsite and the dark privacy-retention remain on Actions).
+  # Prebuilt curl image:
   # the job only POSTs the token-gated ingest endpoint on the web service
   # above — the app itself does the work. Runs regardless of the
   # unified-calendar flag (data flows dark; render paths are flag-gated).
@@ -233,7 +235,15 @@ services:
     runtime: image
     image:
       url: docker.io/curlimages/curl:8.10.1
-    schedule: "*/15 * * * *" # every 15 min (UTC)
+    # Every 15 min DURING FERRY SERVICE HOURS only. Edmonds–Kingston sails
+    # ~04:45–23:55 Pacific; hours 8–10 UTC fall inside the overnight gap in
+    # BOTH winter (00:00–02:59 PST) and summer (01:00–03:59 PDT), with margin
+    # for a late last boat. Observing then logs nothing — but each poll still
+    # woke the Neon compute (scale-to-zero needs ~5 quiet min), so the dark
+    # hours were pure compute spend. Skipping 08–10 UTC gives the DB a
+    # guaranteed nightly sleep window; resuming at 11:00 UTC is still ≥45 min
+    # before the first sailing in either DST regime.
+    schedule: "*/15 0-7,11-23 * * *"
     region: oregon
     # The endpoint dedupes server-side over ~10 min, so an overlapping or
     # double firing is harmless — which is what made the Actions→Render
