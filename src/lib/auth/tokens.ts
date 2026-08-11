@@ -56,6 +56,20 @@ export function generateInviteCode(): string {
   return randomBytes(12).toString("hex");
 }
 
+/** Email verification codes (claim signups): 6 digits, zero-padded, from
+ *  rejection sampling so every value is equally likely (a bare modulo would
+ *  bias low digits). Six digits is only safe because the verify path counts
+ *  and caps attempts — the two are a pair. */
+export function generateVerificationCode(): string {
+  // 4 random bytes = 32 bits; resample above the largest multiple of 10^6
+  // below 2^32 to keep the distribution uniform.
+  const LIMIT = 4_294_000_000; // 4294 * 10^6
+  for (;;) {
+    const n = randomBytes(4).readUInt32BE(0);
+    if (n < LIMIT) return String(n % 1_000_000).padStart(6, "0");
+  }
+}
+
 /** Opaque ids for users and orgs (same 8-byte hex shape v1 used for users). */
 export function generateId(): string {
   return randomBytes(8).toString("hex");

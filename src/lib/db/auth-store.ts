@@ -423,6 +423,47 @@ export async function revokeInvite(
   });
 }
 
+/** Everything a verified self-signup creates, in ONE transaction: the org and
+ *  the user, with their audit rows (E17 claim-signup slice). No invite is
+ *  involved — the emailed-code round-trip already proved the mailbox. Any
+ *  failure (including the DB's unique-email index) rolls back both rows, so a
+ *  signup can never leave an org with no member or a user with no org. */
+export async function selfSignupTx(args: {
+  org: { id: string; name: string; kind: OrgKind; linkedIds: string[] };
+  user: NewUser;
+  actor: string;
+}): Promise<{ user: UserRow; org: OrgRow }> {
+  return getDb().transaction(async (tx) => {
+    const [org] = await tx.insert(orgs).values(args.org).returning();
+    await appendAuthAudit(
+      {
+        actor: args.actor,
+        action: "org-create",
+        store: "orgs",
+        recordId: org.id,
+        after: { ...org },
+        source: "public",
+      },
+      tx,
+    );
+
+    const [user] = await tx.insert(users).values(args.user).returning();
+    await appendAuthAudit(
+      {
+        actor: args.actor,
+        action: "user-create",
+        store: "users",
+        recordId: user.id,
+        after: auditableUser(user),
+        source: "public",
+      },
+      tx,
+    );
+
+    return { user, org };
+  });
+}
+
 /** Everything a redemption does, in ONE transaction: re-check the invite under
  *  lock, create the org if the invite creates one, create the user, burn the
  *  code. Any failure (including the DB's unique-email index) rolls back the
