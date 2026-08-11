@@ -100,7 +100,7 @@ export function ClaimBrowser({ businesses }: { businesses: ClaimableBusiness[] }
                 <p className="text-xs text-ink-soft">{CATEGORY_LABEL[b.category] ?? b.category}</p>
               </div>
               {b.claimed ? (
-                <span className="rounded-full bg-sand/70 px-3 py-1 text-xs font-medium text-ink-soft">
+                <span className="rounded-full bg-sand/70 px-3 py-1 text-xs font-medium text-ink">
                   {claimedBadge}
                 </span>
               ) : (
