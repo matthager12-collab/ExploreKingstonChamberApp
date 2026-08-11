@@ -71,7 +71,7 @@ export const worklistItem = pgTable(
     index("worklist_item_state_type_idx").on(t.state, t.type),
     check(
       "worklist_item_type_check",
-      sql`${t.type} IN ('moderation', 'sync_conflict', 'staleness', 'report_inaccurate', 'privacy_request', 'claim_request')`,
+      sql`${t.type} IN ('moderation', 'sync_conflict', 'staleness', 'report_inaccurate', 'privacy_request', 'claim_request', 'claim_signup')`,
     ),
     check(
       "worklist_item_state_check",

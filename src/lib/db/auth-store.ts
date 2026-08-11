@@ -430,7 +430,9 @@ export async function revokeInvite(
  *  signup can never leave an org with no member or a user with no org. */
 export async function selfSignupTx(args: {
   org: { id: string; name: string; kind: OrgKind; linkedIds: string[] };
-  user: NewUser;
+  /** orgId is stamped from args.org inside the transaction — a caller cannot
+   *  accidentally bind the user to some other org. */
+  user: Omit<NewUser, "orgId">;
   actor: string;
 }): Promise<{ user: UserRow; org: OrgRow }> {
   return getDb().transaction(async (tx) => {
@@ -447,7 +449,10 @@ export async function selfSignupTx(args: {
       tx,
     );
 
-    const [user] = await tx.insert(users).values(args.user).returning();
+    const [user] = await tx
+      .insert(users)
+      .values({ ...args.user, orgId: org.id })
+      .returning();
     await appendAuthAudit(
       {
         actor: args.actor,
