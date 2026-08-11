@@ -239,6 +239,47 @@ async function recordClaimWorklist(args: {
   }
 }
 
+// ---------- the /claim directory (public projection) ----------
+
+/** What the PUBLIC claim page may know about an imported listing: name,
+ *  category, claimed-or-not — nothing else. Draft descriptions, addresses,
+ *  and phone numbers stay unpublished; this projection is the entire
+ *  deliberate carve-out from the no-draft-oracle rule. */
+export interface ClaimableBusiness {
+  id: string;
+  name: string;
+  category: string;
+  claimed: boolean;
+}
+
+export async function listClaimableDirectory(): Promise<ClaimableBusiness[]> {
+  const listings = await getDirectoryListingsAdmin();
+  // hidden/rejected are admin decisions to keep a record OFF every surface —
+  // the claim page respects them; drafts and live rows are the audience.
+  const visible = listings.filter((l) => l.status !== "hidden" && l.status !== "rejected");
+  const claimedRows = await findClaimedLinkedRecords(
+    "business",
+    visible.map((l) => l.id),
+    await listOrganizations(),
+  );
+  const claimed = new Set(claimedRows.map((r) => r.id));
+  return visible
+    .map((l) => ({
+      id: l.id,
+      name: l.name,
+      category: l.category,
+      claimed: claimed.has(l.id),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** One listing in the same public projection, for /claim/[id]. */
+export async function getClaimableBusiness(
+  id: string,
+): Promise<ClaimableBusiness | undefined> {
+  return (await listClaimableDirectory()).find((l) => l.id === id);
+}
+
 // ---------- step 1: start ----------
 
 export interface StartClaimSignupResult {

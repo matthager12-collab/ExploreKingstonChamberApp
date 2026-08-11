@@ -1748,6 +1748,80 @@ export const COPY_BLOCKS = [
     fallback: "Request sent — the Chamber will take a look and you'll see it in your portal once approved.",
   },
   // =============== END claimSignup.* ===============
+  // =============== claimPage.* (the /claim business directory) ===============
+  {
+    key: "claimPage.header.eyebrow",
+    page: "Claim your business",
+    label: "Header eyebrow",
+    fallback: "For Kingston businesses",
+  },
+  {
+    key: "claimPage.header.title",
+    page: "Claim your business",
+    label: "Page title",
+    fallback: "Claim your business",
+  },
+  {
+    key: "claimPage.header.intro",
+    page: "Claim your business",
+    label: "Page intro — what this list is and where it's heading",
+    multiline: true,
+    fallback:
+      "The Chamber has imported listings for local businesses — find yours below and claim it. Claiming is free, gives you a login, and puts your listing in your hands. We're actively expanding what businesses can do here: profiles, hours, photos, events and more are on the way.",
+  },
+  {
+    key: "claimPage.search.label",
+    page: "Claim your business",
+    label: "Search field label (screen readers)",
+    fallback: "Search businesses",
+  },
+  {
+    key: "claimPage.search.placeholder",
+    page: "Claim your business",
+    label: "Search field placeholder",
+    fallback: "Search by name…",
+  },
+  {
+    key: "claimPage.filter.all",
+    page: "Claim your business",
+    label: "Category filter — the all-categories chip",
+    fallback: "All",
+  },
+  {
+    key: "claimPage.claimedBadge",
+    page: "Claim your business",
+    label: "Badge on an already-claimed row",
+    fallback: "Claimed",
+  },
+  {
+    key: "claimPage.row.cta",
+    page: "Claim your business",
+    label: "Row action — open the claim page",
+    fallback: "This is my business",
+  },
+  {
+    key: "claimPage.empty",
+    page: "Claim your business",
+    label: "No search results",
+    multiline: true,
+    fallback:
+      "No businesses match. If yours isn't listed at all, contact the Chamber and we'll add it — claiming will be waiting for you.",
+  },
+  {
+    key: "claimPage.detail.intro",
+    page: "Claim your business",
+    label: "Detail page intro above the claim form",
+    fallback: "Is this your business? Claim it below — it takes about a minute.",
+  },
+  {
+    key: "claimPage.detail.claimed",
+    page: "Claim your business",
+    label: "Detail page notice when the listing is already claimed",
+    multiline: true,
+    fallback:
+      "This listing has already been claimed. If that seems wrong — it's your business and you didn't claim it — contact the Chamber and they'll sort it out.",
+  },
+  // =============== END claimPage.* ===============
 ] as const satisfies readonly CopyBlock[];
 
 /** Union of every registered copy key — a typo at a call site is a tsc error. */
