@@ -1,0 +1,2 @@
+ALTER TABLE "worklist_item" DROP CONSTRAINT "worklist_item_type_check";--> statement-breakpoint
+ALTER TABLE "worklist_item" ADD CONSTRAINT "worklist_item_type_check" CHECK ("worklist_item"."type" IN ('moderation', 'sync_conflict', 'staleness', 'report_inaccurate', 'privacy_request', 'claim_request', 'claim_signup'));

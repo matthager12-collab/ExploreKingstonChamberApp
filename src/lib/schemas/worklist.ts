@@ -23,6 +23,7 @@ export const WORKLIST_TYPES = [
   "report_inaccurate",
   "privacy_request",
   "claim_request",
+  "claim_signup",
 ] as const;
 export type WorklistType = (typeof WORKLIST_TYPES)[number];
 
@@ -150,6 +151,26 @@ export const claimRequestPayloadSchema = z.object({
   count: z.number().int().min(1),
 });
 
+/** claim_signup — a verified self-serve claim awaiting the Chamber's yes
+ *  (E17 claim-signup slice). Unlike claim_request, an ACCOUNT ALREADY EXISTS
+ *  when this item is created: the applicant proved their email with a
+ *  one-time code (verifiedBy 'code') or was already signed in (verifiedBy
+ *  'session'), and userId/orgId point at the rows awaiting the edit grant.
+ *  Approval = grant + ownership stamp on the subject listing; declining
+ *  leaves the account standing with no rights. The payload carries name +
+ *  ONE email and must never grow further identity fields — same
+ *  data-minimization floor as claim_request. */
+export const claimSignupPayloadSchema = z.object({
+  store: z.string().min(1),
+  id: z.string().min(1),
+  applicantName: z.string().min(1).max(200),
+  applicantEmail: z.string().min(3).max(200),
+  userId: z.string().min(1),
+  orgId: z.string().min(1),
+  verifiedBy: z.enum(["code", "session"], { message: "unknown verification kind" }),
+  count: z.number().int().min(1),
+});
+
 export const WORKLIST_PAYLOAD_SCHEMAS: Record<WorklistType, z.ZodType> = {
   moderation: moderationPayloadSchema,
   sync_conflict: syncConflictPayloadSchema,
@@ -157,6 +178,7 @@ export const WORKLIST_PAYLOAD_SCHEMAS: Record<WorklistType, z.ZodType> = {
   report_inaccurate: reportInaccuratePayloadSchema,
   privacy_request: privacyRequestPayloadSchema,
   claim_request: claimRequestPayloadSchema,
+  claim_signup: claimSignupPayloadSchema,
 };
 
 /** Closed per-type resolution vocabularies. `dismissed` state (no resolution)
@@ -168,6 +190,7 @@ export const WORKLIST_RESOLUTIONS = {
   report_inaccurate: ["fixed", "dismissed"],
   privacy_request: ["fulfilled", "declined"],
   claim_request: ["invited", "rejected", "duplicate"],
+  claim_signup: ["approved", "declined"],
 } as const satisfies Record<WorklistType, readonly string[]>;
 
 export type WorklistResolution = (typeof WORKLIST_RESOLUTIONS)[WorklistType][number];

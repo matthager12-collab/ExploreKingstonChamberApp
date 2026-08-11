@@ -95,6 +95,14 @@ export function stripRequestContact(
     const { contact: _omit, ...rest } = payload as { contact?: unknown };
     return rest;
   }
+  if (type === "claim_signup") {
+    // Same rule, different field name: the applicant's email is how the
+    // Chamber reaches them and is their PII — worklist item only, never the
+    // immortal audit table. userId survives (an opaque id, and the account
+    // row is the durable record).
+    const { applicantEmail: _omit, ...rest } = payload as { applicantEmail?: unknown };
+    return rest;
+  }
   return payload;
 }
 
@@ -200,6 +208,14 @@ function mergePayloads(
     //
     // Nothing is lost that the Chamber acts on: verification is out-of-band
     // against the number ON THE LISTING, never the one in the request.
+    const prior = typeof existing.count === "number" ? existing.count : 1;
+    return { ...existing, count: prior + 1 };
+  }
+  if (type === "claim_signup") {
+    // Same first-writer-wins rule as claim_request, same reason: the second
+    // verified applicant must not overwrite the first one's account pointers
+    // out of the item the Chamber is about to act on. The count is the
+    // signal to look at /admin/accounts before approving.
     const prior = typeof existing.count === "number" ? existing.count : 1;
     return { ...existing, count: prior + 1 };
   }

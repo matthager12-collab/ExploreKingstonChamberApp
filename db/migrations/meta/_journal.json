@@ -92,6 +92,20 @@
       "when": 1786123637667,
       "tag": "0012_magenta_norman_osborn",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1786489378171,
+      "tag": "0013_sour_nekra",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1786489562689,
+      "tag": "0014_lethal_nick_fury",
+      "breakpoints": true
     }
   ]
 }

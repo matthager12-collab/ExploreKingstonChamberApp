@@ -15,6 +15,7 @@ import {
   appendAuthAudit,
   countEnabledAdmins,
   countUsers,
+  deleteOrg as deleteOrgRow,
   deleteUser as deleteUserRow,
   findInvite,
   findOrgById,
@@ -368,6 +369,17 @@ export async function removeOrgLinkedIds(
   const next = org.linkedIds.filter((id) => !drop.has(id));
   if (next.length === org.linkedIds.length) return org;
   return updateOrg(orgId, { linkedIds: next }, { actor, action: "org-update", source });
+}
+
+/** Hard-delete an org that has NO member accounts left (the store refuses
+ *  otherwise). Exists for the claim-signup test-reset loop — the product's
+ *  own flows never delete orgs. */
+export async function deleteEmptyOrg(orgId: string, actor: string): Promise<void> {
+  try {
+    await deleteOrgRow(orgId, { actor, action: "org-delete", source: "admin" });
+  } catch (err) {
+    throw new AuthError(err instanceof Error ? err.message : String(err));
+  }
 }
 
 /** E12: flip an org's trusted-auto-publish moderation bypass (FR-EVT-04).
