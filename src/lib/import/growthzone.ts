@@ -550,3 +550,40 @@ export function buildContactsCsv(plan: QwickPlan, roster: GzRoster): string {
   }
   return lines.join("\n") + "\n";
 }
+
+/** One (listing, email) pair per resolved plan row that has an email —
+ *  the rows the claim-signup auto-approval matches against (E17 claim-signup
+ *  slice; see src/lib/db/claim-schema.ts for the containment rules that made
+ *  roster emails in the database acceptable — decided with Mat 2026-08-11,
+ *  superseding this module's original PII-stays-in-the-CSV posture for THIS
+ *  field only; levels and reps still land in the operator CSV, never the DB).
+ *
+ *  Pure planning: the CLI decides whether these rows are written (the
+ *  --claim-contacts flag) through src/lib/db/claim-store's idempotent upsert. */
+export function buildClaimContactRows(
+  plan: QwickPlan,
+  roster: GzRoster,
+): { subjectStore: string; subjectId: string; email: string }[] {
+  const { mapping } = roster.preflight;
+  const rowByExternalId = new Map<string, GzRow>();
+  for (const row of roster.rows) {
+    const id = gzExternalId(row, mapping);
+    if (id !== undefined && !rowByExternalId.has(id)) rowByExternalId.set(id, row);
+  }
+  const emailOf = (externalId: string): string => {
+    const row = rowByExternalId.get(externalId);
+    if (row === undefined) return "";
+    return (cellValue(mapping.email ? row[mapping.email] : undefined) ?? "").trim();
+  };
+
+  const out: { subjectStore: string; subjectId: string; email: string }[] = [];
+  const push = (store: string, listingId: string, externalId: string) => {
+    const email = emailOf(externalId);
+    if (email.includes("@")) out.push({ subjectStore: store, subjectId: listingId, email });
+  };
+  for (const c of plan.created) push("directory", c.record.id, c.externalId);
+  for (const u of plan.updated) push(u.store, u.id, u.externalId);
+  for (const m of plan.matched) push(m.store, m.id, m.externalId);
+  for (const un of plan.unchanged) push(un.store, un.id, un.externalId);
+  return out;
+}

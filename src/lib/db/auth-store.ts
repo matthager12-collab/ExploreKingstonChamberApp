@@ -50,6 +50,7 @@ export type AuthAuditAction =
   | "invite-redeem"
   | "org-create"
   | "org-update"
+  | "org-delete"
   | "privacy-anonymize";
 
 export interface AuthAuditEntry {
@@ -219,6 +220,28 @@ export async function deleteUser(
     await tx.delete(users).where(eq(users.id, id));
     await appendAuthAudit(
       { ...entry, store: "users", recordId: id, before: auditableUser(before) },
+      tx,
+    );
+  });
+}
+
+/** Hard-delete an org, refusing while any user still references it (the
+ *  users.org_id FK is SET NULL, which would silently strand an org-role
+ *  account in violation of users_org_binding's spirit — make the caller
+ *  delete or move the members first). Added for the claim-signup test-reset
+ *  loop; audit rows survive, same rule as deleteUser. */
+export async function deleteOrg(
+  id: string,
+  entry: Omit<AuthAuditEntry, "store" | "recordId" | "before" | "after">,
+): Promise<void> {
+  await getDb().transaction(async (tx) => {
+    const [before] = await tx.select().from(orgs).where(eq(orgs.id, id));
+    if (!before) throw new Error("Organization not found");
+    const [member] = await tx.select({ id: users.id }).from(users).where(eq(users.orgId, id)).limit(1);
+    if (member) throw new Error("Organization still has member accounts");
+    await tx.delete(orgs).where(eq(orgs.id, id));
+    await appendAuthAudit(
+      { ...entry, store: "orgs", recordId: id, before: { ...before } },
       tx,
     );
   });

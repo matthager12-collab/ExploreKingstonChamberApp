@@ -22,6 +22,7 @@
     "import:qwick": "NODE_OPTIONS=--conditions=react-server tsx scripts/import-qwick.ts",
     "import:growthzone": "NODE_OPTIONS=--conditions=react-server tsx scripts/import-growthzone.ts",
     "invites:mint": "NODE_OPTIONS=--conditions=react-server tsx scripts/mint-invites.ts",
+    "seed:claim-test": "NODE_OPTIONS=--conditions=react-server tsx scripts/seed-claim-test.ts",
     "export:json": "NODE_OPTIONS=--conditions=react-server tsx scripts/export-json.ts",
     "restore:db": "NODE_OPTIONS=--conditions=react-server tsx scripts/restore-db.ts",
     "privacy:backfill": "NODE_OPTIONS=--conditions=react-server tsx scripts/privacy-backfill.ts",
