@@ -1822,6 +1822,82 @@ export const COPY_BLOCKS = [
       "This listing has already been claimed. If that seems wrong — it's your business and you didn't claim it — contact the Chamber and they'll sort it out.",
   },
   // =============== END claimPage.* ===============
+  // =============== directoryPage.* (the public /directory) ===============
+  {
+    key: "directoryPage.header.eyebrow",
+    page: "Business directory",
+    label: "Header eyebrow",
+    fallback: "Kingston businesses",
+  },
+  {
+    key: "directoryPage.header.title",
+    page: "Business directory",
+    label: "Page title",
+    fallback: "Business directory",
+  },
+  {
+    key: "directoryPage.header.intro",
+    page: "Business directory",
+    label: "Page intro",
+    multiline: true,
+    fallback:
+      "Local businesses across Kingston, from the Greater Kingston Chamber of Commerce.",
+  },
+  {
+    key: "directoryPage.search.label",
+    page: "Business directory",
+    label: "Search field label (screen readers)",
+    fallback: "Search businesses",
+  },
+  {
+    key: "directoryPage.search.placeholder",
+    page: "Business directory",
+    label: "Search field placeholder",
+    fallback: "Search by name…",
+  },
+  {
+    key: "directoryPage.filter.all",
+    page: "Business directory",
+    label: "Category filter — the all-categories chip",
+    fallback: "All",
+  },
+  {
+    key: "directoryPage.memberBadge",
+    page: "Business directory",
+    label: "Chamber-member badge",
+    fallback: "Chamber member",
+  },
+  {
+    key: "directoryPage.empty",
+    page: "Business directory",
+    label: "No search results",
+    fallback: "No businesses match your search.",
+  },
+  {
+    key: "directoryPage.profile.directions",
+    page: "Business directory",
+    label: "Profile — directions link",
+    fallback: "Directions",
+  },
+  {
+    key: "directoryPage.profile.website",
+    page: "Business directory",
+    label: "Profile — website link",
+    fallback: "Visit website",
+  },
+  {
+    key: "directoryPage.profile.back",
+    page: "Business directory",
+    label: "Profile — back link to the index",
+    fallback: "← All businesses",
+  },
+  {
+    key: "directoryPage.profile.claimLink",
+    page: "Business directory",
+    label: "Profile — claim call-to-action on unclaimed listings",
+    fallback: "Own this business? Claim it to keep this page up to date.",
+  },
+  // =============== END directoryPage.* ===============
 ] as const satisfies readonly CopyBlock[];
 
 /** Union of every registered copy key — a typo at a call site is a tsc error. */
