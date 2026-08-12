@@ -38,6 +38,7 @@ import { getEventsAdmin } from "@/lib/stores/event-store";
 import { getItinerariesAdmin } from "@/lib/stores/itinerary-store";
 import { getLodgingAdmin, getWebcamsAdmin } from "@/lib/stores/listing-stores";
 import { getRestaurantsAdmin } from "@/lib/stores/business-store";
+import { getDirectoryListingsAdmin } from "@/lib/stores/directory-store";
 
 /** The acting signed-in user (SessionUser satisfies this). */
 export type Actor = { id: string; email: string };
@@ -54,6 +55,12 @@ const ADMIN_GETTERS: Record<string, () => Promise<WithStatus<WithId>[]>> = {
   lodging: getLodgingAdmin,
   webcams: getWebcamsAdmin,
   itineraries: getItinerariesAdmin,
+  // Directory-public slice (2026-08-12): once directory listings are public,
+  // owner edits hold as 'edit' proposals (the portal already creates them —
+  // registering the store here is what lets approveModerationItem actually
+  // land them; before this entry those items could be created but never
+  // approved).
+  directory: getDirectoryListingsAdmin,
 };
 
 /** Any-status lookup of a content record by store name — the worklist's

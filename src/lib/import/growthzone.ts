@@ -126,6 +126,7 @@ export const GZ_FIELDS = [
   "categories",
   "description",
   "rep",
+  "dues",
 ] as const;
 export type GzField = (typeof GZ_FIELDS)[number];
 
@@ -154,6 +155,13 @@ const FIELD_SYNONYMS: Record<GzField, string[]> = {
   ],
   status: ["membership status", "member status", "status"],
   level: ["membership level", "membership type", "member type", "level", "membership"],
+  dues: [
+    "membership dues total",
+    "annual dues",
+    "dues total",
+    "dues",
+    "scheduled billing amount",
+  ],
   phone: [
     "phone",
     "work phone",
@@ -585,5 +593,84 @@ export function buildClaimContactRows(
   for (const u of plan.updated) push(u.store, u.id, u.externalId);
   for (const m of plan.matched) push(m.store, m.id, m.externalId);
   for (const un of plan.unchanged) push(un.store, un.id, un.externalId);
+  return out;
+}
+
+/** "$1,234.50" / "1234.5" / "" → number | null. Roster money cells are
+ *  free-form; anything non-numeric reads as unknown rather than zero (an
+ *  unknown must rank below a known amount, not tie with the cheapest tier). */
+export function parseDuesAmount(raw: string): number | null {
+  const cleaned = raw.replace(/[$,\s]/g, "");
+  if (cleaned === "") return null;
+  const n = Number(cleaned);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+export interface MemberMetaPlanRow {
+  subjectStore: string;
+  subjectId: string;
+  memberStatus: string;
+  levelName: string | null;
+  duesAmount: number | null;
+}
+
+/** Membership status/level/dues per resolved plan row, for the member_meta
+ *  table that ranks the public directory (directory-public slice — the
+ *  second Mat-approved exception to this module's PII-stays-in-the-CSV
+ *  posture; see src/lib/db/member-schema.ts for the containment rules).
+ *
+ *  Two sources feed it:
+ *   - every INCLUDED plan row (these passed the status filter, normally
+ *     'active') carries its roster status/level/dues verbatim;
+ *   - every deletedUpstream row — a local listing whose roster row is GONE —
+ *     is marked 'dropped', so a lapsed member sinks in the ranking without
+ *     anything unpublishing (the listings-never-auto-unpublish invariant).
+ *
+ *  Pure planning, like buildClaimContactRows: the CLI decides whether these
+ *  rows are written (--member-meta) through the idempotent upsert. */
+export function buildMemberMetaRows(plan: QwickPlan, roster: GzRoster): MemberMetaPlanRow[] {
+  const { mapping } = roster.preflight;
+  const rowByExternalId = new Map<string, GzRow>();
+  for (const row of roster.rows) {
+    const id = gzExternalId(row, mapping);
+    if (id !== undefined && !rowByExternalId.has(id)) rowByExternalId.set(id, row);
+  }
+  const get = (externalId: string, field: GzField): string => {
+    const row = rowByExternalId.get(externalId);
+    if (row === undefined) return "";
+    return (cellValue(mapping[field] ? row[mapping[field]!] : undefined) ?? "").trim();
+  };
+
+  const out: MemberMetaPlanRow[] = [];
+  const push = (store: string, listingId: string, externalId: string) => {
+    const status = get(externalId, "status");
+    if (status === "") return; // no roster row resolvable — nothing to assert
+    out.push({
+      subjectStore: store,
+      subjectId: listingId,
+      memberStatus: status,
+      levelName: get(externalId, "level") || null,
+      duesAmount: parseDuesAmount(get(externalId, "dues")),
+    });
+  };
+  for (const c of plan.created) push("directory", c.record.id, c.externalId);
+  for (const u of plan.updated) push(u.store, u.id, u.externalId);
+  for (const m of plan.matched) push(m.store, m.id, m.externalId);
+  for (const un of plan.unchanged) push(un.store, un.id, un.externalId);
+  // A listing counts as dropped only when NO alias of it survived into a
+  // live bucket — two historical aliases can put one listing in both a
+  // bucket and deletedUpstream, and the live signal wins.
+  const seen = new Set(out.map((r) => `${r.subjectStore} ${r.subjectId}`));
+  for (const d of plan.deletedUpstream) {
+    if (seen.has(`${d.store} ${d.id}`)) continue;
+    seen.add(`${d.store} ${d.id}`);
+    out.push({
+      subjectStore: d.store,
+      subjectId: d.id,
+      memberStatus: "dropped",
+      levelName: null,
+      duesAmount: null,
+    });
+  }
   return out;
 }

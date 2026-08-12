@@ -14,11 +14,22 @@ import type { FieldDef } from "./form";
 import {
   httpUrlOptional,
   idSchema,
+  numberInRange,
   optionalTrimmed,
   requiredTrimmed,
   tagsSchema,
   trimOrEmpty,
 } from "./shared";
+
+/** numberInRange, but ""/null/undefined parse to ABSENT rather than an error
+ *  — directory coordinates are optional until the geocode pass (or an admin)
+ *  fills them, and the admin form posts empty strings for untouched fields. */
+function optionalNumberInRange(label: string, min: number, max: number) {
+  return z.preprocess(
+    (v) => (v === "" || v === null || v === undefined ? undefined : v),
+    numberInRange(label, min, max).optional(),
+  );
+}
 
 export const DIRECTORY_CATEGORIES = [
   "eat",
@@ -55,6 +66,12 @@ export const directoryListingSchema = z.object({
   address: optionalTrimmed(),
   phone: optionalTrimmed(),
   website: httpUrlOptional("website"),
+  /** Optional until placed: the geocode pass (scripts/geocode-directory.ts)
+   *  or an admin sets them; the portal write path preserves them on member
+   *  edits (admin-only, same rule as restaurant coordinates). Both present
+   *  or both absent — enforced below. */
+  lat: optionalNumberInRange("lat", -90, 90),
+  lng: optionalNumberInRange("lng", -180, 180),
   tags: tagsSchema,
   /** Raw upstream category strings, preserved verbatim so a human can refine
    *  the checked-in category mapping later. Absent on hand-created records. */
@@ -66,6 +83,15 @@ export const directoryListingSchema = z.object({
       listingImage: optionalTrimmed(),
     })
     .optional(),
+}).superRefine((val, ctx) => {
+  // A half-set coordinate is a bug wearing a valid schema: a pin needs both.
+  if ((val.lat === undefined) !== (val.lng === undefined)) {
+    ctx.addIssue({
+      code: "custom",
+      message: "lat and lng must be set together (or both left empty)",
+      path: [val.lat === undefined ? "lat" : "lng"],
+    });
+  }
 });
 
 export type DirectoryListingParsed = z.infer<typeof directoryListingSchema>;
@@ -102,6 +128,20 @@ export const directoryFields: FieldDef[] = [
     kind: "text",
     optional: true,
     placeholder: "https://…",
+  },
+  {
+    key: "lat",
+    label: "Latitude (optional)",
+    kind: "number",
+    optional: true,
+    help: "Right-click the spot in Google Maps → the first number. e.g. 47.7973. Set both or neither.",
+  },
+  {
+    key: "lng",
+    label: "Longitude (optional)",
+    kind: "number",
+    optional: true,
+    help: "The second number from Google Maps. e.g. -122.4969",
   },
   {
     key: "tags",

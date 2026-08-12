@@ -13,6 +13,7 @@ import { webcams as webcamSeed } from "@/lib/data/webcams";
 import { PageHeader, Section } from "@/components/ui";
 import { getMediaItems } from "@/lib/stores/media-store";
 import { ListingsEditor } from "./editor";
+import { DirectoryPublish } from "./directory-publish";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +54,12 @@ export default async function AdminListingsPage() {
             directory: [],
           }}
         />
+      </Section>
+      <Section
+        title="Directory publishing"
+        subtitle="Imported member listings start as drafts. This publishes every draft belonging to an active roster member in one pass — it previews the counts and asks before writing. Courtesy members and special cases stay per-listing decisions in the editor above."
+      >
+        <DirectoryPublish />
       </Section>
     </>
   );

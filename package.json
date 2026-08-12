@@ -20,6 +20,7 @@
     "db:migrate": "drizzle-kit migrate",
     "import:data-dir": "NODE_OPTIONS=--conditions=react-server tsx scripts/import-data-dir.ts",
     "import:qwick": "NODE_OPTIONS=--conditions=react-server tsx scripts/import-qwick.ts",
+    "geocode:directory": "NODE_OPTIONS=--conditions=react-server tsx scripts/geocode-directory.ts",
     "import:growthzone": "NODE_OPTIONS=--conditions=react-server tsx scripts/import-growthzone.ts",
     "invites:mint": "NODE_OPTIONS=--conditions=react-server tsx scripts/mint-invites.ts",
     "seed:claim-test": "NODE_OPTIONS=--conditions=react-server tsx scripts/seed-claim-test.ts",
