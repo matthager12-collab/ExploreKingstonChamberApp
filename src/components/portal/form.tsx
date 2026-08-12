@@ -23,7 +23,12 @@ import { useId, type ComponentPropsWithoutRef, type ReactNode } from "react";
  *
  * text-base is load-bearing, not cosmetic: iOS Safari zooms the viewport when a
  * focused control's font-size is under 16px. Never drop a control to text-sm.
- * (The fix is NOT maximum-scale=1 — that disables pinch-zoom and fails 1.4.4.) */
+ *
+ * The tempting "fix" is to pin the viewport scale in the meta tag. Don't — that
+ * takes pinch-zoom away from low-vision users and fails WCAG 1.4.4, and
+ * tests/unit/a11y-static-invariants.test.ts fails the build if anything under
+ * src/ so much as mentions those viewport keys. Keeping controls at 16px is the
+ * whole fix. */
 
 const CONTROL =
   "block w-full rounded-lg border border-border-strong bg-white px-3 py-2.5 " +

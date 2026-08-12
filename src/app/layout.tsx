@@ -100,6 +100,17 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      // The bootstrap script below stamps data-simple / data-rail on this
+      // element BEFORE React hydrates, so the server markup and the live DOM
+      // legitimately differ and React reports a hydration mismatch. This is the
+      // sanctioned escape hatch for exactly that pattern, and it is narrow: it
+      // suppresses the warning for THIS element's own attributes only, not for
+      // its subtree.
+      //
+      // Not new with the portal rail — data-simple has always had this, it just
+      // never surfaced because the warning only fires for someone who actually
+      // has easy-read turned on.
+      suppressHydrationWarning
       className={`${inter.variable} ${outfit.variable} ${satisfy.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
@@ -112,9 +123,19 @@ export default function RootLayout({
             localStorage access. Reading an absent key is a no-op, which is what
             keeps it harmless in the kiosk group — the kiosk renders no toggle,
             and its Chromium runs --incognito, so the key is never set there. */}
+        {/* The portal rail's collapsed/expanded state rides along in the SAME
+            script, for the same reason: it must be stamped before paint or the
+            rail flashes at the wrong width on every load. It lives here rather
+            than in the (portal) layout because a second <script> nested inside
+            a route-group layout is part of React's tree — Next warns that it
+            will not execute on client navigation, and React reports the
+            resulting <html> attribute as a hydration mismatch. One script, at
+            the top of <body>, is the pattern that already works.
+            Reading an absent key is a no-op, so public pages pay ~60 bytes and
+            nothing else. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{if(localStorage.getItem("ek-simple")==="1"){document.documentElement.dataset.simple="1"}}catch(e){}`,
+            __html: `try{if(localStorage.getItem("ek-simple")==="1"){document.documentElement.dataset.simple="1"}var r=localStorage.getItem("portal:rail");if(r){document.documentElement.dataset.rail=r}}catch(e){}`,
           }}
         />
         <ServiceWorkerClient />

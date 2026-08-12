@@ -75,6 +75,9 @@ export function PortalRail({
 
   // Longest matching href wins, so /portal/business/42 highlights "My business"
   // rather than "Overview", whose /portal prefix matches everything.
+  // A section with one page gets no panel — see the note at the panel below.
+  // Deliberately a derived value, not a prop: whether the level is useful is a
+  // property of the data, not something each screen should get to decide.
   let active = sections[0];
   let bestLength = -1;
   for (const section of sections) {
@@ -86,6 +89,8 @@ export function PortalRail({
       }
     }
   }
+
+  const showPanel = (active?.items.length ?? 0) > 1;
 
   return (
     // data-surface="portal" is what activates the portal-scoped token overrides
@@ -112,9 +117,43 @@ export function PortalRail({
           aria-label="Portal sections"
           className="portal-rail flex shrink-0 flex-col gap-1 overflow-y-auto border-r border-border bg-surface-sunken p-2"
         >
-          <span className="mb-2 truncate px-2 py-1 font-display text-lg font-semibold text-primary">
-            {expanded ? "Kingston" : "K"}
-          </span>
+          {/* Collapse lives at the TOP, not pinned to the bottom.
+              Bottom-left is where Next's dev indicator sits, and it covered the
+              control completely — elementFromPoint returned <nextjs-portal>, so
+              the button was unclickable through the entire local dev session.
+              Production would have been fine, which is the worst version of
+              that bug: broken exactly while you are iterating on it. */}
+          <div className="mb-2 flex min-h-11 items-center gap-1">
+            {expanded && (
+              <span className="min-w-0 flex-1 truncate px-2 font-display text-lg font-semibold text-primary">
+                Kingston
+              </span>
+            )}
+            {/* Collapse is a desktop idea — on mobile the rail is a drawer that
+                is either open or shut, so that slot becomes Close. The panel
+                used to own the close button, and it can now be absent. */}
+            <button
+              type="button"
+              onClick={() => setRail(expanded ? "collapsed" : "expanded")}
+              aria-expanded={expanded}
+              aria-label={expanded ? "Collapse the menu" : "Expand the menu"}
+              title={expanded ? "Collapse the menu" : "Expand the menu"}
+              className="hidden size-11 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-white hover:text-ink md:flex"
+            >
+              <IconChevron
+                size={20}
+                className={`transition-transform ${expanded ? "rotate-180" : ""}`}
+              />
+            </button>
+            <button
+              type="button"
+              onClick={() => setDrawerOpen(false)}
+              className="flex size-11 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-white hover:text-ink md:hidden"
+            >
+              <IconClose size={20} />
+              <span className="sr-only">Close menu</span>
+            </button>
+          </div>
 
           {sections.map((section) => {
             const Icon = PORTAL_ICONS[section.icon];
@@ -146,63 +185,54 @@ export function PortalRail({
             );
           })}
 
-          <button
-            type="button"
-            onClick={() => setRail(expanded ? "collapsed" : "expanded")}
-            aria-expanded={expanded}
-            className="mt-auto flex min-h-11 items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-semibold text-ink-soft hover:bg-white hover:text-ink"
-          >
-            <IconChevron
-              size={20}
-              className={`shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`}
-            />
-            {expanded ? <span className="truncate">Collapse</span> : <span className="sr-only">Expand the menu</span>}
-          </button>
+          {/* Identity moved into the rail. It used to live in the section
+              panel, which now disappears whenever a section has one page — so
+              "who am I signed in as" would have vanished on most screens. */}
+          {expanded && (
+            <p className="mt-auto border-t border-border px-2 pt-3 text-xs text-ink-soft">
+              Signed in as <span className="font-semibold text-ink">{userName}</span>
+              <br />
+              {roleLabel}
+            </p>
+          )}
         </nav>
 
-        <div className="flex w-56 shrink-0 flex-col gap-1 overflow-y-auto border-r border-border bg-white p-3">
-          <div className="mb-1 flex items-center justify-between">
-            <span className="px-1 font-display text-sm font-semibold text-ink">
+        {/* The section panel appears ONLY when the section has somewhere to go.
+            With a single page it listed one link that repeated the rail label
+            immediately to its left, costing 224px of width to say nothing. A
+            navigation level that offers no choice is not navigation. */}
+        {showPanel && (
+          <div className="flex w-56 shrink-0 flex-col gap-1 overflow-y-auto border-r border-border bg-white p-3">
+            <span className="mb-1 px-1 font-display text-sm font-semibold text-ink">
               {active?.label}
             </span>
-            <button
-              type="button"
-              onClick={() => setDrawerOpen(false)}
-              className="rounded-lg p-1 text-ink-soft hover:bg-surface-sunken md:hidden"
+
+            <nav
+              aria-label={`${active?.label ?? "Section"} pages`}
+              className="flex flex-col gap-1"
             >
-              <IconClose size={20} />
-              <span className="sr-only">Close menu</span>
-            </button>
+              {active?.items.map((item) => {
+                const isActive =
+                  pathname === item.href || pathname.startsWith(`${item.href}/`);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setDrawerOpen(false)}
+                    aria-current={isActive ? "page" : undefined}
+                    className={`min-h-11 rounded-lg px-3 py-2 text-sm transition-colors ${
+                      isActive
+                        ? "bg-surface-sunken font-semibold text-ink"
+                        : "text-ink-soft hover:bg-surface-sunken hover:text-ink"
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
           </div>
-
-          <nav aria-label={`${active?.label ?? "Section"} pages`} className="flex flex-col gap-1">
-            {active?.items.map((item) => {
-              const isActive =
-                pathname === item.href || pathname.startsWith(`${item.href}/`);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setDrawerOpen(false)}
-                  aria-current={isActive ? "page" : undefined}
-                  className={`min-h-11 rounded-lg px-3 py-2 text-sm transition-colors ${
-                    isActive
-                      ? "bg-surface-sunken font-semibold text-ink"
-                      : "text-ink-soft hover:bg-surface-sunken hover:text-ink"
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-
-          <p className="mt-auto border-t border-border px-1 pt-3 text-xs text-ink-soft">
-            Signed in as <span className="font-semibold text-ink">{userName}</span>
-            <br />
-            {roleLabel}
-          </p>
-        </div>
+        )}
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col">
