@@ -170,7 +170,7 @@ function SyndicateSection({
   return (
     <section>
       <h2 className="font-display text-xl font-semibold text-primary-deep">{title}</h2>
-      <p className="portal-measure mt-1 text-sm text-ink-soft">{description}</p>
+      <p className="app-measure mt-1 text-sm text-ink-soft">{description}</p>
       <div className="mt-4">{children}</div>
     </section>
   );

@@ -15,6 +15,7 @@
 // module (no next/headers) so this manifest stays usable from the client nav and
 // from vitest alike.
 import { can, type Action, type AuthSubject } from "@/lib/auth/authz";
+import type { NavIconName } from "@/lib/nav-icons";
 
 export interface AdminNavEntry {
   /** Stable id — the React key and the active-highlight key. */
@@ -29,6 +30,9 @@ export interface AdminNavEntry {
   blurb: string;
   /** The can() action that gates visibility in a role-scoped shell. */
   capability: Action;
+  /** Which rail section this surface lives under (ADMIN_SECTIONS below).
+   *  ADDITIVE: the dead-link test and adminNavFor() are untouched by it. */
+  section: AdminSectionId;
 }
 
 // Order is the nav/portal display order: the insights dashboard (which lives at
@@ -44,6 +48,7 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     navLabel: "Insights",
     blurb: "LTAC-ready analytics: origins, movement, top pages, outbound taps.",
     capability: "view-reports",
+    section: "insights",
   },
   {
     id: "feedback",
@@ -55,6 +60,7 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     // activity, and keying it this way means a future board-designee or viewer
     // role sees it alongside Insights and History without a change here.
     capability: "view-reports",
+    section: "insights",
   },
   {
     id: "content",
@@ -63,6 +69,7 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     navLabel: "Content",
     blurb: "Edit page text and show or hide entire pages.",
     capability: "manage-site",
+    section: "listings",
   },
   {
     id: "media",
@@ -71,6 +78,7 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     navLabel: "Photos",
     blurb: "Upload photos once, then use them on the home page, kiosk, and listings.",
     capability: "manage-site",
+    section: "listings",
   },
   {
     id: "listings",
@@ -80,6 +88,7 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     blurb:
       "Edit Eat & Drink vendors — descriptions, show/hide, add new — plus lodging and webcams.",
     capability: "manage-site",
+    section: "listings",
   },
   {
     id: "itineraries",
@@ -88,6 +97,7 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     navLabel: "Itineraries",
     blurb: "Build and edit the ready-made day plans.",
     capability: "manage-site",
+    section: "experiences",
   },
   {
     id: "hunts",
@@ -96,6 +106,7 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     navLabel: "Hunts",
     blurb: "Build hunts, reference photos, review submissions.",
     capability: "manage-site",
+    section: "experiences",
   },
   {
     id: "ferry",
@@ -105,6 +116,7 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     blurb:
       "Busyness prediction on/off + accuracy, boarding-pass status, and payment/cash facts.",
     capability: "manage-site",
+    section: "experiences",
   },
   {
     id: "map",
@@ -113,6 +125,7 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     navLabel: "Parking map",
     blurb: "Drag pins and lot shapes to match reality; mark them field-verified.",
     capability: "manage-site",
+    section: "maps",
   },
   {
     id: "maps",
@@ -121,6 +134,7 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     navLabel: "Map builder",
     blurb: "Create map views and drop markers, trails, and areas onto them.",
     capability: "manage-site",
+    section: "maps",
   },
   {
     id: "accounts",
@@ -129,6 +143,7 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     navLabel: "Accounts",
     blurb: "Invite businesses and nonprofits, manage who edits what.",
     capability: "manage-accounts",
+    section: "members",
   },
   {
     id: "claims",
@@ -137,6 +152,7 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     navLabel: "Claims",
     blurb: "See which listings are claimed, and invite the owners who haven't.",
     capability: "manage-accounts",
+    section: "members",
   },
   {
     id: "worklist",
@@ -146,6 +162,7 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     blurb:
       "Review member submissions, visitor reports, and content due for a re-check.",
     capability: "moderate",
+    section: "members",
   },
   {
     id: "events",
@@ -155,6 +172,7 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     blurb:
       "Every event on the town calendar, whoever created it — including repeating series.",
     capability: "manage-site",
+    section: "events",
   },
   {
     id: "events-sources",
@@ -165,6 +183,7 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     blurb:
       "Which community calendars feed the unified events list, duplicate review, and the go-live switch.",
     capability: "manage-site",
+    section: "events",
   },
   {
     id: "kiosk",
@@ -173,6 +192,7 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     navLabel: "Kiosk",
     blurb: "Turn the dock touchscreen on or off, pick its screens, push an update now.",
     capability: "manage-site",
+    section: "experiences",
   },
   {
     id: "import-qwick",
@@ -182,6 +202,7 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     blurb:
       "Preview and apply a saved Qwick kiosk export — everything lands as invisible drafts.",
     capability: "manage-site",
+    section: "members",
   },
   {
     id: "audit",
@@ -190,6 +211,7 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     navLabel: "History",
     blurb: "Every edit, who made it, and one-tap restore — nothing is ever lost.",
     capability: "view-reports",
+    section: "system",
   },
   {
     id: "ops",
@@ -198,10 +220,65 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     navLabel: "Ops",
     blurb: "System health, backups, scheduled jobs, and geo-IP status in one place.",
     capability: "manage-site",
+    section: "system",
   },
 ];
 
 /** The admin surfaces `user` is allowed to see, in nav order. */
 export function adminNavFor(user: AuthSubject): AdminNavEntry[] {
   return ADMIN_NAV.filter((entry) => can(user, entry.capability));
+}
+
+
+/* ---------------------------------------------------------------------------
+ * SECTIONS (the N5 rail)
+ *
+ * Nineteen surfaces is too many for a flat strip: the chip bar had outgrown its
+ * width and scrolled horizontally, so the last four entries were invisible
+ * until you dragged. Grouped, they are seven sections of two to four pages —
+ * which is also what finally earns the section panel its place, since a section
+ * holding one page renders no panel at all.
+ *
+ * Grouping is by the ADMINISTRATOR'S JOB, not by the data model: "how is the
+ * site doing", "who belongs", "what's in the directory", and so on. That is why
+ * ferry-info sits under Experiences (a thing visitors see) rather than under
+ * System (a thing operators tend).
+ * ------------------------------------------------------------------------- */
+
+export const ADMIN_SECTIONS = [
+  { id: "insights", label: "Insights", icon: "insights" },
+  { id: "members", label: "Members", icon: "members" },
+  { id: "listings", label: "Listings", icon: "listings" },
+  { id: "events", label: "Events", icon: "events" },
+  { id: "experiences", label: "Experiences", icon: "experiences" },
+  { id: "maps", label: "Maps", icon: "maps" },
+  { id: "system", label: "System", icon: "system" },
+] as const satisfies readonly { id: string; label: string; icon: NavIconName }[];
+
+export type AdminSectionId = (typeof ADMIN_SECTIONS)[number]["id"];
+
+export interface AdminRailSection {
+  id: AdminSectionId;
+  label: string;
+  icon: NavIconName;
+  items: { href: string; label: string }[];
+}
+
+/**
+ * The manifest, grouped into rail sections and filtered by capability — the
+ * shape the shared AppRail consumes.
+ *
+ * Sections with no visible entries are dropped entirely rather than rendered
+ * empty, so a future role-scoped shell self-prunes with no change here.
+ */
+export function adminSectionsFor(user: AuthSubject): AdminRailSection[] {
+  const visible = adminNavFor(user);
+  return ADMIN_SECTIONS.map((section) => ({
+    id: section.id,
+    label: section.label,
+    icon: section.icon as NavIconName,
+    items: visible
+      .filter((e) => e.section === section.id)
+      .map((e) => ({ href: e.href, label: e.navLabel })),
+  })).filter((s) => s.items.length > 0);
 }

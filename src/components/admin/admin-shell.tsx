@@ -1,15 +1,24 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 import type { SessionUser } from "@/lib/auth";
-import { adminNavFor } from "@/lib/admin-nav";
-import { AdminNav } from "./admin-nav";
+import { ROLE_LABELS } from "@/lib/auth/roles";
+import { adminSectionsFor } from "@/lib/admin-nav";
+import { AppRail } from "@/components/shell/app-rail";
 
-// The shared chrome for every /admin page: a slim, sticky header bar with the
-// "Chamber admin" wordmark (back to /portal) and the role-filtered section nav.
-// It is a SERVER component — adminNavFor() (which calls the can() seam) runs here
-// during the layout render, and only plain {id, href, navLabel} strings cross to
-// the client <AdminNav>. It renders ONLY the nav; each page keeps its own
-// PageHeader, so titles are never doubled.
+// The shared chrome for every /admin page.
+//
+// WAS a slim sticky header with a horizontally-scrolling strip of nav chips.
+// Nineteen chips had outgrown the bar: the last four were off-screen until you
+// dragged sideways, and there was no grouping to tell you where anything lived.
+// It is now the same N5 rail the portal uses — seven sections, each holding two
+// to four pages.
+//
+// Still a SERVER component, and that is the load-bearing part: adminSectionsFor()
+// calls the can() seam here during the layout render, and only plain
+// {id, label, icon, items} strings cross to the client. No capability logic and
+// no SessionUser reaches the browser bundle.
+//
+// It renders ONLY navigation. Each page keeps its own heading, so titles are
+// never doubled.
 export function AdminShell({
   user,
   children,
@@ -17,29 +26,15 @@ export function AdminShell({
   user: SessionUser;
   children: ReactNode;
 }) {
-  const items = adminNavFor(user).map((e) => ({
-    id: e.id,
-    href: e.href,
-    navLabel: e.navLabel,
-  }));
-
   return (
-    <div>
-      <header className="sticky top-0 z-10 border-b border-sand bg-white/90 backdrop-blur">
-        <div className="mx-auto max-w-5xl px-4">
-          <div className="flex items-center justify-between gap-3 pt-2">
-            <Link
-              href="/portal"
-              className="font-display text-sm font-semibold whitespace-nowrap text-sound-deep"
-            >
-              ← Chamber admin
-            </Link>
-            <span className="truncate text-xs text-ink-soft">{user.name}</span>
-          </div>
-          <AdminNav items={items} />
-        </div>
-      </header>
+    <AppRail
+      surface="admin"
+      brand={{ full: "Chamber admin", short: "CA" }}
+      brandHref="/admin"
+      sections={adminSectionsFor(user)}
+      footer={{ primary: user.name, secondary: ROLE_LABELS[user.role] }}
+    >
       {children}
-    </div>
+    </AppRail>
   );
 }

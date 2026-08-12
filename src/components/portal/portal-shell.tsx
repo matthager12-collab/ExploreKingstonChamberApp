@@ -2,11 +2,14 @@ import type { ReactNode } from "react";
 import type { SessionUser } from "@/lib/auth";
 import { ROLE_LABELS } from "@/lib/auth/roles";
 import { portalNavFor } from "@/lib/portal-nav";
-import { PortalRail, type RailSection } from "./portal-rail";
+import { AppRail, type RailSection } from "@/components/shell/app-rail";
 
-// The server half of the portal shell, mirroring AdminShell: role filtering
-// happens HERE, and only plain {id, label, icon, items} strings cross to the
-// client. No SessionUser and no capability logic reaches the browser bundle.
+// The server half of the portal shell. Role filtering happens HERE, and only
+// plain {id, label, icon, items} strings cross to the client — no SessionUser
+// and no capability logic reaches the browser bundle.
+//
+// The rail itself is shared with the admin console (components/shell/app-rail):
+// same navigation problem, same rules, one place to fix the next bug in it.
 export function PortalShell({
   user,
   children,
@@ -23,12 +26,14 @@ export function PortalShell({
   }));
 
   return (
-    <PortalRail
+    <AppRail
+      surface="portal"
+      brand={{ full: "Kingston", short: "K" }}
+      brandHref="/portal"
       sections={sections}
-      userName={user.name}
-      roleLabel={ROLE_LABELS[user.role]}
+      footer={{ primary: user.name, secondary: ROLE_LABELS[user.role] }}
     >
       {children}
-    </PortalRail>
+    </AppRail>
   );
 }

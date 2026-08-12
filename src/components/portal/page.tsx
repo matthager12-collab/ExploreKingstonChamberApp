@@ -42,7 +42,7 @@ export function PortalPage({
           <h1 className="font-display text-3xl font-semibold text-primary-deep">
             {title}
           </h1>
-          {intro && <p className="portal-measure mt-2 text-ink">{intro}</p>}
+          {intro && <p className="app-measure mt-2 text-ink">{intro}</p>}
         </div>
         {actions}
       </header>
