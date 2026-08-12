@@ -66,7 +66,7 @@ function FieldShell({
         {label}
       </label>
       {hint && (
-        <p id={`${id}-hint`} className="portal-measure mt-1 text-ink-soft">
+        <p id={`${id}-hint`} className="app-measure mt-1 text-ink-soft">
           {hint}
         </p>
       )}
@@ -199,7 +199,7 @@ export function FormSection({
     <section className="rounded-2xl border border-border bg-white p-5">
       <h2 className="font-display text-xl font-semibold text-primary-deep">{title}</h2>
       {description && (
-        <p className="portal-measure mt-1 text-sm text-ink-soft">{description}</p>
+        <p className="app-measure mt-1 text-sm text-ink-soft">{description}</p>
       )}
       <div className="mt-4 flex flex-col gap-5">{children}</div>
     </section>

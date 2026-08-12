@@ -3,37 +3,45 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useSyncExternalStore, type ReactNode } from "react";
-import {
-  IconChevron,
-  IconClose,
-  IconMenu,
-  PORTAL_ICONS,
-  type PortalIconName,
-} from "./portal-icons";
+import { IconChevron, IconClose, IconMenu, NAV_ICONS } from "./icons";
+import type { NavIconName } from "@/lib/nav-icons";
 
-/* The interactive half of the portal shell (pattern N5).
+/* THE APP RAIL — one component, both consoles (pattern N5).
  *
- * Only plain data reaches this file — the server has already filtered sections
- * by role, so no capability logic and no SessionUser crosses the boundary. That
- * is the same split src/components/admin/admin-shell.tsx uses.
+ * The portal and the admin console are the same navigation problem: a set of
+ * sections, each holding a page or three, for someone who works in the tool
+ * daily. Two copies would be two places to fix the next bug in it, so this is
+ * parameterised instead — by brand, by surface, and by the sections it is
+ * handed.
  *
- * THE RULE THAT SHIPS WITH THIS COMPONENT: the rail defaults to EXPANDED and
- * the labels are never more than one click away. When collapsed, every link
- * carries aria-label + title, so a glyph is never the only name for a control.
- * An icon is a memory test; the label is the answer key. */
+ * Only plain data reaches this file. Both callers filter by role on the SERVER
+ * and pass {id, label, icon, items} strings, so no capability logic and no
+ * SessionUser crosses the boundary. That split is the one AdminShell already
+ * used and it is preserved.
+ *
+ * THE RULES THAT SHIP WITH THIS COMPONENT:
+ *   - the rail defaults to EXPANDED, and labels are never more than one click
+ *     away. Collapsed, every link keeps aria-label + title, so a glyph is never
+ *     a control's only name. An icon is a memory test; the label is the answer.
+ *   - the section panel appears ONLY when a section holds more than one page.
+ *     A navigation level that offers no choice is not navigation.
+ */
 
 export type RailSection = {
   id: string;
   label: string;
-  icon: PortalIconName;
+  icon: NavIconName;
   items: { href: string; label: string }[];
+  /** True when following it leaves this console for another. */
   leavesShell?: boolean;
 };
 
-/* Rail width lives in a data attribute on <html> so the CSS in globals.css can
- * do the resizing, and the inline bootstrap in the portal layout can restore it
- * before first paint. React only subscribes — it never owns a second copy of
- * this state, which is what keeps the two from drifting. */
+/* Rail width lives in a data attribute on <html> so CSS does the resizing and
+ * the pre-paint bootstrap in the root layout can restore it before first paint.
+ * React only subscribes; it never owns a second copy of this state.
+ *
+ * ONE key for both consoles on purpose — "do I want a wide rail" is a fact
+ * about the person, not about which tool they happen to be in. */
 const listeners = new Set<() => void>();
 
 function subscribe(cb: () => void) {
@@ -50,34 +58,38 @@ function railSnapshot() {
 function setRail(value: string) {
   document.documentElement.setAttribute("data-rail", value);
   try {
-    localStorage.setItem("portal:rail", value);
+    localStorage.setItem("ui:rail", value);
   } catch {
     // Safari private mode. The setting still applies for this session.
   }
   listeners.forEach((l) => l());
 }
 
-export function PortalRail({
+export function AppRail({
+  surface,
+  brand,
+  brandHref,
   sections,
-  userName,
-  roleLabel,
+  footer,
   children,
 }: {
+  /** Drives the scoped token overrides in globals.css. */
+  surface: "portal" | "admin";
+  /** Full label when expanded; short one when collapsed. */
+  brand: { full: string; short: string };
+  brandHref?: string;
   sections: RailSection[];
-  userName: string;
-  roleLabel: string;
+  /** Who you are signed in as — rendered at the foot of the rail. */
+  footer?: { primary: string; secondary?: string };
   children: ReactNode;
 }) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "";
   const rail = useSyncExternalStore(subscribe, railSnapshot, () => "expanded");
   const expanded = rail !== "collapsed";
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   // Longest matching href wins, so /portal/business/42 highlights "My business"
-  // rather than "Overview", whose /portal prefix matches everything.
-  // A section with one page gets no panel — see the note at the panel below.
-  // Deliberately a derived value, not a prop: whether the level is useful is a
-  // property of the data, not something each screen should get to decide.
+  // rather than Overview, whose /portal prefix matches everything.
   let active = sections[0];
   let bestLength = -1;
   for (const section of sections) {
@@ -93,10 +105,7 @@ export function PortalRail({
   const showPanel = (active?.items.length ?? 0) > 1;
 
   return (
-    // data-surface="portal" is what activates the portal-scoped token overrides
-    // in globals.css. Without it the portal renders with the public site's
-    // ink-soft, which is 4.4993:1 on the shell fill.
-    <div data-surface="portal" className="flex min-h-dvh bg-surface">
+    <div data-surface={surface} className="flex min-h-dvh bg-surface">
       {drawerOpen && (
         <div
           className="fixed inset-0 z-20 bg-ink/40 md:hidden"
@@ -106,7 +115,7 @@ export function PortalRail({
       )}
 
       {/* Sticky and exactly one viewport tall on desktop. Static would let the
-          nav column stretch to the full document height, which pins the collapse
+          nav column stretch to the full document height, pinning the collapse
           control to the bottom of the PAGE — unreachable on any long screen. */}
       <div
         className={`fixed inset-y-0 left-0 z-30 flex transition-transform md:sticky md:top-0 md:h-dvh md:translate-x-0 md:self-start ${
@@ -114,24 +123,26 @@ export function PortalRail({
         }`}
       >
         <nav
-          aria-label="Portal sections"
-          className="portal-rail flex shrink-0 flex-col gap-1 overflow-y-auto border-r border-border bg-surface-sunken p-2"
+          aria-label="Sections"
+          className="app-rail flex shrink-0 flex-col gap-1 overflow-y-auto border-r border-border bg-surface-sunken p-2"
         >
-          {/* Collapse lives at the TOP, not pinned to the bottom.
-              Bottom-left is where Next's dev indicator sits, and it covered the
-              control completely — elementFromPoint returned <nextjs-portal>, so
-              the button was unclickable through the entire local dev session.
-              Production would have been fine, which is the worst version of
-              that bug: broken exactly while you are iterating on it. */}
+          {/* Collapse sits at the TOP. Bottom-left is where Next's dev
+              indicator lives, and it covered the control completely — the
+              button was unclickable for a whole local session while production
+              would have been fine. */}
           <div className="mb-2 flex min-h-11 items-center gap-1">
             {expanded && (
-              <span className="min-w-0 flex-1 truncate px-2 font-display text-lg font-semibold text-primary">
-                Kingston
-              </span>
+              // text-base, not text-lg: the label shares 13rem with the
+              // collapse control, and "Chamber admin" truncated to
+              // "Chamber ad…" at the larger size. A console's name is a label,
+              // not a headline — shrinking it beats abbreviating it.
+              <Link
+                href={brandHref ?? sections[0]?.items[0]?.href ?? "#"}
+                className="min-w-0 flex-1 truncate px-2 font-display text-base font-semibold text-primary"
+              >
+                {brand.full}
+              </Link>
             )}
-            {/* Collapse is a desktop idea — on mobile the rail is a drawer that
-                is either open or shut, so that slot becomes Close. The panel
-                used to own the close button, and it can now be absent. */}
             <button
               type="button"
               onClick={() => setRail(expanded ? "collapsed" : "expanded")}
@@ -145,6 +156,9 @@ export function PortalRail({
                 className={`transition-transform ${expanded ? "rotate-180" : ""}`}
               />
             </button>
+            {/* On mobile the rail is a drawer that is either open or shut, so
+                that slot becomes Close. The section panel used to own this
+                button and can now be absent entirely. */}
             <button
               type="button"
               onClick={() => setDrawerOpen(false)}
@@ -156,7 +170,7 @@ export function PortalRail({
           </div>
 
           {sections.map((section) => {
-            const Icon = PORTAL_ICONS[section.icon];
+            const Icon = NAV_ICONS[section.icon];
             const isActive = section.id === active?.id;
             return (
               <Link
@@ -177,7 +191,7 @@ export function PortalRail({
                   <span className="truncate text-sm">
                     {section.label}
                     {section.leavesShell && (
-                      <span className="sr-only"> (leaves the portal)</span>
+                      <span className="sr-only"> (leaves this console)</span>
                     )}
                   </span>
                 )}
@@ -185,28 +199,28 @@ export function PortalRail({
             );
           })}
 
-          {/* Identity moved into the rail. It used to live in the section
-              panel, which now disappears whenever a section has one page — so
-              "who am I signed in as" would have vanished on most screens. */}
-          {expanded && (
+          {expanded && footer && (
             <p className="mt-auto border-t border-border px-2 pt-3 text-xs text-ink-soft">
-              Signed in as <span className="font-semibold text-ink">{userName}</span>
-              <br />
-              {roleLabel}
+              Signed in as{" "}
+              <span className="font-semibold text-ink">{footer.primary}</span>
+              {footer.secondary && (
+                <>
+                  <br />
+                  {footer.secondary}
+                </>
+              )}
             </p>
           )}
         </nav>
 
-        {/* The section panel appears ONLY when the section has somewhere to go.
-            With a single page it listed one link that repeated the rail label
-            immediately to its left, costing 224px of width to say nothing. A
-            navigation level that offers no choice is not navigation. */}
+        {/* Only when the section has somewhere to go. With a single page it
+            listed one link repeating the rail label immediately to its left —
+            224px of width to offer no choice. */}
         {showPanel && (
           <div className="flex w-56 shrink-0 flex-col gap-1 overflow-y-auto border-r border-border bg-white p-3">
             <span className="mb-1 px-1 font-display text-sm font-semibold text-ink">
               {active?.label}
             </span>
-
             <nav
               aria-label={`${active?.label ?? "Section"} pages`}
               className="flex flex-col gap-1"

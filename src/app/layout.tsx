@@ -123,7 +123,7 @@ export default function RootLayout({
             localStorage access. Reading an absent key is a no-op, which is what
             keeps it harmless in the kiosk group — the kiosk renders no toggle,
             and its Chromium runs --incognito, so the key is never set there. */}
-        {/* The portal rail's collapsed/expanded state rides along in the SAME
+        {/* The app rail's collapsed/expanded state rides along in the SAME
             script, for the same reason: it must be stamped before paint or the
             rail flashes at the wrong width on every load. It lives here rather
             than in the (portal) layout because a second <script> nested inside
@@ -135,7 +135,7 @@ export default function RootLayout({
             nothing else. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{if(localStorage.getItem("ek-simple")==="1"){document.documentElement.dataset.simple="1"}var r=localStorage.getItem("portal:rail");if(r){document.documentElement.dataset.rail=r}}catch(e){}`,
+            __html: `try{if(localStorage.getItem("ek-simple")==="1"){document.documentElement.dataset.simple="1"}var r=localStorage.getItem("ui:rail");if(r){document.documentElement.dataset.rail=r}}catch(e){}`,
           }}
         />
         <ServiceWorkerClient />

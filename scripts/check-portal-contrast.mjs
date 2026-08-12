@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 /**
- * Contrast gate for the PORTAL role tokens.
+ * Contrast gate for the console role tokens — portal AND admin.
  *
- * Scope note: this checks the role tokens the portal archetypes use, not the
+ * Both consoles render the same role tokens and share the same [data-surface]
+ * override block, so one set of pairs covers both.
+ *
+ * Scope note: this checks the role tokens the console archetypes use, not the
  * whole app. The public site's palette is unchanged and out of scope here —
  * its conformance is covered by the existing axe and Lighthouse passes.
  *
  * It reads src/app/globals.css directly, so the tokens stay the single source
  * of truth and this file never carries a second copy of a hex value. The
- * portal-scoped [data-surface="portal"] overrides are layered on top, exactly
- * as the cascade applies them.
+ * scoped [data-surface] overrides are layered on top, exactly as the cascade
+ * applies them.
  *
  * WCAG ratios are the right and only test for TEXT. They are deliberately not
  * applied to decorative fills, where hue and chroma separation carry meaning
@@ -42,11 +45,21 @@ function readTokens() {
 
   collect(theme[1]);
 
-  // Portal-scoped overrides win, because that is what the cascade does inside
-  // the portal subtree. Missing this block would test the public value of
-  // ink-soft and pass on a colour the portal never renders.
-  const scoped = css.match(/\[data-surface="portal"\]\s*\{([\s\S]*?)\n\}/);
+  // Scoped overrides win, because that is what the cascade does inside a
+  // console subtree. Missing this block would test the PUBLIC value of
+  // ink-soft and pass on a colour neither console renders.
+  //
+  // Matched by "any selector list containing [data-surface=...]" rather than by
+  // the exact selector text. The literal form broke the moment admin joined the
+  // rule and it became a two-selector list — the parser silently stopped
+  // finding the block and the gate went red on the public value. A gate that
+  // depends on the exact shape of a selector is a gate that fails for the wrong
+  // reason.
+  const scoped = css.match(
+    /(?:\[data-surface="[a-z]+"\]\s*,?\s*)+\{([\s\S]*?)\n\}/,
+  );
   if (scoped) collect(scoped[1]);
+  else throw new Error("no [data-surface=...] override block found in globals.css");
 
   return tokens;
 }
