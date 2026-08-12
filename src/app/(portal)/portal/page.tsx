@@ -1,18 +1,35 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { getSessionUser, hasAnyUsers } from "@/lib/auth";
 import { ROLE_LABELS } from "@/lib/auth/roles";
-import { adminNavFor } from "@/lib/admin-nav";
+import { redirect } from "next/navigation";
 import { getCopyOverrides } from "@/lib/stores/site-store";
-import { Callout, Card, PageHeader, Section } from "@/components/ui";
+import { getRestaurants } from "@/lib/stores/business-store";
+import { getCharities } from "@/lib/stores/charity-store";
+import { getLodging } from "@/lib/stores/listing-stores";
+import { Callout, PageHeader, Section } from "@/components/ui";
 import { PortalInviteHint } from "@/components/get-listed";
 import { LoginForm, LogoutButton } from "@/components/portal/auth-forms";
+import { FieldList, PortalPage, PortalPanel } from "@/components/portal/page";
 
 export const metadata: Metadata = { title: "Portal" };
 export const dynamic = "force-dynamic";
 
-export default async function PortalPage() {
+/* The portal's front door.
+ *
+ * WAS a grid of link cards — one per portal area, plus one per admin surface.
+ * That made sense when there was no navigation. With the rail on screen, every
+ * card was a second copy of a link already visible two inches to the left, and
+ * the first thing you met after signing in was a menu repeating the menu.
+ *
+ * Now it answers "what do I manage", which the rail cannot: the rail lists
+ * SECTIONS, this lists YOUR RECORDS. Nothing here duplicates a nav item.
+ *
+ * Signed out it is unchanged — the login form inside the site chrome, which the
+ * (portal) layout supplies when there is no session so the page is not a dead
+ * end. */
+
+export default async function PortalPage_() {
   if (!(await hasAnyUsers())) redirect("/portal/setup");
 
   const user = await getSessionUser();
@@ -35,74 +52,76 @@ export default async function PortalPage() {
     );
   }
 
-  const cards: { href: string; title: string; blurb: string }[] = [];
-  // Every role gets this one — it's the self-service account page.
-  cards.push({
-    href: "/portal/account",
-    title: "My account",
-    blurb: "Update your name, email, and password.",
-  });
-  if (user.role === "member-business" || user.role === "admin") {
-    cards.push({
-      href: "/portal/business",
-      title: "My business",
-      blurb: "Hours, listing details, menus & ordering links, and your events.",
-    });
-  }
-  if (user.role === "org-editor" || user.role === "admin") {
-    cards.push({
-      href: "/portal/nonprofit",
-      title: "My organization",
-      blurb: "Volunteer shifts, your org profile, and event deconfliction.",
-    });
-  }
-  cards.push({
-    href: "/portal/syndicate",
-    title: "Push it everywhere",
-    blurb: "Feeds for your website plus checklists for Google, Apple, Yelp, and socials.",
-  });
-  // moderator and viewer are provisioned and ENFORCED in E06 (they sign in and
-  // get correct 403s) but have no surfaces yet: the moderation queue is E08 and
-  // the role-scoped admin shell is E10. Say so plainly rather than showing an
-  // empty dashboard that looks broken.
+  // Resolve the ids this account may edit into names, exactly as
+  // /portal/account does — the client never needs the listing stores.
+  const [restaurants, charities, lodging] = await Promise.all([
+    getRestaurants(),
+    getCharities(),
+    getLodging(),
+  ]);
+  const nameById = new Map<string, string>();
+  for (const r of restaurants) nameById.set(r.id, r.name);
+  for (const c of charities) nameById.set(c.id, c.name);
+  for (const l of lodging) nameById.set(l.id, l.name);
+
+  const managed = user.editableIds.map((id: string) => ({
+    id,
+    name: nameById.get(id) ?? id,
+  }));
+
+  // moderator and viewer are provisioned and ENFORCED (E06) but have no
+  // surfaces yet. Say so plainly rather than showing an empty dashboard that
+  // looks broken.
   const awaitingTools = user.role === "moderator" || user.role === "viewer";
-  // Admin surfaces come from the ONE nav manifest (src/lib/admin-nav.ts) that the
-  // admin shell also renders — so the portal dashboard and the in-shell nav can
-  // never drift, and adding a surface is a one-line change there, not here.
-  if (user.role === "admin") {
-    for (const entry of adminNavFor(user)) {
-      cards.push({ href: entry.href, title: entry.title, blurb: entry.blurb });
-    }
-  }
+  const firstName = user.name.split(" ")[0];
 
   return (
-    <>
-      <PageHeader
-        eyebrow={user.role === "admin" ? "Chamber admin" : "Welcome back"}
-        title={`Hi, ${user.name.split(" ")[0]}`}
-        intro="Everything you manage, in one place."
-      />
-      <Section>
-        {awaitingTools && (
-          <Callout title={`${ROLE_LABELS[user.role]} access is set up`}>
-            Your account and permissions are active. Manage your account details
-            here anytime.
-          </Callout>
-        )}
-        <div className="grid gap-4 sm:grid-cols-2">
-          {cards.map((c) => (
-            <Link key={c.href} href={c.href}>
-              <Card className="h-full transition hover:border-tide">
-                <p className="font-display text-lg font-semibold text-sound-deep">{c.title}</p>
-                <p className="mt-1 text-sm text-ink-soft">{c.blurb}</p>
-              </Card>
-            </Link>
-          ))}
-        </div>
-        <div className="mt-6">
-          <LogoutButton />
-        </div>
-      </Section>
-    </>
+    <PortalPage
+      title={`Hi, ${firstName}`}
+      intro="What you manage, and where to pick it up."
+      actions={<LogoutButton />}
+    >
+      {awaitingTools && (
+        <Callout title={`${ROLE_LABELS[user.role]} access is set up`}>
+          Your account and permissions are active. Manage your account details
+          from the menu any time.
+        </Callout>
+      )}
+
+      {managed.length > 0 && (
+        <PortalPanel title={managed.length === 1 ? "Your listing" : "Your listings"}>
+          <ul className="flex flex-col gap-2">
+            {managed.map((m) => (
+              <li
+                key={m.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border p-4"
+              >
+                <span className="min-w-0 font-semibold text-ink">{m.name}</span>
+                <Link
+                  href={`/portal/business/${m.id}`}
+                  className="shrink-0 font-semibold text-secondary underline underline-offset-2 hover:text-secondary-deep"
+                >
+                  Edit listing
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </PortalPanel>
+      )}
+
+      <PortalPanel title="Your account">
+        <FieldList
+          fields={[
+            { label: "Signed in as", value: user.name },
+            { label: "Email", value: user.email },
+            { label: "Role", value: ROLE_LABELS[user.role] },
+            ...(user.orgName ? [{ label: "Organisation", value: user.orgName }] : []),
+            ...(user.role === "admin"
+              ? [{ label: "Manages", value: "Everything (admin)" }]
+              : []),
+          ]}
+        />
+      </PortalPanel>
+    </PortalPage>
   );
 }
