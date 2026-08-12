@@ -22,17 +22,31 @@ export function useSave() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<SaveMessageState>(null);
 
-  /** run() returns true when the API held the write for review. */
+  /**
+   * run() returns true when the API held the write for review.
+   *
+   * It may instead return a STRING, which is used as the success message
+   * verbatim. That exists for the directory editor, whose API answers with
+   * three outcomes rather than two — pending review, saved-but-still-a-draft,
+   * and live — and the draft case is the one an owner most needs to be told
+   * about, since their listing looks saved but is not public.
+   */
   async function save(
-    run: () => Promise<boolean | void>,
+    run: () => Promise<boolean | string | void>,
     successText: string,
     pendingText: string = PENDING_TEXT,
   ) {
     setBusy(true);
     setMessage(null);
     try {
-      const pending = await run();
-      setMessage({ ok: true, text: pending === true ? pendingText : successText });
+      const outcome = await run();
+      const text =
+        typeof outcome === "string"
+          ? outcome
+          : outcome === true
+            ? pendingText
+            : successText;
+      setMessage({ ok: true, text });
     } catch (err) {
       setMessage({
         ok: false,
