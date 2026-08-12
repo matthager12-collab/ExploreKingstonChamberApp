@@ -78,10 +78,33 @@
    area; rather than inherit a known-marginal value and re-patch it screen by
    screen, it gets one that passes everywhere it is used. */
 /* Both consoles, not just the portal: the admin console moved onto the same
-   shared rail and the same role tokens, so it needs the same ink-soft. */
+   shared rail and the same role tokens, so it needs the same ink-soft.
+
+   THE CUSTOM PROPERTY ALONE DOES NOTHING, and this cost a CI failure to learn.
+   `@theme inline` compiles the token to a LITERAL — the built utility is
+   `.text-ink-soft{color:#6b7683}`, not `color:var(--color-ink-soft)` — so
+   re-pointing the property here never reached a single rendered node. The
+   override sat in the stylesheet looking correct and changed nothing, and the
+   contrast gate "passed" by reading this block instead of what the browser
+   paints. axe on /admin/worklist is what caught it: 4.15:1, serious.
+
+   So the property is kept as the SINGLE SOURCE of the value, and the rule
+   below is what actually applies it, by overriding the compiled utility inside
+   console subtrees. Unlayered, so it beats Tailwind's @layer utilities.
+
+   This is the same shape as the E14 simple-mode rule further down — including
+   the [class~=] form, which matches the bare class and leaves the /90 opacity
+   variant to its own selector. */
 [data-surface="portal"],
 [data-surface="admin"] {
   --color-ink-soft: #5b6672;
+}
+
+[data-surface="portal"] [class~="text-ink-soft"],
+[data-surface="admin"] [class~="text-ink-soft"],
+[data-surface="portal"] [class~="text-ink-soft/90"],
+[data-surface="admin"] [class~="text-ink-soft/90"] {
+  color: var(--color-ink-soft);
 }
 
 /* App rail width (both consoles). A real class, NOT a Tailwind arbitrary-value utility:

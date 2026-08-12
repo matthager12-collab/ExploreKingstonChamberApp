@@ -216,15 +216,19 @@ export function AppRail({
         {/* Only when the section has somewhere to go. With a single page it
             listed one link repeating the rail label immediately to its left —
             224px of width to offer no choice. */}
+        {/* The heading lives INSIDE the nav. Outside it, it was page content
+            belonging to no landmark, which axe reports as a "region" violation
+            — and it is a real one: a screen reader jumping by landmark would
+            meet the links with nothing naming them. */}
         {showPanel && (
           <div className="flex w-56 shrink-0 flex-col gap-1 overflow-y-auto border-r border-border bg-white p-3">
-            <span className="mb-1 px-1 font-display text-sm font-semibold text-ink">
-              {active?.label}
-            </span>
             <nav
               aria-label={`${active?.label ?? "Section"} pages`}
               className="flex flex-col gap-1"
             >
+              <span className="mb-1 px-1 font-display text-sm font-semibold text-ink">
+                {active?.label}
+              </span>
               {active?.items.map((item) => {
                 const isActive =
                   pathname === item.href || pathname.startsWith(`${item.href}/`);

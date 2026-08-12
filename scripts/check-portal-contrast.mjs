@@ -58,8 +58,37 @@ function readTokens() {
   const scoped = css.match(
     /(?:\[data-surface="[a-z]+"\]\s*,?\s*)+\{([\s\S]*?)\n\}/,
   );
-  if (scoped) collect(scoped[1]);
-  else throw new Error("no [data-surface=...] override block found in globals.css");
+  if (!scoped) throw new Error("no [data-surface=...] override block found in globals.css");
+  collect(scoped[1]);
+
+  // The property alone is INERT, and this gate once passed because of it.
+  //
+  // `@theme inline` compiles tokens to literals: the built utility is
+  // `.text-ink-soft{color:#6b7683}`, never `color:var(--color-ink-soft)`. So
+  // re-pointing the custom property changes nothing a browser paints, and this
+  // gate read the property and reported green on a colour that was never
+  // rendered. axe on /admin/worklist caught what this file missed — 4.15:1,
+  // serious.
+  //
+  // Every token overridden in that block must therefore ALSO have a rule that
+  // applies it to the compiled utility. Without this assertion the gate is
+  // measuring an intention rather than an outcome.
+  for (const [, name] of scoped[1].matchAll(/--color-([a-z0-9-]+):/g)) {
+    // The TOKEN is --color-ink-soft; the UTILITY is .text-ink-soft. Any of the
+    // colour-bearing prefixes counts as applying it.
+    const applied = new RegExp(
+      `\\[data-surface="[a-z]+"\\]\\s+\\[class~="(?:text|bg|border)-${name}(?:/\\d+)?"\\]`,
+    ).test(css);
+    if (!applied) {
+      throw new Error(
+        `--color-${name} is overridden for a console surface but no rule applies it ` +
+          `to the compiled utility. @theme inline bakes the token into the utility ` +
+          `as a literal, so the override is inert and this gate would pass on a ` +
+          `colour nothing renders. Add a rule like:\n` +
+          `  [data-surface="portal"] [class~="text-${name}"] { color: var(--color-${name}); }`,
+      );
+    }
+  }
 
   return tokens;
 }
