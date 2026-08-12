@@ -73,6 +73,17 @@ export const PORTAL_NAV: readonly PortalNavSection[] = [
     items: [{ href: "/portal/account", label: "Name, email, password" }],
   },
   {
+    // THE WAY OUT. The portal moved into its own route group and lost the public
+    // header along with it, so every link here pointed at /portal/* and there was
+    // no route back to the site the portal is part of. Listed before the admin
+    // entry because far more people need the site than need the console.
+    id: "site",
+    label: "Explore Kingston",
+    icon: "site",
+    leavesShell: true,
+    items: [{ href: "/", label: "Public site" }],
+  },
+  {
     // Admin keeps its OWN shell (src/components/admin/admin-shell.tsx) and its
     // own manifest. This entry only preserves the entry point the old portal
     // dashboard provided — merging the two shells is a separate piece of work,

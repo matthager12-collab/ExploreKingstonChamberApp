@@ -32,6 +32,31 @@ function Glyph({ size = 22, children, ...props }: IconProps) {
   );
 }
 
+/* The two EXIT glyphs. A console is a room, and a room needs a door — these
+ * mark the way back to the public site and across to the other console. Both
+ * are deliberately literal (a house, an arrow leaving a panel) rather than
+ * clever: an icon is a memory test, and the one control someone reaches for
+ * when they feel stuck is the worst place to set a puzzle. */
+export function IconSite(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M3 10.5 12 3l9 7.5" />
+      <path d="M5.5 9.5V20a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V9.5" />
+      <path d="M9.75 21v-6.5h4.5V21" />
+    </Glyph>
+  );
+}
+
+export function IconLeave(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M14 3h4.5a1.5 1.5 0 0 1 1.5 1.5v15a1.5 1.5 0 0 1-1.5 1.5H14" />
+      <path d="M10 8l-4 4 4 4" />
+      <path d="M6 12h9" />
+    </Glyph>
+  );
+}
+
 export function IconOverview(props: IconProps) {
   return (
     <Glyph {...props}>
@@ -178,6 +203,9 @@ export const NAV_ICONS: Record<NavIconName, (props: IconProps) => ReactElement> 
   experiences: IconExperiences,
   maps: IconMaps,
   system: IconSystem,
+  // exits
+  site: IconSite,
+  leave: IconLeave,
 };
 
 export type { NavIconName };
