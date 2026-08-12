@@ -17,17 +17,33 @@ import {
   type SetStateAction,
 } from "react";
 import type { Charity, EventCategory, EventItem, VolunteerNeed } from "@/lib/types";
-import { Badge, Callout, Card, Section } from "@/components/ui";
+import { Badge, Callout, Card } from "@/components/ui";
 import { formatPacificDate, formatPacificTime } from "@/lib/time";
 
+/* Control styling, moved onto the portal role tokens.
+ *
+ * Changed HERE rather than at the ~30 call sites: these four constants are the
+ * whole styling surface of this file, so four edits do what rewriting every
+ * <Field> would have done, with none of the risk of touching 800 lines of
+ * working JSX.
+ *
+ * Two substantive changes, not just renaming:
+ *   - the control border was `sand` (#e4e4e0), which is ~1.2:1 on white. Fine
+ *     as a divider; a WCAG 1.4.11 failure as the sole boundary of an input.
+ *     border-strong is the 3:1 token.
+ *   - min-h-11 on the buttons: ~44px, comfortably past the 24px WCAG 2.2
+ *     target-size floor rather than sitting exactly on it.
+ *
+ * text-base stays, and must: iOS Safari zooms the viewport on a focused
+ * control under 16px. */
 const inputClass =
-  "mt-1 block w-full rounded-lg border border-sand bg-white px-3 py-2 text-base";
+  "mt-1 block w-full rounded-lg border border-border-strong bg-white px-3 py-2.5 text-base text-ink";
 const buttonClass =
-  "rounded-full bg-sound px-6 py-2.5 font-semibold text-white hover:bg-sound-deep disabled:opacity-50";
+  "inline-flex min-h-11 items-center justify-center rounded-full bg-primary px-6 py-2.5 font-semibold text-white hover:bg-primary-deep disabled:cursor-not-allowed disabled:opacity-60";
 const smallButtonClass =
-  "rounded-full border border-sand bg-white px-3 py-1 text-sm font-medium text-ink hover:border-tide disabled:opacity-40";
+  "inline-flex min-h-11 items-center justify-center rounded-full border border-border-strong bg-white px-4 py-1 text-sm font-semibold text-ink hover:bg-surface-sunken disabled:opacity-40";
 const stepperClass =
-  "h-8 w-8 rounded-full border border-sand bg-white text-base font-semibold text-sound-deep hover:border-tide disabled:opacity-30";
+  "h-11 w-11 rounded-full border border-border-strong bg-white text-base font-semibold text-primary-deep hover:bg-surface-sunken disabled:opacity-30";
 
 const CATEGORY_OPTIONS: EventCategory[] = [
   "charity",
@@ -94,29 +110,52 @@ export function NonprofitEditor({
   const [needs, setNeeds] = useState(initialNeeds);
   const [events, setEvents] = useState(initialEvents);
 
+  // Plain sections, not the public site's <Section>. That component centres
+  // itself in a max-w-5xl column with its own padding, which is right on a
+  // marketing page and wrong inside PortalPage — the two containers stacked
+  // and the content ended up double-padded and narrower than the heading
+  // above it.
   return (
     <>
-      <Section
+      <PortalSection
         title="Organization profile"
-        subtitle="Shown wherever your org appears on the site."
+        description="Shown wherever your org appears on the site."
       >
         <OrgProfileForm org={org} onSaved={setOrg} />
-      </Section>
+      </PortalSection>
 
-      <Section
+      <PortalSection
         title="Volunteer shifts"
-        subtitle="Post shifts and use the stepper to track signups as they come in by email or phone."
+        description="Post shifts and use the stepper to track signups as they come in by email or phone."
       >
         <NeedsSection org={org} needs={needs} setNeeds={setNeeds} today={today} />
-      </Section>
+      </PortalSection>
 
-      <Section
+      <PortalSection
         title="Your events"
-        subtitle="When you pick a date, we check the town calendar so Kingston doesn't double-book itself."
+        description="When you pick a date, we check the town calendar so Kingston doesn't double-book itself."
       >
         <EventsSection org={org} events={events} setEvents={setEvents} today={today} />
-      </Section>
+      </PortalSection>
     </>
+  );
+}
+
+function PortalSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <section>
+      <h2 className="font-display text-xl font-semibold text-primary-deep">{title}</h2>
+      <p className="portal-measure mt-1 text-sm text-ink-soft">{description}</p>
+      <div className="mt-4 flex flex-col gap-4">{children}</div>
+    </section>
   );
 }
 
@@ -628,26 +667,41 @@ function EventForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [date, setDate] = useState(initial ? initial.start.slice(0, 10) : "");
-  // null = no date picked yet / lookup failed; [] = date is clear.
-  const [clashes, setClashes] = useState<EventItem[] | null>(null);
+  // The answer, remembered WITH the date it answers for. Keeping the date
+  // alongside the result is what lets `clashes` below be derived, and that
+  // fixes two things at once:
+  //
+  //   - the lint error this used to carry: clearing on an invalid date was a
+  //     setState called synchronously in the effect body, which React 19
+  //     rejects as a cascading render.
+  //   - a real staleness bug: switching from one valid date to another kept
+  //     showing the PREVIOUS day's clashes until the new fetch returned, so
+  //     the warning could describe a day the user had already moved off.
+  //
+  // Same shape the business events editor uses, for the same reason.
+  const [dayCheck, setDayCheck] = useState<{ date: string; events: EventItem[] } | null>(
+    null,
+  );
   const excludeId = initial?.id;
+
+  // null = no date picked yet / lookup failed / answer is for another date;
+  // [] = this date is clear.
+  const clashes =
+    DATE_RE.test(date) && dayCheck?.date === date ? dayCheck.events : null;
 
   // Deconfliction: the moment a date is picked, ask what else happens that
   // day — the warning shows BEFORE they commit. Never blocks saving.
   useEffect(() => {
-    if (!DATE_RE.test(date)) {
-      setClashes(null);
-      return;
-    }
+    if (!DATE_RE.test(date)) return;
     let cancelled = false;
     const exclude = excludeId ? `&excludeId=${encodeURIComponent(excludeId)}` : "";
     fetch(`/api/portal/needs?onDate=${date}${exclude}`)
       .then((r) => r.json())
       .then((d: { events?: EventItem[] }) => {
-        if (!cancelled) setClashes(d.events ?? []);
+        if (!cancelled) setDayCheck({ date, events: d.events ?? [] });
       })
       .catch(() => {
-        if (!cancelled) setClashes(null);
+        if (!cancelled) setDayCheck(null);
       });
     return () => {
       cancelled = true;
