@@ -872,7 +872,37 @@ export function MapBuilder({
           const first = toLngLat(ring[0]);
           const bounds = new maplibregl.LngLatBounds(first, first);
           for (const p of ring) bounds.extend(toLngLat(p));
-          map.fitBounds(bounds, { padding: 60, maxZoom: 17 });
+          // Frame into the space the DRAWER leaves, not the whole canvas.
+          //
+          // select() opens the feature drawer a few lines above this, and that
+          // drawer is opaque and floats over the canvas's right edge. Framing
+          // with uniform padding therefore centred the feature under a panel
+          // this same function had just opened: handles landed on the drawer,
+          // and a click on them went to the form instead of the map.
+          //
+          // It was always somewhat wrong and the shared rail made it bite. The
+          // rail costs the canvas 432px (rail 208 + section panel 224), so at
+          // 1280px the drawer went from covering about a quarter of the canvas
+          // to covering 320 of 816px — and the first midpoint handle of the
+          // seed trail moved from clear of it to 134px underneath.
+          //
+          // Measured at 1280x1200, three handles on that trail, canvas x448 w816:
+          //   uniform padding    1060 (textarea)   836 (canvas)   631 (canvas)
+          //   drawer-aware        825 (canvas)     744 (canvas)   669 (canvas)
+          //
+          // Gated on the same breakpoint as the drawer's own `lg:flex`, so the
+          // reserved space appears exactly when the thing occupying it does.
+          const DRAWER_W = 320 + 16; // w-80 + the right-4 inset
+          const drawerShown = window.matchMedia("(min-width: 64rem)").matches;
+          map.fitBounds(bounds, {
+            padding: {
+              top: 60,
+              bottom: 60,
+              left: 60,
+              right: 60 + (drawerShown ? DRAWER_W : 0),
+            },
+            maxZoom: 17,
+          });
         }
       }
       setEditing(id, f, true);
