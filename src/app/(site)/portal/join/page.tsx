@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { PageHeader, Section } from "@/components/ui";
-import { JoinForm } from "../forms";
+import { JoinForm } from "@/components/portal/auth-forms";
 
 export const metadata: Metadata = { title: "Join the portal" };
 

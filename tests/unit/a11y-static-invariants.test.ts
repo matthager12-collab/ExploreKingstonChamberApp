@@ -115,11 +115,19 @@ const ARBITRARY_PX_FONT_RE = /text-\[\d+px\]/;
  * and the same assumption the fern rule already made.
  * ----------------------------------------------------------------------- */
 
-/** Brand palette, read from the single source of truth rather than restated. */
+/** Brand palette, read from the single source of truth rather than restated.
+ *
+ * Scoped to the @theme block ON PURPOSE. globals.css also carries subtree
+ * overrides — [data-surface="portal"] re-points --color-ink-soft for the portal
+ * shell — and a whole-file regex takes the LAST match, so it would quietly
+ * measure a value these public surfaces never render, and every ink-soft
+ * invariant below would start passing for the wrong reason. */
 function readPalette(): Record<string, string> {
   const css = readFileSync(path.join(SRC_ROOT, "app", "globals.css"), "utf8");
+  const theme = css.match(/@theme inline\s*\{([\s\S]*?)\n\}/);
+  if (!theme) throw new Error("no @theme inline block found in globals.css");
   const out: Record<string, string> = {};
-  for (const m of css.matchAll(/--color-([a-z-]+):\s*(#[0-9a-fA-F]{6})/g))
+  for (const m of theme[1].matchAll(/--color-([a-z-]+):\s*(#[0-9a-fA-F]{6})/g))
     out[m[1]] = m[2];
   return out;
 }
