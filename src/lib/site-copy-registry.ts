@@ -1750,64 +1750,6 @@ export const COPY_BLOCKS = [
   // =============== END claimSignup.* ===============
   // =============== claimPage.* (the /claim business directory) ===============
   {
-    key: "claimPage.header.eyebrow",
-    page: "Claim your business",
-    label: "Header eyebrow",
-    fallback: "For Kingston businesses",
-  },
-  {
-    key: "claimPage.header.title",
-    page: "Claim your business",
-    label: "Page title",
-    fallback: "Claim your business",
-  },
-  {
-    key: "claimPage.header.intro",
-    page: "Claim your business",
-    label: "Page intro — what this list is and where it's heading",
-    multiline: true,
-    fallback:
-      "The Chamber has imported listings for local businesses — find yours below and claim it. Claiming is free, gives you a login, and puts your listing in your hands. We're actively expanding what businesses can do here: profiles, hours, photos, events and more are on the way.",
-  },
-  {
-    key: "claimPage.search.label",
-    page: "Claim your business",
-    label: "Search field label (screen readers)",
-    fallback: "Search businesses",
-  },
-  {
-    key: "claimPage.search.placeholder",
-    page: "Claim your business",
-    label: "Search field placeholder",
-    fallback: "Search by name…",
-  },
-  {
-    key: "claimPage.filter.all",
-    page: "Claim your business",
-    label: "Category filter — the all-categories chip",
-    fallback: "All",
-  },
-  {
-    key: "claimPage.claimedBadge",
-    page: "Claim your business",
-    label: "Badge on an already-claimed row",
-    fallback: "Claimed",
-  },
-  {
-    key: "claimPage.row.cta",
-    page: "Claim your business",
-    label: "Row action — open the claim page",
-    fallback: "This is my business",
-  },
-  {
-    key: "claimPage.empty",
-    page: "Claim your business",
-    label: "No search results",
-    multiline: true,
-    fallback:
-      "No businesses match. If yours isn't listed at all, contact the Chamber and we'll add it — claiming will be waiting for you.",
-  },
-  {
     key: "claimPage.detail.intro",
     page: "Claim your business",
     label: "Detail page intro above the claim form",
@@ -1896,6 +1838,14 @@ export const COPY_BLOCKS = [
     page: "Business directory",
     label: "Profile — claim call-to-action on unclaimed listings",
     fallback: "Own this business? Claim it to keep this page up to date.",
+  },
+  {
+    key: "directoryPage.claimNote",
+    page: "Business directory",
+    label: "Footer note — how owners claim, and what to do if not listed",
+    multiline: true,
+    fallback:
+      "Own one of these businesses? Open its page and claim it — it takes about a minute. Not listed? Contact the Chamber and we'll add you.",
   },
   // =============== END directoryPage.* ===============
 ] as const satisfies readonly CopyBlock[];

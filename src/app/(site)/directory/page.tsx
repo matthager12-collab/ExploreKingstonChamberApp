@@ -59,6 +59,9 @@ export default async function DirectoryPage() {
       />
       <Section>
         <DirectoryBrowser rows={rows} />
+        <p className="mt-6 text-sm text-ink-soft">
+          {copyText(copy, "directoryPage.claimNote")}
+        </p>
       </Section>
     </>
   );
