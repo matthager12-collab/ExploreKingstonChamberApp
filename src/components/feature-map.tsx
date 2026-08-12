@@ -524,8 +524,11 @@ function zonePhotosHtml(photos: ParkingPhoto[] | undefined): string {
   return `<img src="${esc(first.src)}" alt="${esc(first.alt)}" loading="lazy" style="display:block;width:100%;max-width:210px;border-radius:6px;margin-top:6px;" />${credit}`;
 }
 
-/** Shared popup body for a custom feature. Escapes all user text. */
-function featurePopupHtml(f: MapFeature): string {
+/** Shared popup body for a custom feature. Escapes all user text.
+ *  `profilePath` (resolve-time derived, builtins.profileLinks) adds an
+ *  internal "View profile" link when the pin's title matched a live
+ *  directory listing — same tab, it's our own page. */
+function featurePopupHtml(f: MapFeature, profilePath?: string): string {
   const parts: string[] = [
     `<p style="margin:0;font-weight:600;font-size:0.95rem;">${esc(f.title)}</p>`,
   ];
@@ -545,6 +548,11 @@ function featurePopupHtml(f: MapFeature): string {
       )}" style="display:block;max-width:210px;border-radius:6px;margin-top:6px;" />`,
     );
   }
+  if (profilePath) {
+    parts.push(
+      `<p style="margin:6px 0 0;"><a href="${esc(profilePath)}">View profile →</a></p>`,
+    );
+  }
   if (f.link) {
     parts.push(
       `<p style="margin:6px 0 0;"><a href="${esc(
@@ -555,6 +563,26 @@ function featurePopupHtml(f: MapFeature): string {
   return `<div style="font-size:0.8rem;line-height:1.35;max-width:230px;">${parts.join(
     "",
   )}</div>`;
+}
+
+/** Popup for a directory-sourced business pin (directory-public slice,
+ *  phase 3). Escapes all user text; links to the internal profile page. */
+function directoryPopupHtml(d: {
+  name: string;
+  category?: string;
+  member: boolean;
+  blurb?: string;
+  profilePath: string;
+}): string {
+  const member = d.member
+    ? `<p style="margin:4px 0 0;"><span style="display:inline-block;padding:1px 8px;border-radius:9999px;font-size:0.72rem;font-weight:600;color:#fff;background:${MEMBER_RING};">Chamber member</span></p>`
+    : "";
+  const blurb = d.blurb ? `<p style="margin:4px 0 0;">${esc(d.blurb)}</p>` : "";
+  return `<div style="font-size:0.8rem;line-height:1.35;max-width:230px;">
+    <p style="margin:0;font-weight:600;font-size:0.95rem;">${markerCategory(d.category).emoji} ${esc(d.name)}</p>
+    ${member}${blurb}
+    <p style="margin:6px 0 0;"><a href="${esc(d.profilePath)}">View profile →</a></p>
+  </div>`;
 }
 
 function restaurantPopupHtml(r: {
@@ -964,7 +992,7 @@ export function FeatureMap({
           const ring = featureColor(f, cat.color);
           const featureMarker = new maplibregl.Marker({ element: pinEl(cat.emoji, ring, f.member === true), anchor: "bottom" })
             .setLngLat(toLngLat(f.point))
-            .setPopup(markerPopup(featurePopupHtml(f)))
+            .setPopup(markerPopup(featurePopupHtml(f, view.builtins.profileLinks?.[f.id])))
             .addTo(map);
           fixMarkerA11y(featureMarker, f.title);
           pts.push(toLngLat(f.point));
@@ -1048,6 +1076,21 @@ export function FeatureMap({
         pts.push([r.lng, r.lat]);
         addLabel([r.lng, r.lat], resolveLabel({ title: r.label?.text ?? r.name, category: r.category }));
         addLegend({ key: `builtin-restaurant-${cat.key}`, label: cat.label, color: cat.color, shape: "pin", emoji: cat.emoji });
+      }
+
+      // ---- built-ins: directory businesses (directory-public slice) ----
+      // Same pin machinery as custom features: category emoji + colour, the
+      // member ring when the roster says active, popup → the profile page.
+      for (const d of view.builtins.directory ?? []) {
+        const cat = markerCategory(d.category);
+        const dirMarker = new maplibregl.Marker({ element: pinEl(cat.emoji, cat.color, d.member), anchor: "bottom" })
+          .setLngLat([d.lng, d.lat])
+          .setPopup(markerPopup(directoryPopupHtml(d)))
+          .addTo(map);
+        fixMarkerA11y(dirMarker, d.name);
+        pts.push([d.lng, d.lat]);
+        addLabel([d.lng, d.lat], resolveLabel({ title: d.label?.text ?? d.name, category: d.category }));
+        addLegend({ key: `builtin-directory-${cat.key}`, label: cat.label, color: cat.color, shape: "pin", emoji: cat.emoji });
       }
 
       // ---- built-ins: parking zones ----

@@ -1750,64 +1750,6 @@ export const COPY_BLOCKS = [
   // =============== END claimSignup.* ===============
   // =============== claimPage.* (the /claim business directory) ===============
   {
-    key: "claimPage.header.eyebrow",
-    page: "Claim your business",
-    label: "Header eyebrow",
-    fallback: "For Kingston businesses",
-  },
-  {
-    key: "claimPage.header.title",
-    page: "Claim your business",
-    label: "Page title",
-    fallback: "Claim your business",
-  },
-  {
-    key: "claimPage.header.intro",
-    page: "Claim your business",
-    label: "Page intro — what this list is and where it's heading",
-    multiline: true,
-    fallback:
-      "The Chamber has imported listings for local businesses — find yours below and claim it. Claiming is free, gives you a login, and puts your listing in your hands. We're actively expanding what businesses can do here: profiles, hours, photos, events and more are on the way.",
-  },
-  {
-    key: "claimPage.search.label",
-    page: "Claim your business",
-    label: "Search field label (screen readers)",
-    fallback: "Search businesses",
-  },
-  {
-    key: "claimPage.search.placeholder",
-    page: "Claim your business",
-    label: "Search field placeholder",
-    fallback: "Search by name…",
-  },
-  {
-    key: "claimPage.filter.all",
-    page: "Claim your business",
-    label: "Category filter — the all-categories chip",
-    fallback: "All",
-  },
-  {
-    key: "claimPage.claimedBadge",
-    page: "Claim your business",
-    label: "Badge on an already-claimed row",
-    fallback: "Claimed",
-  },
-  {
-    key: "claimPage.row.cta",
-    page: "Claim your business",
-    label: "Row action — open the claim page",
-    fallback: "This is my business",
-  },
-  {
-    key: "claimPage.empty",
-    page: "Claim your business",
-    label: "No search results",
-    multiline: true,
-    fallback:
-      "No businesses match. If yours isn't listed at all, contact the Chamber and we'll add it — claiming will be waiting for you.",
-  },
-  {
     key: "claimPage.detail.intro",
     page: "Claim your business",
     label: "Detail page intro above the claim form",
@@ -1822,6 +1764,90 @@ export const COPY_BLOCKS = [
       "This listing has already been claimed. If that seems wrong — it's your business and you didn't claim it — contact the Chamber and they'll sort it out.",
   },
   // =============== END claimPage.* ===============
+  // =============== directoryPage.* (the public /directory) ===============
+  {
+    key: "directoryPage.header.eyebrow",
+    page: "Business directory",
+    label: "Header eyebrow",
+    fallback: "Kingston businesses",
+  },
+  {
+    key: "directoryPage.header.title",
+    page: "Business directory",
+    label: "Page title",
+    fallback: "Business directory",
+  },
+  {
+    key: "directoryPage.header.intro",
+    page: "Business directory",
+    label: "Page intro",
+    multiline: true,
+    fallback:
+      "Local businesses across Kingston, from the Greater Kingston Chamber of Commerce.",
+  },
+  {
+    key: "directoryPage.search.label",
+    page: "Business directory",
+    label: "Search field label (screen readers)",
+    fallback: "Search businesses",
+  },
+  {
+    key: "directoryPage.search.placeholder",
+    page: "Business directory",
+    label: "Search field placeholder",
+    fallback: "Search by name…",
+  },
+  {
+    key: "directoryPage.filter.all",
+    page: "Business directory",
+    label: "Category filter — the all-categories chip",
+    fallback: "All",
+  },
+  {
+    key: "directoryPage.memberBadge",
+    page: "Business directory",
+    label: "Chamber-member badge",
+    fallback: "Chamber member",
+  },
+  {
+    key: "directoryPage.empty",
+    page: "Business directory",
+    label: "No search results",
+    fallback: "No businesses match your search.",
+  },
+  {
+    key: "directoryPage.profile.directions",
+    page: "Business directory",
+    label: "Profile — directions link",
+    fallback: "Directions",
+  },
+  {
+    key: "directoryPage.profile.website",
+    page: "Business directory",
+    label: "Profile — website link",
+    fallback: "Visit website",
+  },
+  {
+    key: "directoryPage.profile.back",
+    page: "Business directory",
+    label: "Profile — back link to the index",
+    fallback: "← All businesses",
+  },
+  {
+    key: "directoryPage.profile.claimLink",
+    page: "Business directory",
+    label: "Profile — claim call-to-action on unclaimed listings",
+    fallback: "Own this business? Claim it to keep this page up to date.",
+  },
+  {
+    key: "directoryPage.claimNote",
+    page: "Business directory",
+    label: "Footer note — how owners claim, and what to do if not listed",
+    multiline: true,
+    fallback:
+      "Own one of these businesses? Open its page and claim it — it takes about a minute. Not listed? Contact the Chamber and we'll add you.",
+  },
+  // =============== END directoryPage.* ===============
 ] as const satisfies readonly CopyBlock[];
 
 /** Union of every registered copy key — a typo at a call site is a tsc error. */

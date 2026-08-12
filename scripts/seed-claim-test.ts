@@ -193,7 +193,10 @@ async function main(): Promise<number> {
     `roster contacts on file for the test listing: ${onFile.length} (${inserted} new). ` +
       "Claiming with one of those emails auto-approves; any other email queues for the Chamber.",
   );
-  console.log("Ready: open /claim, search “test”, and run the flow.");
+  console.log(
+    "Ready: open /claim/test-claim-business directly and run the flow " +
+      "(the listing is a draft, so no public index lists it — the direct claim page is the door).",
+  );
   return 0;
 }
 

@@ -96,24 +96,40 @@ export const mapViews: MapView[] = [
    * next to the hardware store. A visitor thinks "where do I get X", not
    * "which taxonomy is X".
    *
-   * `sources: []` on all four is not a placeholder — there is no built-in
-   * layer to pull from. BuiltInSource offers restaurants / parking-zones /
-   * streets, and the one domain that sounds right, E17's DirectoryListing,
-   * carries no lat/lng at all (see src/lib/schemas/directory.ts — name,
-   * address, phone, website, tags). A map needs coordinates, so these are
-   * drawn MapFeatures, geocoded and source-noted one at a time in
-   * src/lib/data/map-features.ts.
-   *
-   * WHEN DIRECTORY LISTINGS GAIN COORDINATES, this is the seam to revisit:
-   * add a "directory" BuiltInSource filtered per category, the way
-   * "restaurants" backs food-drink, and retire the hand-seeded pins. Until
-   * then a hand-drawn pin the Chamber can fix in one click beats an empty map
-   * — the mistake parking-cash made and had to undo above.
+   * THE SEAM OPENED (directory-public slice, 2026-08-12). DirectoryListing
+   * now carries optional lat/lng (geocode pass + workbench), and the
+   * "directory" BuiltInSource exists — filtered per view through
+   * `directoryCategories`, the way "restaurants" backs food-drink. The four
+   * shopping views still run on hand pins ON PURPOSE: their curation is
+   * finer than the listing categories (shop vs take-home vs health), and a
+   * curated hand pin beats an auto pin until the Chamber verifies each
+   * replacement. The migration path: turn the "businesses" view below live
+   * once listings are geocoded, then adopt the source per shopping view (an
+   * admin edit, no code) and retire matched hand pins using the geocode
+   * script's adoption report. Meanwhile resolve.ts already links every hand
+   * pin whose name matches a live listing to its /directory profile — the
+   * pins are clickable business profiles either way.
    *
    * Every `center` here is the centroid of that view's own pins, and every one
    * is a FALLBACK: the public map auto-frames to its content. They matter only
    * if a view is ever emptied in /admin/maps.
    */
+  {
+    // Every live directory business with a pin, one map — the first consumer
+    // of the "directory" BuiltInSource. Ships UNPUBLISHED: it is empty until
+    // the geocode pass gives listings coordinates in production, and an
+    // empty public map is worse than none. The Chamber flips `published` in
+    // /admin/maps once pins exist (and can then adopt the source per
+    // curated shopping view, narrowed via directoryCategories).
+    id: "businesses",
+    name: "Businesses",
+    description:
+      "Every local business in the directory with a map pin — Chamber members ringed in blue. Tap a pin for the business's profile page.",
+    center: [47.7998, -122.4988],
+    zoom: 15,
+    sources: ["directory"],
+    published: false,
+  },
   {
     id: "shops-gifts",
     name: "Shops & Gifts",

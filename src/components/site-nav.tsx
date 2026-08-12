@@ -29,10 +29,10 @@ const moreLinks = [
   { href: "/hunt", label: "Scavenger Hunt" },
   { href: "/give", label: "Give Back" },
   { href: "/about", label: "About" },
-  // E17 claim-signup slice: the self-serve door for business owners. Sits
-  // beside Chamber Portal — both are the "I run a business here" corner of
-  // an otherwise visitor-facing menu. Admin-hideable like every entry.
-  { href: "/claim", label: "Claim Your Business" },
+  // Directory-public slice: the ranked public directory ALSO absorbs the
+  // claim-your-business browse (Mat, 2026-08-12) — /claim redirects here and
+  // claiming happens from each profile page.
+  { href: "/directory", label: "Directory" },
   { href: "/portal", label: "Chamber Portal" },
 ];
 
