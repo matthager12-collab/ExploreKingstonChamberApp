@@ -111,6 +111,11 @@ export interface DirectoryListing {
   tags: string[];
   /** Import provenance: raw upstream category strings, verbatim. */
   sourceCategories?: string[];
+  /** Optional until placed (geocode pass or admin): the pin position for the
+   *  directory map source. Admin-writable only — member edits preserve them,
+   *  the same rule as restaurant coordinates. Both present or both absent. */
+  lat?: number;
+  lng?: number;
   /** Import provenance: vendor image URLs — never rendered publicly. */
   sourceImages?: { logo?: string; listingImage?: string };
 }
