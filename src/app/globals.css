@@ -81,6 +81,34 @@
   --color-ink-soft: #5b6672;
 }
 
+/* Portal rail width. A real class, NOT a Tailwind arbitrary-value utility:
+   both w-(--portal-rail-w) and w-[var(--portal-rail-w)] can compile to no rule
+   at all, leaving the rail at its content width — which looks correct, because
+   collapsing removes the labels and the content narrows on its own. Keeping the
+   width here also puts it beside the custom property it reads.
+
+   data-rail is stamped on <html> by the pre-paint script in the portal layout,
+   so a collapsed rail paints collapsed on the first frame. Both rules are inert
+   on public pages: nothing there carries the class or the attribute. */
+:root {
+  --portal-rail-w: 13rem;
+}
+
+html[data-rail="collapsed"] {
+  --portal-rail-w: 4.25rem;
+}
+
+.portal-rail {
+  width: var(--portal-rail-w);
+  transition: width 200ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portal-rail {
+    transition: none;
+  }
+}
+
 body {
   background-color: var(--color-shell);
   /* Subtle topographic contour texture from explorekingstonwa.com page backgrounds.

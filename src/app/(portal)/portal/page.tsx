@@ -7,7 +7,7 @@ import { adminNavFor } from "@/lib/admin-nav";
 import { getCopyOverrides } from "@/lib/stores/site-store";
 import { Callout, Card, PageHeader, Section } from "@/components/ui";
 import { PortalInviteHint } from "@/components/get-listed";
-import { LoginForm, LogoutButton } from "./forms";
+import { LoginForm, LogoutButton } from "@/components/portal/auth-forms";
 
 export const metadata: Metadata = { title: "Portal" };
 export const dynamic = "force-dynamic";
