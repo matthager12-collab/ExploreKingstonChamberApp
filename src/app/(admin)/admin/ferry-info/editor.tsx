@@ -11,7 +11,7 @@
 // because it changes most often; it edits the same boarding-pass draft, so
 // saving either place persists it.
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import {
   WALK_ON_ROUND_TRIP_KEY,
   type BoardingPass,
@@ -70,11 +70,24 @@ function TextField({
   rows?: number;
   hint?: string;
 }) {
+  // htmlFor + id, never a WRAPPING <label> — same rule as components/portal/form.tsx:
+  // a wrapper folds the hint into the control's accessible name. The label was
+  // previously bare, pointing at nothing, so this textarea had no accessible
+  // name at all (axe "label", critical).
+  const id = useId();
   return (
     <div>
-      <label className="text-sm font-medium text-ink">{label}</label>
-      {hint && <p className="text-xs text-ink-soft">{hint}</p>}
+      <label htmlFor={id} className="text-sm font-medium text-ink">
+        {label}
+      </label>
+      {hint && (
+        <p id={`${id}-hint`} className="text-xs text-ink-soft">
+          {hint}
+        </p>
+      )}
       <textarea
+        id={id}
+        aria-describedby={hint ? `${id}-hint` : undefined}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         rows={rows}
@@ -112,13 +125,25 @@ function StringListEditor({
     onChange(next);
   };
 
+  // The heading is a <p>, so it named nothing: every row's textarea was an
+  // unnamed control (axe "label", critical). A group wrapper carries the shared
+  // name, and each row gets its own visually-hidden label — "Line 3 of Payment
+  // notes" is what distinguishes one row from the next when the visible design
+  // deliberately shows no per-row text.
+  const id = useId();
   return (
-    <div>
-      <p className="text-sm font-medium text-ink">{label}</p>
+    <div role="group" aria-labelledby={`${id}-label`}>
+      <p id={`${id}-label`} className="text-sm font-medium text-ink">
+        {label}
+      </p>
       <div className="mt-1 space-y-2">
         {items.map((item, i) => (
           <div key={i} className="flex items-start gap-2">
+            <label htmlFor={`${id}-${i}`} className="sr-only">
+              {`Line ${i + 1} of ${label}`}
+            </label>
             <textarea
+              id={`${id}-${i}`}
               value={item}
               onChange={(e) => set(i, e.target.value)}
               rows={2}
@@ -178,25 +203,44 @@ function SourcesEditor({
   };
   const remove = (i: number) => onChange(items.filter((_, idx) => idx !== i));
   const add = () => onChange([...items, { label: "", url: "" }]);
+  const id = useId();
 
   return (
-    <div>
-      <p className="text-sm font-medium text-ink">Sources</p>
+    <div role="group" aria-labelledby={`${id}-label`}>
+      <p id={`${id}-label`} className="text-sm font-medium text-ink">
+        Sources
+      </p>
       <p className="text-xs text-ink-soft">
         Label plus an https link — shown as the citations for these facts.
       </p>
       <div className="mt-1 space-y-3">
         {items.map((src, i) => (
           <div key={i} className="rounded-lg border border-sand p-3">
-            <label className="text-xs font-medium text-ink">Label</label>
+            {/* Both labels were bare, so neither input had an accessible name
+                (axe "label", critical). The visible text stays exactly as it
+                was — it just points at its control now. The number is in the
+                name because "Label" repeated down a list of sources tells a
+                screen-reader user nothing about which source they are in. */}
+            <label htmlFor={`${id}-${i}-label`} className="text-xs font-medium text-ink">
+              Label
+              <span className="sr-only">{` for source ${i + 1}`}</span>
+            </label>
             <input
+              id={`${id}-${i}-label`}
               value={src.label}
               onChange={(e) => set(i, { label: e.target.value })}
               maxLength={300}
               className={inputClass}
             />
-            <label className="mt-2 block text-xs font-medium text-ink">URL</label>
+            <label
+              htmlFor={`${id}-${i}-url`}
+              className="mt-2 block text-xs font-medium text-ink"
+            >
+              URL
+              <span className="sr-only">{` for source ${i + 1}`}</span>
+            </label>
             <input
+              id={`${id}-${i}-url`}
               value={src.url}
               onChange={(e) => set(i, { url: e.target.value })}
               maxLength={600}

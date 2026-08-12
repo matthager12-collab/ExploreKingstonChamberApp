@@ -117,9 +117,17 @@ export function BoardingPassOverrideControl({ initial }: { initial: BoardingPass
           onClick={() => apply("on")}
           disabled={busy !== null || pinnedOn}
           className={`${buttonBase} ${
+            // Contrast, the same fix its sibling below already carries: the
+            // inactive fill was bg-coral/90, which composites to #b16c3d where
+            // white text is 4.13:1 — under AA 1.4.3. Undimmed coral is 4.97:1
+            // and the hover is 6.69:1. The ring already carries the
+            // active/inactive distinction, so the /90 was redundant as well as
+            // sub-AA. Only the fern button was fixed at the time; this one was
+            // missed, and had no axe coverage until the admin walk widened
+            // from 2 routes to 19.
             pinnedOn
               ? "bg-coral text-white ring-2 ring-coral-deep ring-offset-1"
-              : "bg-coral/90 text-white hover:bg-coral-deep"
+              : "bg-coral text-white hover:bg-coral-deep"
           }`}
         >
           {busy === "on" ? "Saving…" : pinnedOn ? "✓ Pinned ON" : "Turn ON for today"}
