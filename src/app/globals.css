@@ -26,6 +26,116 @@
   --color-ink: #20262e; /* near-black headings/body */
   --color-ink-soft: #6b7683; /* muted body gray */
   --color-fern: #4a7c59; /* PNW evergreen — success, open-now */
+
+  /* ===== PORTAL ROLE TOKENS =====================================================
+     Role-named aliases so the portal's archetype components (shell, widgets,
+     form primitives) drop in without rewriting every className. Public pages do
+     not use any token below.
+
+     STRICTLY ADDITIVE. Not one value above this comment changes, so no public
+     page can shift — proven by diffing the compiled CSS before and after.
+
+     Values are LITERAL, not var(--color-sound). Tailwind's @theme inline
+     tree-shakes tokens nothing references, so an alias pointing at an unused
+     brand token would compile to an undefined var. The brand token each one
+     mirrors is named in its comment; change them together, and let
+     `npm run check:contrast` catch it if they drift apart.
+
+     Where a role has no brand equivalent, the value is new and marked NEW. */
+  --color-surface: #fbfcfd; /* = shell */
+  --color-surface-raised: #ffffff; /* NEW — panels lift by going lighter than the page */
+  --color-surface-sunken: #f2f3f0; /* NEW — a step lighter than sand, so borders stay visible on it */
+  --color-border: #e4e4e0; /* = sand */
+  /* NEW. sand measures ~1.2:1 on white: fine as a divider, and a WCAG 1.4.11
+     failure as the sole boundary of an input. Control borders need 3:1. */
+  --color-border-strong: #7c7a72;
+  --color-ink-faint: #8b939c; /* NEW — decorative and disabled ONLY, never body text */
+  --color-primary: #324a6d; /* = sound */
+  --color-primary-deep: #22334d; /* = sound-deep */
+  --color-secondary: #16758f; /* = tide-deep, the accessible cyan */
+  --color-secondary-deep: #115c72; /* NEW — hover/pressed under tide-deep */
+  --color-secondary-tint: #b7e0f2; /* = seaglass */
+  --color-accent: #a85c28; /* = coral */
+  --color-accent-deep: #8a4c22; /* = coral-deep */
+  --color-success: #4a7c59; /* = fern. Fills and white-on-green only. */
+  /* NEW. fern carrying TEXT on the sunken fill measures 4.37:1 — under AA. This
+     follows the app's own convention (tide/tide-deep, coral/coral-deep): the
+     brand colour for fills, a -deep variant for type. */
+  --color-success-deep: #3c6647;
+  --color-warning: #8a5200; /* NEW — no brand equivalent */
+  --color-danger: #a8201a; /* NEW — no brand equivalent */
+  /* = tide-deep, matching the app's existing :focus-visible ring exactly, so the
+     portal's focus indicator is the one the rest of the app already uses. */
+  --color-focus: #16758f;
+}
+
+/* Portal-scoped overrides. These change EXISTING tokens, so they are deliberately
+   confined to the portal subtree and can never reach a public page.
+
+   --color-ink-soft is the reason this block exists. At #6b7683 it measures
+   4.4993:1 on the shell fill — a hair under AA 1.4.3, which the app already
+   documents and patches at individual usage sites. The portal is new surface
+   area; rather than inherit a known-marginal value and re-patch it screen by
+   screen, it gets one that passes everywhere it is used.
+
+   THE CUSTOM PROPERTY ALONE DOES NOTHING, and this cost a CI failure to learn.
+   `@theme inline` compiles the token to a LITERAL — the built utility is
+   `.text-ink-soft{color:#6b7683}`, not `color:var(--color-ink-soft)` — so
+   re-pointing the property here never reached a single rendered node. The
+   override sat in the stylesheet looking correct and changed nothing, and the
+   contrast gate "passed" by reading this block instead of what the browser
+   paints. axe is what caught it: 4.15:1, serious.
+
+   So the property is kept as the SINGLE SOURCE of the value, and the rule below
+   is what actually applies it, by overriding the compiled utility inside the
+   portal subtree. Unlayered, so it beats Tailwind's @layer utilities.
+
+   This is the same shape as the E14 simple-mode rule further down — including
+   the [class~=] form, which matches the bare class and leaves the /90 opacity
+   variant to its own selector. */
+[data-surface="portal"] {
+  --color-ink-soft: #5b6672;
+}
+
+[data-surface="portal"] [class~="text-ink-soft"],
+[data-surface="portal"] [class~="text-ink-soft/90"] {
+  color: var(--color-ink-soft);
+}
+
+/* Portal rail width. A real class, NOT a Tailwind arbitrary-value utility:
+   both w-(--portal-rail-w) and w-[var(--portal-rail-w)] can compile to no rule
+   at all, leaving the rail at its content width — which looks correct, because
+   collapsing removes the labels and the content narrows on its own. Keeping the
+   width here also puts it beside the custom property it reads.
+
+   data-rail is stamped on <html> by the pre-paint script in the portal layout,
+   so a collapsed rail paints collapsed on the first frame. Both rules are inert
+   on public pages: nothing there carries the class or the attribute. */
+:root {
+  --portal-rail-w: 13rem;
+}
+
+html[data-rail="collapsed"] {
+  --portal-rail-w: 4.25rem;
+}
+
+.portal-rail {
+  width: var(--portal-rail-w);
+  transition: width 200ms ease;
+}
+
+/* Reading measure for portal prose and field hints. ~66 characters: past that,
+   the return sweep to the next line starts landing on the wrong one. Prefixed
+   rather than a bare .measure so it cannot collide with anything on the public
+   side. */
+.portal-measure {
+  max-width: 66ch;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portal-rail {
+    transition: none;
+  }
 }
 
 body {
