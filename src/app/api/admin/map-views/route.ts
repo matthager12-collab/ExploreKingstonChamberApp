@@ -14,12 +14,15 @@ import { getSessionUser, requireAdmin } from "@/lib/auth";
 import type { BuiltInSource, MapView } from "@/lib/map/types";
 import { deleteMapView, getMapView, getMapViews, saveMapView } from "@/lib/stores/map-store";
 import { RecordValidationError } from "@/lib/db/store-schemas";
+import { DIRECTORY_CATEGORIES } from "@/lib/schemas/directory";
 
 const SOURCES: BuiltInSource[] = [
   "restaurants",
   "parking-zones",
   "streets",
   "port-stalls",
+  // Directory-public slice: live directory listings with coordinates.
+  "directory",
 ];
 
 // Greater Kingston, WA — anything outside this box is a data-entry mistake.
@@ -122,12 +125,37 @@ export async function POST(request: NextRequest) {
   if (body.sources != null) {
     if (!Array.isArray(body.sources) || !body.sources.every((s) => SOURCES.includes(s as BuiltInSource))) {
       return NextResponse.json(
-        { error: "sources must be a subset of restaurants, parking-zones, streets" },
+        { error: `sources must be a subset of: ${SOURCES.join(", ")}` },
         { status: 400 },
       );
     }
     // De-dupe while preserving the canonical order.
     sources = SOURCES.filter((s) => (body.sources as string[]).includes(s));
+  }
+
+  // Category narrowing for the `directory` source. Validated against the
+  // directory vocabulary; absent/empty = every category. PRESERVED from the
+  // stored view when the body omits it — the builder UI has no field for it
+  // yet, and a save that silently erased an admin's narrowing would be a
+  // data-loss bug wearing a valid request.
+  let directoryCategories: string[] | undefined;
+  if (body.directoryCategories != null) {
+    if (
+      !Array.isArray(body.directoryCategories) ||
+      !body.directoryCategories.every(
+        (c) => typeof c === "string" && (DIRECTORY_CATEGORIES as readonly string[]).includes(c),
+      )
+    ) {
+      return NextResponse.json(
+        { error: `directoryCategories must be a subset of: ${DIRECTORY_CATEGORIES.join(", ")}` },
+        { status: 400 },
+      );
+    }
+    directoryCategories = body.directoryCategories.length
+      ? (body.directoryCategories as string[])
+      : undefined;
+  } else {
+    directoryCategories = (await getMapView(id))?.directoryCategories;
   }
 
   const published = body.published === true;
@@ -143,6 +171,7 @@ export async function POST(request: NextRequest) {
     center,
     zoom,
     sources,
+    ...(directoryCategories?.length ? { directoryCategories } : {}),
     published,
   };
 
