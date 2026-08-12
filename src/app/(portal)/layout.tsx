@@ -19,16 +19,10 @@ import { PortalShell } from "@/components/portal/portal-shell";
 // opt every public page out of static rendering (see the note in
 // src/app/layout.tsx and docs/KIOSK.md §2).
 
-// Restores the rail's width before first paint, so a collapsed rail does not
-// flash open on every navigation. It ships only on portal routes because this
-// layout does — the root layout, and therefore the public site, is untouched.
-// try/catch because Safari private mode throws on localStorage.
-const RAIL_BOOTSTRAP = `
-try {
-  var r = localStorage.getItem("portal:rail");
-  if (r) document.documentElement.setAttribute("data-rail", r);
-} catch (e) {}
-`.trim();
+// The rail's pre-paint restore lives in the ROOT layout's existing bootstrap
+// script, not here. A <script> nested in this layout is part of React's tree:
+// Next warns it will not run on client navigation, and React reports the
+// <html> attribute it sets as a hydration mismatch. See src/app/layout.tsx.
 
 export default async function PortalLayout({
   children,
@@ -41,10 +35,5 @@ export default async function PortalLayout({
   // it is not a dead end — without it there is no nav and no way back.
   if (!user) return <SiteChrome>{children}</SiteChrome>;
 
-  return (
-    <>
-      <script dangerouslySetInnerHTML={{ __html: RAIL_BOOTSTRAP }} />
-      <PortalShell user={user}>{children}</PortalShell>
-    </>
-  );
+  return <PortalShell user={user}>{children}</PortalShell>;
 }
