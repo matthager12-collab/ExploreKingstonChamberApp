@@ -12,10 +12,19 @@ import { introFor, requireBusinessRecord } from "./record";
 // lodging or directory listing has one form, and a tab bar with one tab is the
 // same "navigation that offers no choice" the section panel was just cured of.
 
+// Hand-declared params, NOT the generated PageProps/LayoutProps globals.
+// Those are written into .next/types by a BUILD, and CI runs `npm run
+// typecheck` ten steps before `npm run build` — so they do not exist when
+// tsc runs and every file using them fails with TS2304. It passed locally
+// only because a build had already happened. The rest of the repo
+// hand-declares (directory/[id], hunt/[slug], itineraries/[slug]); match it.
 export default async function BusinessRecordLayout({
   children,
   params,
-}: LayoutProps<"/portal/business/[id]">) {
+}: {
+  children: React.ReactNode;
+  params: Promise<{ id: string }>;
+}) {
   const { id } = await params;
   const { user, record } = await requireBusinessRecord(id);
 
