@@ -37,6 +37,12 @@ export * from "./worklist-schema";
 
 // E17 importer substrate (listing_alias dedupe memory + import_run reports).
 export * from "./import-schema";
+
+// E17 claim-signup slice (roster-email matching + pending code verification).
+export * from "./claim-schema";
+
+// Directory-public slice: per-listing membership status/dues for ranking.
+export * from "./member-schema";
 export * from "./volunteer-signup-schema";
 
 /** Lifecycle states a structured record can be in. Everything is 'live'

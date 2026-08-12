@@ -172,11 +172,11 @@ them itself and learns from the record.
 |---|---|
 | Producer | `recordSailingSpaceSnapshot()` in `src/lib/stores/ferry-observations.ts`, called fire-and-forget from `ferry-status.ts` on organic traffic (throttled ≥ 10 min) |
 | Backfill | `/api/ferry/observe` (GET or POST) — point a free scheduler at it for overnight gaps; write is internally throttled so extra hits return `recorded:false` |
-| Scheduler | `.github/workflows/ferry-observe.yml` cron `*/15 * * * *` UTC; base URL from repo var `FERRY_OBSERVE_URL` (defaults to the Render host) |
+| Scheduler | `ferry-observe` Render cron in `render.yaml`, `*/15 0-7,11-23 * * *` UTC — every 15 min during ferry service hours (08–10 UTC skipped: overnight sailing gap, lets the Neon compute suspend) |
 | Scope | Edmonds–Kingston only; the next `SAILINGS_PER_DIR = 2` upcoming sailings per direction; delay stamped only on the soonest |
 | Storage | Append-only, same file/DB seam as analytics: JSONL at `DATA_DIR/ferry/observations.jsonl`, or the `ferry_observation(ts, obs jsonb)` Postgres table. Retention `RETENTION_DAYS = 90`, pruned ~every 48 writes |
 | Consumer | `getEmpiricalBusyness()` aggregates snapshots into an `EmpiricalTable` keyed direction × season × weekday × hour; `scoreAt()` blends it into the heuristic, weighted by sample count (`EMP_MIN_SAMPLES = 3`, ramping to `EMP_MAX_WEIGHT = 0.75` at n = 40) so early estimates stay heuristic and grow data-driven. **Holidays skip the blend** (rare spikes would wash out against ordinary-day averages) |
-| Accuracy backtest | `/api/ferry/accuracy` runs `recordAccuracySnapshot()` (heuristic vs. observed) into a rolling history so the Chamber can validate the model before trusting it publicly. Scheduler: `.github/workflows/ferry-accuracy.yml` cron `0 8 * * *` UTC (~1 AM Pacific) |
+| Accuracy backtest | `/api/ferry/accuracy` runs `recordAccuracySnapshot()` (heuristic vs. observed) into a rolling history so the Chamber can validate the model before trusting it publicly. Scheduler: `ferry-accuracy` Render cron in `render.yaml`, `0 8 * * *` UTC (~1 AM Pacific) |
 | Auth | Both endpoints gate on `FERRY_OBSERVE_TOKEN` if set (`?token=` or `Authorization: Bearer`); otherwise open — writes are throttled and store only public ferry data |
 
 - **Capacity context** (in the model header, not user-facing): the route normally runs two

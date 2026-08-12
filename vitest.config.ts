@@ -14,6 +14,14 @@ export default defineConfig({
     // per-file with a `// @vitest-environment jsdom` pragma, so the default
     // node environment above is unchanged for every existing suite.
     include: ["tests/unit/**/*.test.{ts,tsx}", "src/**/*.test.ts"],
+    // createTestDb boots an in-memory Postgres and applies every checked-in
+    // migration (16 and counting) once per suite file. Under parallel load —
+    // full-suite runs on a laptop that is also running a dev server or a
+    // second agent session — the default 10s hook budget flakes on whichever
+    // files lose the scheduling lottery (observed: 4-50 files per run, all
+    // "Hook timed out", different files each time, every one green alone).
+    // 30s is headroom, not slowness: a quiet boot takes well under a second.
+    hookTimeout: 30_000,
   },
   resolve: {
     alias: {

@@ -13,6 +13,31 @@ import { getParkingZones } from "../stores/parking-store";
 import { getBayTransforms } from "../stores/bay-transform-store";
 import { getMediaItems } from "../stores/media-store";
 import { resolveParkingPhotos } from "./parking-photos";
+import { getDirectoryListings } from "../stores/directory-store";
+import { isActiveMemberStatus, listMemberMeta } from "../db/member-meta";
+import { normalizeName } from "../import/qwick";
+
+/** DirectoryListing.category → MARKER_CATEGORIES key. Coarse on purpose —
+ *  the fine-grained icons stay a hand-pin affordance; a listing-sourced pin
+ *  gets the honest generic for its bucket. */
+const DIRECTORY_MARKER_CATEGORY: Record<string, string> = {
+  eat: "food",
+  stay: "lodging",
+  shop: "shop",
+  services: "services",
+  activities: "star",
+  community: "info",
+  other: "info",
+};
+
+/** Popup teaser, code-point safe (same rule as the /directory card blurb). */
+function popupBlurb(description: string): string | undefined {
+  const text = description.trim();
+  if (!text) return undefined;
+  const points = [...text];
+  if (points.length <= 120) return text;
+  return `${points.slice(0, 119).join("").trimEnd()}…`;
+}
 
 export async function resolveMapView(viewId: string): Promise<ResolvedMapView | null> {
   const view = await getMapView(viewId);
@@ -56,6 +81,70 @@ export async function resolveMapView(viewId: string): Promise<ResolvedMapView | 
         ...(photos.length ? { photos } : {}),
       };
     });
+  }
+
+  // Directory-public slice, phase 3 — two jobs, one LIVE-only read:
+  //
+  //  (1) the `directory` source: pins from real listings that carry
+  //      coordinates (geocode pass / admin placement), filtered to the
+  //      view's directoryCategories when set. This is the seam map-views.ts
+  //      reserved — the layer that retires the hand-drawn shopping pins.
+  //  (2) profileLinks: for EVERY view, custom marker features whose
+  //      normalized title matches a live listing get that listing's
+  //      /directory/[id] path, so the existing hand pins become clickable
+  //      business profiles without waiting for (or duplicating) geocoding.
+  //
+  // The public getter's E08 gate does the draft filtering; member_meta is
+  // read server-side and only the member-or-not fact leaves.
+  {
+    const listings = await getDirectoryListings();
+    if (listings.length > 0) {
+      const byName = new Map<string, { id: string }[]>();
+      for (const l of listings) {
+        const key = normalizeName(l.name);
+        if (!key) continue;
+        const bucket = byName.get(key) ?? [];
+        bucket.push({ id: l.id });
+        byName.set(key, bucket);
+      }
+      const profileLinks: Record<string, string> = {};
+      for (const f of features) {
+        if (f.kind !== "marker") continue;
+        const matches = byName.get(normalizeName(f.title)) ?? [];
+        // Ambiguity = no link; a wrong profile is worse than none.
+        if (matches.length === 1) profileLinks[f.id] = `/directory/${matches[0].id}`;
+      }
+      if (Object.keys(profileLinks).length > 0) builtins.profileLinks = profileLinks;
+    }
+
+    if (view.sources.includes("directory")) {
+      const meta = await listMemberMeta("directory");
+      const memberById = new Map(
+        meta.map((m) => [m.subjectId, isActiveMemberStatus(m.memberStatus)]),
+      );
+      const wanted =
+        view.directoryCategories && view.directoryCategories.length > 0
+          ? new Set(view.directoryCategories)
+          : null;
+      builtins.directory = listings
+        .filter(
+          (l) =>
+            l.lat !== undefined &&
+            l.lng !== undefined &&
+            (!wanted || wanted.has(l.category)),
+        )
+        .map((l) => ({
+          id: l.id,
+          name: l.name,
+          lat: l.lat!,
+          lng: l.lng!,
+          category: DIRECTORY_MARKER_CATEGORY[l.category] ?? "info",
+          member: memberById.get(l.id) ?? false,
+          ...(popupBlurb(l.description) ? { blurb: popupBlurb(l.description) } : {}),
+          profilePath: `/directory/${l.id}`,
+          label: { text: l.name },
+        }));
+    }
   }
 
   if (view.sources.includes("streets")) {

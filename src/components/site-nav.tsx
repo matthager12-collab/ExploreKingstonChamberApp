@@ -29,6 +29,10 @@ const moreLinks = [
   { href: "/hunt", label: "Scavenger Hunt" },
   { href: "/give", label: "Give Back" },
   { href: "/about", label: "About" },
+  // Directory-public slice: the ranked public directory ALSO absorbs the
+  // claim-your-business browse (Mat, 2026-08-12) — /claim redirects here and
+  // claiming happens from each profile page.
+  { href: "/directory", label: "Directory" },
   { href: "/portal", label: "Chamber Portal" },
 ];
 

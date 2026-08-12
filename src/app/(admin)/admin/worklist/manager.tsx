@@ -132,10 +132,12 @@ const TYPE_LABELS: Record<WorklistType, string> = {
   report_inaccurate: "Reports",
   privacy_request: "Privacy",
   claim_request: "Claims",
+  claim_signup: "Claim signups",
 };
 
 const TYPE_ORDER: WorklistType[] = [
   "moderation",
+  "claim_signup",
   "claim_request",
   "report_inaccurate",
   "staleness",
@@ -403,6 +405,45 @@ function PayloadDetail({ item }: { item: WorklistItemView }) {
       </div>
     );
   }
+  if (item.type === "claim_signup") {
+    // E17 claim-signup slice: unlike claim_request, an ACCOUNT ALREADY
+    // EXISTS — the applicant proved their email with a one-time code (or a
+    // signed-in session) and is waiting for edit rights, nothing else.
+    // Approve grants access IMMEDIATELY; there is no invite to mint.
+    //
+    // First-writer-wins like claim_request: a count above 1 means ANOTHER
+    // verified person also asked — check /admin/accounts before approving.
+    const count = Number(p.count ?? 1);
+    return (
+      <div className="space-y-2">
+        <DetailRows
+          rows={[
+            { label: "Listing", value: plain(item.subjectLabel) },
+            { label: "Applicant", value: plain(p.applicantName) },
+            { label: "Applicant's email (verified)", value: plain(p.applicantEmail) },
+            {
+              label: "Verified by",
+              value: p.verifiedBy === "session" ? "existing signed-in account" : "emailed code",
+            },
+            {
+              label: "Requests",
+              value:
+                count > 1
+                  ? `${count} total — later requests add to this count only; the details above are the FIRST applicant's`
+                  : "1",
+            },
+          ]}
+        />
+        <p className="text-xs text-ink-soft">
+          The email is verified, but ANYONE who controls that mailbox could
+          have signed up — approve only if it plausibly belongs to this
+          business (their website, past correspondence, or a phone call to
+          the number on the listing). Approving grants edit access
+          immediately.
+        </p>
+      </div>
+    );
+  }
   // privacy_request
   return (
     <DetailRows
@@ -545,6 +586,46 @@ export function WorklistManager({
       } else {
         setMessage({ ok: true, text: op === "delete" ? "Data deleted." : "Done." });
         setNote("");
+      }
+      await refresh();
+      router.refresh();
+    } catch {
+      setMessage({ ok: false, text: "Could not reach the server — try again." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // E17 claim-signup decisions — posts to the dedicated approve route (not
+  // /api/admin/worklist), because approval GRANTS EDIT RIGHTS (linked-id
+  // grant + ownership stamp), which the generic resolve action must never do.
+  async function claimSignupDecide(
+    itemId: string,
+    decision: "approve" | "decline",
+    confirmText: string,
+  ) {
+    if (!window.confirm(confirmText)) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/admin/claims/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId, decision, note }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setMessage({ ok: false, text: data.error ?? "Action failed" });
+      } else {
+        setMessage({
+          ok: true,
+          text:
+            decision === "approve"
+              ? "Approved — the business can edit its listing now."
+              : "Declined.",
+        });
+        setNote("");
+        setOpenId(null);
       }
       await refresh();
       router.refresh();
@@ -840,6 +921,36 @@ export function WorklistManager({
                                 }
                               >
                                 Duplicate
+                              </button>
+                            </>
+                          )}
+                          {item.type === "claim_signup" && (
+                            <>
+                              <button
+                                className={`${actionBtn} bg-sound text-white hover:bg-sound-deep`}
+                                disabled={busy}
+                                onClick={() =>
+                                  void claimSignupDecide(
+                                    item.id,
+                                    "approve",
+                                    `Approve the claim on "${item.subjectLabel}"? The applicant gets edit access immediately.`,
+                                  )
+                                }
+                              >
+                                Approve claim
+                              </button>
+                              <button
+                                className={`${actionBtn} border border-coral-deep text-coral-deep hover:bg-coral-deep/10`}
+                                disabled={busy || !note.trim()}
+                                onClick={() =>
+                                  void claimSignupDecide(
+                                    item.id,
+                                    "decline",
+                                    `Decline the claim on "${item.subjectLabel}"? Their account stays, without edit access. Your note records why.`,
+                                  )
+                                }
+                              >
+                                Decline
                               </button>
                             </>
                           )}

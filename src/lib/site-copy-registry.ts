@@ -1530,7 +1530,9 @@ export const COPY_BLOCKS = [
   },
   // =============== END edmonds.* (Edmonds-side parking, /parking) ===============
 
-  // ===== claim.* (E17 claim-listing disclosure on the /eat and /stay cards) =====
+  // ===== claim.* (E17 claim disclosure on the /eat and /stay cards; since the
+  // claim-signup slice these keys serve the REQUEST-A-CALL fallback mode
+  // inside components/claim-signup.tsx) =====
   {
     key: "claim.disclosure.label",
     page: "Claim listing",
@@ -1608,6 +1610,244 @@ export const COPY_BLOCKS = [
     fallback: "Could not send your request — please try again.",
   },
   // =============== END claim.* (claim-listing disclosure) ===============
+  // =============== claimSignup.* (self-serve claim signup, E17) ===============
+  {
+    key: "claimSignup.form.intro",
+    page: "Claim signup",
+    label: "Form intro — what signing up does",
+    multiline: true,
+    fallback:
+      "Create a free account to claim this listing. If your email matches what the Chamber has on file for this business, you're approved instantly — otherwise the Chamber takes a quick look first.",
+  },
+  {
+    key: "claimSignup.form.email.label",
+    page: "Claim signup",
+    label: "Email field label",
+    fallback: "Business email",
+  },
+  {
+    key: "claimSignup.form.email.hint",
+    page: "Claim signup",
+    label: "Email field hint",
+    fallback: "Use the address the Chamber has on file for this business — that's what approves instantly.",
+  },
+  {
+    key: "claimSignup.form.password.label",
+    page: "Claim signup",
+    label: "Password field label",
+    fallback: "Choose a password",
+  },
+  {
+    key: "claimSignup.form.password.hint",
+    page: "Claim signup",
+    label: "Password field hint",
+    fallback: "8 or more characters. You'll sign in with your email and this password.",
+  },
+  {
+    key: "claimSignup.form.submit",
+    page: "Claim signup",
+    label: "Submit button (sends the code)",
+    fallback: "Create account & claim",
+  },
+  {
+    key: "claimSignup.form.sending",
+    page: "Claim signup",
+    label: "Submit button while the code email is in flight",
+    fallback: "Sending code…",
+  },
+  {
+    key: "claimSignup.code.intro",
+    page: "Claim signup",
+    label: "Code step intro",
+    multiline: true,
+    fallback:
+      "We've emailed you a 6-digit code — enter it below within 15 minutes to finish. Nothing is created until the code checks out.",
+  },
+  {
+    key: "claimSignup.code.devHint",
+    page: "Claim signup",
+    label: "Code step hint when email is unconfigured (dev only)",
+    fallback: "Email isn't configured in this environment — the code was printed to the server log.",
+  },
+  {
+    key: "claimSignup.code.label",
+    page: "Claim signup",
+    label: "Code field label",
+    fallback: "Verification code",
+  },
+  {
+    key: "claimSignup.code.submit",
+    page: "Claim signup",
+    label: "Code submit button",
+    fallback: "Verify & finish",
+  },
+  {
+    key: "claimSignup.code.verifying",
+    page: "Claim signup",
+    label: "Code submit button while verifying",
+    fallback: "Verifying…",
+  },
+  {
+    key: "claimSignup.success.approved",
+    page: "Claim signup",
+    label: "Success — roster match, claim landed",
+    multiline: true,
+    fallback:
+      "You're in! Your email matched the Chamber's records, so this listing is yours to edit right now. You're signed in.",
+  },
+  {
+    key: "claimSignup.success.pending",
+    page: "Claim signup",
+    label: "Success — account created, claim with the Chamber",
+    multiline: true,
+    fallback:
+      "Account created and you're signed in. Your claim is with the Chamber for a quick review — check your portal anytime for its status.",
+  },
+  {
+    key: "claimSignup.success.portalCta",
+    page: "Claim signup",
+    label: "Success CTA — open the portal",
+    fallback: "Open your portal",
+  },
+  {
+    key: "claimSignup.fallback.toggle",
+    page: "Claim signup",
+    label: "Switch to the phone-request path",
+    fallback: "No access to the business email? Ask the Chamber to call you instead.",
+  },
+  {
+    key: "claimSignup.fallback.back",
+    page: "Claim signup",
+    label: "Switch back to the signup path",
+    fallback: "Back to instant claim",
+  },
+  {
+    key: "claimSignup.signedIn.intro",
+    page: "Claim signup",
+    label: "Signed-in variant intro",
+    multiline: true,
+    fallback:
+      "You're signed in. Request this listing and it joins your organization — instantly if your account email is on the Chamber's records for it, otherwise after a quick review.",
+  },
+  {
+    key: "claimSignup.signedIn.submit",
+    page: "Claim signup",
+    label: "Signed-in request button",
+    fallback: "Request this listing",
+  },
+  {
+    key: "claimSignup.signedIn.approved",
+    page: "Claim signup",
+    label: "Signed-in success — claim landed",
+    fallback: "Done — this listing is now yours to edit.",
+  },
+  {
+    key: "claimSignup.signedIn.pending",
+    page: "Claim signup",
+    label: "Signed-in success — queued for review",
+    fallback: "Request sent — the Chamber will take a look and you'll see it in your portal once approved.",
+  },
+  // =============== END claimSignup.* ===============
+  // =============== claimPage.* (the /claim business directory) ===============
+  {
+    key: "claimPage.detail.intro",
+    page: "Claim your business",
+    label: "Detail page intro above the claim form",
+    fallback: "Is this your business? Claim it below — it takes about a minute.",
+  },
+  {
+    key: "claimPage.detail.claimed",
+    page: "Claim your business",
+    label: "Detail page notice when the listing is already claimed",
+    multiline: true,
+    fallback:
+      "This listing has already been claimed. If that seems wrong — it's your business and you didn't claim it — contact the Chamber and they'll sort it out.",
+  },
+  // =============== END claimPage.* ===============
+  // =============== directoryPage.* (the public /directory) ===============
+  {
+    key: "directoryPage.header.eyebrow",
+    page: "Business directory",
+    label: "Header eyebrow",
+    fallback: "Kingston businesses",
+  },
+  {
+    key: "directoryPage.header.title",
+    page: "Business directory",
+    label: "Page title",
+    fallback: "Business directory",
+  },
+  {
+    key: "directoryPage.header.intro",
+    page: "Business directory",
+    label: "Page intro",
+    multiline: true,
+    fallback:
+      "Local businesses across Kingston, from the Greater Kingston Chamber of Commerce.",
+  },
+  {
+    key: "directoryPage.search.label",
+    page: "Business directory",
+    label: "Search field label (screen readers)",
+    fallback: "Search businesses",
+  },
+  {
+    key: "directoryPage.search.placeholder",
+    page: "Business directory",
+    label: "Search field placeholder",
+    fallback: "Search by name…",
+  },
+  {
+    key: "directoryPage.filter.all",
+    page: "Business directory",
+    label: "Category filter — the all-categories chip",
+    fallback: "All",
+  },
+  {
+    key: "directoryPage.memberBadge",
+    page: "Business directory",
+    label: "Chamber-member badge",
+    fallback: "Chamber member",
+  },
+  {
+    key: "directoryPage.empty",
+    page: "Business directory",
+    label: "No search results",
+    fallback: "No businesses match your search.",
+  },
+  {
+    key: "directoryPage.profile.directions",
+    page: "Business directory",
+    label: "Profile — directions link",
+    fallback: "Directions",
+  },
+  {
+    key: "directoryPage.profile.website",
+    page: "Business directory",
+    label: "Profile — website link",
+    fallback: "Visit website",
+  },
+  {
+    key: "directoryPage.profile.back",
+    page: "Business directory",
+    label: "Profile — back link to the index",
+    fallback: "← All businesses",
+  },
+  {
+    key: "directoryPage.profile.claimLink",
+    page: "Business directory",
+    label: "Profile — claim call-to-action on unclaimed listings",
+    fallback: "Own this business? Claim it to keep this page up to date.",
+  },
+  {
+    key: "directoryPage.claimNote",
+    page: "Business directory",
+    label: "Footer note — how owners claim, and what to do if not listed",
+    multiline: true,
+    fallback:
+      "Own one of these businesses? Open its page and claim it — it takes about a minute. Not listed? Contact the Chamber and we'll add you.",
+  },
+  // =============== END directoryPage.* ===============
 ] as const satisfies readonly CopyBlock[];
 
 /** Union of every registered copy key — a typo at a call site is a tsc error. */

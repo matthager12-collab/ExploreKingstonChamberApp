@@ -183,6 +183,7 @@ describe("validateWorklistPayload + vocabularies", () => {
     expect(WORKLIST_RESOLUTIONS.staleness).toEqual(["verified", "archived"]);
     expect(WORKLIST_RESOLUTIONS.report_inaccurate).toEqual(["fixed", "dismissed"]);
     expect(WORKLIST_RESOLUTIONS.claim_request).toEqual(["invited", "rejected", "duplicate"]);
+    expect(WORKLIST_RESOLUTIONS.claim_signup).toEqual(["approved", "declined"]);
   });
 
   it("claim_request payload (E17): name + one contact, message capped, count ≥ 1 — and no location fields ever", () => {
@@ -214,7 +215,7 @@ describe("validateWorklistPayload + vocabularies", () => {
     ]);
   });
 
-  it("type and state vocabularies are the six/four the DB CHECKs mirror", () => {
+  it("type and state vocabularies are the seven/four the DB CHECKs mirror", () => {
     expect([...WORKLIST_TYPES]).toEqual([
       "moderation",
       "sync_conflict",
@@ -223,6 +224,8 @@ describe("validateWorklistPayload + vocabularies", () => {
       "privacy_request",
       // E17: claim_request joined in migration 0008 (CHECK extended there).
       "claim_request",
+      // E17 claim-signup slice: claim_signup joined in migration 0014.
+      "claim_signup",
     ]);
     expect([...WORKLIST_STATES]).toEqual(["open", "in_progress", "resolved", "dismissed"]);
   });

@@ -2,12 +2,13 @@
 
 // Live departure board for both Kingston ferries. Receives server-fetched
 // data as props, then polls /api/ferry/status every 60s (paused while the
-// tab is hidden). Countdown labels tick every 20s.
+// tab is hidden) and on every wake signal. Countdown labels tick every 20s.
 
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { Sailing, TerminalStatus } from "@/lib/types";
 import type { WaterSide } from "@/lib/side";
+import { isStaleDay, useWakeRefresh } from "@/lib/ferry-refresh";
 import { formatPacificDate, formatPacificTime } from "@/lib/time";
 import { Badge, Card, ExternalLink } from "@/components/ui";
 
@@ -109,12 +110,15 @@ function DirectionColumn({
   sailings,
   now,
   emptyNote,
+  staleDay,
   footer,
 }: {
   label: string;
   sailings: Sailing[];
   now: number;
   emptyNote: string;
+  /** Payload is from a Kingston day that has ended — see isStaleDay(). */
+  staleDay: boolean;
   footer?: ReactNode;
 }) {
   const next = sailings.slice(0, 3);
@@ -122,7 +126,11 @@ function DirectionColumn({
     <div>
       <p className="text-xs font-semibold tracking-widest text-ink-soft uppercase">{label}</p>
       {next.length === 0 ? (
-        <p className="mt-2 text-sm text-ink-soft">{emptyNote}</p>
+        // Short here on purpose: when the day has rolled over EVERY column is
+        // empty, so the explanation belongs in the one banner above rather than
+        // repeated four times. This line only has to stop the column asserting
+        // something it cannot know.
+        <p className="mt-2 text-sm text-ink-soft">{staleDay ? "Times out of date." : emptyNote}</p>
       ) : (
         <ol className="mt-2 space-y-1.5">
           {next.map((s, i) => (
@@ -149,12 +157,22 @@ function DirectionColumn({
   );
 }
 
-function RemainingList({ label, sailings }: { label: string; sailings: Sailing[] }) {
+function RemainingList({
+  label,
+  sailings,
+  staleDay,
+}: {
+  label: string;
+  sailings: Sailing[];
+  staleDay: boolean;
+}) {
   return (
     <div>
       <p className="text-xs font-semibold tracking-widest text-ink-soft uppercase">{label}</p>
       {sailings.length === 0 ? (
-        <p className="mt-1 text-sm text-ink-soft">Done for today.</p>
+        <p className="mt-1 text-sm text-ink-soft">
+          {staleDay ? "Times out of date." : "Done for today."}
+        </p>
       ) : (
         <ul className="mt-1 space-y-0.5 text-sm text-ink">
           {sailings.map((s) => (
@@ -192,6 +210,13 @@ export function FerryBoard({
   // serverNow because at t=0 the times on screen came from that server render.
   const lastGoodRef = useRef<string>(serverNow);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // The wake signals below live outside this component's polling effect, but
+  // they have to call the SAME refresh() — the one holding the `cancelled`
+  // flag and the lastGoodRef bookkeeping. Handing it out through a ref keeps
+  // refresh() defined inside the effect (see the empty-dep-array reasoning on
+  // lastGoodRef) instead of hoisting it and its four closures out.
+  const refreshRef = useRef<() => void>(() => {});
+  useWakeRefresh(() => refreshRef.current());
 
   useEffect(() => {
     let cancelled = false;
@@ -252,6 +277,7 @@ export function FerryBoard({
       }
     }
 
+    refreshRef.current = refresh;
     setNow(Date.now());
     startPolling();
     const tick = setInterval(() => setNow(Date.now()), TICK_MS);
@@ -273,9 +299,31 @@ export function FerryBoard({
   const fastToSeattle = upcoming(data.fastFerry.sailings, "from-kingston", now);
   const fastToKingston = upcoming(data.fastFerry.sailings, "to-kingston", now);
   const fastRunsToday = data.fastFerry.sailings.length > 0;
+  // Dated from the CAR ferry alone: it runs every day, so an empty list there
+  // is always a data problem, never a fact about the timetable. The fast ferry
+  // has no Sunday service and no winter Saturdays, so an empty fastFerry array
+  // is routinely the truth and would make a useless clock.
+  const staleDay = isStaleDay(data.carFerry.sailings, now);
 
   return (
     <div className="space-y-5">
+      {/* Day rollover. A DIFFERENT claim from the E13 staleness banner below and
+          deliberately louder: that one says "this copy might be a few minutes
+          old", this one says "every number under here is about a day that has
+          already ended". It leads even that banner because it invalidates more.
+          Both can show at once — an overnight tab that also lost its network
+          is exactly how this gets reported. */}
+      {staleDay && (
+        <p role="status" className="rounded-xl bg-coral/10 px-4 py-3 text-sm text-ink">
+          <span className="font-semibold">These times are from an earlier day.</span> Today&rsquo;s
+          sailings haven&rsquo;t loaded yet — reload the page, or check{" "}
+          <ExternalLink href="https://wsdot.wa.gov/travel/washington-state-ferries">
+            wsdot.wa.gov/ferries
+          </ExternalLink>
+          .
+        </p>
+      )}
+
       {/* E13 transport freshness — "how old is this copy of the board?", which is
           a different question from the per-card "Schedule times — not live"
           notes ("is the WSDOT feed live?"). Both can legitimately show at once
@@ -330,6 +378,7 @@ export function FerryBoard({
                 sailings={carToEdmonds}
                 now={now}
                 emptyNote="Done for today — first boat tomorrow morning."
+                staleDay={staleDay}
                 footer={
                   side === "kingston" ? (
                     <TerminalNote status={data.terminals.kingston} />
@@ -344,6 +393,7 @@ export function FerryBoard({
                 sailings={carToKingston}
                 now={now}
                 emptyNote="Done for today — first boat tomorrow morning."
+                staleDay={staleDay}
                 footer={
                   side === "edmonds" ? (
                     <TerminalNote status={data.terminals.edmonds} />
@@ -381,12 +431,14 @@ export function FerryBoard({
               sailings={fastToSeattle}
               now={now}
               emptyNote="Done for today."
+              staleDay={staleDay}
             />
             <DirectionColumn
               label="Seattle (Pier 50) to Kingston"
               sailings={fastToKingston}
               now={now}
               emptyNote="Done for today."
+              staleDay={staleDay}
             />
           </div>
         ) : (
@@ -411,10 +463,10 @@ export function FerryBoard({
           All remaining sailings today
         </summary>
         <div className="mt-4 grid gap-6 sm:grid-cols-2">
-          <RemainingList label="Car ferry: Kingston to Edmonds" sailings={carToEdmonds} />
-          <RemainingList label="Car ferry: Edmonds to Kingston" sailings={carToKingston} />
-          <RemainingList label="Fast ferry: Kingston to Seattle" sailings={fastToSeattle} />
-          <RemainingList label="Fast ferry: Seattle to Kingston" sailings={fastToKingston} />
+          <RemainingList label="Car ferry: Kingston to Edmonds" sailings={carToEdmonds} staleDay={staleDay} />
+          <RemainingList label="Car ferry: Edmonds to Kingston" sailings={carToKingston} staleDay={staleDay} />
+          <RemainingList label="Fast ferry: Kingston to Seattle" sailings={fastToSeattle} staleDay={staleDay} />
+          <RemainingList label="Fast ferry: Seattle to Kingston" sailings={fastToKingston} staleDay={staleDay} />
         </div>
       </details>
 

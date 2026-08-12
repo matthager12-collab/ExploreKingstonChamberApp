@@ -17,7 +17,7 @@ import { NearMe } from "@/components/near-me";
 import { AccessFactsBlock } from "@/components/access-facts";
 import { readAccessFacts } from "@/lib/schemas/access";
 import { ReportInaccurate } from "@/components/report-inaccurate";
-import { ClaimListing } from "@/components/claim-listing";
+import { ClaimSignup } from "@/components/claim-signup";
 import { LocalBusinessJsonLd } from "@/components/json-ld";
 import { FeatureMap } from "@/components/feature-map";
 import { GetListedCallout } from "@/components/get-listed";
@@ -150,7 +150,7 @@ function RestaurantCard({ r, photos }: { r: Restaurant; photos: Record<string, M
       )}
       <ReportInaccurate store="restaurants" id={r.id} subject={r.name} />
       {/* E17 (M-10-03): the claim intake — a request grants nothing. */}
-      <ClaimListing store="restaurants" id={r.id} subject={r.name} />
+      <ClaimSignup store="restaurants" id={r.id} subject={r.name} />
     </Card>
   );
 }

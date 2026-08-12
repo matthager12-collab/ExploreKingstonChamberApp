@@ -28,11 +28,10 @@ export const PUBLIC_PATHS_BY_STORE: Record<string, readonly string[]> = {
   // /ferry embeds the terminal cams alongside the sailing board.
   webcams: ["/webcams", "/ferry"],
   itineraries: ["/itineraries"],
-  // E17 directory records have no public surface yet (deliberate non-goal),
-  // so an approval touches nothing a visitor can see. Present and empty on
-  // purpose: the completeness test treats a missing key as an error, and
-  // whoever gives the directory a public page will find this line.
-  directory: [],
+  // Directory-public slice (2026-08-12): /directory is the ranked public
+  // index — a publish, approval, or claim shows there within a click, not a
+  // timer. The /directory/[id] profiles are force-dynamic and need no entry.
+  directory: ["/directory"],
 };
 
 /** Store reads that happen inside a COMPONENT rather than a page file, so the

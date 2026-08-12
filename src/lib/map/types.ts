@@ -21,7 +21,8 @@ export type BuiltInSource =
   | "restaurants"
   | "parking-zones"
   | "streets"
-  | "port-stalls";
+  | "port-stalls"
+  | "directory";
 
 export interface MapView {
   id: string; // slug, e.g. "food-drink"
@@ -31,6 +32,10 @@ export interface MapView {
   zoom: number;
   /** Built-in layers to render alongside this view's custom features. */
   sources: BuiltInSource[];
+  /** For the `directory` source only: which DirectoryListing categories this
+   *  view pulls (`shop`, `services`, `eat`, …). Absent = every category —
+   *  right for the all-businesses view; a curated view narrows it. */
+  directoryCategories?: string[];
   /** false hides the view from the public /map switcher (admin-only draft). */
   published: boolean;
 }
@@ -319,6 +324,30 @@ export interface ResolvedMapView {
        *  has none — the common case for seed zones. */
       photos?: ParkingPhoto[];
     }[];
+    /** Live directory listings with coordinates (directory-public slice,
+     *  phase 3): the pins that finally replace the hand-drawn shopping OSM
+     *  pull. `member` mirrors MapFeature.member (active roster member,
+     *  derived server-side from member_meta — never hand-flagged);
+     *  `profilePath` is the internal /directory/[id] page the popup links to.
+     *  Dues never ride here — membership is the only fact that leaves. */
+    directory?: {
+      id: string;
+      name: string;
+      lat: number;
+      lng: number;
+      /** MARKER_CATEGORIES key, mapped server-side from the listing category. */
+      category: string;
+      member: boolean;
+      blurb?: string;
+      profilePath: string;
+      label?: { text?: string; priority?: number };
+    }[];
+    /** Derived at resolve time, never stored: internal /directory/[id] paths
+     *  for CUSTOM features whose title matches a live directory listing —
+     *  what makes the existing hand pins "clickable business profiles"
+     *  before (and after) their geocoded replacements exist. Keyed by
+     *  feature id. */
+    profileLinks?: Record<string, string>;
     streets?: boolean; // client fetches /geo/street-parking.json itself when true
     /**
      * Port-lot bay geometry. Flagged, not inlined — the client fetches the

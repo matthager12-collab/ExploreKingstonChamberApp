@@ -630,11 +630,9 @@ for every live record past its window — restaurants 90 days,
 lodging/webcams/charities 180, itineraries 365 (a record-level
 `verify_interval_days` overrides; events and volunteer shifts expire on their
 own and are exempt). The sweep is idempotent — run it as often as you like.
-Schedule it either as a **Render Cron Job** (dashboard → New → Cron Job,
-`curl -fsS -X POST -H "Authorization: Bearer $WORKLIST_SWEEP_TOKEN"
-https://<production-host>/api/admin/worklist/sweep`, weekly is plenty) or as
-a GitHub Actions cron following the ferry-observe pattern
-(`.github/workflows/ferry-observe.yml`). The token is env-only
+It is scheduled as the `worklist-sweep` **Render cron in `render.yaml`**
+(Mondays 14:00 UTC, same curl-image pattern as the ferry crons — E15 slice 4
+moved every app cron off GitHub Actions). The token is env-only
 (`WORKLIST_SWEEP_TOKEN`, §1 and §12); with it unset the sweep still works
 from any signed-in admin session — the button-free fallback is hitting the
 URL while signed in. Note: **seed records** (content that ships in git and
@@ -1098,7 +1096,7 @@ not run.**
 | Job | Where | Schedule (UTC) | Calls | Token |
 |---|---|---|---|---|
 | `events-ingest` | Render cron | `23 * * * *` hourly | `POST /api/events/ingest` | `EVENTS_INGEST_TOKEN` |
-| `ferry-observe` | Render cron | `*/15 * * * *` | `POST /api/ferry/observe` | `FERRY_OBSERVE_TOKEN` |
+| `ferry-observe` | Render cron | `*/15 0-7,11-23 * * *` (every 15 min in service hours; 08–10 UTC skipped — overnight ferry gap, lets Neon suspend) | `POST /api/ferry/observe` | `FERRY_OBSERVE_TOKEN` |
 | `ferry-accuracy` | Render cron | `0 8 * * *` (~1 AM Pacific) | `POST /api/ferry/accuracy` | `FERRY_OBSERVE_TOKEN` |
 | `worklist-sweep` | Render cron | `0 14 * * 1` Mondays (~7 AM Pacific) | `POST /api/admin/worklist/sweep` | `WORKLIST_SWEEP_TOKEN` |
 | `backup-offsite` | **GitHub Actions** | `23 9 * * *` daily | `GET /api/admin/backup` | `BACKUP_TOKEN` |
@@ -1522,9 +1520,9 @@ plan) — no new spend.
 | Secret | Cadence | Procedure |
 |---|---|---|
 | `BACKUP_TOKEN` | Quarterly (align with the §6 quarterly checklist) | `openssl rand -hex 32` → update the Render dashboard env var on **both** services → update the GitHub Actions repo secret (`gh secret set BACKUP_TOKEN`, value piped via stdin, never a CLI arg) → no redeploy required (runtime var) |
-| `FERRY_OBSERVE_TOKEN` | Quarterly | Same procedure as `BACKUP_TOKEN` above — one value shared by both ferry cron workflows |
-| `WORKLIST_SWEEP_TOKEN` | Quarterly | Same procedure — update the Render env var on **both** services and wherever the sweep cron is registered (Render Cron Job or GH Actions secret). Fail-closed: while rotated-but-unset the sweep just needs an admin session. |
-| `EVENTS_INGEST_TOKEN` | Quarterly | Same procedure — update the Render env var on the **web service AND the `events-ingest` cron service** (same value in both). Fail-closed: while rotated-but-unset, ingest still runs from "Sync now" on `/admin/events-sources`. |
+| `FERRY_OBSERVE_TOKEN` | Quarterly | `openssl rand -hex 32` → update the Render dashboard env var on **both web services only**. The two ferry Render crons read it via `fromService` at the next Blueprint sync (rides the next deploy, or trigger a manual sync) — never retype it into a cron's env; an unfilled cron copy is what 401'd every cron until 2026-08-08. The GH Actions ferry workflows are gone. |
+| `WORKLIST_SWEEP_TOKEN` | Quarterly | Same — update **both web services only**; the `worklist-sweep` cron reads it via `fromService` at the next Blueprint sync. Fail-closed: while rotated-but-unset the sweep just needs an admin session. |
+| `EVENTS_INGEST_TOKEN` | Quarterly | Same — update the **web service only**; the `events-ingest` cron reads it via `fromService` at the next Blueprint sync. Fail-closed: while rotated-but-unset, ingest still runs from "Sync now" on `/admin/events-sources`. |
 | age keypair (`BACKUP_AGE_RECIPIENT`) | Annually, or immediately on any suspicion of exposure | `age-keygen` → new **public** key becomes the repo variable `BACKUP_AGE_RECIPIENT` (`gh variable set`) → new **private** key goes to 1Password ("ExploreKingston backup age key") → **keep every old private key** — backups encrypted under a retired key can only be decrypted with it, and rotation is forward-only (old backups are never re-encrypted) |
 | `AUTH_SECRET` | Never casually — rotating logs **every** signed-in user out (see §10 "Portal login loops"). Only rotate on a real compromise. | Render dashboard env var → redeploy. Since E06 there IS per-user revocation (disable / reset / role change bump `session_version`), so rotating this is only for a compromise of the SECRET itself — to remove one person, use §5 "Off-board a volunteer". |
 

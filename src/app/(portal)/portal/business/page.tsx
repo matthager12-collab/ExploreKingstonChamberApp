@@ -69,6 +69,16 @@ export default async function BusinessPortalPage() {
       : allLodging.filter((l) => user.editableIds.includes(l.id));
   const directory = allDirectory.filter((d) => user.editableIds.includes(d.id));
 
+  // E17 claim-signup slice: this account's claims still with the Chamber.
+  // Filtered in code (payload.userId lives in jsonb) — the open claim_signup
+  // queue is small by nature. Admins skip it: their queue is /admin/worklist.
+  const pendingClaims =
+    user.role === "admin"
+      ? []
+      : (
+          await listWorklistItems({ type: "claim_signup", state: ["open", "in_progress"] })
+        ).filter((item) => (item.payload as { userId?: unknown }).userId === user.id);
+
   // Quarterly series checks assigned to THIS account. Scoped by assignee, not
   // by listing: after an escalation the task belongs to the Chamber, and it
   // should leave this page the moment that happens.
@@ -110,13 +120,27 @@ export default async function BusinessPortalPage() {
       intro="Update once, and it's everywhere — your hours, menus, and events flow straight to the public pages, the open-now badge, and the town calendar."
       width="wide"
     >
+      {/* Merge note: the pending-claim callout landed on main while the portal
+          was moving onto the shell. Both survive. The callout keeps its copy and
+          its position ABOVE the listings — someone waiting on a claim needs to
+          see that first — and only loses its <Section> wrapper, because
+          PortalPage already owns the column and the gap. */}
+      {pendingClaims.length > 0 && (
+        <Callout title="Your claim is with the Chamber">
+          {pendingClaims.length === 1
+            ? `“${pendingClaims[0].subjectLabel}” is waiting for a quick review — once the Chamber approves it, the listing appears right here.`
+            : `${pendingClaims.length} of your claims are waiting for a quick review — approved listings appear right here.`}
+        </Callout>
+      )}
       {seriesChecks.length > 0 && <SeriesChecks checks={seriesChecks} />}
       <div>
         {restaurants.length === 0 && lodging.length === 0 && directory.length === 0 ? (
-          <Callout title="No listings linked to this account yet" tone="coral">
-            Your account isn&apos;t connected to a listing. Email the Chamber and
-            they&apos;ll link your business in a minute.
-          </Callout>
+          pendingClaims.length > 0 ? null : (
+            <Callout title="No listings linked to this account yet" tone="coral">
+              Your account isn&apos;t connected to a listing. Email the Chamber and
+              they&apos;ll link your business in a minute.
+            </Callout>
+          )
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
             {restaurants.map((r) => (

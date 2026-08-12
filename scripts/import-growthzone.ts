@@ -10,6 +10,19 @@
 //                                [--map field="Header Name"]...
 //                                [--contacts-out contacts.csv]
 //                                [--report-out report.json]
+//                                [--claim-contacts] [--member-meta]
+//
+// --claim-contacts (with --apply) additionally loads (listing, email) pairs
+// into the claim_contact table so the self-serve claim flow can auto-approve
+// roster matches (E17 claim-signup slice — a deliberate, Mat-approved
+// exception to the PII-stays-in-the-CSV rule below; emails only, never
+// reps).
+//
+// --member-meta (with --apply) additionally loads status/level/dues per
+// listing into the member_meta table that ranks the public directory
+// (directory-public slice — the second Mat-approved exception, 2026-08-12;
+// see src/lib/db/member-schema.ts for containment rules). Listings whose
+// roster row has VANISHED are marked 'dropped'.
 //
 // All semantics live in src/lib/import/growthzone.ts (shared with the vitest
 // suite); this wrapper owns argv, the interactive host confirmation, and
@@ -31,8 +44,12 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline/promises";
 
+import { upsertClaimContacts } from "../src/lib/db/claim-store";
+import { upsertMemberMeta } from "../src/lib/db/member-meta";
 import {
   applyGrowthZonePlan,
+  buildClaimContactRows,
+  buildMemberMetaRows,
   buildContactsCsv,
   DEFAULT_INCLUDE_STATUSES,
   GROWTHZONE_PRINCIPAL,
@@ -248,6 +265,42 @@ async function main(): Promise<number> {
 
   const { runId } = await applyGrowthZonePlan(plan);
   console.log(`applied — import_run ${runId}.`);
+
+  // E17 claim-signup slice, opt-in: load (listing, email) pairs so the
+  // self-serve claim flow can auto-approve roster matches. Idempotent upsert;
+  // levels/reps still land only in the --contacts-out CSV.
+  if (flag("--claim-contacts")) {
+    const rows = buildClaimContactRows(plan, roster);
+    const inserted = await upsertClaimContacts(
+      rows.map((r) => ({
+        ...r,
+        source: GROWTHZONE_PRINCIPAL,
+        createdBy: GROWTHZONE_PRINCIPAL,
+      })),
+    );
+    console.log(
+      `claim contacts: ${rows.length} (listing, email) pairs in the roster, ${inserted} new rows written.`,
+    );
+  }
+
+  // Directory-public slice: status/level/dues per listing, ranking input for
+  // the public directory. Newest import wins (the roster is this table's
+  // source of truth); vanished roster rows mark their listings 'dropped'.
+  if (flag("--member-meta")) {
+    const rows = buildMemberMetaRows(plan, roster);
+    const dropped = rows.filter((r) => r.memberStatus === "dropped").length;
+    const written = await upsertMemberMeta(
+      rows.map((r) => ({
+        ...r,
+        source: GROWTHZONE_PRINCIPAL,
+        createdBy: GROWTHZONE_PRINCIPAL,
+      })),
+    );
+    const withDues = rows.filter((r) => r.duesAmount !== null).length;
+    console.log(
+      `member meta: ${written} rows written (${dropped} marked dropped, ${withDues} with a dues amount).`,
+    );
+  }
   return quarantines ? 2 : 0;
 }
 
