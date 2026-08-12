@@ -657,7 +657,13 @@ export function buildMemberMetaRows(plan: QwickPlan, roster: GzRoster): MemberMe
   for (const u of plan.updated) push(u.store, u.id, u.externalId);
   for (const m of plan.matched) push(m.store, m.id, m.externalId);
   for (const un of plan.unchanged) push(un.store, un.id, un.externalId);
+  // A listing counts as dropped only when NO alias of it survived into a
+  // live bucket — two historical aliases can put one listing in both a
+  // bucket and deletedUpstream, and the live signal wins.
+  const seen = new Set(out.map((r) => `${r.subjectStore} ${r.subjectId}`));
   for (const d of plan.deletedUpstream) {
+    if (seen.has(`${d.store} ${d.id}`)) continue;
+    seen.add(`${d.store} ${d.id}`);
     out.push({
       subjectStore: d.store,
       subjectId: d.id,

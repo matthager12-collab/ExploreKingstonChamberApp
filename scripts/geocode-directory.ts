@@ -230,18 +230,36 @@ async function main(): Promise<number> {
     }
   }
 
-  const byId = new Map(listings.map((l) => [l.id, l]));
+  // RE-READ before writing: the Nominatim loop above is throttled and can
+  // run for minutes on a real backlog, and saveDirectoryListing is a full-
+  // document replace — writing the snapshot captured before the loop would
+  // silently revert any edit an admin landed meanwhile (adversarial review,
+  // 2026-08-12). The window shrinks from minutes to the write pass itself;
+  // listings that gained coordinates meanwhile are skipped, not clobbered.
+  const fresh = new Map((await getDirectoryListingsAdmin()).map((l) => [l.id, l]));
+  let written = 0;
+  let skippedStale = 0;
   for (const p of placements) {
-    const current = byId.get(p.id);
-    if (!current) continue;
+    const current = fresh.get(p.id);
+    if (!current) {
+      skippedStale += 1;
+      continue;
+    }
+    if (current.lat !== undefined && current.lng !== undefined) {
+      skippedStale += 1; // someone placed it while we were geocoding — theirs wins
+      continue;
+    }
     const { status, ...doc } = current;
     // Preserve status: placing a pin must never publish a draft.
     await saveDirectoryListing(
       { ...(doc as DirectoryListing), lat: p.lat, lng: p.lng },
       { actor: ACTOR, source: "admin", status },
     );
+    written += 1;
   }
-  console.log(`applied — ${placements.length} listings placed.`);
+  console.log(
+    `applied — ${written} listings placed${skippedStale ? ` (${skippedStale} skipped: changed or placed during the run)` : ""}.`,
+  );
   return unplaced.length ? 2 : 0;
 }
 

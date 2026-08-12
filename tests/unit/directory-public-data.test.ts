@@ -88,12 +88,29 @@ describe("buildMemberMetaRows", () => {
     const gone = rows.find((r) => r.subjectId === "gone-books");
     expect(gone).toMatchObject({ memberStatus: "dropped", duesAmount: null });
   });
+
+  it("a live bucket beats deletedUpstream when two aliases resolve one listing", () => {
+    // Two historical aliases can put the SAME listing in a bucket AND in
+    // deletedUpstream; the live signal must win and no duplicate row emitted.
+    const liveId = plan.created[0].record.id;
+    const overlapping: QwickPlan = {
+      ...plan,
+      deletedUpstream: [{ store: "directory", id: liveId }] as QwickPlan["deletedUpstream"],
+    };
+    const rows = buildMemberMetaRows(overlapping, roster);
+    const mine = rows.filter((r) => r.subjectId === liveId);
+    expect(mine).toHaveLength(1);
+    expect(mine[0].memberStatus).not.toBe("dropped");
+  });
 });
 
 describe("isActiveMemberStatus", () => {
-  it("prefix-matches active, refuses everything else", () => {
+  it("matches paying active members only — courtesy is a per-listing decision", () => {
     expect(isActiveMemberStatus("active")).toBe(true);
-    expect(isActiveMemberStatus("Active - Courtesy")).toBe(true);
+    expect(isActiveMemberStatus("Active")).toBe(true);
+    // 'Active - Courtesy' must NOT auto-publish (docs/DIRECTORY-PUBLIC.md
+    // decision 2; adversarial-review finding 2026-08-12).
+    expect(isActiveMemberStatus("Active - Courtesy")).toBe(false);
     expect(isActiveMemberStatus("courtesy")).toBe(false);
     expect(isActiveMemberStatus("dropped")).toBe(false);
     expect(isActiveMemberStatus(null)).toBe(false);
@@ -159,6 +176,34 @@ describe("member_meta store + directory moderation loop", () => {
     expect(stored.memberStatus).toBe("dropped");
     expect(stored.duesAmount).toBeNull();
     expect(await listMemberMeta("directory")).toHaveLength(1);
+  });
+
+  it("dedupes duplicate subjects in one batch — live beats dropped, no PG error", async () => {
+    // Postgres refuses ON CONFLICT DO UPDATE hitting one row twice in a
+    // statement; duplicate subjects are legitimate importer output.
+    const written = await upsertMemberMeta([
+      {
+        subjectStore: "directory",
+        subjectId: "twice-aliased",
+        memberStatus: "dropped",
+        source: "test",
+        createdBy: "test",
+      },
+      {
+        subjectStore: "directory",
+        subjectId: "twice-aliased",
+        memberStatus: "Active",
+        duesAmount: 160,
+        source: "test",
+        createdBy: "test",
+      },
+    ]);
+    expect(written).toBe(1);
+    const stored = (await listMemberMeta("directory")).find(
+      (r) => r.subjectId === "twice-aliased",
+    );
+    expect(stored?.memberStatus).toBe("active");
+    expect(stored?.duesAmount).toBe("160.00");
   });
 
   it("directory is a moderated store, and hold→approve actually lands an edit", async () => {
