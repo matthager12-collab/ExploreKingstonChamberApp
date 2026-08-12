@@ -357,6 +357,10 @@ const SOURCE_OPTIONS: { key: string; label: string }[] = [
   { key: "parking-zones", label: "Parking zones" },
   { key: "streets", label: "Street overlay" },
   { key: "port-stalls", label: "Port parking bays" },
+  // Directory-public slice: live directory listings that carry coordinates,
+  // pins linking to their /directory profile pages. Narrow per view with
+  // MapView.directoryCategories (no UI yet — an admin JSON edit).
+  { key: "directory", label: "Member businesses" },
 ];
 
 const SOURCE_SHORT: Record<string, string> = {
@@ -364,6 +368,7 @@ const SOURCE_SHORT: Record<string, string> = {
   "parking-zones": "🅿️",
   streets: "🛣",
   "port-stalls": "🅿",
+  directory: "🏪",
 };
 
 /** Everything one context render put on the map, so the next one (or unmount)

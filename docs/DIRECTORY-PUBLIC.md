@@ -58,9 +58,18 @@ change, not a redesign.
   happens from each profile, and the /claim/[id] form pages keep working for
   direct links — including still-unpublished drafts, which no public index
   lists.
-- **Phase 3 — maps.** A `directory` BuiltInSource (the seam map-views.ts
-  names): per-category pins from live directory records, popups linking to
-  the profile page, member badge on; retire superseded hand pins using the
+- **Phase 3 — maps.** Two mechanisms:
+  (a) resolve-time PROFILE LINKS — every hand-drawn marker whose name
+  matches exactly one live listing gets a "View profile" link in its popup,
+  so the existing shopping maps become clickable business profiles with no
+  geocoding prerequisite (ambiguous or draft matches deliberately get none);
+  (b) the `directory` BuiltInSource (the seam map-views.ts reserved) — live,
+  coordinate-bearing listings as pins, per-view category narrowing via
+  `MapView.directoryCategories`, member ring from member_meta, popups
+  linking to the profile page. A new "Businesses" view ships UNPUBLISHED
+  (empty until the geocode pass runs in production; the Chamber flips it
+  live in /admin/maps). Curated shopping views adopt the source per-view
+  later — an admin edit, no code — retiring matched hand pins via the
   geocode script's adoption report.
 
 ## Interim vs plan-of-record
