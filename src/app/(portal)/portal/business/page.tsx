@@ -20,7 +20,8 @@ import { describeRepeat, rruleToPreset } from "@/lib/events/recurrence";
 import { SeriesChecks, type SeriesCheck } from "./series-checks";
 import type { Lodging } from "@/lib/types";
 import { OpenBadge } from "@/components/open-badge";
-import { Badge, Callout, Card, PageHeader, Section } from "@/components/ui";
+import { Badge, Callout, Card } from "@/components/ui";
+import { PortalPage } from "@/components/portal/page";
 
 export const metadata: Metadata = { title: "My Business" };
 export const dynamic = "force-dynamic";
@@ -100,19 +101,17 @@ export default async function BusinessPortalPage() {
     });
   }
 
+  // PortalPage, not the public PageHeader + Section: those centre themselves in
+  // their own padded max-w-5xl column, which stacks with the shell's and leaves
+  // the content narrower than its own heading.
   return (
-    <>
-      <PageHeader
-        eyebrow={user.role === "admin" ? "Chamber admin · all listings" : "Business portal"}
-        title="My business"
-        intro="Update once, and it's everywhere — your hours, menus, and events flow straight to the public pages, the open-now badge, and the town calendar."
-      />
-      {seriesChecks.length > 0 && (
-        <Section>
-          <SeriesChecks checks={seriesChecks} />
-        </Section>
-      )}
-      <Section>
+    <PortalPage
+      title="My business"
+      intro="Update once, and it's everywhere — your hours, menus, and events flow straight to the public pages, the open-now badge, and the town calendar."
+      width="wide"
+    >
+      {seriesChecks.length > 0 && <SeriesChecks checks={seriesChecks} />}
+      <div>
         {restaurants.length === 0 && lodging.length === 0 && directory.length === 0 ? (
           <Callout title="No listings linked to this account yet" tone="coral">
             Your account isn&apos;t connected to a listing. Email the Chamber and
@@ -189,7 +188,7 @@ export default async function BusinessPortalPage() {
             ))}
           </div>
         )}
-      </Section>
-    </>
+      </div>
+    </PortalPage>
   );
 }

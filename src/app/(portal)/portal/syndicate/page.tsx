@@ -18,7 +18,8 @@ import { getSessionUser } from "@/lib/auth";
 import { getRestaurants } from "@/lib/stores/business-store";
 import { getCharities } from "@/lib/stores/charity-store";
 import { getEvents } from "@/lib/stores/event-store";
-import { Badge, Callout, Card, PageHeader, Section } from "@/components/ui";
+import { Badge, Callout, Card } from "@/components/ui";
+import { PortalPage } from "@/components/portal/page";
 import type { EventItem } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Push it everywhere" };
@@ -154,6 +155,27 @@ interface Listing {
   hoursVerified?: string;
 }
 
+/** A titled block inside PortalPage. The public <Section> cannot be used here:
+ *  it centres itself in its own padded max-w-5xl column, which stacks with the
+ *  shell's and leaves content narrower than the heading above it. */
+function SyndicateSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      <h2 className="font-display text-xl font-semibold text-primary-deep">{title}</h2>
+      <p className="portal-measure mt-1 text-sm text-ink-soft">{description}</p>
+      <div className="mt-4">{children}</div>
+    </section>
+  );
+}
+
 // ---------- page ----------
 
 export default async function SyndicatePage() {
@@ -197,27 +219,25 @@ export default async function SyndicatePage() {
       (e.charityId !== undefined && listingIds.has(e.charityId)),
   );
 
+  // PortalPage rather than the public PageHeader + Section — those centre
+  // themselves in their own padded column, which stacks with the shell's.
   return (
-    <>
-      <PageHeader
-        eyebrow={isAdmin ? "Chamber admin — all listings" : "Syndication"}
-        title="Push it everywhere"
-        intro="Your listing and events live here once. These tools carry them out to your own website, calendar apps, and the big platforms — no retyping."
-      />
-
+    <PortalPage
+      title="Push it everywhere"
+      intro="Your listing and events live here once. These tools carry them out to your own website, calendar apps, and the big platforms — no retyping."
+      width="wide"
+    >
       {listings.length === 0 && !isAdmin && (
-        <Section>
-          <Callout title="No listing linked yet" tone="coral">
-            Your account is not linked to a business or organization listing, so there are no
-            feeds to show. Contact the Chamber and we will connect your account.
-          </Callout>
-        </Section>
+        <Callout title="No listing linked yet" tone="coral">
+          Your account is not linked to a business or organization listing, so there are no
+          feeds to show. Contact the Chamber and we will connect your account.
+        </Callout>
       )}
 
       {/* a. live feeds ---------------------------------------------------- */}
-      <Section
+      <SyndicateSection
         title="Your live feeds"
-        subtitle="These URLs always serve your latest portal data — update once here and everything reading them follows."
+        description="These URLs always serve your latest portal data — update once here and everything reading them follows."
       >
         <div className="space-y-4">
           {isAdmin && (
@@ -281,13 +301,13 @@ export default async function SyndicatePage() {
             </Card>
           ))}
         </div>
-      </Section>
+      </SyndicateSection>
 
       {/* b. big platforms ------------------------------------------------- */}
       {listings.length > 0 && (
-        <Section
+        <SyndicateSection
           title="Update the big platforms"
-          subtitle="Where visitors actually look you up — keep these matching the portal."
+          description="Where visitors actually look you up — keep these matching the portal."
         >
           <div className="space-y-4">
             <Callout title="Update these by hand" tone="teal">
@@ -324,13 +344,13 @@ export default async function SyndicatePage() {
               </Card>
             ))}
           </div>
-        </Section>
+        </SyndicateSection>
       )}
 
       {/* c. socials ------------------------------------------------------- */}
-      <Section
+      <SyndicateSection
         title="Post it to socials"
-        subtitle="A ready-made post for each of your upcoming events."
+        description="A ready-made post for each of your upcoming events."
       >
         {myUpcoming.length === 0 ? (
           <Callout title="No upcoming events yet" tone="teal">
@@ -382,10 +402,10 @@ export default async function SyndicatePage() {
             })}
           </div>
         )}
-      </Section>
+      </SyndicateSection>
 
       {/* Copy-button behavior for every [data-copy] on this page. */}
       <script dangerouslySetInnerHTML={{ __html: COPY_SCRIPT }} />
-    </>
+    </PortalPage>
   );
 }
