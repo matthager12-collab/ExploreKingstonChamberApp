@@ -16,7 +16,21 @@
 // adminNavFor()/can() where they already live.
 
 import type { Role } from "@/lib/auth/roles";
-import type { PortalIconName } from "@/components/portal/portal-icons";
+
+/** Icon slots the rail can render.
+ *
+ * Declared HERE, in lib, not imported from the icon component — the
+ * lib-not-to-components boundary rule (.dependency-cruiser.cjs) exists so the
+ * lower layer never reaches up into the UI, and this manifest is data. The
+ * component satisfies this union rather than defining it, so adding a slot
+ * without drawing its glyph is a type error in portal-icons.tsx. */
+export type PortalIconName =
+  | "overview"
+  | "business"
+  | "nonprofit"
+  | "syndicate"
+  | "account"
+  | "admin";
 
 export interface PortalNavItem {
   /** Route. MUST resolve to a real page (enforced by test). */
