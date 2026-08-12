@@ -8,8 +8,14 @@
 // receives only the projection below. Dues amounts never leave the server;
 // the browser learns member-or-not, nothing else.
 //
-// ISR (revalidate 60): same freshness contract as /eat — a publish or a
-// rank change appears within a minute.
+// force-dynamic, NOT ISR — deliberately different from /eat. An ISR page
+// prerenders at BUILD time, where DATABASE_URL is absent in CI: /eat
+// survives that because its store read falls back to git seeds, but the
+// directory has NO seed and the member_meta read is a raw Postgres query —
+// the build died prerendering this page (CI, 2026-08-12). Rendering
+// per-request also makes publishes and claims visible immediately; the
+// PUBLIC_PATHS_BY_STORE entry stays for the completeness test (revalidating
+// a dynamic path is a harmless no-op).
 
 import type { Metadata } from "next";
 import { rankDirectoryListings } from "@/lib/directory/rank";
@@ -24,7 +30,7 @@ export const metadata: Metadata = {
   description:
     "Local businesses across Kingston, Washington — the Greater Kingston Chamber of Commerce directory.",
 };
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
 /** One-line teaser for the card grid; the profile page has the full text.
  *  Truncates by CODE POINT, not UTF-16 unit — a bare .slice() can cut an
