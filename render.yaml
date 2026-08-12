@@ -123,6 +123,17 @@ services:
       - key: SENTRY_ENVIRONMENT
         value: production
 
+      # Outbound email (src/lib/email.ts) — first consumer is the claim-signup
+      # verification code (E17 claim-signup slice). BOTH must be set or
+      # sendEmail() no-ops and claim signups 503 with "couldn't send the
+      # verification email" (the request-a-call fallback keeps working).
+      # EMAIL_FROM's domain must be verified in the Resend dashboard first,
+      # e.g.:  Explore Kingston <claims@send.blueyonderadventures.com>
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+
       # E15: the PRIVATE Cloudflare R2 bucket holding every uploaded image
       # (hunt reference photos + player submissions, map-feature images, event
       # attachments). All four must be set or hasR2() reads as unconfigured.
