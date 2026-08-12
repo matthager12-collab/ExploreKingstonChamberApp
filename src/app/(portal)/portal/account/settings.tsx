@@ -210,7 +210,7 @@ export function AccountSettings({
               Change password
             </Button>
           </div>
-          <p className="portal-measure text-sm text-ink-soft">
+          <p className="app-measure text-sm text-ink-soft">
             We can&apos;t display your password — not even the Chamber can see it.
             Forget it? An admin can reset it for you.
           </p>

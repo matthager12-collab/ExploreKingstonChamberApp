@@ -25,8 +25,8 @@ import { PARKING_TYPES } from "@/lib/map/types";
 
 const read = (p: string) => readFileSync(path.join(process.cwd(), p), "utf8");
 const FEATURE_MAP = read("src/components/feature-map.tsx");
-const ZONE_EDITOR = read("src/app/(site)/admin/map/editor.tsx");
-const CMS_EDITOR = read("src/app/(site)/admin/maps/editor.tsx");
+const ZONE_EDITOR = read("src/app/(admin)/admin/map/editor.tsx");
+const CMS_EDITOR = read("src/app/(admin)/admin/maps/editor.tsx");
 const PARKING_API = read("src/app/api/admin/parking/route.ts");
 
 // RULE_LABELS is typed Record<ParkingRule, string>, so its keys ARE the union —

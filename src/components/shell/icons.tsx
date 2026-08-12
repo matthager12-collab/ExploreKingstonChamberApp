@@ -1,9 +1,10 @@
 import type { ReactElement, SVGProps } from "react";
-import type { PortalIconName } from "@/lib/portal-nav";
+import type { NavIconName } from "@/lib/nav-icons";
 
-// Hand-rolled, because the portal needs six glyphs and an icon library is
-// 50-200 KB plus its own sizing and stroke conventions to override. These
-// inherit currentColor and obey the design tokens like everything else.
+// Hand-rolled, because the two rails need thirteen glyphs between them and an
+// icon library is 50-200 KB plus its own sizing and stroke conventions to
+// override. These inherit currentColor and obey the design tokens like
+// everything else.
 //
 // Every one is aria-hidden: in the rail they sit beside a visible label, and
 // when the rail is collapsed the link itself carries an aria-label. An icon is
@@ -112,15 +113,71 @@ export function IconClose(props: IconProps) {
   );
 }
 
-// The union lives in src/lib/portal-nav.ts (see the boundary note there); this
-// record must cover it, so adding a nav slot without a glyph fails to compile.
-export const PORTAL_ICONS: Record<PortalIconName, (props: IconProps) => ReactElement> = {
+
+export function IconInsights(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M4 20V10M10 20V5M16 20v-7M22 20H2" />
+    </Glyph>
+  );
+}
+
+export function IconEvents(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M3 10h18M8 3v4M16 3v4" />
+    </Glyph>
+  );
+}
+
+export function IconExperiences(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M12 21s-6-5.2-6-10a6 6 0 0 1 12 0c0 4.8-6 10-6 10Z" />
+      <circle cx="12" cy="11" r="2.2" />
+    </Glyph>
+  );
+}
+
+export function IconMaps(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="m9 4 6 2 5-2v14l-5 2-6-2-5 2V4l5-2Z" />
+      <path d="M9 2v16M15 6v16" />
+    </Glyph>
+  );
+}
+
+export function IconSystem(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <rect x="3" y="4" width="18" height="7" rx="1.5" />
+      <rect x="3" y="13" width="18" height="7" rx="1.5" />
+      <path d="M7 7.5h.01M7 16.5h.01" />
+    </Glyph>
+  );
+}
+
+// The union lives in src/lib/nav-icons.ts (see the boundary note there); this
+// record must COVER it, so adding a nav slot without drawing its glyph is a
+// type error rather than a blank square in the rail.
+export const NAV_ICONS: Record<NavIconName, (props: IconProps) => ReactElement> = {
+  // portal
   overview: IconOverview,
   business: IconBusiness,
   nonprofit: IconNonprofit,
   syndicate: IconSyndicate,
   account: IconAccount,
   admin: IconAdmin,
+  // admin sections
+  insights: IconInsights,
+  members: IconAccount,
+  listings: IconBusiness,
+  events: IconEvents,
+  experiences: IconExperiences,
+  maps: IconMaps,
+  system: IconSystem,
 };
 
-export type { PortalIconName };
+export type { NavIconName };

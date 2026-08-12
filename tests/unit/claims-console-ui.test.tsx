@@ -20,7 +20,7 @@ import {
   ClaimsManager,
   type ClaimsRowView,
   type OpenClaimView,
-} from "@/app/(site)/admin/claims/manager";
+} from "@/app/(admin)/admin/claims/manager";
 
 afterEach(() => {
   cleanup();

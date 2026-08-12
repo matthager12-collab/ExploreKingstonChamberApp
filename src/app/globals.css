@@ -76,7 +76,9 @@
    4.4993:1 on the shell fill — a hair under AA 1.4.3, which the app already
    documents and patches at individual usage sites. The portal is new surface
    area; rather than inherit a known-marginal value and re-patch it screen by
-   screen, it gets one that passes everywhere it is used.
+   screen, it gets one that passes everywhere it is used. */
+/* Both consoles, not just the portal: the admin console moved onto the same
+   shared rail and the same role tokens, so it needs the same ink-soft.
 
    THE CUSTOM PROPERTY ALONE DOES NOTHING, and this cost a CI failure to learn.
    `@theme inline` compiles the token to a LITERAL — the built utility is
@@ -84,26 +86,29 @@
    re-pointing the property here never reached a single rendered node. The
    override sat in the stylesheet looking correct and changed nothing, and the
    contrast gate "passed" by reading this block instead of what the browser
-   paints. axe is what caught it: 4.15:1, serious.
+   paints. axe on /admin/worklist is what caught it: 4.15:1, serious.
 
-   So the property is kept as the SINGLE SOURCE of the value, and the rule below
-   is what actually applies it, by overriding the compiled utility inside the
-   portal subtree. Unlayered, so it beats Tailwind's @layer utilities.
+   So the property is kept as the SINGLE SOURCE of the value, and the rule
+   below is what actually applies it, by overriding the compiled utility inside
+   console subtrees. Unlayered, so it beats Tailwind's @layer utilities.
 
    This is the same shape as the E14 simple-mode rule further down — including
    the [class~=] form, which matches the bare class and leaves the /90 opacity
    variant to its own selector. */
-[data-surface="portal"] {
+[data-surface="portal"],
+[data-surface="admin"] {
   --color-ink-soft: #5b6672;
 }
 
 [data-surface="portal"] [class~="text-ink-soft"],
-[data-surface="portal"] [class~="text-ink-soft/90"] {
+[data-surface="admin"] [class~="text-ink-soft"],
+[data-surface="portal"] [class~="text-ink-soft/90"],
+[data-surface="admin"] [class~="text-ink-soft/90"] {
   color: var(--color-ink-soft);
 }
 
-/* Portal rail width. A real class, NOT a Tailwind arbitrary-value utility:
-   both w-(--portal-rail-w) and w-[var(--portal-rail-w)] can compile to no rule
+/* App rail width (both consoles). A real class, NOT a Tailwind arbitrary-value utility:
+   both w-(--app-rail-w) and w-[var(--app-rail-w)] can compile to no rule
    at all, leaving the rail at its content width — which looks correct, because
    collapsing removes the labels and the content narrows on its own. Keeping the
    width here also puts it beside the custom property it reads.
@@ -112,15 +117,15 @@
    so a collapsed rail paints collapsed on the first frame. Both rules are inert
    on public pages: nothing there carries the class or the attribute. */
 :root {
-  --portal-rail-w: 13rem;
+  --app-rail-w: 13rem;
 }
 
 html[data-rail="collapsed"] {
-  --portal-rail-w: 4.25rem;
+  --app-rail-w: 4.25rem;
 }
 
-.portal-rail {
-  width: var(--portal-rail-w);
+.app-rail {
+  width: var(--app-rail-w);
   transition: width 200ms ease;
 }
 
@@ -128,12 +133,12 @@ html[data-rail="collapsed"] {
    the return sweep to the next line starts landing on the wrong one. Prefixed
    rather than a bare .measure so it cannot collide with anything on the public
    side. */
-.portal-measure {
+.app-measure {
   max-width: 66ch;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .portal-rail {
+  .app-rail {
     transition: none;
   }
 }
