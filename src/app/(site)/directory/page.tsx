@@ -26,11 +26,14 @@ export const metadata: Metadata = {
 };
 export const revalidate = 60;
 
-/** One-line teaser for the card grid; the profile page has the full text. */
+/** One-line teaser for the card grid; the profile page has the full text.
+ *  Truncates by CODE POINT, not UTF-16 unit — a bare .slice() can cut an
+ *  emoji in half and render a broken glyph before the ellipsis. */
 function blurb(description: string): string {
   const text = description.trim();
-  if (text.length <= 140) return text;
-  return `${text.slice(0, 139).trimEnd()}…`;
+  const points = [...text];
+  if (points.length <= 140) return text;
+  return `${points.slice(0, 139).join("").trimEnd()}…`;
 }
 
 export default async function DirectoryPage() {

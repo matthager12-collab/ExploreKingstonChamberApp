@@ -25,9 +25,13 @@
 // Oracle posture: START never reads claim_contact and answers identically
 // whether or not the email is on file — whether an address is on the roster
 // is only ever revealed to someone who has just proven they control it.
-// Directory DRAFTS are deliberately visible here (they are what gets
-// claimed, and /claim lists them by name); the other stores stay live-only,
-// same as /api/claim.
+// Directory DRAFTS are deliberately claimable here (they are what gets
+// claimed), but since the /claim browse page folded into /directory
+// (2026-08-12) no public index lists draft names — a draft's claim page is
+// reachable by DIRECT id only (a Chamber-mailed link, the test fixture), so
+// the admin-getter read below confirms a name's existence only to a caller
+// who already holds the exact id. The other stores stay live-only, same as
+// /api/claim.
 
 import "server-only";
 
@@ -105,9 +109,11 @@ function kindForStore(store: ClaimStore): OrgKind {
 }
 
 /** The claim flow's view of each store. Directory reads through the ADMIN
- *  getter on purpose — imported DRAFTS are the normal claimable state and
- *  /claim already lists their names — while the curated stores keep the
- *  live-only, no-draft-oracle posture of /api/claim. */
+ *  getter on purpose — imported DRAFTS are the normal claimable state, and
+ *  since the /claim browse fold (2026-08-12) a draft's page is reachable by
+ *  direct id only, so this read confirms existence only to callers who
+ *  already hold the id — while the curated stores keep the live-only,
+ *  no-draft-oracle posture of /api/claim. */
 async function findClaimSubject(
   store: ClaimStore,
   id: string,
