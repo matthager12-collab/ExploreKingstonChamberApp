@@ -103,6 +103,14 @@ html[data-rail="collapsed"] {
   transition: width 200ms ease;
 }
 
+/* Reading measure for portal prose and field hints. ~66 characters: past that,
+   the return sweep to the next line starts landing on the wrong one. Prefixed
+   rather than a bare .measure so it cannot collide with anything on the public
+   side. */
+.portal-measure {
+  max-width: 66ch;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .portal-rail {
     transition: none;

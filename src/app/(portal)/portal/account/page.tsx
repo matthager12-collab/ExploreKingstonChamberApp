@@ -4,6 +4,10 @@
 // since) and hands the editable parts to the client settings component.
 // Linked ids are resolved to display names here so the client never needs the
 // full listing stores.
+//
+// Archetype D7 (form page). The data logic below is unchanged from the
+// pre-shell version — same session gate, same three stores, same id→name
+// resolution. Only the presentation moved onto the portal primitives.
 
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
@@ -12,12 +16,12 @@ import { ROLE_LABELS, ROLE_TONES } from "@/lib/auth/roles";
 import { getRestaurants } from "@/lib/stores/business-store";
 import { getCharities } from "@/lib/stores/charity-store";
 import { getLodging } from "@/lib/stores/listing-stores";
-import { Badge, Card, PageHeader, Section } from "@/components/ui";
+import { Badge } from "@/components/ui";
+import { FieldList, PortalPage, PortalPanel } from "@/components/portal/page";
 import { AccountSettings } from "./settings";
 
 export const metadata: Metadata = { title: "My account" };
 export const dynamic = "force-dynamic";
-
 
 export default async function AccountPage() {
   const user = await getSessionUser();
@@ -41,49 +45,34 @@ export default async function AccountPage() {
   });
 
   return (
-    <>
-      <PageHeader
-        eyebrow="Portal"
-        title="My account"
-        intro="Your profile, what you manage, and your sign-in details."
-      />
-
-      <Section title="Profile">
-        <Card>
-          <dl className="grid gap-4 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="font-semibold text-ink">Name</dt>
-              <dd className="mt-0.5 text-ink-soft">{user.name}</dd>
-            </div>
-            <div>
-              <dt className="font-semibold text-ink">Email</dt>
-              <dd className="mt-0.5 text-ink-soft">{user.email}</dd>
-            </div>
-            <div>
-              <dt className="font-semibold text-ink">Role</dt>
-              <dd className="mt-1">
-                <Badge tone={ROLE_TONES[user.role]}>{ROLE_LABELS[user.role]}</Badge>
-              </dd>
-            </div>
-            <div>
-              <dt className="font-semibold text-ink">Account created</dt>
-              <dd className="mt-0.5 text-ink-soft">{createdLabel}</dd>
-            </div>
-            <div className="sm:col-span-2">
-              <dt className="font-semibold text-ink">Manages</dt>
-              <dd className="mt-0.5 text-ink-soft">
-                {user.role === "admin"
+    <PortalPage
+      title="My account"
+      intro="Your profile, what you manage, and your sign-in details."
+    >
+      <PortalPanel title="Profile">
+        <FieldList
+          fields={[
+            { label: "Name", value: user.name },
+            { label: "Email", value: user.email },
+            {
+              label: "Role",
+              value: <Badge tone={ROLE_TONES[user.role]}>{ROLE_LABELS[user.role]}</Badge>,
+            },
+            { label: "Account created", value: createdLabel },
+            {
+              label: "Manages",
+              value:
+                user.role === "admin"
                   ? "Everything (admin)"
                   : linkedNames.length > 0
                     ? linkedNames.join(", ")
-                    : "—"}
-              </dd>
-            </div>
-          </dl>
-        </Card>
-      </Section>
+                    : "—",
+            },
+          ]}
+        />
+      </PortalPanel>
 
       <AccountSettings name={user.name} email={user.email} />
-    </>
+    </PortalPage>
   );
 }

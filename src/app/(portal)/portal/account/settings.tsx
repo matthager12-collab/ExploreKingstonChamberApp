@@ -1,17 +1,32 @@
 "use client";
 
 // Client half of /portal/account: the profile (name/email) form and the
-// change-password form. Deliberately plain (fetch + local state, no reload)
-// in the same spirit as portal/forms.tsx. All authorization is server-side —
-// both endpoints act only on the session's own user.
+// change-password form. Deliberately plain (fetch + local state, no reload).
+// All authorization is server-side — both endpoints act only on the session's
+// own user.
+//
+// REBUILT ON THE PORTAL FORM PRIMITIVES (archetype D7). Every fetch, every
+// validation rule, every endpoint and every autoComplete value below is
+// unchanged from the pre-shell version; only the markup moved. That was the
+// whole constraint on this screen: it is the account and password surface, so
+// it gets restyled, never re-logicked.
+//
+// What the primitives changed, and why each mattered here:
+//   - the wrapping <label> is gone. It made the accessible name of the new
+//     password field "New password (8+ characters)"; the requirement is now a
+//     hint, reached through aria-describedby, and the name is "New password".
+//   - errors carry aria-invalid and role="alert" rather than only turning red.
+//   - failure is --color-danger, not coral. Coral is the CTA colour, and having
+//     one hue mean both "press this" and "that failed" on the same screen is
+//     the kind of thing nobody notices until it matters.
 
 import { useState, type FormEvent } from "react";
-import { Card, Section } from "@/components/ui";
-
-const inputClass =
-  "mt-1 block w-full rounded-lg border border-sand bg-white px-3 py-2 text-base";
-const buttonClass =
-  "rounded-full bg-sound px-6 py-2.5 font-semibold text-white hover:bg-sound-deep disabled:opacity-50";
+import {
+  Button,
+  FormSection,
+  FormStatus,
+  TextField,
+} from "@/components/portal/form";
 
 export function AccountSettings({
   name: initialName,
@@ -106,100 +121,101 @@ export function AccountSettings({
 
   // ---------- render ----------
 
+  // Which field an error belongs to. The two password rules are checked before
+  // the request, so they can point at the field that broke rather than sitting
+  // in a general status line the reader has to map back themselves.
+  const mismatch = pwError === "New passwords don't match.";
+  const tooShort = pwError === "New password must be 8+ characters.";
+  const generalPwError = pwError && !mismatch && !tooShort ? pwError : null;
+
+  // No container of its own — PortalPage owns the column and the gap, so this
+  // returns a fragment. Nesting a second max-width here would silently narrow
+  // these two sections relative to the profile panel above them.
   return (
     <>
-      <Section title="Edit profile" subtitle="Your name and the email you sign in with.">
-        <Card>
-          <form onSubmit={saveProfile} className="max-w-sm space-y-4">
-            <label className="block text-sm font-medium text-ink">
-              Name
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                autoComplete="name"
-                className={inputClass}
-              />
-            </label>
-            <label className="block text-sm font-medium text-ink">
-              Email
-              <input
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                type="email"
-                required
-                autoComplete="email"
-                className={inputClass}
-              />
-            </label>
-            {profileError && (
-              <p role="alert" className="text-sm font-medium text-coral-deep">{profileError}</p>
-            )}
-            {profileSaved && <p role="status" className="text-sm font-medium text-fern">Saved.</p>}
-            <button type="submit" disabled={profileBusy} className={buttonClass}>
-              {profileBusy ? "Saving…" : "Save profile"}
-            </button>
-          </form>
-        </Card>
-      </Section>
-
-      <Section
-        title="Change password"
-        subtitle="You'll need your current password to set a new one."
+      <FormSection
+        title="Edit profile"
+        description="Your name and the email you sign in with."
       >
-        <Card>
-          <form onSubmit={changePassword} className="max-w-sm space-y-4">
-            <label className="block text-sm font-medium text-ink">
-              Current password
-              <input
-                value={current}
-                onChange={(e) => setCurrent(e.target.value)}
-                type="password"
-                required
-                autoComplete="current-password"
-                className={inputClass}
-              />
-            </label>
-            <label className="block text-sm font-medium text-ink">
-              New password (8+ characters)
-              <input
-                value={next}
-                onChange={(e) => setNext(e.target.value)}
-                type="password"
-                required
-                minLength={8}
-                autoComplete="new-password"
-                className={inputClass}
-              />
-            </label>
-            <label className="block text-sm font-medium text-ink">
-              Confirm new password
-              <input
-                value={confirm}
-                onChange={(e) => setConfirm(e.target.value)}
-                type="password"
-                required
-                minLength={8}
-                autoComplete="new-password"
-                className={inputClass}
-              />
-            </label>
-            {pwError && <p role="alert" className="text-sm font-medium text-coral-deep">{pwError}</p>}
-            {pwSaved && (
-              <p role="status" className="text-sm font-medium text-fern">
-                Saved — use the new password next time you sign in.
-              </p>
-            )}
-            <button type="submit" disabled={pwBusy} className={buttonClass}>
-              {pwBusy ? "Saving…" : "Change password"}
-            </button>
-            <p className="text-xs text-ink-soft">
-              We can&apos;t display your password — not even the Chamber can see it. Forget it?
-              An admin can reset it for you.
-            </p>
-          </form>
-        </Card>
-      </Section>
+        <form onSubmit={saveProfile} className="flex flex-col gap-5">
+          <TextField
+            label="Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            autoComplete="name"
+          />
+          <TextField
+            label="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            type="email"
+            required
+            autoComplete="email"
+          />
+          <FormStatus
+            error={profileError}
+            success={profileSaved ? "Saved." : null}
+          />
+          <div>
+            <Button type="submit" pending={profileBusy}>
+              Save profile
+            </Button>
+          </div>
+        </form>
+      </FormSection>
+
+      <FormSection
+        title="Change password"
+        description="You'll need your current password to set a new one."
+      >
+        <form onSubmit={changePassword} className="flex flex-col gap-5">
+          <TextField
+            label="Current password"
+            value={current}
+            onChange={(e) => setCurrent(e.target.value)}
+            type="password"
+            required
+            autoComplete="current-password"
+          />
+          <TextField
+            label="New password"
+            hint="At least 8 characters."
+            error={tooShort ? pwError : undefined}
+            value={next}
+            onChange={(e) => setNext(e.target.value)}
+            type="password"
+            required
+            minLength={8}
+            autoComplete="new-password"
+          />
+          <TextField
+            label="Confirm new password"
+            error={mismatch ? pwError : undefined}
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            type="password"
+            required
+            minLength={8}
+            autoComplete="new-password"
+          />
+          <FormStatus
+            error={generalPwError}
+            success={
+              pwSaved ? "Saved — use the new password next time you sign in." : null
+            }
+          />
+          <div>
+            <Button type="submit" pending={pwBusy}>
+              Change password
+            </Button>
+          </div>
+          <p className="portal-measure text-sm text-ink-soft">
+            We can&apos;t display your password — not even the Chamber can see it.
+            Forget it? An admin can reset it for you.
+          </p>
+        </form>
+      </FormSection>
     </>
   );
 }

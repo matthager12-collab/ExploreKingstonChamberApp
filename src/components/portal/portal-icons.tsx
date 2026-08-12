@@ -1,4 +1,5 @@
-import type { SVGProps } from "react";
+import type { ReactElement, SVGProps } from "react";
+import type { PortalIconName } from "@/lib/portal-nav";
 
 // Hand-rolled, because the portal needs six glyphs and an icon library is
 // 50-200 KB plus its own sizing and stroke conventions to override. These
@@ -111,13 +112,15 @@ export function IconClose(props: IconProps) {
   );
 }
 
-export const PORTAL_ICONS = {
+// The union lives in src/lib/portal-nav.ts (see the boundary note there); this
+// record must cover it, so adding a nav slot without a glyph fails to compile.
+export const PORTAL_ICONS: Record<PortalIconName, (props: IconProps) => ReactElement> = {
   overview: IconOverview,
   business: IconBusiness,
   nonprofit: IconNonprofit,
   syndicate: IconSyndicate,
   account: IconAccount,
   admin: IconAdmin,
-} as const;
+};
 
-export type PortalIconName = keyof typeof PORTAL_ICONS;
+export type { PortalIconName };
