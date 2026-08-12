@@ -53,7 +53,11 @@ change, not a redesign.
   category chips) and /directory/[id] profile pages: description, address,
   phone, website, member badge, claim CTA on unclaimed listings (feeds the
   claim-signup flow). The ranking module is the real birth of the
-  rankListings() choke point the E19 comments reserve.
+  rankListings() choke point the E19 comments reserve. The old /claim browse
+  page FOLDED INTO /directory (Mat, 2026-08-12): /claim redirects, claiming
+  happens from each profile, and the /claim/[id] form pages keep working for
+  direct links — including still-unpublished drafts, which no public index
+  lists.
 - **Phase 3 — maps.** A `directory` BuiltInSource (the seam map-views.ts
   names): per-category pins from live directory records, popups linking to
   the profile page, member badge on; retire superseded hand pins using the
