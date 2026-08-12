@@ -22,9 +22,38 @@ import { AxeBuilder } from "@axe-core/playwright";
 import { BASE_URL } from "./config";
 import { signInAdmin } from "./admin-session";
 
+/* All 19 admin surfaces, not the two this file shipped with.
+ *
+ * The rail rebuild touches the chrome of every one of them at once, so a walk
+ * that covered claims and qwick only would have proved almost nothing. Headings
+ * are the EXACT rendered text — note the three that are written `&amp;` in
+ * source: Playwright matches what the browser paints, so the entity must be
+ * decoded here or the wait hangs until it times out.
+ *
+ * The three canvas editors (map, maps, hunts) are included deliberately. They
+ * are the surfaces nobody will restyle, which makes them exactly the ones most
+ * likely to rot unnoticed.
+ */
 const PAGES: { path: string; heading: string }[] = [
+  { path: "/admin", heading: "Visitor Insights" },
+  { path: "/admin/feedback", heading: "Page feedback" },
+  { path: "/admin/content", heading: "Site content" },
+  { path: "/admin/media", heading: "Photos" },
+  { path: "/admin/listings", heading: "Listings Workbench" },
+  { path: "/admin/itineraries", heading: "Itinerary Builder" },
+  { path: "/admin/hunts", heading: "Scavenger Hunt Builder" },
+  { path: "/admin/ferry-info", heading: "Ferry settings" },
+  { path: "/admin/map", heading: "Parking map editor" },
+  { path: "/admin/maps", heading: "Map builder" },
+  { path: "/admin/accounts", heading: "Accounts & invites" },
   { path: "/admin/claims", heading: "Claims console" },
+  { path: "/admin/worklist", heading: "Worklist" },
+  { path: "/admin/events", heading: "Events Workbench" },
+  { path: "/admin/events-sources", heading: "Events sources & unified calendar" },
+  { path: "/admin/kiosk", heading: "Ferry-dock kiosk" },
   { path: "/admin/import/qwick", heading: "Qwick listings import" },
+  { path: "/admin/audit", heading: "Change history" },
+  { path: "/admin/ops", heading: "Ops & status" },
 ];
 
 let browser: Browser;
@@ -36,7 +65,7 @@ afterAll(async () => {
   await browser?.close();
 });
 
-describe("axe on the authenticated E17 admin surfaces (zero violations)", () => {
+describe("axe on every authenticated admin surface (zero violations)", () => {
   it.each(PAGES)("$path scans clean", async ({ path, heading }) => {
     // @axe-core/playwright needs a page from an explicit context (frame
     // iteration) — same constraint as the smoke suite.
