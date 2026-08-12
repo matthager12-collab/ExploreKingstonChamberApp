@@ -143,6 +143,46 @@ async function atLngLatSettled(lngLat: [number, number]): Promise<{ x: number; y
   return prev;
 }
 
+/** The first of `candidates` the map CANVAS actually owns at its settled pixel,
+ *  as page coords ready to click.
+ *
+ *  Being inside the canvas rect is not the same as being clickable. The editor's
+ *  feature form is an overlay ON TOP of the canvas, so a handle can sit well
+ *  within the map's bounding box and still have a <textarea> above it —
+ *  elementFromPoint returns the form, the synthetic click is delivered to the
+ *  form, and the gesture silently does nothing.
+ *
+ *  Picking candidates in store order used to work only by luck about layout.
+ *  When the admin console moved behind the shared rail the canvas lost 432px of
+ *  width (rail 208 + section panel 224), the camera re-framed into what was
+ *  left, and the FIRST handle landed under the form while the other two stayed
+ *  perfectly clickable. That surfaces as "expected 4 to be 5" — indistinguishable
+ *  from the two earlier TIMING flakes this file already defends against in
+ *  coordCountSettles and atLngLatSettled. Same symptom, third distinct cause.
+ *
+ *  If nothing is reachable that is a PRODUCT bug rather than a test one — a human
+ *  could not perform the gesture either — so this throws saying exactly that,
+ *  instead of letting the caller retry into a bare count mismatch. */
+async function firstClickable(
+  candidates: [number, number][],
+  what: string,
+): Promise<{ x: number; y: number }> {
+  for (const coords of candidates) {
+    const px = await atLngLatSettled(coords);
+    const onCanvas = await page.evaluate(({ x, y }) => {
+      const w = window as unknown as { __vkMap?: { getContainer(): HTMLElement } };
+      const el = document.elementFromPoint(x, y);
+      return Boolean(el && w.__vkMap!.getContainer().contains(el) && el.tagName === "CANVAS");
+    }, px);
+    if (onCanvas) return px;
+  }
+  throw new Error(
+    `none of the ${candidates.length} ${what} is clickable — every one is covered by ` +
+      `editor chrome. That is a product bug, not a test one: a human could not ` +
+      `perform this gesture here either.`,
+  );
+}
+
 async function openBuilder(): Promise<void> {
   await page.goto(BASE_URL + "/admin/maps", { waitUntil: "load" });
   await page.waitForSelector('button:has-text("Draw marker"):not([disabled])', {
@@ -377,7 +417,7 @@ describe("admin map builder (MapLibre + terra-draw)", () => {
       // ONLY while the store is untouched: the moment the count moves at all
       // we stop clicking and assert, so a slow insert can never be compounded
       // into two.
-      const midpoint = async (): Promise<[number, number]> => {
+      const midpoints = async (): Promise<[number, number][]> => {
         await page.waitForFunction(
           () => {
             const w = window as unknown as {
@@ -397,13 +437,18 @@ describe("admin map builder (MapLibre + terra-draw)", () => {
               }[];
             };
           };
-          return w.__vkDraw!.getSnapshot().find((f) => f.properties.midPoint)!.geometry
-            .coordinates;
+          return w
+            .__vkDraw!.getSnapshot()
+            .filter((f) => f.properties.midPoint)
+            .map((f) => f.geometry.coordinates);
         });
       };
+
+      // Which handle gets clicked is chosen by hit-test, not by store order —
+      // see firstClickable, which is where that whole story lives.
       let afterInsert = before;
       for (let attempt = 0; attempt < 3 && afterInsert.length === before.length; attempt++) {
-        const midPx = await atLngLatSettled(await midpoint());
+        const midPx = await firstClickable(await midpoints(), "midpoint handles");
         await page.mouse.click(midPx.x, midPx.y);
         afterInsert = await coordCountSettles(TRAIL_ID, before.length + 1, 2_500);
       }
@@ -411,10 +456,18 @@ describe("admin map builder (MapLibre + terra-draw)", () => {
 
       // Right-click a vertex to remove it, back to the original count — the
       // same settled-projection + click-and-poll ladder, same
-      // swallowed-click-only retry bound.
+      // swallowed-click-only retry bound, and the same hit-test: the form
+      // overlay covers vertices exactly as readily as it covers midpoints.
+      //
+      // INTERIOR vertices only. Deleting an endpoint is a different edit —
+      // it shortens the trail rather than simplifying it — and the original
+      // spec deliberately took index 1. Offering the whole array to
+      // firstClickable would let it quietly fall back to an endpoint the day
+      // the interior ones are covered, changing what this test asserts without
+      // anyone noticing.
       let afterDelete = afterInsert;
       for (let attempt = 0; attempt < 3 && afterDelete.length === afterInsert.length; attempt++) {
-        const vtx = await atLngLatSettled(afterInsert[1]);
+        const vtx = await firstClickable(afterInsert.slice(1, -1), "interior vertices");
         await page.mouse.click(vtx.x, vtx.y, { button: "right" });
         afterDelete = await coordCountSettles(TRAIL_ID, before.length, 2_500);
       }
