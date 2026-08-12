@@ -45,8 +45,47 @@ function readTokens() {
   // Portal-scoped overrides win, because that is what the cascade does inside
   // the portal subtree. Missing this block would test the public value of
   // ink-soft and pass on a colour the portal never renders.
-  const scoped = css.match(/\[data-surface="portal"\]\s*\{([\s\S]*?)\n\}/);
-  if (scoped) collect(scoped[1]);
+  //
+  // Matched by "any selector list containing [data-surface=...]" rather than by
+  // the exact selector text, so this keeps working when the admin console joins
+  // the rule and it becomes a two-selector list. A gate that depends on the
+  // exact shape of a selector is a gate that fails for the wrong reason.
+  //
+  // THROWS rather than skipping. `if (scoped)` meant a rename of this block
+  // would silently drop every override and quietly test the public palette.
+  const scoped = css.match(
+    /(?:\[data-surface="[a-z]+"\]\s*,?\s*)+\{([\s\S]*?)\n\}/,
+  );
+  if (!scoped) throw new Error("no [data-surface=...] override block found in globals.css");
+  collect(scoped[1]);
+
+  // The property alone is INERT, and this gate once passed because of it.
+  //
+  // `@theme inline` compiles tokens to literals: the built utility is
+  // `.text-ink-soft{color:#6b7683}`, never `color:var(--color-ink-soft)`. So
+  // re-pointing the custom property changes nothing a browser paints, and this
+  // gate read the property and reported green on a colour that was never
+  // rendered. axe caught what this file missed — 4.15:1, serious.
+  //
+  // Every token overridden in that block must therefore ALSO have a rule that
+  // applies it to the compiled utility. Without this assertion the gate is
+  // measuring an intention rather than an outcome.
+  for (const [, name] of scoped[1].matchAll(/--color-([a-z0-9-]+):/g)) {
+    // The TOKEN is --color-ink-soft; the UTILITY is .text-ink-soft. Any of the
+    // colour-bearing prefixes counts as applying it.
+    const applied = new RegExp(
+      `\\[data-surface="[a-z]+"\\]\\s+\\[class~="(?:text|bg|border)-${name}(?:/\\d+)?"\\]`,
+    ).test(css);
+    if (!applied) {
+      throw new Error(
+        `--color-${name} is overridden for a console surface but no rule applies it ` +
+          `to the compiled utility. @theme inline bakes the token into the utility ` +
+          `as a literal, so the override is inert and this gate would pass on a ` +
+          `colour nothing renders. Add a rule like:\n` +
+          `  [data-surface="portal"] [class~="text-${name}"] { color: var(--color-${name}); }`,
+      );
+    }
+  }
 
   return tokens;
 }

@@ -76,9 +76,30 @@
    4.4993:1 on the shell fill — a hair under AA 1.4.3, which the app already
    documents and patches at individual usage sites. The portal is new surface
    area; rather than inherit a known-marginal value and re-patch it screen by
-   screen, it gets one that passes everywhere it is used. */
+   screen, it gets one that passes everywhere it is used.
+
+   THE CUSTOM PROPERTY ALONE DOES NOTHING, and this cost a CI failure to learn.
+   `@theme inline` compiles the token to a LITERAL — the built utility is
+   `.text-ink-soft{color:#6b7683}`, not `color:var(--color-ink-soft)` — so
+   re-pointing the property here never reached a single rendered node. The
+   override sat in the stylesheet looking correct and changed nothing, and the
+   contrast gate "passed" by reading this block instead of what the browser
+   paints. axe is what caught it: 4.15:1, serious.
+
+   So the property is kept as the SINGLE SOURCE of the value, and the rule below
+   is what actually applies it, by overriding the compiled utility inside the
+   portal subtree. Unlayered, so it beats Tailwind's @layer utilities.
+
+   This is the same shape as the E14 simple-mode rule further down — including
+   the [class~=] form, which matches the bare class and leaves the /90 opacity
+   variant to its own selector. */
 [data-surface="portal"] {
   --color-ink-soft: #5b6672;
+}
+
+[data-surface="portal"] [class~="text-ink-soft"],
+[data-surface="portal"] [class~="text-ink-soft/90"] {
+  color: var(--color-ink-soft);
 }
 
 /* Portal rail width. A real class, NOT a Tailwind arbitrary-value utility:
