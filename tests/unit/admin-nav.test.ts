@@ -16,7 +16,7 @@ describe("admin nav manifest ↔ routes", () => {
     "%s resolves to a page.tsx",
     (href) => {
       // Route-group aware since E22 — /admin/* is served from
-      // src/app/(site)/admin/*, and the group is stripped from the URL.
+      // src/app/(admin)/admin/*, and the group is stripped from the URL.
       expect(
         resolvesToPage(href),
         `${href} matched no page.tsx — looked in:\n  ${candidatePageFiles(href).join("\n  ")}`,

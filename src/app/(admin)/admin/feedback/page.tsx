@@ -2,7 +2,7 @@
 //
 // Server component, force-dynamic for the same reason the insights dashboard
 // is: these numbers must be fresh on every load, never a build-time snapshot.
-// Access is gated by src/app/(site)/admin/layout.tsx (admin role required);
+// Access is gated by src/app/(admin)/admin/layout.tsx (admin role required);
 // /api/feedback's GET re-checks independently, because route handlers bypass
 // layouts entirely.
 //

@@ -27,14 +27,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 
-import { QwickImportManager } from "@/app/(site)/admin/import/qwick/manager";
+import { QwickImportManager } from "@/app/(admin)/admin/import/qwick/manager";
 
 // jsdom rewrites import.meta.url to an http URL, so the file-URL trick the
 // node-environment suites use is unavailable here. Vitest always runs from the
 // repo root (vitest.config.ts lives there), so cwd is the equivalent anchor.
 const REPO_ROOT = process.cwd();
 const SRC_ROOT = path.join(REPO_ROOT, "src");
-const QWICK_UI_DIR = path.join(SRC_ROOT, "app", "(site)", "admin", "import", "qwick");
+// (admin), not (site): /admin moved into its own route group so it stops
+// rendering the public tourist navigation above its own nav bar. Route groups
+// do not change URLs, but they do change on-disk paths — and this one is built
+// from segments, so the import rewrite that caught every other reference
+// stepped straight over it.
+const QWICK_UI_DIR = path.join(SRC_ROOT, "app", "(admin)", "admin", "import", "qwick");
 
 /* ---------------------------------------------------------------------------
  * Contrast machinery. Same WCAG arithmetic as
