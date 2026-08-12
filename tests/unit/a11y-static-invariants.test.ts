@@ -45,8 +45,8 @@ const PARKING_ZONES_BUILTIN = "parkingZones";
  *
  *   git grep -nE 'text-\[[0-9]+px\]' -- 'src/' \
  *     ':!src/components/feature-map.tsx' \
- *     ':!src/app/(site)/admin/maps/editor.tsx' \
- *     ':!src/app/(site)/admin/map/editor.tsx'
+ *     ':!src/app/(admin)/admin/maps/editor.tsx' \
+ *     ':!src/app/(admin)/admin/map/editor.tsx'
  *
  * The reason is `.agent-frozen`: all three are frozen-zone files that no agent
  * may edit, so "fix the px size" is not an available move for them. The test
@@ -55,21 +55,21 @@ const PARKING_ZONES_BUILTIN = "parkingZones";
  */
 const FROZEN_PX_HOLDOUTS = [
   "src/components/feature-map.tsx",
-  "src/app/(site)/admin/maps/editor.tsx",
-  "src/app/(site)/admin/map/editor.tsx",
+  "src/app/(admin)/admin/maps/editor.tsx",
+  "src/app/(admin)/admin/map/editor.tsx",
 ];
 
 /**
  * Frozen files that still pair `text-fern` with a fern tint. Both are in
  * `.agent-frozen`, so repairing them in place is not an available move:
- *   - src/app/(site)/admin/map/editor.tsx — an admin-only toggle button.
+ *   - src/app/(admin)/admin/map/editor.tsx — an admin-only toggle button.
  *   - src/lib/ferry-forecast.ts — LEVELS.light.chip, which IS repaired, at the
  *     two non-frozen components that render it (see src/lib/ferry-chip.ts).
  * The test below re-reads the manifest and fails if either is ever unfrozen
  * without this list being revisited.
  */
 const FERN_TINT_HOLDOUTS = [
-  "src/app/(site)/admin/map/editor.tsx",
+  "src/app/(admin)/admin/map/editor.tsx",
   "src/lib/ferry-forecast.ts",
 ];
 
