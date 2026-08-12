@@ -23,4 +23,9 @@ export type NavIconName =
   | "events"
   | "experiences"
   | "maps"
-  | "system";
+  | "system"
+  // exits — the way OUT of a console, back to the public site or across to the
+  // other one. Kept separate from the section icons above because they name a
+  // destination outside the console rather than a section within it.
+  | "site"
+  | "leave";

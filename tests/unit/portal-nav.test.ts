@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { PORTAL_NAV, portalNavFor, portalSectionFor } from "@/lib/portal-nav";
+import { ADMIN_EXITS } from "@/components/admin/admin-shell";
 import { ROLES, type Role } from "@/lib/auth/roles";
 
 import { candidatePageFiles, resolvesToPage } from "../helpers/app-routes";
@@ -99,5 +100,47 @@ describe("portalSectionFor(pathname)", () => {
     expect(portalSectionFor("/portal/nonprofit", "member-business")?.id).not.toBe(
       "nonprofit",
     );
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * THE WAY OUT
+ *
+ * Both consoles moved into their own route groups and lost the public header
+ * with it. For a while the result was a one-way door: every link in the portal
+ * rail pointed at /portal/*, every link in the admin rail at /admin/*, and once
+ * you were inside there was no route back to the site the console belongs to.
+ * It reached production before anyone noticed, because the people building it
+ * always arrived by typing the URL.
+ *
+ * These are cheap tripwires for a failure that is invisible in a screenshot of
+ * either console on its own.
+ * ------------------------------------------------------------------------- */
+describe("every console offers a way out", () => {
+  it("the portal rail links back to the public site, for every role", () => {
+    for (const role of ["admin", "member-business", "org-editor"] as const) {
+      const hrefs = portalNavFor(role).flatMap((s) => s.items.map((i) => i.href));
+      expect(hrefs, `role "${role}" is trapped in the portal`).toContain("/");
+    }
+  });
+
+  it("the admin rail links back to the public site AND to the portal", () => {
+    const hrefs = ADMIN_EXITS.flatMap((s) => s.items.map((i) => i.href));
+    expect(hrefs).toContain("/");
+    expect(hrefs).toContain("/portal");
+  });
+
+  it("marks every exit as leaving the console", () => {
+    // Without it a screen-reader user follows a rail link and lands somewhere
+    // with entirely different chrome, announced as an ordinary in-console move.
+    for (const exit of ADMIN_EXITS) {
+      expect(exit.leavesShell, `admin exit "${exit.id}"`).toBe(true);
+    }
+    for (const section of portalNavFor("admin")) {
+      const leaves = section.items.some((i) => !i.href.startsWith("/portal"));
+      if (leaves) {
+        expect(section.leavesShell, `portal exit "${section.id}"`).toBe(true);
+      }
+    }
   });
 });
