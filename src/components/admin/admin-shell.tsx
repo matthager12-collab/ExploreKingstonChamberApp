@@ -21,7 +21,9 @@ import { AppRail, type RailSection } from "@/components/shell/app-rail";
  * card to the dashboard and cost a genuinely useful tripwire.
  *
  * leavesShell adds the screen-reader "(leaves this console)" note, so the jump
- * is announced rather than discovered on arrival.
+ * is announced rather than discovered on arrival — and it is also what sinks
+ * these to the FOOT of the rail (see the partition in app-rail.tsx). Order in
+ * this array no longer decides where they land; the flag does.
  */
 export const ADMIN_EXITS: RailSection[] = [
   {

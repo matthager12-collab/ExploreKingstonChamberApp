@@ -88,11 +88,28 @@ export function AppRail({
   const expanded = rail !== "collapsed";
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  /* THE EXITS SINK TO THE FOOT OF THE RAIL.
+   *
+   * Both consoles listed their exits last but INLINE, so "Explore Kingston" sat
+   * flush against the last real section and read as one more place to work.
+   * They are not: they are the door, and a door belongs at the edge of a room,
+   * not among the furniture. Pinned to the bottom with a rule above them, the
+   * scanning order becomes "everything I do here" and then, separately,
+   * "everywhere else I could be".
+   *
+   * The split keys off `leavesShell`, which already means exactly this — so no
+   * caller changes and BOTH rails get the treatment from one rule, which is the
+   * promise at the top of this file. */
+  const primary = sections.filter((s) => !s.leavesShell);
+  const bottom = sections.filter((s) => s.leavesShell);
+
   // Longest matching href wins, so /portal/business/42 highlights "My business"
-  // rather than Overview, whose /portal prefix matches everything.
-  let active = sections[0];
+  // rather than Overview, whose /portal prefix matches everything. Exits are
+  // excluded: their hrefs ("/" above all) live OUTSIDE this console, so they can
+  // only ever be a false positive here.
+  let active = primary[0];
   let bestLength = -1;
-  for (const section of sections) {
+  for (const section of primary) {
     for (const item of section.items) {
       const hit = pathname === item.href || pathname.startsWith(`${item.href}/`);
       if (hit && item.href.length > bestLength) {
@@ -103,6 +120,38 @@ export function AppRail({
   }
 
   const showPanel = (active?.items.length ?? 0) > 1;
+
+  // One renderer for both lists — the exits differ in WHERE they sit, not in how
+  // a rail link behaves, so collapsed labelling and the drawer-close stay shared.
+  const renderSection = (section: RailSection) => {
+    const Icon = NAV_ICONS[section.icon];
+    const isActive = section.id === active?.id;
+    return (
+      <Link
+        key={section.id}
+        href={section.items[0].href}
+        onClick={() => setDrawerOpen(false)}
+        aria-current={isActive ? "page" : undefined}
+        aria-label={expanded ? undefined : section.label}
+        title={expanded ? undefined : section.label}
+        className={`flex min-h-11 items-center gap-3 rounded-lg px-2.5 py-2 font-semibold transition-colors ${
+          isActive
+            ? "bg-primary text-white"
+            : "text-ink-soft hover:bg-white hover:text-ink"
+        }`}
+      >
+        <Icon size={22} className="shrink-0" />
+        {expanded && (
+          <span className="truncate text-sm">
+            {section.label}
+            {section.leavesShell && (
+              <span className="sr-only"> (leaves this console)</span>
+            )}
+          </span>
+        )}
+      </Link>
+    );
+  };
 
   return (
     <div data-surface={surface} className="flex min-h-dvh bg-surface">
@@ -137,7 +186,7 @@ export function AppRail({
               // "Chamber ad…" at the larger size. A console's name is a label,
               // not a headline — shrinking it beats abbreviating it.
               <Link
-                href={brandHref ?? sections[0]?.items[0]?.href ?? "#"}
+                href={brandHref ?? primary[0]?.items[0]?.href ?? "#"}
                 className="min-w-0 flex-1 truncate px-2 font-display text-base font-semibold text-primary"
               >
                 {brand.full}
@@ -169,47 +218,33 @@ export function AppRail({
             </button>
           </div>
 
-          {sections.map((section) => {
-            const Icon = NAV_ICONS[section.icon];
-            const isActive = section.id === active?.id;
-            return (
-              <Link
-                key={section.id}
-                href={section.items[0].href}
-                onClick={() => setDrawerOpen(false)}
-                aria-current={isActive ? "page" : undefined}
-                aria-label={expanded ? undefined : section.label}
-                title={expanded ? undefined : section.label}
-                className={`flex min-h-11 items-center gap-3 rounded-lg px-2.5 py-2 font-semibold transition-colors ${
-                  isActive
-                    ? "bg-primary text-white"
-                    : "text-ink-soft hover:bg-white hover:text-ink"
-                }`}
-              >
-                <Icon size={22} className="shrink-0" />
-                {expanded && (
-                  <span className="truncate text-sm">
-                    {section.label}
-                    {section.leavesShell && (
-                      <span className="sr-only"> (leaves this console)</span>
-                    )}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
+          {primary.map(renderSection)}
 
-          {expanded && footer && (
-            <p className="mt-auto border-t border-border px-2 pt-3 text-xs text-ink-soft">
-              Signed in as{" "}
-              <span className="font-semibold text-ink">{footer.primary}</span>
-              {footer.secondary && (
-                <>
-                  <br />
-                  {footer.secondary}
-                </>
+          {/* mt-auto moved OFF the footer and onto this block, so the exits sink
+              with it and stay above the signed-in line. The rail column already
+              scrolls (overflow-y-auto), so on a short viewport this simply stops
+              floating and the exits sit after the sections — never clipped. */}
+          {(bottom.length > 0 || (expanded && footer)) && (
+            <div className="mt-auto flex flex-col gap-1 pt-2">
+              {bottom.length > 0 && (
+                <div className="flex flex-col gap-1 border-t border-border pt-2">
+                  {bottom.map(renderSection)}
+                </div>
               )}
-            </p>
+
+              {expanded && footer && (
+                <p className="border-t border-border px-2 pt-3 text-xs text-ink-soft">
+                  Signed in as{" "}
+                  <span className="font-semibold text-ink">{footer.primary}</span>
+                  {footer.secondary && (
+                    <>
+                      <br />
+                      {footer.secondary}
+                    </>
+                  )}
+                </p>
+              )}
+            </div>
           )}
         </nav>
 
