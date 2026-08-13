@@ -162,7 +162,12 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     blurb:
       "Review member submissions, visitor reports, and content due for a re-check.",
     capability: "moderate",
-    section: "members",
+    // Its OWN section, not a page under Members. It was two clicks down a
+    // section named after who submits the work rather than after the work — and
+    // it is the one surface with a queue behind it, so it is the one that has a
+    // reason to be checked daily. A single-page section renders no panel, so
+    // top-level here also means one click instead of two.
+    section: "worklist",
   },
   {
     id: "events",
@@ -247,6 +252,11 @@ export function adminNavFor(user: AuthSubject): AdminNavEntry[] {
 
 export const ADMIN_SECTIONS = [
   { id: "insights", label: "Insights", icon: "insights" },
+  // Second, directly under Insights: those two answer "how is the site doing"
+  // and "what needs me today", which is the order someone opens the console in.
+  // It also puts the only surface a moderator can see at the TOP of their rail
+  // rather than behind a Members section holding nothing else they may reach.
+  { id: "worklist", label: "Worklist", icon: "worklist" },
   { id: "members", label: "Members", icon: "members" },
   { id: "listings", label: "Listings", icon: "listings" },
   { id: "events", label: "Events", icon: "events" },

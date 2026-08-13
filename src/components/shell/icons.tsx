@@ -147,6 +147,20 @@ export function IconInsights(props: IconProps) {
   );
 }
 
+// A checklist rather than a clipboard: the worklist is a QUEUE you draw down,
+// and two ticked rows say that where a clipboard outline would only say
+// "document". Same reasoning as the exit glyphs — literal beats clever on the
+// control someone reaches for when work is piling up.
+export function IconWorklist(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="m3 7.5 1.8 1.8 3.4-3.4" />
+      <path d="m3 16.5 1.8 1.8 3.4-3.4" />
+      <path d="M12.5 8h8.5M12.5 17h8.5" />
+    </Glyph>
+  );
+}
+
 export function IconEvents(props: IconProps) {
   return (
     <Glyph {...props}>
@@ -197,6 +211,7 @@ export const NAV_ICONS: Record<NavIconName, (props: IconProps) => ReactElement> 
   admin: IconAdmin,
   // admin sections
   insights: IconInsights,
+  worklist: IconWorklist,
   members: IconAccount,
   listings: IconBusiness,
   events: IconEvents,

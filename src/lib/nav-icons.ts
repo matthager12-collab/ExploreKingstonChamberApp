@@ -18,6 +18,7 @@ export type NavIconName =
   | "admin"
   // admin sections
   | "insights"
+  | "worklist"
   | "members"
   | "listings"
   | "events"
