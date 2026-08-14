@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recordLogin, sessionCookie, tokenFor, verifyCredentials } from "@/lib/auth";
+import { landingFor } from "@/lib/auth/landing";
 import { checkRateLimit, clientKey } from "@/lib/rate-limit";
 
 function tooMany(retryAfterSeconds: number): NextResponse {
@@ -40,7 +41,15 @@ export async function POST(request: NextRequest) {
   // Stamps last_login_at (FR-A09's account list) and audits the sign-in.
   const signedIn = await recordLogin(user);
 
-  const res = NextResponse.json({ ok: true, role: signedIn.role });
+  // `redirectTo` is where this ROLE belongs (src/lib/auth/landing.ts) — a
+  // Chamber admin lands in the console instead of the member portal. Computed
+  // from the role that was just read out of the database, never from the
+  // request body, so the sign-in flow gains no open-redirect surface.
+  const res = NextResponse.json({
+    ok: true,
+    role: signedIn.role,
+    redirectTo: landingFor(signedIn.role),
+  });
   // Minted at the user's CURRENT session_version: any token issued before a
   // revocation is already dead.
   res.cookies.set(sessionCookie.name, tokenFor(signedIn), sessionCookie.options);

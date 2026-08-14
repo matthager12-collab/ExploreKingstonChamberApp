@@ -5,6 +5,8 @@
 
 import { useState, type FormEvent, type ReactNode } from "react";
 
+import { LANDING_FALLBACK, safeLandingPath } from "@/lib/auth/landing";
+
 // E14: explicit htmlFor/id rather than a wrapping label. Hints render as
 // siblings of the label so `aria-describedby` can point at them without the
 // same sentence also folding into the control's accessible name.
@@ -35,7 +37,15 @@ const inputClass =
 const buttonClass =
   "rounded-full bg-sound px-6 py-2.5 font-semibold text-white hover:bg-sound-deep disabled:opacity-50";
 
-function useSubmit(endpoint: string, redirectTo = "/portal") {
+// Each of the three session-minting routes answers with the console this
+// ROLE belongs to (src/lib/auth/landing.ts), so a Chamber admin signing in
+// lands in /admin rather than in the member portal and clicking through. The
+// `redirectTo` default stays as the floor for a response that predates the
+// field. safeLandingPath() rejects anything that is not a same-origin absolute
+// path — the value is server-computed from a closed table, so that can only
+// fire on a bug, but it keeps "sign-in cannot redirect off-site" checkable
+// here rather than only by reading the server.
+function useSubmit(endpoint: string, redirectTo = LANDING_FALLBACK) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,13 +58,18 @@ function useSubmit(endpoint: string, redirectTo = "/portal") {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = (await res.json()) as { ok?: boolean; error?: string };
+      const data = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        redirectTo?: string;
+      };
       if (!res.ok || !data.ok) {
         setError(data.error ?? "Something went wrong");
         setBusy(false);
         return;
       }
-      window.location.href = redirectTo;
+      window.location.href =
+        data.redirectTo === undefined ? redirectTo : safeLandingPath(data.redirectTo);
     } catch {
       setError("Network error — try again");
       setBusy(false);
@@ -238,16 +253,7 @@ export function JoinForm({ initialCode }: { initialCode?: string }) {
   );
 }
 
-export function LogoutButton() {
-  return (
-    <button
-      onClick={async () => {
-        await fetch("/api/auth/logout", { method: "POST" });
-        window.location.href = "/portal";
-      }}
-      className="text-sm font-medium text-ink-soft underline underline-offset-2 hover:text-ink"
-    >
-      Sign out
-    </button>
-  );
-}
+// LogoutButton moved to src/components/shell/sign-out-button.tsx. It is chrome
+// belonging to the rail (which both consoles render), not to the portal's
+// signed-out form module — and leaving it here meant the admin console could
+// only have reached it by importing the login/setup/invite forms alongside it.

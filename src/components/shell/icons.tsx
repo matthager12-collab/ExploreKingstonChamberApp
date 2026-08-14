@@ -57,6 +57,25 @@ export function IconLeave(props: IconProps) {
   );
 }
 
+/* Sign out. Deliberately NOT registered in NAV_ICONS below, for the same
+ * reason ADMIN_EXITS lives outside the admin manifest: that union is the slot
+ * list for nav SECTIONS, and signing out is chrome. Putting it there would let
+ * a manifest declare a "sign out" page that does not exist.
+ *
+ * Distinct from IconLeave (the door to the other console) — leaving a room and
+ * leaving the building should not wear the same glyph when they sit two rows
+ * apart in the same rail. The arrow points OUT of the panel rather than into
+ * it, which is the one part of the door metaphor worth keeping literal. */
+export function IconSignOut(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M10 3H5.5A1.5 1.5 0 0 0 4 4.5v15A1.5 1.5 0 0 0 5.5 21H10" />
+      <path d="M16 8l4 4-4 4" />
+      <path d="M20 12H9" />
+    </Glyph>
+  );
+}
+
 export function IconOverview(props: IconProps) {
   return (
     <Glyph {...props}>

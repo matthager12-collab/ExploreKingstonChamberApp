@@ -145,6 +145,56 @@ describe("AppRail — an exit never takes the active highlight", () => {
   });
 });
 
+describe("AppRail — sign out is chrome, so it is in the rail", () => {
+  // WHY THIS SUITE EXISTS. Sign-out used to render as a page action on the
+  // portal's Overview. The admin console's rail never passes through that page,
+  // so /admin had no sign-out at ALL: you left by taking the "Member portal"
+  // exit and finding the button on the far side. Both consoles render this one
+  // component, so putting it here is what makes that true of both at once.
+
+  it("renders in a console whose sections are all admin", () => {
+    renderRail([...SECTIONS, ...EXITS]);
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
+  });
+
+  it("survives a COLLAPSED rail, still carrying its own name", () => {
+    // The trap this guards. The signed-in line renders only when expanded — it
+    // is prose, and prose does not fit a 3.5rem column. Sign-out sitting in
+    // that same block would vanish with it, and a collapsed rail is a sticky,
+    // per-person setting: someone who collapses it once loses sign-out in both
+    // consoles, permanently, with no error to explain it.
+    document.documentElement.setAttribute("data-rail", "collapsed");
+    renderRail([...SECTIONS, ...EXITS]);
+
+    // Found BY ITS ACCESSIBLE NAME while the visible label is gone — the
+    // labelling rule the rail's links already follow (glyph is never a
+    // control's only name).
+    const button = screen.getByRole("button", { name: "Sign out" });
+    expect(button).toBeInTheDocument();
+    expect(button).toHaveAttribute("title", "Sign out");
+    expect(screen.queryByText(/Signed in as/)).toBeNull();
+  });
+
+  it("sits below the exits, at the very foot of the rail", () => {
+    // Reading order: everything I do here, then everywhere else I could be,
+    // then who I am and how to stop being them.
+    const { container } = renderRail([...SECTIONS, ...EXITS]);
+    const text = container.textContent ?? "";
+    expect(text.indexOf("Sign out")).toBeGreaterThan(text.indexOf("Member portal"));
+  });
+
+  it("posts to the logout route and lands on the signed-out portal", () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+    renderRail([...SECTIONS, ...EXITS]);
+
+    screen.getByRole("button", { name: "Sign out" }).click();
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/auth/logout", { method: "POST" });
+    vi.unstubAllGlobals();
+  });
+});
+
 describe("AppRail — a one-page section is one click", () => {
   it("opens no section panel for Worklist", () => {
     // The reason promoting Worklist out of Members is worth doing: a section
