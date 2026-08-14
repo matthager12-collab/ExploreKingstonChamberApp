@@ -4,6 +4,7 @@
 import { timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createFirstAdmin, hasAnyUsers, sessionCookie, tokenFor } from "@/lib/auth";
+import { landingFor } from "@/lib/auth/landing";
 import { checkRateLimit, clientKey } from "@/lib/rate-limit";
 
 /** Constant-time string compare (rejects unequal lengths without comparing). */
@@ -62,7 +63,10 @@ export async function POST(request: NextRequest) {
     name: body.name,
     password: body.password,
   });
-  const res = NextResponse.json({ ok: true });
+  // createFirstAdmin only ever mints an admin, so this is always the console —
+  // but it goes through landingFor() with the returned role like the other two
+  // routes, so there is ONE table to change and no hard-coded "/admin" to miss.
+  const res = NextResponse.json({ ok: true, redirectTo: landingFor(user.role) });
   res.cookies.set(sessionCookie.name, tokenFor(user), sessionCookie.options);
   return res;
 }

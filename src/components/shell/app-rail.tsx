@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { IconChevron, IconClose, IconMenu, NAV_ICONS } from "./icons";
+import { SignOutButton } from "./sign-out-button";
 import type { NavIconName } from "@/lib/nav-icons";
 
 /* THE APP RAIL — one component, both consoles (pattern N5).
@@ -232,17 +233,34 @@ export function AppRail({
                 </div>
               )}
 
-              {expanded && footer && (
-                <p className="border-t border-border px-2 pt-3 text-xs text-ink-soft">
-                  Signed in as{" "}
-                  <span className="font-semibold text-ink">{footer.primary}</span>
-                  {footer.secondary && (
-                    <>
-                      <br />
-                      {footer.secondary}
-                    </>
+              {footer && (
+                <div className="flex flex-col gap-1 border-t border-border pt-2">
+                  {expanded && (
+                    <p className="px-2 pt-1 text-xs text-ink-soft">
+                      Signed in as{" "}
+                      <span className="font-semibold text-ink">{footer.primary}</span>
+                      {footer.secondary && (
+                        <>
+                          <br />
+                          {footer.secondary}
+                        </>
+                      )}
+                    </p>
                   )}
-                </p>
+                  {/* SIGN OUT BELONGS TO THE RAIL, NOT TO A PAGE.
+                      It used to render as a page action on the portal Overview
+                      — which meant the admin console, whose rail never passes
+                      through that page, had no way to sign out at all. You got
+                      out by taking the "Member portal" exit and finding the
+                      button over there. Chrome that every page needs cannot
+                      live on one page.
+
+                      Rendered like a rail link rather than inside the
+                      expanded-only block above, so it survives a collapsed
+                      rail: the glyph keeps aria-label + title, per the labelling
+                      rule at the top of this file. */}
+                  <SignOutButton expanded={expanded} />
+                </div>
               )}
             </div>
           )}

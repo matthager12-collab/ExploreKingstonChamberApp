@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { redeemInvite, sessionCookie, tokenFor } from "@/lib/auth";
+import { landingFor } from "@/lib/auth/landing";
 import { OwnershipConflictError } from "@/lib/ownership";
 import { checkRateLimit, clientKey } from "@/lib/rate-limit";
 
@@ -40,7 +41,14 @@ export async function POST(request: NextRequest) {
       name: body.name,
       password: body.password,
     });
-    const res = NextResponse.json({ ok: true, role: user.role });
+    // Same role-based landing as login: an admin invite drops the new account
+    // straight into the console. Most invites mint org roles, which fall
+    // through to the portal — see src/lib/auth/landing.ts.
+    const res = NextResponse.json({
+      ok: true,
+      role: user.role,
+      redirectTo: landingFor(user.role),
+    });
     res.cookies.set(sessionCookie.name, tokenFor(user), sessionCookie.options);
     return res;
   } catch (e) {

@@ -9,7 +9,7 @@ import { getCharities } from "@/lib/stores/charity-store";
 import { getLodging } from "@/lib/stores/listing-stores";
 import { Callout, PageHeader, Section } from "@/components/ui";
 import { PortalInviteHint } from "@/components/get-listed";
-import { LoginForm, LogoutButton } from "@/components/portal/auth-forms";
+import { LoginForm } from "@/components/portal/auth-forms";
 import { FieldList, PortalPage, PortalPanel } from "@/components/portal/page";
 
 export const metadata: Metadata = { title: "Portal" };
@@ -76,10 +76,13 @@ export default async function PortalPage_() {
   const firstName = user.name.split(" ")[0];
 
   return (
+    // Sign out was a page action here and is now in the rail footer, where both
+    // consoles get it (src/components/shell/sign-out-button.tsx). Keeping it in
+    // both places would repeat, two inches apart, a control already on screen —
+    // the same duplication that emptied this page of nav cards.
     <PortalPage
       title={`Hi, ${firstName}`}
       intro="What you manage, and where to pick it up."
-      actions={<LogoutButton />}
     >
       {awaitingTools && (
         <Callout title={`${ROLE_LABELS[user.role]} access is set up`}>
