@@ -57,7 +57,8 @@ export type ParkingRule =
   | "park-and-ride-24h"
   | "prohibited"
   | "load-zone"
-  | "permit";
+  | "permit"
+  | "accessible";
 
 /**
  * Which curb(s) of a street a rule applies to. Compass sides, matching how
@@ -161,7 +162,31 @@ export const RULE_LABELS: Record<ParkingRule, string> = {
   prohibited: "No parking",
   "load-zone": "Loading / dropoff only",
   permit: "Permit holders only",
+  accessible: "Accessible — disabled placard required",
 };
+
+/**
+ * `accessible` (owner request, 2026-08-15): stalls reserved for drivers with a
+ * state disabled parking placard or plate.
+ *
+ * Added because the Chamber was already trying to map these and had nowhere to
+ * put them — a live zone drawn as "Handicap and loading zones" was filed under
+ * `permit`, which is the one rule that tells a visitor they may NOT park there.
+ * For the driver this map exists to help, that is the opposite of the truth.
+ *
+ * The nearest neighbours, and why it is neither:
+ *   - `permit` — a permit is issued by the lot's operator to a specific person
+ *     for a specific lot. A placard is issued by the state and travels with the
+ *     driver; it is honoured in every accessible stall in town.
+ *   - `load-zone` — a rule about the vehicle's activity (drop something off and
+ *     move on). This is a rule about who is driving, with no clock on it.
+ *
+ * Deliberately silent on price: see freeOrPaidFromRule in
+ * src/lib/map/parking-labels.ts. Accessible stalls sit inside free lots and
+ * paid ones alike, and Washington's placard privileges do not extend to Port
+ * text-to-pay stalls, so the rule alone cannot answer "what will this cost me".
+ * Per-lot payment facts belong in the zone's `summary`/`details`.
+ */
 
 /**
  * `business-customer` (owner request, 2026-08-04): a lot a business keeps for

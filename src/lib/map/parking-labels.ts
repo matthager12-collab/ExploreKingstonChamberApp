@@ -24,6 +24,7 @@ export const PARKING_RULE_LABELS: Record<string, string> = {
   prohibited: "No parking",
   "load-zone": "Load zone",
   permit: "Permit parking",
+  accessible: "Accessible · disabled placard",
 };
 
 /** The label a visitor reads. Falls back to the slug rather than to nothing —
@@ -54,16 +55,28 @@ export function parkingRuleLabel(rule: string): string {
  *   permit              permit holders only — a visitor cannot park here at all
  *   load-zone           loading / dropoff only — not visitor parking
  *   prohibited          no parking
+ *   accessible          disabled placard required — see the separate note below
  *
- * The last three return `undefined` ON PURPOSE. A visitor cannot park in a
- * permit row, a load zone, or a no-parking area at any price, so "Free" and
- * "Paid" are both wrong answers — and "Free" would be actively harmful, since
- * a permit row is free only to people who already hold a permit. The rule
- * label beside the badge already reads "Permit parking" / "Load zone" / "No
- * parking", which is the accurate thing to say; a cost badge would either
- * repeat it or contradict it. Stretching this into a "Restricted" value was
- * considered and rejected: it turns a money question into a legal-status
- * question, which is the exact conflation src/lib/cost.ts exists to prevent.
+ * `permit`, `load-zone` and `prohibited` return `undefined` ON PURPOSE. A
+ * visitor cannot park in a permit row, a load zone, or a no-parking area at any
+ * price, so "Free" and "Paid" are both wrong answers — and "Free" would be
+ * actively harmful, since a permit row is free only to people who already hold
+ * a permit. The rule label beside the badge already reads "Permit parking" /
+ * "Load zone" / "No parking", which is the accurate thing to say; a cost badge
+ * would either repeat it or contradict it. Stretching this into a "Restricted"
+ * value was considered and rejected: it turns a money question into a
+ * legal-status question, which is the exact conflation src/lib/cost.ts exists
+ * to prevent.
+ *
+ * `accessible` returns `undefined` for a DIFFERENT reason, and the distinction
+ * matters. The other three are unanswerable because nobody may park there. An
+ * accessible stall is one a placard holder is entitled to use — the money
+ * question genuinely applies, and the rule simply does not carry the answer.
+ * Kingston has accessible stalls inside the free 2-hour row AND inside the
+ * Port's paid POKPARK rows, and Washington's placard privileges (RCW 46.19.050)
+ * do not waive the Port's text-to-pay charge. So either badge would be right
+ * somewhere in town and wrong elsewhere. The honest answer is the zone's own
+ * `summary`, which says what that particular lot charges.
  */
 export function freeOrPaidFromRule(rule: string): CostValue | undefined {
   switch (rule) {

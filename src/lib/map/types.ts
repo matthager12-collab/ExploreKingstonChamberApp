@@ -108,7 +108,8 @@ export interface MapFeature {
 }
 
 export type ParkingType =
-  | "paid" | "free" | "free-timed" | "customer" | "permit" | "park-and-ride" | "load-zone" | "no-parking";
+  | "paid" | "free" | "free-timed" | "customer" | "permit" | "park-and-ride" | "load-zone" | "no-parking"
+  | "accessible";
 
 // Colors track the zone-rule palette (ADR-0007 §4, "Evergreen & Sound"):
 // permit/park-and-ride/load-zone carry the same meanings as the MapZone rules,
@@ -126,6 +127,12 @@ export const PARKING_TYPES = [
   { key: "park-and-ride", label: "Park & ride",         color: "#8a4c22" },
   { key: "load-zone",     label: "Load / 15-min zone",  color: "#b8860b" },
   { key: "no-parking",    label: "No parking",          color: "#d43d3d" },
+  // Mirrors the MapZone rule `accessible`, same reasoning as `customer` above:
+  // a concept that exists on only one side of these two taxonomies deepens the
+  // divergence docs/MAPS.md already warns about. Lets a hand-drawn CMS feature
+  // mark accessible stalls inside a lot the zone layer covers as one polygon —
+  // which is exactly what the Port's are (the seed data never polygonized them).
+  { key: "accessible",    label: "Accessible stalls",   color: "#30457e" },
 ] as const;
 
 export function parkingTypeInfo(key: string | undefined) {

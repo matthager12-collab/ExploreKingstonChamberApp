@@ -40,6 +40,7 @@ const RULES: ParkingRule[] = [
   "prohibited",
   "load-zone",
   "permit",
+  "accessible",
 ];
 const OVERNIGHT: MapZone["overnight"][] = ["yes", "no", "confirm-first"];
 const CONFIDENCE: MapZone["confidence"][] = ["verified", "probable", "unverified"];

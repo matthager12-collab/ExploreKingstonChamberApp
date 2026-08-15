@@ -70,6 +70,17 @@ const PARKING_RULE_COLORS: Record<string, string> = {
   prohibited: "#d43d3d",
   "load-zone": "#b8860b",
   permit: "#7a7468",
+  // Navy, because the International Symbol of Access is white-on-blue and a
+  // driver looking for these stalls is looking for blue. The obvious mid-blue
+  // was not available — `free-unrestricted` already holds #1E96C0 and `paid`
+  // holds a blue-leaning purple, so the band is squeezed from both sides.
+  // Swept the whole blue range against every other rule colour: this is the
+  // best available at a lightness that still reads as blue rather than black.
+  // ΔE76 39.1 from its nearest neighbour (`free-unrestricted`), which clears
+  // the legend's tightest shipped pair (36.3, park-and-ride/load-zone), so
+  // ADR-0007 §4's "zero confusable pairs" still holds. 4.89:1 on the worst
+  // base surface and 9.22:1 for white text — both comfortably above the bar.
+  accessible: "#30457e",
 };
 const FALLBACK_PARKING_COLOR = "#7a7468";
 
@@ -86,6 +97,7 @@ const PARKING_RULE_LABELS: Record<string, string> = {
   prohibited: "No parking",
   "load-zone": "Load zone",
   permit: "Permit parking",
+  accessible: "Accessible · disabled placard",
 };
 
 /** Popup wording for a zone's known curb side (E31 phase 6). */

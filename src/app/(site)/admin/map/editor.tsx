@@ -92,6 +92,7 @@ const RULE_COLORS: Record<string, string> = {
   prohibited: "#d43d3d",
   "load-zone": "#b8860b",
   permit: "#7a7468",
+  accessible: "#30457e",
 };
 
 const RULES: ParkingRule[] = [
@@ -103,6 +104,7 @@ const RULES: ParkingRule[] = [
   "prohibited",
   "load-zone",
   "permit",
+  "accessible",
 ];
 
 const INPUT =

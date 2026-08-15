@@ -171,6 +171,12 @@ describe("the free-vs-paid projection", () => {
       prohibited: undefined,
       "load-zone": undefined,
       permit: undefined,
+      // Also `undefined`, but for a different reason than the three above: a
+      // placard holder MAY park here, so the money question applies — the rule
+      // just cannot answer it. Kingston has accessible stalls in the free
+      // 2-hour row and in the Port's paid rows, and a placard does not waive
+      // the Port's charge. Reasoning in full in parking-labels.ts.
+      accessible: undefined,
     };
     for (const rule of ALL_RULES) {
       expect(freeOrPaidFromRule(rule), rule).toBe(expected[rule]);
@@ -202,7 +208,12 @@ describe("ADR-0007 §4 — zero confusable pairs inside the parking legend", () 
   it("the newest rule is not the tightest pair in the legend", () => {
     // Adding a colour must not quietly become the worst case — if it does, it
     // needed a different hue, not a smaller floor.
-    const withNew = pairs.filter((p) => p.a === "business-customer" || p.b === "business-customer");
+    // Re-point this at the newest rule whenever one is added; leaving it on a
+    // superseded rule would let the actual newcomer in unmeasured. Previously
+    // `business-customer` (ΔE 41.3), now `accessible` (ΔE 39.1) — both clear
+    // the shipped worst case of 36.3 (park-and-ride / load-zone).
+    const NEWEST = "accessible";
+    const withNew = pairs.filter((p) => p.a === NEWEST || p.b === NEWEST);
     const others = pairs.filter((p) => !withNew.includes(p));
     expect(Math.min(...withNew.map((p) => p.d))).toBeGreaterThan(
       Math.min(...others.map((p) => p.d)),
