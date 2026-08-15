@@ -281,7 +281,10 @@ export const mapFeatures: MapFeature[] = [
     notes:
       "Tailoring and alterations, upstairs on the downtown strip. By appointment — (360) 731-9973. No survey date on record.",
     category: "services",
-    views: ["health-beauty"],
+    // Home & Practical, not Health & Beauty (owner call 2026-08-15): alterations
+    // are an errand you run, not something you browse — the same test the
+    // home-practical view description applies to hardware and auto parts.
+    views: ["home-practical"],
     point: [47.7972193, -122.4967622],
   },
   {
@@ -368,16 +371,10 @@ export const mapFeatures: MapFeature[] = [
     views: ["home-practical"],
     point: [47.8018899, -122.5001945],
   },
-  {
-    id: "shop-sheepish-pig",
-    kind: "marker",
-    title: "The Sheepish Pig",
-    notes:
-      "Butcher and specialty foods, next to Kingston Mercantile & Marine. OSM check 2025-06-14.",
-    category: "shop",
-    views: ["food-to-take-home"],
-    point: [47.8018765, -122.5023235],
-  },
+  // The Sheepish Pig (butcher, next to Kingston Mercantile & Marine) was here
+  // until 2026-08-15 — removed as closed, owner report. Kept as a comment
+  // rather than deleted outright so the coordinates survive if it reopens:
+  // point [47.8018765, -122.5023235], category "shop", views ["food-to-take-home"].
   {
     id: "shop-country-pet-shoppe",
     kind: "marker",

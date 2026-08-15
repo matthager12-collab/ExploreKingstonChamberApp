@@ -158,7 +158,7 @@ export const mapViews: MapView[] = [
     id: "home-practical",
     name: "Home & Practical",
     description:
-      "Hardware, auto parts, phones, and storage — the errands you run rather than browse. Mostly up the hill on Highway 104.",
+      "Hardware, auto parts, phones, alterations, and storage — the errands you run rather than browse. Mostly up the hill on Highway 104.",
     center: [47.8017, -122.5006],
     zoom: 16,
     sources: [],
@@ -168,7 +168,7 @@ export const mapViews: MapView[] = [
     id: "health-beauty",
     name: "Health & Beauty",
     description:
-      "Salons, spas, massage, nails, and alterations around downtown Kingston and Kingston Center.",
+      "Salons, spas, massage, and nails around downtown Kingston and Kingston Center.",
     center: [47.7992, -122.4995],
     zoom: 15,
     sources: [],
