@@ -67,7 +67,13 @@ export default async function ItineraryPage({
                 aria-hidden
                 className="absolute top-1.5 -left-[7px] h-3 w-3 rounded-full border-2 border-white bg-tide"
               />
-              <div className="w-20 shrink-0 pt-0.5 pl-5 text-sm font-semibold whitespace-nowrap text-sound-deep sm:w-24">
+              {/* Multi-day itineraries time their stops "Day 2 9:30 AM", which
+                  does not fit the old w-20 + whitespace-nowrap column — it
+                  overflowed into the stop title rather than wrapping, because
+                  nothing here clips. Slightly wider, and allowed to wrap, so a
+                  multi-day label stacks as "Day 2" over "9:30 AM" while a plain
+                  "10:25 AM" still sits on one line. */}
+              <div className="w-24 shrink-0 pt-0.5 pl-5 text-sm font-semibold text-sound-deep sm:w-28">
                 {stop.time}
               </div>
               <div className="min-w-0 flex-1">
