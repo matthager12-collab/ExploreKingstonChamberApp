@@ -8,6 +8,15 @@
 // The list of hideable paths (with labels) lives here so the admin UI and
 // the nav filter agree on one source of truth. Home ("/") and the portal/
 // admin/api routes are deliberately not hideable.
+//
+// EVERY page under a hideable path needs a gate, not just the section index.
+// A detail route that only 404s on "no such record" stays fully reachable
+// while its section is hidden — the list page 404s and the URLs leave the
+// sitemap, but bookmarks and search results keep working
+// (/itineraries/<slug> and /hunt/<slug>, found 2026-08-19). Children gate on
+// the PARENT section path: /ferry/plan calls assertPageVisible("/ferry").
+// tests/unit/visibility-gate-guard.test.ts enforces both halves — that a gate
+// exists, and that it names the right section.
 
 import { notFound } from "next/navigation";
 import { getSessionUser } from "./auth";

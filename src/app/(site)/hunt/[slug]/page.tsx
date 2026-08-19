@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getHunt, photoUrl } from "@/lib/hunt-store";
+import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
 import { HuntPlayer, type PlayerHunt } from "@/components/hunt-player";
 import { Badge, Callout, ExternalLink, PageHeader, Section, mapDirectionsUrl } from "@/components/ui";
 
@@ -29,6 +30,9 @@ export default async function HuntDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
+  // Before the store read — hiding "/hunt" must take every hunt URL with it,
+  // not just the list page. Bare gate because the route is force-dynamic.
+  const hiddenPreview = await assertPageVisible("/hunt");
   const hunt = await getHunt(slug);
   if (!hunt) notFound();
 
@@ -49,6 +53,7 @@ export default async function HuntDetailPage({
 
   return (
     <>
+      {hiddenPreview && <HiddenPageBanner />}
       <PageHeader eyebrow="Scavenger hunt" title={hunt.title} intro={hunt.description} />
 
       <Section>
