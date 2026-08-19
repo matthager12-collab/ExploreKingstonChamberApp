@@ -14,6 +14,13 @@
 // That is the one observable that distinguishes the two placements (verified
 // by moving the gate below the read and watching only that test go red).
 //
+// generateMetadata is covered as its OWN entry point. Calling a page's default
+// export directly — which is what this file does — never runs it, so it is
+// exactly the kind of gap a direct-invocation test cannot see: it runs on the
+// same request, reads the same record store, and ungated it would answer a
+// hidden section with the record's real title for a live slug and the fallback
+// for a bogus one. Same exists-oracle, relocated into <head>.
+//
 // Node environment, no DOM: an async server component returns an element tree,
 // and we only need to know whether awaiting it throws. The gate under test is
 // the real assertPageVisible — only its two data dependencies (the page-settings
@@ -154,6 +161,28 @@ describe.each(SECTIONS)("$label/<slug> honours the section hide", ({ section, sl
       "the gate is below the store read — move it above so the hidden section " +
         "cannot be probed for which slugs exist",
     ).not.toHaveBeenCalled();
+  });
+
+  it("gates generateMetadata too, so <head> is not a second exists-oracle", async () => {
+    hide(section);
+    const { generateMetadata } = await load();
+    await expect(generateMetadata({ params: Promise.resolve({ slug }) })).rejects.toThrow(
+      NOT_FOUND,
+    );
+    expect(
+      store,
+      "generateMetadata read the record before checking visibility — a hidden " +
+        "section would title its 404 with the real record name",
+    ).not.toHaveBeenCalled();
+  });
+
+  it("still titles the page for an admin previewing a hidden section", async () => {
+    hide(section);
+    getSessionUser.mockResolvedValue({ role: "admin" });
+    const { generateMetadata } = await load();
+    await expect(
+      generateMetadata({ params: Promise.resolve({ slug }) }),
+    ).resolves.toMatchObject({ title: expect.stringContaining("") });
   });
 
   it("answers a hidden section identically for a real and a bogus slug", async () => {

@@ -16,6 +16,13 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
+  // Gated too, and for the same reason the page body is: generateMetadata
+  // runs on the SAME request and reads the same record store. Ungated, a
+  // hidden section still answers a real slug with the record's title and a
+  // bogus one with the fallback — the exists-oracle the body gate closes,
+  // relocated into <head>. notFound() from generateMetadata is supported,
+  // and the admin pass-through still returns the real title for a preview.
+  await assertPageVisible("/hunt");
   const hunt = await getHunt(slug);
   if (!hunt) return { title: "Scavenger Hunt" };
   return {
