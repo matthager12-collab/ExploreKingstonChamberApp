@@ -22,12 +22,15 @@ import {
   deleteItinerary,
   getItineraries,
   getItinerariesAdmin,
+  getItineraryOverrides,
   saveItinerary,
 } from "@/lib/stores/itinerary-store";
 import {
   deleteLodging,
   deleteWebcam,
   getLodgingAdmin,
+  getLodgingOverrides,
+  getWebcamOverrides,
   getWebcamsAdmin,
   saveLodging,
   saveWebcam,
@@ -35,6 +38,7 @@ import {
 import {
   deleteRestaurant,
   getRestaurant,
+  getRestaurantOverrides,
   getRestaurantsAdmin,
   saveRestaurant,
 } from "@/lib/stores/business-store";
@@ -101,7 +105,21 @@ export async function GET(request: NextRequest) {
               ? await getEventsAdmin()
               : await getRestaurantsAdmin();
 
-  return NextResponse.json({ records });
+  // Which of these shadow a shipped seed record (and whether they actually
+  // say anything different) — the admin UI badges them so an operator can see
+  // that a record has detached from the codebase. Directory is seedless.
+  const overrides =
+    domain === "itineraries"
+      ? await getItineraryOverrides()
+      : domain === "lodging"
+        ? await getLodgingOverrides()
+        : domain === "webcams"
+          ? await getWebcamOverrides()
+          : domain === "directory"
+            ? {}
+            : await getRestaurantOverrides();
+
+  return NextResponse.json({ records, overrides });
 }
 
 export async function POST(request: NextRequest) {

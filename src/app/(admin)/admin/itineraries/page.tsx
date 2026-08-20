@@ -3,7 +3,7 @@
 // (/api/admin/content-records) re-checks the admin role server-side.
 
 import type { Metadata } from "next";
-import { getItinerariesAdmin } from "@/lib/stores/itinerary-store";
+import { getItinerariesAdmin, getItineraryOverrides } from "@/lib/stores/itinerary-store";
 import { itineraries as seedItineraries } from "@/lib/data/itineraries";
 import { PageHeader, Section } from "@/components/ui";
 import { ItineraryEditor } from "./editor";
@@ -18,6 +18,8 @@ export const metadata: Metadata = {
 export default async function AdminItinerariesPage() {
   const itineraries = await getItinerariesAdmin();
   const seedIds = seedItineraries.map((i) => i.id);
+  // Which of these have detached from the codebase (see editor.tsx header).
+  const overrides = await getItineraryOverrides();
 
   return (
     <>
@@ -30,7 +32,11 @@ export default async function AdminItinerariesPage() {
         title="Builder"
         subtitle="Pick an itinerary to edit — or start a new one. Each stop gets a time, a title, a description, and an optional map query for the Map link."
       >
-        <ItineraryEditor initialItineraries={itineraries} seedIds={seedIds} />
+        <ItineraryEditor
+          initialItineraries={itineraries}
+          seedIds={seedIds}
+          initialOverrides={overrides}
+        />
       </Section>
     </>
   );
