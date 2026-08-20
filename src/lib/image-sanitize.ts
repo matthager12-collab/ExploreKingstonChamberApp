@@ -17,10 +17,10 @@
 // requirement forbids. This mirrors the repo's existing posture for /es safety
 // copy (src/lib/page-visibility.tsx): when in doubt, stay dark.
 //
-// NOT COVERED (documented in docs/LAUNCH.md, deliberately):
-//   - PDF event attachments. PDFs carry XMP/DocInfo (author, producer), but
-//     they are authored artwork rather than camera output, so they are not a
-//     GPS vector. Passed through untouched; noted as a backlog item.
+// NOT COVERED (documented in docs/OPERATIONS.md, deliberately):
+//   - PDF event attachments — but only by THIS module. Their document-level
+//     Info dictionary + XMP stream are removed by the sibling
+//     src/lib/pdf-sanitize.ts, with the same fail-closed posture.
 //   - Images already stored before launch. The R2 migration copies bytes
 //     VERBATIM so the parity check can compare by byte equality; a one-off
 //     sweep of pre-existing images is backlogged.

@@ -9,6 +9,7 @@ import { readFileSync } from "fs";
 import path from "path";
 import { NextRequest } from "next/server";
 import { count, eq } from "drizzle-orm";
+import { PDFDocument } from "pdf-lib";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { audit } from "@/lib/db/schema";
@@ -339,11 +340,15 @@ describe("(a)-(c) anonymous suggest intake — always pending, no bypass", () =>
     // A REAL PNG, not three placeholder bytes: since E15 the save path strips
     // EXIF/GPS (M-16-02) and is fail-closed, so an unparseable image is now
     // correctly rejected with a 400. Using the tagged fixture keeps this test
-    // about attachment plumbing while exercising the real code path.
+    // about attachment plumbing while exercising the real code path. The same
+    // evolution hit the PDF: the save path now strips its document metadata,
+    // also fail-closed, so the placeholder bytes became a real document too.
+    const pdfDoc = await PDFDocument.create();
+    pdfDoc.addPage([200, 200]);
     const res = await suggestPOST(
       suggestReq({ ...SUGGESTION, title: "Gallery Opening" }, [
         { name: "flyer.png", type: "image/png", bytes: GPS_PNG },
-        { name: "program.pdf", type: "application/pdf", bytes: new Uint8Array([4, 5, 6]) },
+        { name: "program.pdf", type: "application/pdf", bytes: await pdfDoc.save() },
       ]),
     );
     expect(res.status).toBe(200);
@@ -375,6 +380,24 @@ describe("(a)-(c) anonymous suggest intake — always pending, no bypass", () =>
     expect(
       (await listWorklistItems({ type: "moderation", state: "open" })).some(
         (i) => i.subjectLabel === "Zip Bomb" || i.subjectLabel === "Huge Poster",
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects a PDF it cannot read (400), storing nothing — parity with the image path", async () => {
+    authState.user = null;
+    const res = await suggestPOST(
+      suggestReq({ ...SUGGESTION, title: "Locked Program" }, [
+        { name: "program.pdf", type: "application/pdf", bytes: new Uint8Array([4, 5, 6]) },
+      ]),
+    );
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toMatch(
+      /password-protected or couldn't be read/,
+    );
+    expect(
+      (await listWorklistItems({ type: "moderation", state: "open" })).some(
+        (i) => i.subjectLabel === "Locked Program",
       ),
     ).toBe(false);
   });

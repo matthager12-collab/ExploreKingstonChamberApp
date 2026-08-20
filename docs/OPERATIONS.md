@@ -226,10 +226,16 @@ container cannot be parsed is REJECTED with a 4xx rather than stored
 unverified. If an operator reports "my image won't upload", that is this — ask
 them to re-save or export it.
 
-Two documented gaps, both deliberate:
-- **PDF** event attachments pass through untouched. PDFs carry document
-  metadata (author, producer) but are authored artwork rather than camera
-  output, so they are not a GPS vector.
+**PDF** event attachments get the matching treatment in
+`src/lib/pdf-sanitize.ts`: the document-level Info dictionary (title, author,
+subject, keywords, producer, creator, dates) and XMP metadata stream are
+removed before storage, so a flyer submitted as a PDF keeps no more than the
+same flyer submitted as a PNG. Same fail-closed posture: an **encrypted or
+unparseable PDF is rejected with a 4xx**, never stored unverified. If an
+operator reports "my PDF won't upload", ask them to export an unprotected
+copy from the original document and try again.
+
+One documented gap, deliberate:
 - **Images stored before the E15 cutover** were not re-processed: the migration
   copies bytes verbatim so the parity check can compare by byte equality. A
   one-off sweep of pre-existing images is a backlog item.
