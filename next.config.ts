@@ -51,9 +51,20 @@ const nextConfig: NextConfig = {
             key: "Permissions-Policy",
             value: "geolocation=(self), camera=(), microphone=(), payment=()",
           },
-          // Report-Only, NOT enforced: launch is days away and kiosk / map
-          // editors / admin are too many surfaces to enforce untested —
-          // flipping this to Content-Security-Policy is a post-launch task.
+          // ENFORCED as of the post-launch hardening pass (2026-08-16). The
+          // directive set ran as Content-Security-Policy-Report-Only from
+          // launch (2026-08-06) until then, unchanged, with no violations
+          // observed in use — the flip changes the header key, and adds three
+          // additive-only directives (object-src/base-uri/form-action; the
+          // repo renders no <object>/<embed>/<base> and every <form> posts to
+          // its own origin).
+          //
+          // script-src keeps 'unsafe-inline' DELIBERATELY: this app is
+          // heavily ISR/static-prerendered, so a per-request nonce is
+          // impossible without forcing dynamic rendering everywhere, and
+          // hashes cannot cover Next's streamed inline RSC payload scripts
+          // (they differ per page and per build). Dropping it is only
+          // feasible if the rendering model changes.
           // Why each carve-out exists:
           //   - script-src 'unsafe-inline': RSC/Next bootstrap inline scripts
           //     and the JSON-LD component render inline <script> tags.
@@ -70,7 +81,7 @@ const nextConfig: NextConfig = {
           //     them through an <img>/ImageBitmap. Vector pmtiles and glyphs
           //     remain same-origin from /api/map/tiles/* and /fonts/*.
           {
-            key: "Content-Security-Policy-Report-Only",
+            key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
               "script-src 'self' 'unsafe-inline'",
@@ -79,6 +90,9 @@ const nextConfig: NextConfig = {
               "connect-src 'self' https://services.arcgisonline.com",
               "worker-src 'self' blob:",
               "frame-ancestors 'self'",
+              "object-src 'none'",
+              "base-uri 'self'",
+              "form-action 'self'",
             ].join("; "),
           },
         ],
