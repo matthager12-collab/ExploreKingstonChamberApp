@@ -52,7 +52,15 @@ vi.mock("@/lib/auth", () => ({
 
 import { POST as eventsPOST } from "@/app/api/portal/events/route";
 import { POST as orgPOST } from "@/app/api/portal/org/route";
-import { POST as suggestPOST } from "@/app/api/events/suggest/route";
+import { POST as suggestRoutePOST } from "@/app/api/events/suggest/route";
+
+/** The route now length-guards before parsing, so requests must arrive the
+ *  way the wire delivers them: serialized bytes with a declared
+ *  Content-Length (suggestReq builds those async). This shim keeps the call
+ *  sites reading naturally. */
+async function suggestPOST(request: NextRequest | Promise<NextRequest>) {
+  return suggestRoutePOST(await request);
+}
 import { GET as feedsEventsGET } from "@/app/api/feeds/events/route";
 
 const seedRestaurant = restaurantSeed[0];
@@ -242,7 +250,7 @@ describe("(a)-(c) anonymous suggest intake — always pending, no bypass", () =>
    *  the 5/hour bucket (keyed on IP) doesn't bleed across tests; the rate-limit
    *  test pins one IP on purpose. */
   let ipSeq = 0;
-  function suggestReq(
+  async function suggestReq(
     fields: Record<string, string>,
     files: { name: string; type: string; bytes: Uint8Array }[] = [],
     ip = `10.0.0.${++ipSeq}`,
@@ -252,10 +260,19 @@ describe("(a)-(c) anonymous suggest intake — always pending, no bypass", () =>
     for (const f of files) {
       fd.append("attachments", new File([f.bytes as BlobPart], f.name, { type: f.type }));
     }
+    // Serialize the way the wire does: bytes plus the declared Content-Length
+    // every browser sends, so the route's pre-parse length guard sees what
+    // production sees.
+    const wire = new Response(fd);
+    const body = await wire.arrayBuffer();
     return new NextRequest("http://localhost/api/events/suggest", {
       method: "POST",
-      body: fd,
-      headers: { "x-forwarded-for": ip },
+      body,
+      headers: {
+        "content-type": wire.headers.get("content-type") ?? "",
+        "content-length": String(body.byteLength),
+        "x-forwarded-for": ip,
+      },
     });
   }
 
