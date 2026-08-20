@@ -14,7 +14,8 @@
 // else live-only).
 //
 // Rate limiting mirrors /api/claim: an IP bucket before the body is read,
-// then a per-(store,id) bucket so churn on one listing is bounded. Body is
+// then a per-(store,id) bucket so churn on one listing is bounded, then a
+// per-recipient bucket so no single inbox can be flooded with codes. Body is
 // capped BEFORE JSON.parse, the house pattern for public intakes.
 
 import { NextRequest, NextResponse } from "next/server";
@@ -37,6 +38,10 @@ const MAX_BODY_BYTES = 8_192;
  *  RECORD_BUCKET: tight enough to bound junk, loose enough that a stranger
  *  cannot lock the genuine owner out of the form. */
 const RECORD_BUCKET = { limit: 60, windowMs: 10 * 60_000 } as const;
+
+/** Per-recipient bound on code emails: 3 per rolling hour to any one inbox,
+ *  no matter which IPs or listings the requests arrive through. */
+const EMAIL_BUCKET = { limit: 3, windowMs: 60 * 60_000 } as const;
 
 function tooMany(retryAfterSeconds: number): NextResponse {
   return NextResponse.json(
@@ -84,6 +89,20 @@ export async function POST(request: NextRequest) {
         approved: result.approved,
         pending: !result.approved,
       });
+    }
+
+    // The third bucket keys on the DESTINATION mailbox: the IP and (store,id)
+    // buckets bound the caller and the listing, but neither stops a rotation
+    // of both from pointing a stream of code emails at one victim inbox.
+    // Checked here — not earlier — because a signed-in claim carries no email.
+    // Skipped when the email is blank: startClaimSignup rejects those without
+    // sending anything, and keying "" would pool every malformed request into
+    // one shared bucket. Same 429 as the siblings either way, so the response
+    // still says nothing about whether the address is known to us.
+    const email = str(body.email).toLowerCase();
+    if (email) {
+      const emailLimit = await checkRateLimit(`claim-email:${email}`, EMAIL_BUCKET);
+      if (!emailLimit.ok) return tooMany(emailLimit.retryAfterSeconds);
     }
 
     const result = await startClaimSignup({
