@@ -27,15 +27,24 @@ const authState = vi.hoisted(() => ({
   users: [] as { id: string; orgId: string | null }[],
 }));
 
-vi.mock("@/lib/auth", () => ({
-  getSessionUser: vi.fn(async () => authState.user),
-  requireAdmin: vi.fn(async () =>
-    authState.user?.role === "admin"
-      ? null
-      : Response.json({ error: "Sign in first" }, { status: 401 }),
-  ),
-  listUsers: vi.fn(async () => authState.users),
-}));
+vi.mock("@/lib/auth", async () => {
+  // The route pulls its constant-time token compare from the same barrel as
+  // the session gates; keep the REAL one so the Bearer path under test is the
+  // production code path, not a stub.
+  const { timingSafeEqualStr } = await vi.importActual<typeof import("@/lib/auth/tokens")>(
+    "@/lib/auth/tokens",
+  );
+  return {
+    timingSafeEqualStr,
+    getSessionUser: vi.fn(async () => authState.user),
+    requireAdmin: vi.fn(async () =>
+      authState.user?.role === "admin"
+        ? null
+        : Response.json({ error: "Sign in first" }, { status: 401 }),
+    ),
+    listUsers: vi.fn(async () => authState.users),
+  };
+});
 
 import { POST as sweepPOST } from "@/app/api/admin/worklist/sweep/route";
 

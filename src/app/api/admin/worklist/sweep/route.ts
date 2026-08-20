@@ -5,17 +5,17 @@
 // often as it likes.
 //
 // Auth: an admin session OR `Authorization: Bearer $WORKLIST_SWEEP_TOKEN`
-// (?token= also accepted — cron schedulers vary; pattern from
-// src/app/api/ferry/observe/route.ts). UNLIKE the ferry route this gate
-// FAILS CLOSED: with the env var unset the token path simply doesn't exist —
-// a worklist write is not public-data telemetry, so open-when-unset would be
-// wrong here. The scheduler registration lives in docs/OPERATIONS.md.
+// (header only — a token in a query string lands in access logs, and the
+// Render cron already sends the header). This gate FAILS CLOSED: with the
+// env var unset the token path simply doesn't exist — a worklist write is
+// not public-data telemetry, so open-when-unset would be wrong here. The
+// scheduler registration lives in docs/OPERATIONS.md.
 //
 // Seed-only records carry no governance row and are not swept until a write
 // overlays them — docs/OPERATIONS.md "Worklist & moderation" explains.
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionUser, listUsers, requireAdmin } from "@/lib/auth";
+import { getSessionUser, listUsers, requireAdmin, timingSafeEqualStr } from "@/lib/auth";
 import { listVerifyDue } from "@/lib/db/records";
 import {
   createWorklistItem,
@@ -33,11 +33,8 @@ export const OWNER_VERIFY_DAYS = 14;
 
 export async function POST(request: NextRequest) {
   const expected = process.env.WORKLIST_SWEEP_TOKEN;
-  const provided =
-    request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ??
-    request.nextUrl.searchParams.get("token") ??
-    "";
-  const tokenOk = Boolean(expected && provided && provided === expected);
+  const provided = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+  const tokenOk = Boolean(expected && provided && timingSafeEqualStr(provided, expected));
 
   let actor = "system";
   if (!tokenOk) {

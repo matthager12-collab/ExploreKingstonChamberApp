@@ -158,11 +158,33 @@ export async function putImage(
 }
 
 /**
+ * The store id embedded in a Vercel Blob read-write token. The token shape is
+ * `vercel_blob_rw_<storeId>_<secret>`, and @vercel/blob's own
+ * parseStoreIdFromReadWriteToken (dist/chunk-*.js — the package exports only
+ * the delegation/presigned variants, not this one) is exactly
+ * `token.split("_")[3]`. Mirrored here rather than re-derived: put() builds
+ * its URLs as `https://<storeId>.public.blob.vercel-storage.com/…`
+ * (constructBlobUrl in the same chunk), so this is the one hostname
+ * putImage() can ever return.
+ */
+function blobStoreId(): string {
+  return process.env.BLOB_READ_WRITE_TOKEN?.split("_")[3] ?? "";
+}
+
+/**
  * True only for a URL this app itself could have produced via putImage():
- * https, and a hostname that is exactly (or a subdomain of) our Vercel Blob
- * store. Anything else — including other https URLs — must NOT be redirected
- * to, or the image routes are an open redirect on our own domain. Distinct
- * from the storage-form detectors named isBlobUrl() in map-store.ts /
+ * https, and the hostname of exactly THIS deployment's Vercel Blob store —
+ * derived from BLOB_READ_WRITE_TOKEN, the same credential putImage() writes
+ * with. Anything else — other https URLs, and other tenants' otherwise
+ * well-formed `*.public.blob.vercel-storage.com` hostnames — must NOT be
+ * redirected to, or the image routes are an open redirect on our own domain.
+ *
+ * With no BLOB_READ_WRITE_TOKEN configured (the R2/filesystem deployments,
+ * which store fs-relative paths, never URLs) this returns false for
+ * everything: putImage() cannot run without the token, so no record value
+ * this deployment produced can be a vercel-storage URL.
+ *
+ * Distinct from the storage-form detectors named isBlobUrl() in map-store.ts /
  * hunt-store.ts, which only distinguish "URL" from "filesystem path" at other
  * call sites and must not be repurposed as a trust check.
  */
@@ -174,7 +196,13 @@ export function isTrustedBlobUrl(value: unknown): boolean {
   } catch {
     return false;
   }
-  return url.protocol === "https:" && url.hostname.endsWith(".public.blob.vercel-storage.com");
+  const storeId = blobStoreId();
+  if (!storeId) return false;
+  return (
+    url.protocol === "https:" &&
+    // URL lowercases the hostname; lowercase the derived id to match.
+    url.hostname === `${storeId.toLowerCase()}.public.blob.vercel-storage.com`
+  );
 }
 
 /**

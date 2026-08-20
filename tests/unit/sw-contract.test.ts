@@ -72,7 +72,8 @@ const FORBIDDEN: { name: string; re: RegExp }[] = [
   { name: "PushManager reference (capitalised)", re: /\bPushManager\b/ },
   { name: "pushManager reference", re: /\bpushManager\b/ },
   // A prefix match here would swallow /api/ferry/observe and /api/ferry/accuracy,
-  // which are state-MUTATING GETs — every offline retry would write to the DB.
+  // which MUTATE state (POST-only routes) — an offline replay must never
+  // write to the DB.
   { name: "prefix match on /api/ferry", re: /startsWith\(\s*["']\/api\/ferry/ },
   // addAll is atomic: one 404 rejects the install and the worker silently never
   // activates. Per-entry cache.add().catch() is the only sanctioned form.

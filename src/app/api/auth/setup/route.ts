@@ -1,18 +1,16 @@
 // One-time bootstrap: creates the FIRST account (admin) when none exist.
 // Locked forever after — later accounts come from admin-minted invites.
 
-import { timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { createFirstAdmin, hasAnyUsers, sessionCookie, tokenFor } from "@/lib/auth";
+import {
+  createFirstAdmin,
+  hasAnyUsers,
+  sessionCookie,
+  timingSafeEqualStr,
+  tokenFor,
+} from "@/lib/auth";
 import { landingFor } from "@/lib/auth/landing";
 import { checkRateLimit, clientKey } from "@/lib/rate-limit";
-
-/** Constant-time string compare (rejects unequal lengths without comparing). */
-function timingSafeEqualStr(a: string, b: string): boolean {
-  const bufA = Buffer.from(a);
-  const bufB = Buffer.from(b);
-  return bufA.length === bufB.length && timingSafeEqual(bufA, bufB);
-}
 
 export async function POST(request: NextRequest) {
   // Low limit: this endpoint is only ever hit a handful of times, once, during

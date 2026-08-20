@@ -4,28 +4,26 @@
 // misconfigured scheduler.
 //
 // Auth: an admin session OR `Authorization: Bearer $RETENTION_TOKEN`
-// (?token= accepted — same fail-closed pattern as the E08 sweep: env unset
-// means the token path doesn't exist). The proxy's MACHINE_TOKEN_ROUTES
-// carve-out (src/proxy.ts) lets the cron's Bearer request reach this
-// re-check — without that entry the request dies at the session gate (the
-// bug that broke nightly backups; docs/OPERATIONS.md).
+// (header only — a token in a query string lands in access logs; same
+// fail-closed pattern as the E08 sweep: env unset means the token path
+// doesn't exist). The proxy's MACHINE_TOKEN_ROUTES carve-out (src/proxy.ts)
+// lets the cron's Bearer request reach this re-check — without that entry
+// the request dies at the session gate (the bug that broke nightly backups;
+// docs/OPERATIONS.md).
 //
 // Scheduling: .github/workflows/privacy-retention.yml, workflow_dispatch-only
 // until the E11 §4-e staging evidence lands (ships dark by design).
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionUser, requireAdmin } from "@/lib/auth";
+import { getSessionUser, requireAdmin, timingSafeEqualStr } from "@/lib/auth";
 import { runRetention } from "@/lib/privacy/retention";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   const expected = process.env.RETENTION_TOKEN;
-  const provided =
-    request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ??
-    request.nextUrl.searchParams.get("token") ??
-    "";
-  const tokenOk = Boolean(expected && provided && provided === expected);
+  const provided = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+  const tokenOk = Boolean(expected && provided && timingSafeEqualStr(provided, expected));
 
   if (!tokenOk) {
     const denied = await requireAdmin();

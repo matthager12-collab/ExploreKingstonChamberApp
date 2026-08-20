@@ -27,6 +27,7 @@ export {
   hashPassword,
   makeSessionToken,
   sessionCookie,
+  timingSafeEqualStr,
   verifyPassword,
   verifySessionToken,
   type SessionClaims,
