@@ -24,7 +24,7 @@ describe("security headers on served responses", () => {
     }
     const csp = res.headers.get("content-security-policy");
     expect(csp, "enforced CSP header missing").toContain("default-src 'self'");
-    // Enforced since the 2026-08-16 hardening pass — the Report-Only header
+    // Enforced since the 2026-08-19 hardening pass — the Report-Only header
     // must be GONE, not doubled up (two policies would report confusingly).
     expect(res.headers.get("content-security-policy-report-only")).toBeNull();
     // poweredByHeader:false — the framework leak must be gone.

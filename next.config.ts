@@ -51,7 +51,7 @@ const nextConfig: NextConfig = {
             key: "Permissions-Policy",
             value: "geolocation=(self), camera=(), microphone=(), payment=()",
           },
-          // ENFORCED as of the post-launch hardening pass (2026-08-16). The
+          // ENFORCED as of the post-launch hardening pass (2026-08-19). The
           // directive set ran as Content-Security-Policy-Report-Only from
           // launch (2026-08-06) until then, unchanged, with no violations
           // observed in use — the flip changes the header key, and adds three
