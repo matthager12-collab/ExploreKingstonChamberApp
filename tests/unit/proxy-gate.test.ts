@@ -3,7 +3,9 @@
 // right for humans, and exactly wrong for the sweep cron's Bearer request
 // (found in production: the token never reached the route's own check).
 // Contract pinned here: the ONE carve-out is path-exact, fail-closed on a
-// missing env var, and accepts both the header and ?token= forms.
+// missing env var, and accepts ONLY the `Authorization: Bearer` header —
+// a token in a query string lands in access logs, so the ?token= form is
+// deliberately not a way in.
 
 import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it } from "vitest";
@@ -39,11 +41,13 @@ describe("proxy sweep-token carve-out", () => {
     expect(res.status).toBe(401);
   });
 
-  it("wrong token → 401; right token passes via header AND ?token= form", () => {
+  it("wrong token → 401; right token passes via the header ONLY (never ?token=)", () => {
     process.env.WORKLIST_SWEEP_TOKEN = "sweep-secret";
     expect(proxy(req(SWEEP_URL, { authorization: "Bearer nope" })).status).toBe(401);
     expect(passed(proxy(req(SWEEP_URL, { authorization: "Bearer sweep-secret" })))).toBe(true);
-    expect(passed(proxy(req(`${SWEEP_URL}?token=sweep-secret`)))).toBe(true);
+    // The query-string form is not a transport: it would put the token in
+    // access logs, and no scheduler of ours ever used it.
+    expect(proxy(req(`${SWEEP_URL}?token=sweep-secret`)).status).toBe(401);
   });
 
   it("the carve-out is path-exact: the token opens NO other admin route", () => {
@@ -78,9 +82,9 @@ describe("proxy sweep-token carve-out", () => {
     expect(proxy(req(url, { authorization: "Bearer retention-secret" })).status).toBe(401);
     process.env.RETENTION_TOKEN = "retention-secret";
     expect(proxy(req(url, { authorization: "Bearer nope" })).status).toBe(401);
-    // Right token passes via header AND ?token= form…
+    // Right token passes via the header; the query-string form never does…
     expect(passed(proxy(req(url, { authorization: "Bearer retention-secret" })))).toBe(true);
-    expect(passed(proxy(req(`${url}?token=retention-secret`)))).toBe(true);
+    expect(proxy(req(`${url}?token=retention-secret`)).status).toBe(401);
     // …and opens ONLY its own route, path-exact.
     for (const other of [
       "http://localhost/api/admin/backup",

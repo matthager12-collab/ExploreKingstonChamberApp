@@ -157,16 +157,17 @@ services:
       - key: BACKUP_TOKEN
         sync: false
 
-      # Shared secret the ferry-observe/ferry-accuracy GitHub Actions crons
-      # send as a Bearer token. Optional — those routes are open (throttled)
-      # when unset.
+      # Shared secret the ferry-observe/ferry-accuracy crons (below) send as
+      # a Bearer token. FAIL-CLOSED like the other machine tokens: unset in
+      # production means those routes answer 503 until it is configured —
+      # they never open up.
       - key: FERRY_OBSERVE_TOKEN
         sync: false
 
       # Bearer token for the E08 staleness-sweep cron to call
       # POST /api/admin/worklist/sweep without an admin session. FAIL-CLOSED:
       # unset just disables the token path (the sweep still works from an
-      # admin session) — unlike FERRY_OBSERVE_TOKEN it never opens the route.
+      # admin session) — it never opens the route.
       - key: WORKLIST_SWEEP_TOKEN
         sync: false
 

@@ -45,6 +45,24 @@ export function verifyPassword(password: string, stored: string): boolean {
   return candidate.length === expected.length && timingSafeEqual(candidate, expected);
 }
 
+/**
+ * Constant-time string equality for shared-secret comparison (setup token,
+ * the machine tokens in src/proxy.ts and their per-route re-checks). The
+ * length guard runs first because timingSafeEqual THROWS on unequal lengths;
+ * rejecting there is fine — the comparison's duration still doesn't depend on
+ * WHERE two equal-length strings differ, which is the property we want from
+ * a secret compare. Callers must handle the empty case themselves: two empty
+ * strings ARE equal, so "env var unset" needs its own guard before this.
+ *
+ * Lives here (pure crypto, no request scope) so src/proxy.ts can use it —
+ * the proxy may only import from pure modules.
+ */
+export function timingSafeEqualStr(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  return bufA.length === bufB.length && timingSafeEqual(bufA, bufB);
+}
+
 /** A random temporary password for the admin shown-once reset (FR-18.3).
  *  ~12 URL-safe chars; never stored in plaintext, never audited. */
 export function generateTempPassword(): string {
