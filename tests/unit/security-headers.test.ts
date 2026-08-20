@@ -3,10 +3,10 @@
 //
 // Prod served ZERO security headers as of 2026-07-31 (curl-verified). This
 // suite pins the next.config.ts contract so a config refactor cannot silently
-// drop a header, weaken HSTS, or — the two easy-to-get-wrong bits — flip the
-// CSP from Report-Only to enforced before the post-launch rollout, or
-// "harden" Permissions-Policy into geolocation=() and break the
-// side-switcher / near-me / hunt check-ins.
+// drop a header, weaken HSTS, quietly demote the CSP back to Report-Only
+// (enforced since the 2026-08-16 post-launch hardening pass), or "harden"
+// Permissions-Policy into geolocation=() and break the side-switcher /
+// near-me / hunt check-ins.
 
 import { describe, expect, it } from "vitest";
 import nextConfig from "../../next.config";
@@ -40,7 +40,7 @@ describe("next.config security headers", () => {
     expect(all, "the site-wide /(.*) security rule is missing").toBeDefined();
     expect([...headerMap(all!).keys()].sort()).toEqual(
       [
-        "Content-Security-Policy-Report-Only",
+        "Content-Security-Policy",
         "Permissions-Policy",
         "Referrer-Policy",
         "Strict-Transport-Security",
@@ -76,19 +76,20 @@ describe("next.config security headers", () => {
     expect(pp).toContain("payment=()");
   });
 
-  it("ships CSP as Report-Only with the documented carve-outs, never enforced", async () => {
+  it("ships CSP ENFORCED with the documented carve-outs, never demoted to Report-Only", async () => {
     const rules = await loadRules();
-    // Enforcement is a deliberate post-launch task: kiosk, MapLibre editors and
-    // admin are too many surfaces to enforce untested days before launch.
+    // Enforced since the 2026-08-16 post-launch hardening pass. A demotion
+    // back to Report-Only would be silent in every browser — pin it here.
     for (const rule of rules) {
       for (const { key } of rule.headers) {
-        expect(key.toLowerCase(), "enforced CSP must not ship before the post-launch rollout").not.toBe(
-          "content-security-policy",
-        );
+        expect(
+          key.toLowerCase(),
+          "the CSP is enforced now — do not demote it to Report-Only",
+        ).not.toBe("content-security-policy-report-only");
       }
     }
     const csp = headerMap(rules.find((r) => r.source === "/(.*)")!).get(
-      "Content-Security-Policy-Report-Only",
+      "Content-Security-Policy",
     )!;
     expect(csp).toContain("default-src 'self'");
     // RSC/Next bootstrap + JSON-LD render inline scripts.
@@ -103,5 +104,10 @@ describe("next.config security headers", () => {
     // MapLibre spawns its workers from blob: URLs.
     expect(csp).toContain("worker-src 'self' blob:");
     expect(csp).toContain("frame-ancestors 'self'");
+    // The additive hardening set: nothing in the repo renders <object>,
+    // <embed>, or <base>, and every form posts to its own origin.
+    expect(csp).toContain("object-src 'none'");
+    expect(csp).toContain("base-uri 'self'");
+    expect(csp).toContain("form-action 'self'");
   });
 });
