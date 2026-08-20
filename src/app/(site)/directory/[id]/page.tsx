@@ -17,6 +17,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getClaimableBusiness } from "@/lib/claims/self-signup";
 import { isActiveMemberStatus, listMemberMeta } from "@/lib/db/member-meta";
+import { safeExternalHref } from "@/lib/safe-href";
 import { getDirectoryListing } from "@/lib/stores/directory-store";
 import { copyText, getCopyOverrides } from "@/lib/stores/site-store";
 import { Badge, PageHeader, Section } from "@/components/ui";
@@ -115,8 +116,13 @@ export default async function DirectoryProfilePage({
             >
               {copyText(copy, "directoryPage.profile.directions")}
             </a>
-            {listing.website && (
-              <a href={listing.website} target="_blank" rel="noreferrer" className={quietActionCls}>
+            {safeExternalHref(listing.website) && (
+              <a
+                href={safeExternalHref(listing.website)}
+                target="_blank"
+                rel="noreferrer"
+                className={quietActionCls}
+              >
                 {copyText(copy, "directoryPage.profile.website")}
               </a>
             )}
