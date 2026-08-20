@@ -240,6 +240,10 @@ export function ItineraryEditor({
         return [...list, saved];
       });
       setDraft(toDraft(saved));
+      // Re-read the override flags: a save can CLEAR them (saving a seed
+      // record unedited re-attaches it) as well as set them, and a stale
+      // badge is worse than none — the whole point is that it can be trusted.
+      void refreshOverrides();
       setMessage({ kind: "ok", text: `Saved — live at /itineraries/${saved.slug}` });
       router.refresh();
     } catch {
@@ -275,6 +279,17 @@ export function ItineraryEditor({
       setMessage({ kind: "error", text: "Could not reach the server — try again." });
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function refreshOverrides() {
+    try {
+      const res = await fetch("/api/admin/content-records?domain=itineraries");
+      if (!res.ok) return;
+      const payload = (await res.json()) as { overrides?: Record<string, OverrideFlags> };
+      setOverrides(payload.overrides ?? {});
+    } catch {
+      // Non-fatal: the badge is advisory, and router.refresh() will re-seed it.
     }
   }
 
