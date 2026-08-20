@@ -110,7 +110,12 @@ export async function writeOverlayRecordSeedAware<T extends WithId>(
  *  content actually differs from it. `differsFromSeed: false` is the smoking
  *  gun of a no-op save — the overlay is pure dead weight and reverting it is
  *  guaranteed lossless. Keyed by record id; ids with no overlay row (or a
- *  tombstoned one — those are already hidden from admin lists) are absent. */
+ *  tombstoned one — those are already hidden from admin lists) are absent.
+ *
+ *  LIVE rows only, deliberately: readMergedRecords overlays nothing else, so a
+ *  non-live row does not shadow anything on the public site and the seed is
+ *  what renders. Badging it "overriding the shipped version" would be exactly
+ *  backwards — and it matches what detachOverlayRecord will agree to act on. */
 export type SeedOverrideFlags = { overridesSeed: true; differsFromSeed: boolean };
 
 export async function readSeedOverrides<T extends WithId>(
@@ -120,7 +125,7 @@ export async function readSeedOverrides<T extends WithId>(
   if (!seed.length) return {};
   const seedById = new Map(seed.map((s) => [s.id, s]));
   const out: Record<string, SeedOverrideFlags> = {};
-  for (const row of await readOverlay<T>(name)) {
+  for (const row of await readRecords<T>(name, { statuses: ["live"] })) {
     const twin = seedById.get(row.id);
     if (!twin || row._deleted) continue;
     const { _deleted: _ignored, ...doc } = row as { _deleted?: boolean } & Record<

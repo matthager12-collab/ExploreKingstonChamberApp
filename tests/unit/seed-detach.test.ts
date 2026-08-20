@@ -256,6 +256,15 @@ describe("readSeedOverrides (the admin badge)", () => {
     });
   });
 
+  it("ignores a non-live row — the seed is what renders, so nothing is shadowed", async () => {
+    await reset();
+    await writeOverlayRecord(STORE, itinerary({ tagline: "Pending review." }), {
+      ...META,
+      status: "pending",
+    });
+    expect(await readSeedOverrides(STORE, SEED_V1)).toEqual({});
+  });
+
   it("reports nothing for seed-only records or a seedless store", async () => {
     await reset();
     expect(await readSeedOverrides(STORE, SEED_V1)).toEqual({});
