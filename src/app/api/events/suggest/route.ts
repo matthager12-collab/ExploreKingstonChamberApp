@@ -40,6 +40,7 @@ import {
   saveAttachment,
 } from "@/lib/events/attachment-store";
 import { UnstrippableImageError } from "@/lib/image-sanitize";
+import { UnstrippablePdfError } from "@/lib/pdf-sanitize";
 import { getUnifiedCalendarAccess } from "@/lib/stores/unified-calendar-store";
 import { WorklistValidationError } from "@/lib/schemas/worklist";
 import type { EventItem } from "@/lib/types";
@@ -219,6 +220,9 @@ export async function POST(request: NextRequest) {
       // an unreadable image than store bytes we could not verify.
       if (err instanceof UnstrippableImageError) {
         return fail(400, `"${file.name}" could not be processed — please re-save or export it and try again`);
+      }
+      if (err instanceof UnstrippablePdfError) {
+        return fail(400, `"${file.name}" is password-protected or couldn't be read — please export an unprotected copy and try again`);
       }
       return fail(500, "could not save an attachment — please try again");
     }
