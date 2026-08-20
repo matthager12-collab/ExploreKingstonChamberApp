@@ -63,7 +63,7 @@ export async function readMergedAdmin<T extends WithId>(
 }
 
 
-/* ------------------------- seed re-attachment (E36) ------------------------- */
+/* ---------------- seed re-attachment (2026-08-19 incident) ---------------- */
 
 /** Drop a record's overlay row so it reads from the shipped seed again.
  *  Guarded — see detachOverlayRecord in db/records.ts for what it refuses. */

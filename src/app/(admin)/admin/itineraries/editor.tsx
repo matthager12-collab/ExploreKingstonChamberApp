@@ -11,10 +11,10 @@
 // restored later by removing the overlay row) — the confirm dialog explains
 // which case applies.
 //
-// E36: editing a seed itinerary detaches it from the codebase permanently —
-// the overlay wins the merge forever, so later fixes to the shipped file can
-// never surface. Overridden records are badged, and "Revert to shipped
-// version" drops the overlay so seed updates flow again.
+// Seed detach (the 2026-08-19 incident): editing a seed itinerary detaches it
+// from the codebase permanently — the overlay wins the merge forever, so later
+// fixes to the shipped file can never surface. Overridden records are badged,
+// and "Revert to shipped version" drops the overlay so seed updates flow again.
 
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";

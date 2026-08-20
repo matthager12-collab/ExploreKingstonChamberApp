@@ -1,4 +1,4 @@
-// E36 — a no-op admin save must never detach a record from the shipped seed.
+// A no-op admin save must never detach a record from the shipped seed.
 //
 // The incident these lock down (2026-08-19): PR #194 corrected factual errors
 // in two itineraries, CI passed, the deploy shipped, and the live pages kept

@@ -44,7 +44,7 @@ export const ACTION_VERBS: Record<string, string> = {
   restore: "restored",
   "status-change": "changed status",
   verify: "marked verified",
-  // E36: the overlay row was dropped and the record re-attached to the seed
+  // The overlay row was dropped and the record re-attached to the seed
   // that ships in the codebase. `after` is null — there is no snapshot to
   // restore to, which is why 'revert' is absent from RESTORABLE_ACTIONS.
   revert: "reverted to shipped version",
