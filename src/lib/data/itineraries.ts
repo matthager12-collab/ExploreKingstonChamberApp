@@ -173,7 +173,7 @@ export const itineraries: Itinerary[] = [
         time: "11:15 AM",
         title: "Kingston Public Market at Mike Wallace Park (Sundays)",
         description:
-          "In season, the Kingston Public Market sets up under canopies at the little park by the marina on Sundays, 10 AM–3 PM — vendors show up rain or shine, and the crowd is friendlier in the drizzle. Not a Sunday, or shoulder season? Check our Events page for dates and stroll the marina boardwalk instead.",
+          "In season, the Kingston Public Market sets up under canopies at the little park by the marina on Sundays, 10 AM–3 PM, roughly May into mid-October — and the crowd is friendlier in the drizzle. The market posts no foul-weather policy, so in a genuine downpour check before you build the morning around it. Not a Sunday, or shoulder season? Check our Events page for dates and stroll the marina boardwalk instead.",
         mapQuery: "Mike Wallace Park, Kingston, WA",
       },
       {
@@ -187,14 +187,14 @@ export const itineraries: Itinerary[] = [
         time: "2:00 PM",
         title: "A short forest walk, properly misty",
         description:
-          "Puget Sound forests are at their best in the rain. With a car, hit the gravel loops at North Kitsap Heritage Park — good drainage, big trees, zero mud drama. On foot, the paths around the Village Green scratch the same itch in 20 minutes.",
+          "Puget Sound forests are at their best in the rain. With a car, North Kitsap Heritage Park is hundreds of acres of second growth on wide old logging roads — the county calls the trails largely undeveloped, so wear boots and expect mud after a real soaking. On foot, a loop of the streets and lawn around the Village Green gets you 20 minutes of air without the drive.",
         mapQuery: "North Kitsap Heritage Park, Kingston, WA",
       },
       {
         time: "3:30 PM",
         title: "Dry out at Friends and Neighbors Brewing",
         description:
-          "Kingston's taproom pours a wall of rotating taps and welcomes dogs and kids — but it opens at 2 PM only on Saturday and Sunday, and at 4 PM Tuesday through Friday (closed Mondays). If you're early, or it's a Monday, The Kingston Ale House across the way opens at 11 daily and does American and seafood classics.",
+          "Kingston's taproom pours a wall of rotating taps and welcomes dogs and kids — but it opens at 2 PM only on Saturday and Sunday and 4 PM midweek, and it has been dark on Mondays through this summer. If you're early, or it's a Monday, The Kingston Ale House across the way opens at 11 daily and does American and seafood classics.",
         mapQuery: "Friends and Neighbors Brewing, 10991 NE State Hwy 104, Kingston, WA",
       },
       {
@@ -241,14 +241,14 @@ export const itineraries: Itinerary[] = [
         time: "9:00 AM",
         title: "Cross the Hood Canal Bridge",
         description:
-          "SR 104 floats across Hood Canal about 14 miles west of Kingston. Heads-up: the drawspan opens for Navy and large vessel traffic and can stop cars for 45 minutes or more, unannounced. If you're stopped, it's not you — enjoy the canal view.",
+          "SR 104 floats across Hood Canal about 11 miles west of Kingston. Heads-up: the drawspan opens for Navy and large vessel traffic and can stop cars for 45 minutes or more, unannounced. If you're stopped, it's not you — enjoy the canal view.",
         mapQuery: "Hood Canal Bridge, WA",
       },
       {
         time: "10:30 AM",
         title: "Into Olympic National Park country",
         description:
-          "From the bridge it's roughly an hour to Sequim and 90 minutes to Port Angeles, the main gateways to Olympic National Park — Hurricane Ridge, lavender farms, and the Dungeness Spit are all in reach. Pick one mountain thing and one water thing; don't try for three.",
+          "From the bridge it's roughly 45 minutes to Sequim and a little over an hour to Port Angeles, the main gateways to Olympic National Park — Hurricane Ridge, lavender farms, and the Dungeness Spit are all in reach. One thing to plan around: the Hurricane Ridge day lodge burned down in 2023 and has not been rebuilt, so the summit has a ranger contact station and views, but no indoor facilities, food, or running water. Carry your own. Pick one mountain thing and one water thing; don't try for three.",
         mapQuery: "Olympic National Park Visitor Center, Port Angeles, WA",
       },
       {
