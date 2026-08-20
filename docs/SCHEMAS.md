@@ -67,6 +67,47 @@ line up, the schema is wrong, not the interface.
    `source`, `updated_by`, …) belongs to the Drizzle layer (E05), and
    status-gated rendering belongs to E08 — don't duplicate either here.
 
+## Seeds vs. overlays: a save can detach a record forever
+
+Seeded domains read as **seed + overlay, overlay-wins-by-id**. The consequence
+is easy to miss: *any* overlay row permanently detaches its record from the
+codebase. Fix the seed file afterwards and the fix can never reach the page —
+the overlay keeps winning.
+
+That bit us on **2026-08-19**. PR #194 corrected factual errors in two
+itineraries; CI passed, the deploy shipped, and the live pages kept serving the
+old text. The overlay rows were byte-identical to the pre-PR seed — the
+signature of someone opening the record in the builder and pressing **Save**
+without editing anything. Nothing warned them, and nothing showed the record
+was overriding the shipped version.
+
+Rules for any seeded store:
+
+- **Save through `writeOverlayRecordSeedAware(store, seed, record, meta)`**, not
+  `writeOverlayRecord`. A save whose content equals the seed re-attaches the
+  record instead of shadowing it. Wired today for `itineraries`, `lodging`,
+  `webcams`, `restaurants`. `directory` ships no seed, so it is out of scope by
+  construction; `map-features`, `events` and `charities` are seeded but still on
+  the plain write path.
+- **Comparison is canonical, not literal** (`sameDoc` in
+  `src/lib/stores/seed-overlay.ts`): keys are sorted and `undefined` is dropped,
+  because the seed literal, a zod parse and a JSONB row disagree about both.
+  Arrays are *not* sorted — stop order is content.
+- **`detachOverlayRecord` is the only way back.** Re-saving the shipped text
+  through an editor just writes another row saying the same thing. It hard-
+  deletes the row and audits it as `revert` (`after: null`, deliberately not in
+  `RESTORABLE_ACTIONS` — there is no snapshot to replay).
+- **It refuses** on a tombstone, a non-live status, or a row carrying
+  `ownerOrgId` / `externalId`: all state the seed cannot represent. Callers fall
+  back to a normal write, so nothing is silently discarded.
+- **`readSeedOverrides`** reports which records shadow a seed and whether they
+  actually differ from it — `differsFromSeed: false` means the overlay is dead
+  weight and reverting is lossless. The itinerary builder badges this and offers
+  "Revert to shipped version".
+
+Tests: `src/lib/stores/seed-overlay.test.ts` (pure rules) and
+`tests/unit/seed-detach.test.ts` (store + audit against PGlite).
+
 ## The copy-registry contract (E07)
 
 The same drift problem existed for site copy, and got the same fix:

@@ -10,6 +10,11 @@
 // records get a tombstone overlay that hides them from the site (they can be
 // restored later by removing the overlay row) — the confirm dialog explains
 // which case applies.
+//
+// E36: editing a seed itinerary detaches it from the codebase permanently —
+// the overlay wins the merge forever, so later fixes to the shipped file can
+// never surface. Overridden records are badged, and "Revert to shipped
+// version" drops the overlay so seed updates flow again.
 
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
@@ -137,15 +142,21 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+type OverrideFlags = { overridesSeed: true; differsFromSeed: boolean };
+
 export function ItineraryEditor({
   initialItineraries,
   seedIds,
+  initialOverrides,
 }: {
   initialItineraries: Itinerary[];
   seedIds: string[];
+  initialOverrides: Record<string, OverrideFlags>;
 }) {
   const router = useRouter();
   const [itineraries, setItineraries] = useState<Itinerary[]>(initialItineraries);
+  const [overrides, setOverrides] =
+    useState<Record<string, OverrideFlags>>(initialOverrides);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(
@@ -153,6 +164,9 @@ export function ItineraryEditor({
   );
 
   const isSeed = (id: string) => seedIds.includes(id);
+  /** Seed record currently shadowed by an overlay row — its content is frozen
+   *  against the codebase until someone reverts it. */
+  const override = (id: string): OverrideFlags | undefined => overrides[id];
 
   function selectItinerary(id: string) {
     const it = itineraries.find((i) => i.id === id);
@@ -264,6 +278,53 @@ export function ItineraryEditor({
     }
   }
 
+  /** Drop this record's overlay row so it reads from the shipped version
+   *  again. The only way back — saving the shipped text through the editor
+   *  would just write another overlay row saying the same thing. */
+  async function revert(current: Draft) {
+    const flags = override(current.id);
+    if (!flags) return;
+    const confirmText = flags.differsFromSeed
+      ? `"${current.title}" has edits that differ from the version shipped in the app. Reverting DISCARDS those edits and restores the shipped text. Continue?`
+      : `"${current.title}" is already word-for-word identical to the shipped version, but a saved copy is overriding it — which is why app updates to this itinerary never appear. Reverting is lossless. Continue?`;
+    if (!window.confirm(confirmText)) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/admin/content-records/revert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ domain: "itineraries", id: current.id }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) {
+        setMessage({ kind: "error", text: data.error ?? "Could not revert the itinerary." });
+        return;
+      }
+      // Re-read rather than patching state by hand: the record's content is
+      // now whatever the shipped seed says, which the client doesn't have.
+      const fresh = await fetch("/api/admin/content-records?domain=itineraries");
+      if (fresh.ok) {
+        const payload = (await fresh.json()) as {
+          records?: Itinerary[];
+          overrides?: Record<string, OverrideFlags>;
+        };
+        if (payload.records) {
+          setItineraries(payload.records);
+          const restored = payload.records.find((i) => i.id === current.id);
+          setDraft(restored ? toDraft(restored) : null);
+        }
+        setOverrides(payload.overrides ?? {});
+      }
+      setMessage({ kind: "ok", text: `"${current.title}" is back on the shipped version.` });
+      router.refresh();
+    } catch {
+      setMessage({ kind: "error", text: "Could not reach the server — try again." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       {/* Picker */}
@@ -280,7 +341,7 @@ export function ItineraryEditor({
           >
             {it.title}
             <span className="ml-1.5 text-xs font-normal opacity-70">
-              {isSeed(it.id) ? "seed" : "custom"}
+              {isSeed(it.id) ? (override(it.id) ? "seed · overridden" : "seed") : "custom"}
             </span>
           </button>
         ))}
@@ -502,6 +563,22 @@ export function ItineraryEditor({
                 </button>
                 {isSeed(draft.id) && (
                   <Badge tone="sand">Seed — deleting hides it, restorable</Badge>
+                )}
+                {override(draft.id) && (
+                  <>
+                    <button
+                      onClick={() => void revert(draft)}
+                      disabled={busy}
+                      className="rounded-full border border-tide/40 bg-white px-4 py-2 text-sm font-semibold text-tide-deep hover:bg-tide/10 disabled:opacity-60"
+                    >
+                      Revert to shipped version
+                    </button>
+                    <Badge tone="coral">
+                      {override(draft.id)!.differsFromSeed
+                        ? "Overriding the shipped version — app updates to this itinerary will not appear"
+                        : "Overriding the shipped version with identical text — app updates cannot appear; reverting is lossless"}
+                    </Badge>
+                  </>
                 )}
               </>
             )}

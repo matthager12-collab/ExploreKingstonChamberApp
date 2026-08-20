@@ -5,9 +5,14 @@
 import type { Itinerary } from "../types";
 import { itineraries as seed } from "../data/itineraries";
 import {
+  detachOverlayRecord,
   readMerged,
   readMergedAdmin,
+  readSeedOverrides,
   writeOverlayRecord,
+  writeOverlayRecordSeedAware,
+  type DetachResult,
+  type SeedOverrideFlags,
   type WithStatus,
   type WriteMeta,
 } from "./json-store";
@@ -29,7 +34,19 @@ export async function getItinerary(slug: string): Promise<Itinerary | undefined>
 }
 
 export async function saveItinerary(record: Itinerary, meta?: WriteMeta): Promise<void> {
-  await writeOverlayRecord(STORE, record, meta);
+  await writeOverlayRecordSeedAware<Itinerary>(STORE, seed, record, meta);
+}
+
+/** Which itineraries currently shadow a shipped one (and whether they say
+ *  anything different) — powers the admin "overriding the shipped version"
+ *  badge. */
+export async function getItineraryOverrides(): Promise<Record<string, SeedOverrideFlags>> {
+  return readSeedOverrides<Itinerary>(STORE, seed);
+}
+
+/** Discard the overlay so this itinerary reads from the shipped version again. */
+export async function revertItinerary(id: string, meta?: WriteMeta): Promise<DetachResult> {
+  return detachOverlayRecord(STORE, id, meta);
 }
 
 export async function deleteItinerary(id: string, meta?: WriteMeta): Promise<void> {
