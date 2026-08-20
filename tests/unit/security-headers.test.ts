@@ -4,7 +4,7 @@
 // Prod served ZERO security headers as of 2026-07-31 (curl-verified). This
 // suite pins the next.config.ts contract so a config refactor cannot silently
 // drop a header, weaken HSTS, quietly demote the CSP back to Report-Only
-// (enforced since the 2026-08-16 post-launch hardening pass), or "harden"
+// (enforced since the 2026-08-19 post-launch hardening pass), or "harden"
 // Permissions-Policy into geolocation=() and break the side-switcher /
 // near-me / hunt check-ins.
 
@@ -78,7 +78,7 @@ describe("next.config security headers", () => {
 
   it("ships CSP ENFORCED with the documented carve-outs, never demoted to Report-Only", async () => {
     const rules = await loadRules();
-    // Enforced since the 2026-08-16 post-launch hardening pass. A demotion
+    // Enforced since the 2026-08-19 post-launch hardening pass. A demotion
     // back to Report-Only would be silent in every browser — pin it here.
     for (const rule of rules) {
       for (const { key } of rule.headers) {
