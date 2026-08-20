@@ -276,7 +276,7 @@ describe("planGrowthZoneImport bucket matrix (fixture manifest)", () => {
       'created,directory,kingston-marine-supply-inc,"Kingston Marine Supply, Inc.",sam@kingstonmarine.example.com',
     );
     expect(csv).toContain("matched,restaurants,jaime-les-crepes");
-    expect(csv).toContain("owner@jaimelescrepes.com");
+    expect(csv).toContain("owner@jaimelescrepes.example.com");
     // The dropped member was status-filtered before planning — never invited.
     expect(csv).not.toContain("dropped@example.com");
   });
