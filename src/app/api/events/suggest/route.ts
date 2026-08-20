@@ -49,6 +49,10 @@ export const dynamic = "force-dynamic";
 const MAX_NAME = 200;
 const MAX_CONTACT = 200;
 
+// Multipart framing slack on top of the attachment budget: boundaries, part
+// headers, and the bounded text fields (title, venue, description, contacts).
+const MULTIPART_OVERHEAD_BYTES = 64 * 1024;
+
 function slugify(title: string): string {
   return (
     title
@@ -81,6 +85,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: "too many suggestions, please try again later" },
       { status: 429, headers: { "Retry-After": String(ipLimit.retryAfterSeconds) } },
+    );
+  }
+
+  // Bound the request BEFORE request.formData() buffers it — the per-file
+  // and per-run caps below run after the whole body is already in memory, so
+  // they bound what we STORE, not what the parse costs. The declared
+  // Content-Length is a trustworthy ceiling (Node reads exactly that many
+  // bytes); a request without one (chunked transfer) is refused rather than
+  // trusted — every browser multipart POST declares it.
+  const declaredBytes = Number(request.headers.get("content-length"));
+  if (!Number.isInteger(declaredBytes) || declaredBytes <= 0) {
+    return NextResponse.json({ error: "missing request length" }, { status: 411 });
+  }
+  if (declaredBytes > MAX_ATTACHMENTS * MAX_ATTACHMENT_BYTES + MULTIPART_OVERHEAD_BYTES) {
+    return NextResponse.json(
+      { error: `attachments too large (max ${MAX_ATTACHMENTS} files, 8 MB each)` },
+      { status: 413 },
     );
   }
 

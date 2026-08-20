@@ -23,6 +23,10 @@ import { UnstrippableImageError } from "@/lib/image-sanitize";
 import { checkRateLimit, clientKey } from "@/lib/rate-limit";
 import { createWorklistItem } from "@/lib/stores/worklist-store";
 
+// Multipart framing slack on top of the photo cap: boundaries, part headers,
+// and the few small text fields (huntId, stopId, lat, lng).
+const MULTIPART_OVERHEAD_BYTES = 64 * 1024;
+
 export async function POST(request: NextRequest) {
   const limit = await checkRateLimit(clientKey(request, "hunt-submit"), {
     limit: 5,
@@ -45,6 +49,21 @@ export async function POST(request: NextRequest) {
       },
       { status: 507 },
     );
+  }
+
+  // Bound the request BEFORE request.formData() touches it: formData()
+  // buffers the whole body into memory first, so the photo.size check below
+  // bounds what we STORE, not what the parse costs. The declared
+  // Content-Length is a trustworthy ceiling — Node reads exactly that many
+  // bytes off the socket — and a request without one (chunked transfer) is
+  // refused rather than trusted; every browser and curl multipart POST
+  // declares it.
+  const declaredBytes = Number(request.headers.get("content-length"));
+  if (!Number.isInteger(declaredBytes) || declaredBytes <= 0) {
+    return Response.json({ ok: false, error: "missing request length" }, { status: 411 });
+  }
+  if (declaredBytes > MAX_PHOTO_BYTES + MULTIPART_OVERHEAD_BYTES) {
+    return Response.json({ ok: false, error: "photo too large (max 8 MB)" }, { status: 413 });
   }
 
   let form: FormData;
