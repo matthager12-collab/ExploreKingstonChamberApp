@@ -150,7 +150,7 @@ export const COPY_BLOCKS = [
     label: "Header intro",
     multiline: true,
     fallback:
-      "Ready-made Kingston days built around ferry arrivals and local spots. Steal one whole or mix and match — everything downtown is a few blocks from the dock.",
+      "Ready-made days built around ferry arrivals and places we have actually checked — half a day on foot, a full day with the car, or a whole weekend. Steal one whole or mix and match. Each plan says which days its stops are open, because the fastest way to ruin a trip over here is a locked door.",
   },
 
   // -------------------------------------------------------------- /stay
