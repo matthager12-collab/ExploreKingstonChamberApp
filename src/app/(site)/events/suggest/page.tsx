@@ -6,6 +6,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getUnifiedCalendarAccess } from "@/lib/stores/unified-calendar-store";
+import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
 import { getBusinessOptions } from "@/lib/stores/business-options";
 import { PageHeader, Section } from "@/components/ui";
 import { SuggestEventForm } from "./suggest-form";
@@ -19,12 +20,19 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function SuggestEventPage() {
+  // Two independent gates, and both must pass. The calendar flag below asks
+  // "is the unified calendar built yet"; this one asks "has the Chamber hidden
+  // the events section" — hiding /events has to take its child form with it,
+  // the same way /ferry/plan gates on "/ferry". Bare gate: route is
+  // force-dynamic, so the admin pass-through genuinely works.
+  const hiddenPreview = await assertPageVisible("/events");
   const access = await getUnifiedCalendarAccess();
   if (!access.enabled && !access.adminPreview) notFound();
   const businesses = await getBusinessOptions();
 
   return (
     <>
+      {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
         eyebrow="Kingston events"
         title="Suggest an event"

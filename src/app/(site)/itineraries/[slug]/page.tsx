@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getItinerary } from "@/lib/stores/itinerary-store";
+import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
 import {
   Badge,
   Callout,
@@ -21,6 +22,13 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
+  // Gated too, and for the same reason the page body is: generateMetadata
+  // runs on the SAME request and reads the same record store. Ungated, a
+  // hidden section still answers a real slug with the record's title and a
+  // bogus one with the fallback — the exists-oracle the body gate closes,
+  // relocated into <head>. notFound() from generateMetadata is supported,
+  // and the admin pass-through still returns the real title for a preview.
+  await assertPageVisible("/itineraries");
   const itinerary = await getItinerary(slug);
   if (!itinerary) return { title: "Itinerary not found" };
   return {
@@ -41,6 +49,11 @@ export default async function ItineraryPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
+  // Before the store read, so hiding "/itineraries" hides the whole section:
+  // every detail URL 404s uniformly rather than leaking which slugs exist.
+  // The bare gate (not ...Static) is right here because the route is
+  // force-dynamic — see src/lib/page-visibility.tsx.
+  const hiddenPreview = await assertPageVisible("/itineraries");
   const itinerary = await getItinerary(slug);
   if (!itinerary) notFound();
 
@@ -48,6 +61,7 @@ export default async function ItineraryPage({
 
   return (
     <>
+      {hiddenPreview && <HiddenPageBanner />}
       <PageHeader eyebrow="Itinerary" title={itinerary.title} intro={itinerary.tagline} />
       <Section>
         <div className="mb-8 flex flex-wrap items-center gap-2">

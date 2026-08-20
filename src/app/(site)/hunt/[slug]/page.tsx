@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getHunt, photoUrl } from "@/lib/hunt-store";
+import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
 import { HuntPlayer, type PlayerHunt } from "@/components/hunt-player";
 import { Badge, Callout, ExternalLink, PageHeader, Section, mapDirectionsUrl } from "@/components/ui";
 
@@ -15,6 +16,13 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
+  // Gated too, and for the same reason the page body is: generateMetadata
+  // runs on the SAME request and reads the same record store. Ungated, a
+  // hidden section still answers a real slug with the record's title and a
+  // bogus one with the fallback — the exists-oracle the body gate closes,
+  // relocated into <head>. notFound() from generateMetadata is supported,
+  // and the admin pass-through still returns the real title for a preview.
+  await assertPageVisible("/hunt");
   const hunt = await getHunt(slug);
   if (!hunt) return { title: "Scavenger Hunt" };
   return {
@@ -29,6 +37,9 @@ export default async function HuntDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
+  // Before the store read — hiding "/hunt" must take every hunt URL with it,
+  // not just the list page. Bare gate because the route is force-dynamic.
+  const hiddenPreview = await assertPageVisible("/hunt");
   const hunt = await getHunt(slug);
   if (!hunt) notFound();
 
@@ -49,6 +60,7 @@ export default async function HuntDetailPage({
 
   return (
     <>
+      {hiddenPreview && <HiddenPageBanner />}
       <PageHeader eyebrow="Scavenger hunt" title={hunt.title} intro={hunt.description} />
 
       <Section>
