@@ -81,7 +81,7 @@ Handoff protocol in [choreography.md](./choreography.md).
 ## Resolved: `main` was not green — fixed on 2026-08-21
 
 Found while executing `run-1-sealed-seam/validate-exit.sh`, fixed the same day in
-commit `ddff311` on branch `tests-raise-testtimeout`. Recorded here because the
+PR #206 (`50e5cec`). Recorded here because the
 diagnosis is worth keeping, and because it was briefly a blocker on run 1's entry
 criterion.
 

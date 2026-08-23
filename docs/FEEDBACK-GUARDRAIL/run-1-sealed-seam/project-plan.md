@@ -17,24 +17,25 @@ without `ANTHROPIC_API_KEY` the module is a no-op and T-01 cannot run at all.
 
 | Criterion | Check |
 |---|---|
-| Branch cut from a green `main` | `npm run test` exits 0 on `main` — satisfied since commit `ddff311` |
+| Branch cut from a green `main` | `npm run test` exits 0 on `main` — satisfied since PR #206 |
 | Worktree is clean | `git status --porcelain` is empty |
 | `ANTHROPIC_API_KEY` available for T-01 | present in `.env.local`, absent from git |
 
 > **The suite was flaky until 2026-08-21** — 3–5 files failing per run, never the same
-> ones, all `Test timed out in 5000ms`. Fixed in `ddff311` by raising `testTimeout` to
-> match the existing `hookTimeout` and capping `maxWorkers` at 4, since one in-memory
-> Postgres per core exhausts an 8GB machine. Verified with three consecutive green
-> full runs. Diagnosis in [../split-assessment.md](../split-assessment.md) § Resolved.
+> ones, all `Test timed out in 5000ms`. Fixed in PR #206 (`50e5cec`) by raising
+> `testTimeout` to match the existing `hookTimeout` and capping `maxWorkers` at 4,
+> since one in-memory Postgres per core exhausts an 8GB machine. Verified with three
+> consecutive green full runs locally and a green CI run.
+> Diagnosis in [../split-assessment.md](../split-assessment.md) § Resolved.
 >
-> **That fix must be on your branch point.** It lives on `tests-raise-testtimeout`; if
-> it has not reached `main` yet, branch from it rather than from `main`, or the
-> flake comes back and `pii-inventory.test.ts` — the tripwire run 2 depends on — stops
-> being trustworthy.
+> Branch from `main` at `50e5cec` or later. Anything earlier reintroduces the flake,
+> and `pii-inventory.test.ts` — the tripwire run 2 depends on — stops being
+> trustworthy.
 >
 > `npm run test:server` still needs `TEST_DATABASE_URL` and a throwaway Postgres. That
 > is an environment prerequisite, not a defect, and `validate-exit.sh` runs
-> `npm run test:all`, so set it up before running the gate.
+> `npm run test:all`, so set it up before running the gate — or lean on CI, which runs
+> it.
 
 ## Tasks
 
