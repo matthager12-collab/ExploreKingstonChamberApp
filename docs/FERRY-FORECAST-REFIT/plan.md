@@ -27,9 +27,13 @@ thresholds; walk-forward backtest of the *shipped* model; probability-of-full.
   are research-derived and **this data cannot validate them** — deck fullness
   says nothing about how many boats you wait. They keep sitting on top of a now-
   measured busyness number, which is an improvement, not a validation.
-- `seasonFactor` (0.82 / 0.58) and the holiday multipliers (1.2–1.5). All 50
-  days are peak season and no holiday falls in the window. Phase 2 adds a guard
-  instead of a refit — see DEC-004.
+- `seasonFactor` (0.82 / 0.58). All 50 days are peak season, so it cannot be
+  validated at all. Phase 2 adds a guard instead of a refit — see DEC-004.
+- **The holiday multipliers, for now.** July 4th *is* in the window and the
+  1.5× multiplier over-predicts it by 34.6 points on 48 sailings — the model
+  calls it the busiest day of the year and it was one of the quietest. That is
+  one occurrence in one year, too thin to refit against but too strong to keep
+  asserting. Recorded as **DEC-012, deferred to phase 2**.
 - **Deferred: narrowing the observation window** (change #9 of the evaluation's
   nine). Dropping snapshots >45 min out would cut 57% of rows, but the spike
   showed the valuable window runs to roughly +15 min *after* scheduled

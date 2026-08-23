@@ -95,7 +95,7 @@ constant and a pure `isFitStale(dateStr)`; the caller supplies the date.
 ## F-5 · Medium · The fixture's reproducibility criterion expires
 
 T-07 requires that regenerating the fixture from the documented query reproduces
-it byte-for-byte. `RETENTION_DAYS = 90`, and the data spans 2026-07-12 →
+it byte-for-byte. `RETENTION_DAYS = 90`, and the data spans 2026-07-03 →
 2026-08-23 — so the source rows are pruned from roughly **2026-10-10**, after
 which the criterion is permanently false.
 

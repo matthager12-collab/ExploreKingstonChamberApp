@@ -17,7 +17,7 @@ skips it over scan cost.
 
 Measured baseline and every number quoted below:
 [../FERRY-FORECAST-ACCURACY-2026-08.md](../FERRY-FORECAST-ACCURACY-2026-08.md) —
-25,454 snapshots, 2,156 sailings, 50 Pacific days, 2026-07-12 → 2026-08-23.
+25,454 snapshots, 2,156 sailings, 50 Pacific days, 2026-07-03 → 2026-08-23.
 
 ### The two defects
 

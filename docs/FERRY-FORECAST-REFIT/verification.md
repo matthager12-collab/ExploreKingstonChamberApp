@@ -96,7 +96,9 @@ Stated so a green suite is not mistaken for a validated model:
 - **Off-peak accuracy.** Every fixture sailing is peak season. Nothing here
   proves the forecast in October, and DEC-004's guard exists precisely because
   it cannot.
-- **Holiday multipliers.** No holiday in the window.
+- **Holiday multipliers.** Only July 4th is in the window, and it contradicts
+  the model (see DEC-012). Memorial Day, Labor Day, Thanksgiving and Christmas
+  are wholly untested.
 - **Wait-time claims.** `BOAT_WAIT` and `ARRIVE_EARLY_*` are unfalsifiable from
   deck fullness.
 - **WSF feed semantics.** The 60m+ post-departure tail (T-04) is characterised,

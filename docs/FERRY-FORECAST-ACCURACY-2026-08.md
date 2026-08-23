@@ -7,8 +7,13 @@ MAE and ~60% exact level match, which clears every threshold in
 `ferry-accuracy-verdict.ts`.**
 
 Evidence: read-only pull of the production `ferry_observation` log —
-**25,454 snapshots, 2,156 distinct sailings, 50 Pacific days, 2026-07-12 →
-2026-08-23**. Every number below is computed from that pull against the shipped
+**25,454 snapshots, 2,156 distinct sailings, 50 Pacific days, 2026-07-03 →
+2026-08-23**. (Corrected 2026-08-23: an earlier revision of this document said
+the window opened 2026-07-12. That was the `ferry_observation.ts` **column**,
+which carries the import time for re-imported rows; the payload `ts` and
+`departs` show collection actually began 2026-07-03. No measured figure changes
+— every calculation keyed off `departs` — but the window includes July 4th, so
+the holiday claim in §7 was wrong and is now corrected.) Every number below is computed from that pull against the shipped
 `scoreAt()`. The live stored snapshot (`record` store `ferry-accuracy`,
 computed 2026-08-23T08:00Z) reads `mae 32.4, bias +19, level 0.24, within1
 0.58` — this analysis reproduces it at 32.5 / +19.1 / 0.24 / 0.58, so we are
@@ -202,7 +207,7 @@ Expected MAE after each step is cumulative, measured on the pull above.
 | 5 | Train the empirical table on a **trailing 28-day window** rather than the full 90 | `getEmpiricalBusyness` | −1.6, and it tracks the season instead of averaging across it |
 | 6 | Re-derive `scoreToLevel` thresholds (20/42/65/83) against the real fullness distribution — observed quartiles are p25=43, p50=74, p75=95 | `ferry-forecast.ts` | Level match is the metric the verdict gates on; current cuts were drawn for a different scale |
 | 7 | Backtest the **blended** model with leave-one-day-out CV, not heuristic-only | `computeAccuracy` | Today the shipped model is never graded. LODO keeps it honest and out-of-sample |
-| 8 | Skip holiday sailings in aggregation, mirroring `scoreAt`'s gate | `getEmpiricalBusyness` | Already filed in the code review; unvalidated here (no holiday in the window) |
+| 8 | Skip holiday sailings in aggregation, mirroring `scoreAt`'s gate | `getEmpiricalBusyness` | Already filed in the code review. **Now known to matter**: July 4th is in the window and is a genuine outlier (§7) that would otherwise pollute peak-summer buckets |
 | 9 | Stop logging snapshots >45 min out, or keep them and mark them non-gradeable | `recordSailingSpaceSnapshot` | 57% of rows carry no information; this is also the row-count/scan-cost fix |
 
 Steps 1–2 are the load-bearing ones — everything else is tuning that cannot be
@@ -218,7 +223,27 @@ Stated plainly, because the window is narrow:
   throughout). `seasonFactor` 0.82 / 0.58 for shoulder and off-season is
   **completely unvalidated**. A refit on this data will be a summer model —
   it needs a shoulder-season guard, and re-checking in October.
-- **No holiday falls in the window.** The 1.2–1.5 holiday multipliers are
+- **One holiday falls in the window, and the model gets it backwards.** July
+  4th 2026 is present (48 sailings). `holiday()` applies a **1.5× multiplier**
+  on the stated grounds that it is "the ferry's worst day of the year":
+
+  | Day | n | Mean predicted | Mean observed | Bias |
+  |---|---:|---:|---:|---:|
+  | July 3 (partial — collection began mid-evening) | 12 | 20 | 32 | −11.8 |
+  | **July 4** | **48** | **67** | **33** | **+34.6** |
+  | July 5 | 44 | 62 | 50 | +11.9 |
+  | Ordinary days | 2,052 | 44 | 68 | −23.9 |
+
+  July 4th was one of the **quietest** days in the window — mean observed
+  fullness 33 against 68 on an ordinary day — while the model predicted the
+  busiest. The multiplier is not merely unvalidated; the only evidence we have
+  points the opposite way.
+
+  **Weigh this carefully before acting on it.** It is a single occurrence,
+  n=48, one year, and a plausible confound exists: if WSF stopped reporting
+  during a chaotic day, `min(driveUp)` would understate. It is enough to stop
+  trusting the 1.5×, not enough to replace it with a number. The remaining
+  multipliers (Memorial Day, Labor Day, Thanksgiving, Christmas) stay entirely
   untested.
 - Ground truth is `min(driveUp)`, which is itself a lower bound on demand
   (see §5) and depends on WSF reporting continuously through loading.

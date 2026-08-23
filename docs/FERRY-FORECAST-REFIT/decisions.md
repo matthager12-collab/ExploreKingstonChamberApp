@@ -13,6 +13,7 @@
 | DEC-009 | The actual level cut points | Decided | A — 35 / 50 / 80 / 92 | R2 |
 | DEC-010 | Level agreement is unreachable under those cuts — what gives? | Decided | A — keep the cuts, rebalance what gates | R3 |
 | DEC-011 | How is the refit evaluated without grading on its own fit? | Decided | C — time-blocked hold-out, both numbers reported | R3 |
+| DEC-012 | The July 4th multiplier predicts the opposite of what happened | Deferred to phase 2 | | Build |
 
 Two-way doors, decided in passing and recorded here so they are not re-litigated:
 
@@ -613,3 +614,63 @@ split produced it.
 - `verification.md` Phase 2 exit, "Cold path hits its target out of sample"
 - `review.md` F-2
 
+---
+
+## Opened during the build
+
+### DEC-012: The July 4th multiplier predicts the opposite of what happened
+
+**Date**: 2026-08-23
+**Decided by**:
+**Status**: Deferred — opens at phase 2 (T-08/T-09), when `CURVES` and the
+factors around them are next touched. Phase 1 is measurement only and does not
+depend on it.
+
+**Context**: Found while building the phase-1 fixture. The evaluation document
+claimed no holiday fell in the observation window; that was wrong, caused by
+reading `ferry_observation.ts` (the **column**, which carries import time for
+re-imported rows) instead of the payload `ts`. Collection actually began
+2026-07-03, so July 4th 2026 is in the data.
+
+`holiday()` applies **1.5×** on the stated grounds that Independence Day is
+"the ferry's worst day of the year". Measured:
+
+| Day | n | Mean predicted | Mean observed | Bias |
+|---|---:|---:|---:|---:|
+| July 3 (partial day) | 12 | 20 | 32 | −11.8 |
+| **July 4** | **48** | **67** | **33** | **+34.6** |
+| July 5 | 44 | 62 | 50 | +11.9 |
+| Ordinary | 2,052 | 44 | 68 | −23.9 |
+
+July 4th was among the **quietest** days observed. Note the direction: on
+ordinary days this model under-predicts by 24 points; on July 4th it
+over-predicts by 35. That is not noise in the same direction — it is the
+multiplier pushing the wrong way.
+
+**Why this is deferred rather than decided now**: one occurrence, one year,
+n=48. A confound exists — if WSF stopped reporting during a chaotic day,
+`min(driveUp)` understates. Phase 1 changes no prediction behaviour, so nothing
+is blocked by leaving it open.
+
+| Option | Description | Trade-offs |
+|---|---|---|
+| A | Leave 1.5× alone | No action on thin evidence. Keeps shipping a multiplier whose only measurement says it is backwards, on the single day of the year it fires hardest. |
+| B | Drop the July 4 multiplier to 1.0 | Matches the evidence. Overturns researched guidance on n=48 from one year, and would look wrong if 2026 was the anomaly. |
+| C | Widen the T-10 staleness guard to cover holiday factors, and suppress the *prediction* on holiday dates — show the live board instead | Refuses to guess where we know we cannot. Costs a visitor-facing answer on the days most people want one. |
+| D | Keep 1.5× but flag the day in the UI as low-confidence, and re-measure after July 2027 | Honest about uncertainty without overturning or hiding. Defers the real answer a year. |
+
+**Recommendation**: **D for now, revisited with 2027 data.** The confound is
+real enough that B would be trading a researched guess for a measured
+one-sample guess. But T-05 (excluding holidays from the empirical aggregation)
+becomes more clearly right, not less — whatever the true holiday behaviour is,
+July 4th should not be averaged into ordinary peak-summer buckets.
+
+**Decision**:
+
+**Consequences**:
+
+**Applied to**:
+
+- `plan.md` § Scope (holiday multipliers moved out of scope with the evidence)
+- `../FERRY-FORECAST-ACCURACY-2026-08.md` § 7
+- Opens at phase 2; phase 1 unaffected
