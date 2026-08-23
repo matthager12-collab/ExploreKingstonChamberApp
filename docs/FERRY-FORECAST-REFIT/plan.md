@@ -57,8 +57,8 @@ recorded in this plan so the change is attributable.
 | # | Task | Depends on | Acceptance criteria |
 |---|---|---|---|
 | T-01 | Add `collapseToSailings(observations)` to `ferry-observations.ts`, exported for tests: group by `(dir, departs)`, `observed = round(max(1 - driveUp/max) * 100)` across all snapshots of that sailing | — | Unit test: 5 snapshots of one sailing collapse to 1 outcome; the outcome's `observed` comes from the fullest row **even when that row's `ts` is after `departs`**; a sailing with no usable `max`/`driveUp` row is dropped entirely |
-| T-02 | Rewrite `computeAccuracy` and `computeDailyAccuracy` over `collapseToSailings` | T-01 | Against the committed fixture the backtest reports `n=2156`, MAE `28.1 ±0.2`, bias `−21.8 ±0.2`, level `0.19`. `computeDailyAccuracy` still folds up to exactly `computeAccuracy` (existing test in `ferry-daily-accuracy.test.ts` passes unmodified in intent) |
-| T-03 | Rewrite `getEmpiricalBusyness` over `collapseToSailings`; `EmpiricalBucket.n` counts distinct sailings | T-01 | Fixture assertion: the peak-summer `from-kingston` Saturday 14:00 bucket reports `s ≥ 85` (today it reports ~21). `EMP_MIN_SAMPLES = 3` can no longer be satisfied by one sailing |
+| T-02 | Rewrite `computeAccuracy` and `computeDailyAccuracy` over `collapseToSailings` | T-01, T-07 | Against the committed fixture the backtest reports `n=2156`, MAE `28.1 ±0.2`, bias `−21.8 ±0.2`, level `0.19`. `computeDailyAccuracy` still folds up to exactly `computeAccuracy` (existing test in `ferry-daily-accuracy.test.ts` passes unmodified in intent) |
+| T-03 | Rewrite `getEmpiricalBusyness` over `collapseToSailings`; `EmpiricalBucket.n` counts distinct sailings | T-01, T-07 | Fixture assertion: the peak-summer `from-kingston` Saturday 14:00 bucket reports `s ≥ 85` (today it reports ~21). `EMP_MIN_SAMPLES = 3` can no longer be satisfied by one sailing |
 | T-04 | Characterise the 1,673 post-departure rows aged 60m+ (mean fullness 26.8, well below the 66.9 sailing mean). Write the finding into design.md § Context; add a lead-time guard **only if** it changes `min(driveUp)` for any sailing | T-01 | A written characterisation with counts, plus either a guard with a test or a one-line statement that `min()` is provably unaffected |
 | T-05 | Exclude holiday-dated sailings from `getEmpiricalBusyness` and both backtests, mirroring `scoreAt`'s existing gate via the exported `holiday`/`parseParts` helpers | T-02, T-03 | Unit test: a July 4 sailing keyed into a peak-Saturday bucket does not move that bucket's `s`. Both sides of the gate use the same helper, so they cannot drift |
 | T-06 | Land the DEC-007 record shape once — `{ method, coldPath, walkForward? }` — wrapping existing history entries as `method: "per-snapshot"`, and handle the discontinuity in the **`history` readers**: `accuracy-trend.tsx` and `ops/page.tsx`. Per F-3, `plateauDays()` is **not** in scope: it reads the daily series from `computeDailyAccuracy()`, which is recomputed from the log with current code and so is never mixed-method | DEC-002, DEC-007 | The trend chart renders the break rather than a cliff; every `history` reader handles `walkForward` absent; no existing entry is rewritten; a test asserts the daily series is single-method by construction |
@@ -95,7 +95,7 @@ decided (T-16 depends on the record shape).
 | T-13 | Trailing `EMP_WINDOW_DAYS = 28` window in `getEmpiricalBusyness`, replacing the 90-day retention scan. Retention stays 90 days for the backtest | T-03 | Fixture test: the table built for a given day uses only sailings in the preceding 28 days |
 | T-14 | Raise the blend to full weight for well-populated buckets: `EMP_MAX_WEIGHT → 1.0`, `EMP_MIN_SAMPLES` and `EMP_FULL_CONFIDENCE_N` re-expressed in sailings | T-13 | Blend-gate tests updated; a bucket below the floor still returns the pure heuristic, unchanged |
 | T-15 | Precompute the table in the daily cron into `record` store `ferry-empirical/latest`; `/ferry` and `/ferry/plan` read one record instead of scanning | DEC-003 | No page render calls `readFerryObservations`. Missing record falls back to the refit curves without erroring, and the admin surface states *why* it is on the fallback (F-7) rather than degrading silently |
-| T-16 | Per DEC-006, make the walk-forward blended backtest primary — for each day, build the table from the 28 days before it, predict that day, grade — and keep the heuristic-only run alongside as the labelled cold-path number, in the DEC-007 record shape | DEC-006, DEC-007, T-13 | Strictly out-of-sample by construction: a test asserts no day appears in its own training window. Fixture assertion: walk-forward MAE `10.6 ±0.5`, level ≥ 0.60; cold-path MAE ≤ 13 reported in the same run. `accuracyVerdict()` reads the walk-forward number only |
+| T-16 | Per DEC-006, make the walk-forward blended backtest primary — for each day, build the table from the 28 days before it, predict that day, grade — and keep the heuristic-only run alongside as the labelled cold-path number, in the DEC-007 record shape | DEC-006, DEC-007, T-13, T-14 | Strictly out-of-sample by construction: a test asserts no day appears in its own training window. Fixture assertion: walk-forward MAE `10.6 ±0.5`, level ≥ 0.60; cold-path MAE ≤ 13 reported in the same run. `accuracyVerdict()` reads the walk-forward number only |
 | T-17 | Cron-death alarm: `ops-health` warns when `ferry-empirical/latest` is older than 48h or its `sailings` count drops below the bucket-coverage floor | T-15 | Simulating a 3-day cron gap produces a visible ops warning. This is the failure mode `render.yaml` records as having happened silently before |
 
 **Two consequences of walk-forward the Chamber will see** (F-6, F-7):
@@ -144,21 +144,23 @@ model goes back to phase 2.
 
 ```mermaid
 graph LR
-  T01[T-01 collapse] --> T02[T-02 backtest]
-  T01 --> T03[T-03 aggregate]
+  T01[T-01 collapse] --> T07[T-07 fixture]
+  T07 --> T02[T-02 backtest]
+  T07 --> T03[T-03 aggregate]
+  T01 --> T02
+  T01 --> T03
   T01 --> T04[T-04 60m tail]
-  T01 --> T07[T-07 fixture]
   T02 --> T05[T-05 holiday gate]
   T03 --> T05
   T06[T-06 record shape]
   T07 --> T08[T-08 refit script] --> T09[T-09 commit curves]
   T09 --> T11[T-11 thresholds] --> T12[T-12 parity]
   T10[T-10 season guard]
-  T03 --> T13[T-13 28d window] --> T14[T-14 full weight]
-  T13 --> T16[T-16 walk-forward]
+  T03 --> T13[T-13 28d window] --> T14[T-14 full weight] --> T16[T-16 walk-forward]
+  T13 --> T16
   T15[T-15 precompute] --> T17[T-17 cron alarm]
-  T16 --> T18[T-18 pFull] --> T19[T-19 surface]
-  T18 --> T20[T-20 calibration]
+  T16 --> T18[T-18 pFull] --> T20[T-20 calibration] --> T19[T-19 surface]
+  T18 --> T19
 ```
 
 ## Roles
