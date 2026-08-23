@@ -46,7 +46,7 @@ const RUDE = "This is garbage and whoever built it is an idiot.";
 beforeEach(() => {
   requests.length = 0;
   createSpy.mockClear();
-  process.env.ANTHROPIC_API_KEY = "sk-ant-test-not-a-real-key";
+  process.env.ANTHROPIC_API_KEY = "test-credential-placeholder";
   nextReply = { kind: "text", text: JSON.stringify({ rude: false, cleaned: "fine" }) };
 });
 
