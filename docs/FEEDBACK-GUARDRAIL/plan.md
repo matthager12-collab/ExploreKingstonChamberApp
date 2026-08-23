@@ -107,7 +107,7 @@ access-then-delete request against a test email finds, exports and removes the r
 | # | Task | Depends on | Acceptance criteria |
 |---|---|---|---|
 | T-16 | Set `ANTHROPIC_API_KEY` on the Render service | Phase 3 | The key is set in the Render dashboard only. It appears in no commit, no note, and no message. |
-| T-17 | **Ask** the Chamber, before deploy, whether they accept the notice bump re-prompting every returning visitor for consent | — | Their answer is recorded in writing. `policy.ts:18-21` establishes this as their call, and it has gone the other way before — a decline reopens DEC-007 rather than being worked around. |
+| T-17 | ~~Ask the Chamber whether they accept the notice bump re-prompting every returning visitor~~ — **answered: approved 2026-08-23 (DEC-007)** | — | Done ahead of Phase 4. Re-confirm only if the deploy slips well past that date. The approval covers the re-prompt, **not** the T-14 notice wording, which is still theirs to review. |
 | T-18 | Squash-merge to `main`; add the one-line entry to `engagement/activity.md` | T-16, T-17 | Branch deleted after merge. |
 | T-19 | Watch `/admin/feedback` for the first two weeks | T-18 | The proportion of rows carrying the "rewritten" marker is checked against expectation. Sustained over-firing reopens the rewrite instruction from T-03. |
 
@@ -134,7 +134,7 @@ graph LR
   T14 --> T15[T-15 version bump]
   T15 --> T16[T-16 Render key]
   T16 --> T18[T-18 merge]
-  T17[T-17 ask Chamber] --> T18
+  T17[T-17 Chamber approved] --> T18
   T18 --> T19[T-19 watch]
 ```
 
