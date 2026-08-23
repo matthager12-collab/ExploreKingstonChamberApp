@@ -194,11 +194,24 @@ The response schema handed to the API:
 `cleaned` is re-validated in code as a non-empty string of at most
 `FEEDBACK_COMMENT_MAX` characters. Anything else collapses to `{ checked: false }`.
 
-> **Implementation-order note.** Confirm `output_config.format` is accepted on
-> `claude-haiku-4-5` with one smoke call before building around it. If it is rejected,
-> the fallback is a `strict: true` tool with forced `tool_choice` — the same guarantee
-> through a different mechanism, swappable behind this signature. This is a two-way
-> door and carries no DEC entry.
+> **T-01 finding, 2026-08-23: `output_config.format` is accepted on
+> `claude-haiku-4-5`.** Confirmed by live smoke call. The `strict: true` tool fallback
+> is **not needed and was not built**. Five cases returned schema-valid JSON in
+> 0.78–1.68s, comfortably inside the 4s budget.
+>
+> Two things the smoke test settled beyond the mechanism:
+>
+> - **Substance survives the rewrite.** A rude comment carrying specifics — a bay
+>   number, permit hours, a sailing time, a phone number — kept every one of them,
+>   which is the risk DEC-003 accepted when it chose to discard the original.
+> - **Contempt with no content needed a prompt fix.** *"Absolutely useless website.
+>   Whoever made this should be embarrassed."* first rewrote to *"This website does not
+>   meet my needs"* — inventing a stance the visitor never expressed, which the prompt
+>   itself forbids. The instruction now names a fixed sentence for that case: *"The
+>   visitor expressed dissatisfaction without giving specifics."* Re-verified.
+>
+> Prompt quality is not unit-tested (§ Testing strategy); this smoke run is the
+> evidence, and the admin "rewritten" marker is the ongoing signal.
 
 ### `FeedbackResponse` — `src/lib/types.ts`
 
