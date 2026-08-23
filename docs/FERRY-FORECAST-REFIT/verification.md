@@ -49,7 +49,7 @@ prod access or a network call.
 | Refit is deterministic | `tsx scripts/refit-ferry-curves.ts \| sha256sum` run twice | identical digests |
 | Refit output is well-formed | `npm test -- ferry-curves-shape` | 8 arrays × 24 entries, every value an integer in `[0,100]`, no hour emitted from a bucket with `n < 5` |
 | `ferry-forecast.ts` is still pure | `npm run lint:boundaries` | exit 0; the module still imports only `./types` |
-| Cold path hits its target | `npm test -- ferry-accuracy-fixture` with the empirical table omitted | `mae <= 13`, `abs(bias) <= 3`, `levelMatchRate >= 0.55` |
+| Cold path hits its target **out of sample** | `npm test -- ferry-coldpath-holdout` | `mae <= 13` and `abs(bias) <= 3` on the DEC-011 hold-out days only; the in-fit number is asserted to be *reported*, not gated (F-2) |
 | Boarding-pass parity survives the refit | `npm test -- ferry-model` | the every-day-of-2026 sweep at hours {7,8,13,19,20} passes |
 | Season guard exists and fires | `npm test -- ferry-season-guard` | a date past the fit window produces the warning; `ops-health` reports it |
 | Level cuts and copy agree | `npm test -- ferry-model` | threshold edge test matches **35 / 50 / 80 / 92** exactly; no blurb names a wait inconsistent with its level; `light`/`moderate` copy is consistent with a measured 0% fill rate |
@@ -60,8 +60,9 @@ prod access or a network call.
 |---|---|---|
 | Trailing window is honoured | `npm test -- ferry-window` | the table for day D contains no sailing older than 28 days before D |
 | Walk-forward is genuinely out-of-sample | `npm test -- ferry-walk-forward` | asserts no graded day appears in its own training window |
-| **Warm path hits the measured ceiling** | same test | `mae` in `[10.1, 11.1]`, `levelMatchRate >= 0.60` |
-| Verdict returns `ready` on unmoved thresholds | `npm test -- ferry-accuracy-verdict` | `accuracyVerdict(phase3Metrics).tone === "ready"` with `GOOD_LEVEL_MATCH`, `GOOD_BIAS`, `GOOD_WITHIN1` **unchanged from `git show HEAD~1`** |
+| **Warm path hits the measured ceiling** | same test | `mae` in `[10.1, 11.1]`; level agreement meets the DEC-010 bar |
+| Reported span drop is explained, not silent | `npm test -- ferry-accuracy-span` | `spanDays` falls by the warm-up window and the admin copy names the reason (F-6) |
+| Verdict returns `ready` without post-hoc goalpost-moving | `npm test -- ferry-accuracy-verdict` | `accuracyVerdict(phase3Metrics).tone === "ready"`. Thresholds may differ from today's only where DEC-010 changed them **before phase 2**; a test asserts they are unchanged since the phase-2 commit, so nothing moves after a phase-3 result is seen (F-1) |
 | Cold path still stands alone | `npm test -- ferry-accuracy-fixture` with the table removed | `mae <= 13` — a data outage degrades, it does not collapse |
 | Both numbers are stored and only one gates | `npm test -- ferry-accuracy-record` | one history entry per run carries walk-forward **and** cold-path metrics; `accuracyVerdict()` is called with the walk-forward metrics only |
 | Request path no longer scans the log | `npm test -- ferry-page-no-scan` | rendering `/ferry` and `/ferry/plan` issues zero `readFerryObservations` calls |

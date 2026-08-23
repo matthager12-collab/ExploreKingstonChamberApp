@@ -11,6 +11,8 @@
 | DEC-007 | What shape holds two accuracy numbers, and which one gates? | Decided | B — one entry, `{ walkForward, coldPath, method }`; gates on `walkForward` | R2 |
 | DEC-008 | What is the p(full) contract and where does it render? | Decided | C — coarse frequency, gated on calibration | R2 |
 | DEC-009 | The actual level cut points | Decided | A — 35 / 50 / 80 / 92 | R2 |
+| DEC-010 | Level agreement is unreachable under those cuts — what gives? | Open | | R3 |
+| DEC-011 | How is the refit evaluated without grading on its own fit? | Open | | R3 |
 
 Two-way doors, decided in passing and recorded here so they are not re-litigated:
 
@@ -474,3 +476,84 @@ staleness guard.
 - `plan.md` T-11, T-12
 - `verification.md` Phase 2 exit, "Level cuts and copy agree"
 
+---
+
+## Round 3
+
+Opened by the adversarial review ([review.md](./review.md)). Both entries come
+from findings confirmed by measurement rather than argument.
+
+### DEC-010: Level agreement is unreachable under the DEC-009 cuts — what gives?
+
+**Date**:
+**Decided by**:
+**Status**: Open
+
+**Context**: Review finding F-1. Walk-forward on a trailing 28-day window, 969
+graded sailings, MAE already at the 10.6-point noise floor:
+
+| Cut set | Level match | Within-1 | Fill risk per band |
+|---|---:|---:|---|
+| Current 20/42/65/83 | 0.635 | 0.945 | 0/0/3/11/45% |
+| **DEC-009 35/50/80/92** | **0.551** | 0.920 | 0/0/6/30/54% |
+| Quantile 25/45/70/92 | 0.583 | 0.961 | 0/0/5/24/54% |
+
+`GOOD_LEVEL_MATCH` is 0.6 and the phase-3 exit demands ≥0.60, so the plan
+cannot clear its own gate — and no modelling improvement closes the gap,
+because the error is already at the floor.
+
+A grid search over 566 cut sets that *do* clear 0.60 shows why the metric is the
+wrong gate: the best, **15/25/35/91 at 0.715**, wins by making one band 56
+points wide, labelling everything from 35% to 91% full "very busy". It scores
+higher and says less. With a 10.6-point noise floor inside bands 15–30 points
+wide, exact 5-band agreement measures band width as much as skill.
+
+| Option | Description | Trade-offs |
+|---|---|---|
+| A | Keep 35/50/80/92; gate on within-1, MAE, bias and calibration; demote exact level match to a reported diagnostic | Keeps the labels visitors can act on and stops gating on a gameable metric. Requires changing `ferry-accuracy-verdict.ts` thresholds — which must happen *before* phase 2 and be recorded here, never after seeing a result. |
+| B | Revert to 20/42/65/83 | Clears the existing gate untouched at 0.635. Abandons the risk ladder: the top band carries only a 45% fill risk, so `extreme` still does not mean "you will be bumped". |
+| C | Adopt 25/45/70/92 | A middle position at 0.583 — still under 0.60, so it needs the same threshold change as A but with a weaker rationale for the cuts. |
+| D | Search for cuts that clear 0.60 | **Rejected on evidence.** The sets that clear it are degenerate; optimising the label vocabulary against the metric is precisely backwards. |
+
+**Recommendation**: **A**. Within-1 at 0.92 already bounds the damage, MAE is at
+the floor, and phase 4 adds a calibration measure that is not gameable by band
+width. The verification guard is reworded rather than removed: thresholds may
+change before phase 2 as a recorded decision, never after a phase-3 result.
+
+**Decision**:
+
+**Consequences**:
+
+**Applied to**:
+
+---
+
+### DEC-011: How is the refit evaluated without grading on its own fit?
+
+**Date**:
+**Decided by**:
+**Status**: Open
+
+**Context**: Review finding F-2. T-08 fits `CURVES` from the fixture and the
+phase-2 exit grades the result "against the fixture" — in-sample by
+construction, so the ≤13 MAE target is optimistic by an unknown margin. It leaks
+into phase 3 as well: sub-floor buckets fall back to curves that have seen every
+test day. The fixture was introduced for reproducibility and quietly became an
+evaluation set too.
+
+| Option | Description | Trade-offs |
+|---|---|---|
+| A | Accept it, note the optimism | Free. Leaves a number in front of the Chamber that we know is flattering, in a project whose entire premise is that the previous number was not trustworthy. |
+| B | Time-blocked hold-out: fit on the first 40 days, evaluate on the last 10; ship curves refit on all 50 | Honest cold-path number for ~15 lines of script. The 10 hold-out days are a thin, seasonally-narrow sample, and the shipped curves are not the ones measured. |
+| C | B, and report the in-fit number alongside the held-out one | Same honesty, and the gap between the two is itself the diagnostic — a large gap means the fit is memorising. Two numbers to explain. |
+| D | Nest the refit inside the walk-forward loop | Exact, and destroys the point: `CURVES` would no longer be a committed constant, which is the cold path's whole reason to exist. |
+
+**Recommendation**: **C**. The refit script grows a `--holdout` flag, the
+phase-2 exit gates on the held-out days, and both numbers are reported so the
+in-fit/held-out gap stays visible.
+
+**Decision**:
+
+**Consequences**:
+
+**Applied to**:
