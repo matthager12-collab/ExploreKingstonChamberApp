@@ -78,40 +78,51 @@ Two runs, split on the only clean checkpoint in the plan:
 
 Handoff protocol in [choreography.md](./choreography.md).
 
-## Blocking finding: `main` is not green, and the failures are flaky
+## Resolved: `main` was not green — fixed on 2026-08-21
 
-Discovered while executing `run-1-sealed-seam/validate-exit.sh` on 2026-08-21. Run 1's
-entry criterion — "branch cut from a green `main`" — **is not currently satisfiable.**
+Found while executing `run-1-sealed-seam/validate-exit.sh`, fixed the same day in
+commit `ddff311` on branch `tests-raise-testtimeout`. Recorded here because the
+diagnosis is worth keeping, and because it was briefly a blocker on run 1's entry
+criterion.
 
-Three runs of `npm run test` produced three different failure sets:
+**Symptom.** Three runs of `npm run test` produced three different failure sets — 3 to
+5 files each time, never the same ones, every one green when run alone. The branch
+under test contained documentation only, so nothing about this project caused it.
 
-| Run | Failing files |
-|---|---|
-| On `feedback-guardrail-plan` (docs only) | `backup-restore-roundtrip`, `pii-inventory`, +1 |
-| Same branch, immediately after | 5 files |
-| On `main`, clean | `analytics-k-floor`, `backup-restore-roundtrip`, `pii-inventory` |
+**Cause.** Every failure carried the same message: `Test timed out in 5000ms`. Not
+logic — vitest's default per-test budget. `vitest.config.ts` had already raised
+`hookTimeout` to 30s for exactly this reason, with a comment describing the same flake,
+but `testTimeout` was left at the 5s default. The tests that boot a database do it
+inside the `it()` body (`createTestDb()`), not in a hook, so the fix never reached them
+and the flake simply moved from the hooks to the bodies.
 
-The branch under test contains **documentation only**, so none of this is caused by
-this project. The set varying between identical runs makes it flakiness, not a stable
-break. The suspect is timing: these files take 14–19s each and use PGlite.
+Raising `testTimeout` alone made it **worse** — 12 files failing instead of 6, and the
+run taking 377s instead of 116s. A starved worker simply held its slot six times
+longer. The underlying cause was parallelism: vitest defaults to one worker per core,
+and every worker touching the data layer boots its own in-memory Postgres. This is an
+8-core / 8GB machine also running Cursor, Claude and a Spotlight index pass — measured
+load average 30, ~200k pageouts, i.e. swapping.
 
-**Why this matters here specifically.** `tests/unit/pii-inventory.test.ts` is the
-tripwire DEC-002 relies on — it is what forces the privacy work to ship with the
-feature. A tripwire that fails at random cannot distinguish "the privacy work is
-missing" from "PGlite was slow again", which is the one signal run 2 depends on.
+**Fix.** `testTimeout: 30_000` alongside the existing `hookTimeout`, plus
+`maxWorkers: 4`. The cap binds only above 4 cores, so it is a no-op on the 4-core
+GitHub runner and a real limit on a laptop.
 
-**Recommended before run 1 starts:** stabilise those three files, or at minimum
-establish which failures are flaky and which are real, and record the baseline. This is
-separate work and is not in [plan.md](./plan.md).
+**Verified.** Three consecutive full runs, under the same load that had been breaking
+it: 182/182 files, 2276 tests, 0 failures, 154–200s. Typecheck clean, 0 lint errors,
+no boundary violations.
 
-`npm run test:server` additionally needs `TEST_DATABASE_URL` and a throwaway Postgres:
+**Why it mattered here specifically.** `tests/unit/pii-inventory.test.ts` is the
+tripwire DEC-002 relies on — it forces the privacy work to ship with the feature. A
+tripwire that fails at random cannot distinguish "the privacy work is missing" from
+"PGlite was slow again", which is the one signal run 2 depends on.
+
+`npm run test:server` remains a separate matter: it needs `TEST_DATABASE_URL` and a
+throwaway Postgres, which is an environment prerequisite rather than a defect.
 
 ```
 docker run -e POSTGRES_PASSWORD=ci -p 5432:5432 postgres:16
 TEST_DATABASE_URL=postgres://postgres:ci@127.0.0.1:5432/postgres npm run test:server
 ```
-
-That is an environment prerequisite, not a defect.
 
 ## Open questions
 

@@ -17,19 +17,24 @@ without `ANTHROPIC_API_KEY` the module is a no-op and T-01 cannot run at all.
 
 | Criterion | Check |
 |---|---|
-| Branch cut from a green `main` | `npm run test:all` exits 0 on `main` — **currently unmet, see below** |
+| Branch cut from a green `main` | `npm run test` exits 0 on `main` — satisfied since commit `ddff311` |
 | Worktree is clean | `git status --porcelain` is empty |
 | `ANTHROPIC_API_KEY` available for T-01 | present in `.env.local`, absent from git |
 
-> **`main` is not green.** As of 2026-08-21, `npm run test` fails on 3–5 files, and the
-> set varies between identical runs — `analytics-k-floor`, `backup-restore-roundtrip`
-> and `pii-inventory` are the recurring names. `npm run test:server` additionally needs
-> `TEST_DATABASE_URL` and a throwaway Postgres.
+> **The suite was flaky until 2026-08-21** — 3–5 files failing per run, never the same
+> ones, all `Test timed out in 5000ms`. Fixed in `ddff311` by raising `testTimeout` to
+> match the existing `hookTimeout` and capping `maxWorkers` at 4, since one in-memory
+> Postgres per core exhausts an 8GB machine. Verified with three consecutive green
+> full runs. Diagnosis in [../split-assessment.md](../split-assessment.md) § Resolved.
 >
-> `pii-inventory.test.ts` is the tripwire run 2 depends on (DEC-002), so a flaky
-> failure there is not cosmetic. Stabilise it, or at least record a known-flaky
-> baseline, before starting. Details in [../split-assessment.md](../split-assessment.md)
-> § Blocking finding.
+> **That fix must be on your branch point.** It lives on `tests-raise-testtimeout`; if
+> it has not reached `main` yet, branch from it rather than from `main`, or the
+> flake comes back and `pii-inventory.test.ts` — the tripwire run 2 depends on — stops
+> being trustworthy.
+>
+> `npm run test:server` still needs `TEST_DATABASE_URL` and a throwaway Postgres. That
+> is an environment prerequisite, not a defect, and `validate-exit.sh` runs
+> `npm run test:all`, so set it up before running the gate.
 
 ## Tasks
 
