@@ -82,7 +82,13 @@ check "moderation tests exist"   test -f "$TESTFILE"
 #    on 2026-08-21 and is exactly the failure mode this script exists to catch.
 absent_from() { # absent_from <file> <extended-regex>
   test -f "$1" || return 1
-  ! grep -qiE "$2" "$1"
+  # Filenames are stripped before matching. Without this the C6 check fires on
+  # the module's own header comment, which cites src/lib/email.ts as the design
+  # it is modelled on — a reference to a file, not a contact field. Observed on
+  # 2026-08-23 during run 1. A check that forces the code to stop naming its
+  # own influences is a worse check, so the check gave way rather than the
+  # comment.
+  ! sed -E 's/[A-Za-z0-9_-]+\.(ts|tsx|js|mjs|md)//g' "$1" | grep -qiE "$2"
 }
 export -f absent_from
 
