@@ -272,15 +272,24 @@ therefore settled ahead of Phase 4 rather than during it: the Chamber accepts th
 bumping the notice re-prompts every returning visitor for consent. DEC-007 stays
 `Decided` and does not reopen.
 
-Two things this does not settle, and the executor should not assume it does:
+**Reviewed with the Chamber in person, 2026-08-23**, sitting with Mat. So the approval
+is a considered one rather than a forwarded yes.
 
-- **It approves the consent re-prompt, not the notice wording.** T-14 still writes the
-  copy naming Anthropic as a processor, and that copy is the Chamber's to review.
+What that review could and could not have covered, stated plainly because the
+distinction matters later:
+
+- **It covered this plan.** The documents in `docs/FEEDBACK-GUARDRAIL/` existed on that
+  date and were on screen.
+- **It cannot have covered the T-14 notice copy**, which does not exist yet — no
+  application code has been written. That copy still needs the Chamber's sign-off when
+  it is drafted, and this entry is not it.
 - **The approval predates the deploy by some margin.** If Phase 4 slips well past
   2026-08-23, re-confirm rather than relying on this line.
 
-Attach the Chamber's written approval to the engagement record — this entry is a
-second-hand note of it, not the record itself.
+**Open, not done: attach the Chamber's written approval to the engagement record.**
+This entry is a second-hand note of an in-person conversation, not the record itself,
+and an in-person yes leaves no artefact unless someone makes one. Tracked here rather
+than as a plan task because it belongs to the engagement, not to the build.
 
 **Consequences**: A visible one-off dip in consent rate after deploy, which should be
 flagged to the Chamber in advance so it is not read as a bug or a traffic problem. The
