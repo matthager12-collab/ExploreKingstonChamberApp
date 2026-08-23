@@ -56,7 +56,7 @@ union rather than a raw model response is what keeps option B cheap later.
 **Status**: Decided
 
 **Context**: `feedback_response` is registered via `noIdentifierStore(…)` in
-`src/lib/privacy/pii-inventory.ts:297`. `src/lib/types.ts:275` explicitly forbids adding
+`src/lib/privacy/pii-inventory.ts:298`. `src/lib/types.ts:277` explicitly forbids adding
 an email field without giving the store real find/export/delete handlers, and
 `docs/PRIVACY.md` and the public notice both state the store holds no identifier.
 Adding a contact field without the handlers would make the app's own privacy page
@@ -247,11 +247,25 @@ identifier-free, and introduces Anthropic as a new processor of visitor free tex
 | A | Bump to `2026-09` with a changelog entry | Consent is re-obtained against an accurate notice, which is what the version gate exists for. Every returning visitor sees the consent prompt again, which will show up as a dip in the analytics consent rate. |
 | B | Update the notice text without bumping | No re-prompt, no visible disruption. Visitors would be operating under consent granted to a notice that did not mention a new processor or a new identifier. |
 
-**Recommendation**: A — a new external processor of free text and a new personal-data
-field is precisely the material change the gate was built to catch. `policy.ts:19`
-already warns against editing the notice without bumping.
+**Precedent, found 2026-08-21 while re-verifying citations.** `policy.ts:18-21` records
+the *opposite* call being made once already, when the feedback widget itself shipped:
 
-**Decision**: A.
+> NOTE: this added a data category to the published schedule without bumping
+> `PRIVACY_NOTICE_VERSION`, because that bump re-prompts every version-gated consent
+> (the geo card). **Whether the Chamber wants that prompt is their call, not a side
+> effect of shipping a widget.**
+
+That note does not change the recommendation — adding a *processor* and an *identifier*
+is a materially larger change than adding a retention row — but it does establish that
+this call belongs to the Chamber and has previously gone the other way.
+
+**Recommendation**: A — a new external processor of free text and a new personal-data
+field is precisely the material change the gate was built to catch.
+
+**Decision**: A, with T-17 upgraded from *tell* to **ask**: the precedent above makes
+the prompt the Chamber's decision, so Phase 4 seeks their agreement before deploy
+rather than merely warning them. If they decline, DEC-007 is reopened, not overridden
+in passing.
 
 **Consequences**: A visible one-off dip in consent rate after deploy, which should be
 flagged to the Chamber in advance so it is not read as a bug or a traffic problem. The

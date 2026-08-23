@@ -33,7 +33,7 @@ another session may be in the same tree.
 
 | # | Task | Depends on | Acceptance criteria |
 |---|---|---|---|
-| T-05 | Optional `name`, `email`, `moderated` on `FeedbackResponse`; rewrite the "NO contact field, by design" block at `src/lib/types.ts:270` | entry | `npm run typecheck` exits 0. Rows without the new fields still satisfy the type. The stale instruction forbidding an email field is **deleted**, not contradicted. |
+| T-05 | Optional `name`, `email`, `moderated` on `FeedbackResponse`; rewrite the "NO contact field, by design" block at `src/lib/types.ts:271` | entry | `npm run typecheck` exits 0. Rows without the new fields still satisfy the type. The stale instruction forbidding an email field is **deleted**, not contradicted. |
 | T-06 | `src/app/api/feedback/route.ts`: validate `name`/`email`; call `moderateComment` after the idempotency claim and before the save; return `{ok, moderated}`; rewrite the header comment | T-05 | Malformed email dropped, submission still 200s. Duplicate key returns `{ok,duplicate,moderated:false}` with **zero** model calls. A rude comment stores `cleaned` with `moderated:true`, and the original appears in no row, log line or Sentry breadcrumb. |
 | T-07 | `src/lib/outbox.ts`: `submitOrQueue` returns `body?: unknown` on the `sent` branch | entry | Existing outbox tests pass **unedited**. A non-JSON response yields `body: undefined`, not a throw. The contract block at line 192 documents it as the `httpStatus` addition is documented. |
 | T-08 | Copy registry: reword `feedback.panel.intro`; add `feedback.name.label`, `feedback.email.label`, `feedback.contact.hint`, `feedback.thankyou.moderated` | T-05 | The intro no longer tells visitors to omit contact details. All four keys render on `/admin/content`. The moderated wording matches [../plan.md](../plan.md) § Agreed copy. |
@@ -55,7 +55,7 @@ another session may be in the same tree.
 | # | Task | Depends on | Acceptance criteria |
 |---|---|---|---|
 | T-16 | Set `ANTHROPIC_API_KEY` on the Render service | T-15 | Set in the Render dashboard only. In no commit, note, or message. |
-| T-17 | Tell the Chamber, **before deploy**, that the notice bump re-prompts every returning visitor | — | Written notice sent, so the consent-rate dip is not read as a bug (DEC-007). |
+| T-17 | **Ask** the Chamber, **before deploy**, whether they accept the notice bump re-prompting every returning visitor | — | Their answer recorded in writing. This is their call per `policy.ts:18-21` and has gone the other way before; a decline reopens DEC-007. |
 | T-18 | Squash-merge to `main`; one-line entry at the top of `engagement/activity.md` | T-16, T-17 | Branch deleted after merge. |
 | T-19 | Watch `/admin/feedback` for two weeks | T-18 | The proportion of rows marked "rewritten" is checked against expectation. Sustained over-firing reopens the rewrite instruction from T-03. |
 

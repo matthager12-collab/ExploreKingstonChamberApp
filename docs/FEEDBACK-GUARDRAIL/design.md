@@ -23,14 +23,14 @@ The existing pieces this design lands between:
 
 ### The three constraints that shape everything below
 
-**1. The feedback store is deliberately identifier-free.** `src/lib/types.ts:270-277`
+**1. The feedback store is deliberately identifier-free.** `src/lib/types.ts:271-278`
 carries an explicit instruction:
 
 > *NO contact field, by design: the widget never asks for one, so the store holds no
 > identifier to look a person up by. […] Do not add an email field here without also
 > giving `feedback_response` real find/export/delete handlers in `PII_STORES`.*
 
-`src/app/api/feedback/route.ts` restates it, and `src/lib/privacy/pii-inventory.ts:297`
+`src/app/api/feedback/route.ts` restates it, and `src/lib/privacy/pii-inventory.ts:298`
 registers the store via the `noIdentifierStore(…)` helper. Adding contact fields is
 therefore not a widget change with a route change behind it — it is a change to a
 published privacy claim, enforced by a coverage test.

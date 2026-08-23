@@ -48,9 +48,10 @@ makes the boundary safe: if run 1's internals change, run 2 is unaffected.
 Run 2 carries the release itself (T-16 – T-19). Two things in it are not code and
 cannot be validated by script:
 
-- **T-17 must happen before deploy, not after.** The notice bump re-prompts every
-  returning visitor for consent (DEC-007), and the Chamber needs to know before they
-  see the dip.
+- **T-17 must happen before deploy, not after, and it is an ask rather than a notice.**
+  The bump re-prompts every returning visitor for consent (DEC-007). `policy.ts:18-21`
+  records the Chamber's team making the opposite call once already, so this is their
+  decision to make — a decline reopens DEC-007 rather than being worked around.
 - **T-16 sets the key in the Render dashboard only.** It goes in no commit, no note,
   and no message.
 
