@@ -52,7 +52,7 @@ prod access or a network call.
 | Cold path hits its target | `npm test -- ferry-accuracy-fixture` with the empirical table omitted | `mae <= 13`, `abs(bias) <= 3`, `levelMatchRate >= 0.55` |
 | Boarding-pass parity survives the refit | `npm test -- ferry-model` | the every-day-of-2026 sweep at hours {7,8,13,19,20} passes |
 | Season guard exists and fires | `npm test -- ferry-season-guard` | a date past the fit window produces the warning; `ops-health` reports it |
-| Level cuts and copy agree | `npm test -- ferry-model` | threshold edge test matches the new cuts; no blurb names a wait inconsistent with its level |
+| Level cuts and copy agree | `npm test -- ferry-model` | threshold edge test matches the DEC-009 cut points exactly; no blurb names a wait inconsistent with its level; `light`/`moderate` copy is consistent with a measured 0% fill rate |
 
 ## Phase 3 exit — make the data primary
 
@@ -63,6 +63,7 @@ prod access or a network call.
 | **Warm path hits the measured ceiling** | same test | `mae` in `[10.1, 11.1]`, `levelMatchRate >= 0.60` |
 | Verdict returns `ready` on unmoved thresholds | `npm test -- ferry-accuracy-verdict` | `accuracyVerdict(phase3Metrics).tone === "ready"` with `GOOD_LEVEL_MATCH`, `GOOD_BIAS`, `GOOD_WITHIN1` **unchanged from `git show HEAD~1`** |
 | Cold path still stands alone | `npm test -- ferry-accuracy-fixture` with the table removed | `mae <= 13` — a data outage degrades, it does not collapse |
+| Both numbers are stored and only one gates | `npm test -- ferry-accuracy-record` | one history entry per run carries walk-forward **and** cold-path metrics; `accuracyVerdict()` is called with the walk-forward metrics only |
 | Request path no longer scans the log | `npm test -- ferry-page-no-scan` | rendering `/ferry` and `/ferry/plan` issues zero `readFerryObservations` calls |
 | Missing record degrades gracefully | `npm test -- ferry-empirical-record` | with no `ferry-empirical/latest`, pages render on the refit curves and do not throw |
 | Cron death is visible | `npm test -- ops-health-ferry` | a simulated 3-day gap produces a warning |

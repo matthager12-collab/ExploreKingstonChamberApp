@@ -63,6 +63,16 @@ queue-sensing blend seam; B (data-first only) makes the *worst* path the one
 visitors hit during an outage, on a cron that `render.yaml`'s own comments
 record as having died silently before.
 
+**Season lives on exactly one side of the blend.** A trailing window *is* a
+season adjustment — a bucket learned from the last 28 days already knows what
+month it is. Applying `seasonFactor` on top of that would count the season
+twice. Per DEC-004, `seasonFactor` and the holiday factor apply to the
+**heuristic term only, before the blend**; the empirical term is used as
+observed. `empiricalBucketKey` is unchanged, so the golden-string contract and
+every persisted key survive. The untested season constants stay confined to the
+cold path, where they are the only thing we have — and T-10's staleness guard is
+what stops that path quietly serving summer constants in December.
+
 ## Structure
 
 ```mermaid
@@ -149,8 +159,31 @@ interface EmpiricalRecord {
 }
 ```
 
+**`scoreAt` blend order** changes shape per DEC-004. Today the factors multiply
+the curve and the result is blended. After phase 3:
+
+```ts
+const heuristic = clamp(base * seasonFactor(parts) * (holiday?.factor ?? 1));
+const bucket = empirical?.[empiricalBucketKey(direction, dateStr, minutes)];
+// season/holiday already spent on `heuristic`; `bucket.s` is used as observed
+return bucket && bucket.n >= EMP_MIN_SAILINGS
+  ? clamp(heuristic * (1 - w) + bucket.s * w)
+  : heuristic;
+```
+
 **`AccuracyMetrics`** gains a `method` discriminator so the stored history does
-not silently mix two incompatible measurement regimes. See DEC-002.
+not silently mix two incompatible measurement regimes (DEC-002), and per DEC-006
+each run produces two numbers — the walk-forward blended metric that gates, and
+the heuristic-only cold-path metric that is displayed and alarmed on but never
+gates. The record shape that carries both is `Pending DEC-007`.
+
+**Level thresholds.** `scoreToLevel` stops being a scale-shaped guess and
+becomes a risk ladder (DEC-005): each cut sits where the measured chance of the
+boat actually filling changes materially — 0% below 35, 5–10% in the middle, and
+better-than-even above 92. The cut points themselves are `Pending DEC-009`.
+Because the same cuts classify both prediction and outcome, moving them changes
+`levelMatchRate` on both sides — which is why they are pinned once, before the
+phase-2 exit measurement, and not tuned afterwards.
 
 ## Decision summary
 
@@ -161,7 +194,10 @@ not silently mix two incompatible measurement regimes. See DEC-002.
 | DEC-003 | Where the empirical table is computed | § Structure, § Key flows, phase 3 |
 | DEC-004 | Season handling under a trailing window | § Approach, phase 2 and 3 |
 | DEC-005 | Level thresholds | phase 2 |
-| DEC-006 | Backtest split policy | § Key flows, phase 3 |
+| DEC-006 | Backtest split policy | § Key flows, § Contracts (`AccuracyMetrics`), phase 3 |
+| DEC-007 | Shape holding both accuracy numbers | § Contracts — **open** |
+| DEC-008 | p(full) contract and surface | phase 4 — **open** |
+| DEC-009 | Level cut points | § Contracts — **open** |
 
 ## Testing strategy
 

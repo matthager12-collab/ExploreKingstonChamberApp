@@ -2,12 +2,15 @@
 
 | # | Question | Status | Decision | Round |
 |---|---|---|---|---|
-| DEC-001 | What is a sailing's observed busyness? | Open | | R1 |
-| DEC-002 | What happens to the stored accuracy history across the fix? | Open | | R1 |
-| DEC-003 | Where is the empirical table computed? | Open | | R1 |
-| DEC-004 | How is season handled once the window is trailing? | Open | | R1 |
-| DEC-005 | Where do the busyness level thresholds cut? | Open | | R1 |
-| DEC-006 | What does the backtest grade? | Open | | R1 |
+| DEC-001 | What is a sailing's observed busyness? | Decided | C — `min(driveUp)` across every snapshot | R1 |
+| DEC-002 | What happens to the stored accuracy history across the fix? | Decided | C — `method` discriminator, render the break | R1 |
+| DEC-003 | Where is the empirical table computed? | Decided | C — daily cron writes `ferry-empirical/latest` | R1 |
+| DEC-004 | How is season handled once the window is trailing? | Decided | C — `seasonFactor` on the heuristic term only | R1 |
+| DEC-005 | Where do the busyness level thresholds cut? | Decided | C — operational meaning, **as a risk ladder** (cut points → DEC-009) | R1 |
+| DEC-006 | What does the backtest grade? | Decided | D — walk-forward primary, cold path reported alongside | R1 |
+| DEC-007 | What shape holds two accuracy numbers, and which one gates? | Open | | R2 |
+| DEC-008 | What is the p(full) contract and where does it render? | Open | | R2 |
+| DEC-009 | The actual level cut points | Open | | R2 |
 
 Two-way doors, decided in passing and recorded here so they are not re-litigated:
 
@@ -22,9 +25,9 @@ Two-way doors, decided in passing and recorded here so they are not re-litigated
 
 ### DEC-001: What is a sailing's observed busyness?
 
-**Date**:
-**Decided by**:
-**Status**: Open
+**Date**: 2026-08-23
+**Decided by**: Mat
+**Status**: Decided
 
 **Context**: Every downstream number — the refit constants, the empirical
 table, the backtest, the go/no-go verdict — is defined against this. Change it
@@ -48,19 +51,34 @@ best pre-departure reading — boats load late and WSF keeps reporting.
 converting to D only if that investigation finds a real corruption. Adopting D
 pre-emptively would be tuning against a phenomenon we have not yet explained.
 
-**Decision**:
+**Decision**: **C** — `observed = round(max(1 - driveUp/max) * 100)` across every snapshot of a `(dir, departs)` pair, with no lead-time bound. T-04 may convert this to D if the 60m+ tail turns out to corrupt `min()`; absent that finding, no bound is added.
 
 **Consequences**:
 
+**Easier**: The refit, the empirical table and the backtest all share one
+definition that matches the physical question. The bias sign becomes a
+falsifiable test of the fix (T-02).
+
+**Harder**: The definition depends on WSF reporting continuously through
+loading. If they ever stop, we understate and nothing announces it.
+
+**Foreclosed**: Comparing any metric across the phase-1 cutover — hence
+DEC-002.
+
 **Applied to**:
+
+- `design.md` § The spike that shaped DEC-001; § Contracts (`SailingOutcome.observed`)
+- `plan.md` T-01, T-02, T-03, T-04
+- `verification.md` Phase 1 exit, rows 1–3
 
 ---
 
+
 ### DEC-002: What happens to the stored accuracy history across the fix?
 
-**Date**:
-**Decided by**:
-**Status**: Open
+**Date**: 2026-08-23
+**Decided by**: Mat
+**Status**: Decided
 
 **Context**: `record` store `ferry-accuracy/latest` holds a rolling 60-entry
 history, currently 50 days of per-snapshot numbers around MAE 32. After phase 1
@@ -77,19 +95,33 @@ would draw a cliff. Written records are permanent, so the shape is a one-way doo
 **Recommendation**: **C**. The discontinuity is real and worth showing — a
 visible step down is the most persuasive artifact this work produces.
 
-**Decision**:
+**Decision**: **C** — `AccuracyMetrics` gains `method: "per-snapshot" | "per-sailing"`. `plateauDays()` stops at a boundary; `accuracy-trend.tsx` renders the break. Existing entries are backfilled as `per-snapshot` and never rewritten.
 
 **Consequences**:
 
+**Easier**: The step down at cutover stays visible — the most persuasive
+artifact this project produces.
+
+**Harder**: Every consumer of `history` must handle a mixed array, and the
+admin chart needs a break marker.
+
+**Foreclosed**: Treating the history as a single continuous series. That was
+always false; now it is explicit.
+
 **Applied to**:
+
+- `design.md` § Contracts (`AccuracyMetrics`)
+- `plan.md` T-06
+- `verification.md` Phase 1 exit, "History discontinuity handled"
 
 ---
 
+
 ### DEC-003: Where is the empirical table computed?
 
-**Date**:
-**Decided by**:
-**Status**: Open
+**Date**: 2026-08-23
+**Decided by**: Mat
+**Status**: Decided
 
 **Context**: `getEmpiricalBusyness()` runs on the request path for `/ferry` and
 `/ferry/plan`, full-scanning the observation log in JS — flagged high-severity
@@ -107,19 +139,34 @@ Introducing a new stored record is a contract other code will depend on.
 high-severity performance finding and gives the cron-death failure mode
 somewhere to be noticed.
 
-**Decision**:
+**Decision**: **C** — the daily cron computes the table and writes `record` store `ferry-empirical`, id `latest`. `/ferry` and `/ferry/plan` read that one record. A missing record falls back to the refit curves.
 
 **Consequences**:
 
+**Easier**: Removes the high-severity request-path scan; makes a trailing
+window affordable; `line-lander.tsx` can finally use the table; the staleness
+alarm has somewhere to live.
+
+**Harder**: A new persisted contract, and a fallback path that must be real
+and tested rather than theoretical. The table is up to 24h stale.
+
+**Foreclosed**: Any feature needing sub-daily empirical freshness without a
+second write path.
+
 **Applied to**:
+
+- `design.md` § Structure, § Key flows, § Contracts (`EmpiricalRecord`)
+- `plan.md` T-15, T-17
+- `verification.md` Phase 3 exit, rows 6–8
 
 ---
 
+
 ### DEC-004: How is season handled once the window is trailing?
 
-**Date**:
-**Decided by**:
-**Status**: Open
+**Date**: 2026-08-23
+**Decided by**: Mat
+**Status**: Decided
 
 **Context**: `empiricalBucketKey` is `direction|season|dow|hour`, and `scoreAt`
 multiplies the curve by `seasonFactor` (peak 1.0 / shoulder 0.82 / off 0.58). A
@@ -142,19 +189,34 @@ correctness fix without touching a persisted key format, and it keeps the
 untested season constants confined to the path where they are the only thing we
 have. The guard is what stops a summer-fitted model quietly serving December.
 
-**Decision**:
+**Decision**: **C** — `empiricalBucketKey` is unchanged (golden strings hold). `scoreAt` applies `seasonFactor` and the holiday factor to the **heuristic term only**, before the blend; the empirical term is used as observed. T-10 adds the staleness guard.
 
 **Consequences**:
 
+**Easier**: Kills the double-count without touching a persisted key format.
+The trailing window becomes the season adjustment for any bucket with data,
+and the untested constants are confined to the path where they are all we have.
+
+**Harder**: `scoreAt` gains a conditional — factors apply pre-blend, not
+post-blend. The parity sweep (T-12) has to confirm nothing drifted.
+
+**Foreclosed**: Nothing. Refitting `seasonFactor` stays available the moment
+non-peak data exists — which is what the T-10 guard is counting down to.
+
 **Applied to**:
+
+- `design.md` § Approach; § Contracts (`scoreAt` blend order)
+- `plan.md` T-10, T-12
+- `verification.md` Phase 2 exit, "Season guard exists and fires"
 
 ---
 
+
 ### DEC-005: Where do the busyness level thresholds cut?
 
-**Date**:
-**Decided by**:
-**Status**: Open
+**Date**: 2026-08-23
+**Decided by**: Mat
+**Status**: Decided
 
 **Context**: `scoreToLevel` cuts at 20 / 42 / 65 / 83 on a scale where the
 heuristic's natural peak was ~80. Against real fullness the quartiles are
@@ -172,19 +234,51 @@ cuts are a public contract.
 boat", and C is the only option where the top label answers it. It also makes the
 phase-4 work a continuation rather than a second vocabulary.
 
-**Decision**:
+**Decision**: **C**, with a correction the evidence forced. Option C was written as
+"`extreme` = ≥99". That is not implementable: the thresholds apply to the
+*predicted score*, and predicted bucket means top out near 97, so a ≥99 cut
+would never fire. The implementable form is a **risk ladder** — each cut sits
+where the chance of actually being bumped changes materially:
+
+| Predicted band | n | Mean outcome | P(boat fills, ≥99) |
+|---|---:|---:|---:|
+| 0–35 | 343 | 25 | **0%** |
+| 35–50 | 197 | 42 | **0%** |
+| 50–65 | 390 | 59 | 5% |
+| 65–80 | 346 | 73 | 10% |
+| 80–90 | 503 | 86 | 31% |
+| 90–95 | 220 | 93 | 57% |
+| 95+ | 157 | 97 | 70% |
+
+So `light`/`moderate` become claims we can stand behind ("this boat has never
+filled in 50 days of data"), and `extreme` becomes "being bumped is more likely
+than not". The exact cut points are DEC-009.
 
 **Consequences**:
 
+**Easier**: Every label answers the question visitors actually ask, and the
+top label is falsifiable. Phase 4's `pFull` becomes a continuation of the same
+idea rather than a second vocabulary.
+
+**Harder**: `BOAT_WAIT`, `ARRIVE_EARLY_*` and the `LEVELS` blurbs all have to
+be re-read against the new meanings. The risk figures are peak-season only.
+
+**Foreclosed**: Comparing `levelMatchRate` across the cutover.
+
 **Applied to**:
+
+- `plan.md` T-11, T-12
+- `verification.md` Phase 2 exit, "Level cuts and copy agree"
+- Cut points pending DEC-009
 
 ---
 
+
 ### DEC-006: What does the backtest grade?
 
-**Date**:
-**Decided by**:
-**Status**: Open
+**Date**: 2026-08-23
+**Decided by**: Mat
+**Status**: Decided
 
 **Context**: Both backtests deliberately score the heuristic **with no
 empirical blend** — the comment calls it an "honest out-of-sample test". The
@@ -203,6 +297,115 @@ one-way door.
 **Recommendation**: **D**. C is the right primary metric; keeping A as an
 explicitly-labelled second number is what makes phase 3's "cold path still ≤ 13"
 exit criterion continuously verified rather than checked once.
+
+**Decision**: **D** — walk-forward blended backtest is the primary metric and the one `accuracyVerdict()` gates on. The heuristic-only number is retained and reported alongside, explicitly labelled as the cold/fallback path.
+
+**Consequences**:
+
+**Easier**: The Chamber's go/no-go grades the model visitors actually see,
+strictly out-of-sample. The fallback path stops being checked once and starts
+being monitored continuously.
+
+**Harder**: Two numbers on the admin panel that must be distinguishable in
+plain English, and a backtest that rebuilds a table per day.
+
+**Foreclosed**: Nothing — but it opens DEC-007, since the stored record now
+has to hold both.
+
+**Applied to**:
+
+- `design.md` § Key flows; § Contracts (`AccuracyMetrics`)
+- `plan.md` T-16
+- `verification.md` Phase 3 exit, rows 2–5
+
+---
+
+## Round 2
+
+Opened by applying round 1. DEC-007 falls out of DEC-006's two numbers meeting
+DEC-002's `method` field; DEC-009 out of DEC-005's correction; DEC-008 was
+deferred here deliberately because it depends on DEC-005.
+
+### DEC-007: What shape holds two accuracy numbers, and which one gates?
+
+**Date**:
+**Decided by**:
+**Status**: Open
+
+**Context**: DEC-006 says report a walk-forward number *and* a cold-path
+number. DEC-002 says tag each stored entry with a `method`. Those two collide:
+`method` was designed to separate old measurements from new, not to hold two
+concurrent measurements of different things. `accuracyVerdict()` takes a single
+`VerdictInput`, and `ops/page.tsx` reads `getAccuracy()` too. Persisted shape,
+so one-way.
+
+| Option | Description | Trade-offs |
+|---|---|---|
+| A | Two history entries per run, distinguished by `method` | No shape change beyond DEC-002. `plateauDays()` and the chart must filter by method or they interleave two series — easy to get wrong silently, and `plateauDays()` already walks the array backwards. |
+| B | One entry per run holding both: `{ walkForward: AccuracyMetrics, coldPath: AccuracyMetrics, method }` | Unambiguous, one entry per day, chart and plateau read one series. Changes the record shape, so the backfill must wrap existing entries. |
+| C | Two separate records (`ferry-accuracy`, `ferry-accuracy-cold`) | Total isolation, no migration of the existing record. Two stores, two crons' worth of failure modes, and the panel has to join them. |
+
+**Recommendation**: **B** — the two numbers are produced by one run over one
+dataset and are only meaningful side by side. `accuracyVerdict()` gates on
+`walkForward`; `coldPath` is displayed and alarmed on, never gating.
+
+**Decision**:
+
+**Consequences**:
+
+**Applied to**:
+
+---
+
+### DEC-008: What is the p(full) contract and where does it render?
+
+**Date**:
+**Decided by**:
+**Status**: Open
+
+**Context**: Phase 4. 20.5% of summer sailings finish ≥99% full, and for those
+the 0–100 score is censored. `pFull` is a public-facing probability claim on a
+Chamber surface, which makes both the number and its wording a contract.
+
+| Option | Description | Trade-offs |
+|---|---|---|
+| A | Admin-only for one season, public later | Lets calibration prove itself before anyone acts on it. Delays the only part of this work visitors would actually notice. |
+| B | Public as a percentage — "about a 60% chance this boat fills" | Precise and honest. A percentage invites false confidence, and the underlying rate is peak-season only. |
+| C | Public as a coarse frequency — "roughly 3 in 5 of these boats fill" | Same information, harder to over-read, matches the app's existing plain-English voice. Coarsening loses resolution at the top of the range where it matters most. |
+| D | Public only at the top two levels, where it changes behaviour | Minimal surface, maximum relevance. Silence at lower levels reads as "no data" rather than "very unlikely" — which is the opposite of the reassurance a light sailing should give. |
+
+**Recommendation**: **C**, gated on the T-20 calibration check passing first —
+so the claim ships only once it is measured, and A becomes the fallback if it
+is not.
+
+**Decision**:
+
+**Consequences**:
+
+**Applied to**:
+
+---
+
+### DEC-009: The actual level cut points
+
+**Date**:
+**Decided by**:
+**Status**: Open
+
+**Context**: DEC-005 settled the *principle* (a risk ladder) and produced the
+evidence table above. This pins the numbers, which are a public contract.
+Current cuts are 20 / 42 / 65 / 83.
+
+| Option | Description | Trade-offs |
+|---|---|---|
+| A | 35 / 50 / 80 / 92 | Cuts land on the risk breaks in the data: 0% / 0% / 5–10% / 31–50% / ≥57%. `light` and `moderate` become "this boat has never filled in 50 days". Gives roughly 18/20/19/15/29% of sailings per label. |
+| B | 25 / 45 / 70 / 92 | The quantile fit — most even spread across labels, which flatters `levelMatchRate`. But `moderate` then covers sailings up to 45% full with a non-trivial fill risk at the top edge. |
+| C | Keep 20 / 42 / 65 / 83 | No copy churn. Puts 40% of summer sailings in `extreme`, which drains the word of meaning exactly when it matters. |
+
+**Recommendation**: **A**. The two cuts that carry weight are 35 (below it,
+nothing has ever filled) and 92 (above it, more than half do). B optimises the
+metric we are graded on rather than the claim we are making, which is the wrong
+way round.
 
 **Decision**:
 

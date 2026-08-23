@@ -70,14 +70,16 @@ suite, types, lint and boundaries green.
 
 ### Phase 2: Refit the fallback
 
-**Entry criteria**: phase 1 exit met. DEC-004 and DEC-005 decided.
+**Entry criteria**: phase 1 exit met. DEC-004 and DEC-005 decided. **T-11 is
+blocked until DEC-009 pins the cut points** — every other task in this phase can
+proceed without it.
 
 | # | Task | Depends on | Acceptance criteria |
 |---|---|---|---|
 | T-08 | `scripts/refit-ferry-curves.ts` (tsx, matching the existing `scripts/*.ts` convention): reads the fixture, emits `CURVES` arrays per day-category × direction × hour, smoothing buckets under the sample floor from their neighbours rather than emitting noise | T-07 | Running it prints 8 arrays of 24 integers in `[0,100]`; no hour is left at a raw mean with `n < 5`; output is deterministic across runs |
 | T-09 | Commit the refit `CURVES` with a provenance header naming the fixture, the window, the row count and the date | T-08 | The diff is constants and comments only. `ferry-forecast.ts` still imports nothing but `./types` — purity preserved |
 | T-10 | Add the season-staleness guard per DEC-004, following the `FEED_VALID_THRU` pattern the code review recommends for `kitsap.ts` | DEC-004 | A named constant carries the fit window; `ops-health` surfaces it; passing the guard date produces a visible warning rather than silently serving summer constants in December |
-| T-11 | Re-derive `scoreToLevel` thresholds per DEC-005 and update `LEVELS` blurbs, `BOAT_WAIT` and the admin copy to match | DEC-005 | Threshold edge test in `ferry-model.test.ts` updated with the new cuts and their rationale; every blurb that names a wait is consistent with the level it sits on |
+| T-11 | Re-derive `scoreToLevel` thresholds to the DEC-009 cut points and update `LEVELS` blurbs, `BOAT_WAIT` and the admin copy to match the risk ladder | DEC-005, DEC-009 | Threshold edge test in `ferry-model.test.ts` updated with the new cuts and the measured fill risk behind each; `light` and `moderate` copy states that no sailing in the fit window reached a full boat; no blurb names a wait inconsistent with its level |
 | T-12 | Update the boarding-pass parity sweep and the `empiricalBucketKey` golden-string test if — and only if — DEC-004 changes the key | T-11, DEC-004 | Parity across every day of 2026 at hours {7,8,13,19,20} still passes; any golden-string change is deliberate and commented |
 
 **Exit criteria**: backtest MAE ≤ 13, |bias| ≤ 3, level match ≥ 0.55 against the
@@ -85,14 +87,15 @@ fixture, with the empirical blend disabled — i.e. the cold path alone.
 
 ### Phase 3: Make the data primary
 
-**Entry criteria**: phase 2 exit met. DEC-003 and DEC-006 decided.
+**Entry criteria**: phase 2 exit met. DEC-003 and DEC-006 decided, DEC-007
+decided (T-16 depends on the record shape).
 
 | # | Task | Depends on | Acceptance criteria |
 |---|---|---|---|
 | T-13 | Trailing `EMP_WINDOW_DAYS = 28` window in `getEmpiricalBusyness`, replacing the 90-day retention scan. Retention stays 90 days for the backtest | T-03 | Fixture test: the table built for a given day uses only sailings in the preceding 28 days |
 | T-14 | Raise the blend to full weight for well-populated buckets: `EMP_MAX_WEIGHT → 1.0`, `EMP_MIN_SAMPLES` and `EMP_FULL_CONFIDENCE_N` re-expressed in sailings | T-13 | Blend-gate tests updated; a bucket below the floor still returns the pure heuristic, unchanged |
 | T-15 | Precompute the table in the daily cron into `record` store `ferry-empirical/latest`; `/ferry` and `/ferry/plan` read one record instead of scanning | DEC-003 | No page render calls `readFerryObservations`. Missing record falls back to the refit curves without erroring. Staleness is surfaced, not hidden |
-| T-16 | Replace the heuristic-only backtest with the walk-forward blended backtest per DEC-006: for each day, build the table from the 28 days before it, predict that day, grade | DEC-006, T-13 | Strictly out-of-sample by construction — no day is graded against a table containing itself. Fixture assertion: MAE `10.6 ±0.5`, level ≥ 0.60 |
+| T-16 | Per DEC-006, make the walk-forward blended backtest primary — for each day, build the table from the 28 days before it, predict that day, grade — and keep the heuristic-only run alongside as the labelled cold-path number, in the DEC-007 record shape | DEC-006, DEC-007, T-13 | Strictly out-of-sample by construction: a test asserts no day appears in its own training window. Fixture assertion: walk-forward MAE `10.6 ±0.5`, level ≥ 0.60; cold-path MAE ≤ 13 reported in the same run. `accuracyVerdict()` reads the walk-forward number only |
 | T-17 | Cron-death alarm: `ops-health` warns when `ferry-empirical/latest` is older than 48h or its `sailings` count drops below the bucket-coverage floor | T-15 | Simulating a 3-day cron gap produces a visible ops warning. This is the failure mode `render.yaml` records as having happened silently before |
 
 **Exit criteria**: walk-forward backtest MAE ≤ 12, level match ≥ 0.60,
@@ -105,13 +108,12 @@ for tone `ready`. Cold path independently still ≤ 13 with the table removed.
 censored: "95" and "you are the fortieth car left behind" are the same number.
 A point estimate also hides a 10.6-point noise floor.
 
-**Entry criteria**: phase 3 exit met. Round-2 decisions on the p(full) contract
-and its surface decided.
+**Entry criteria**: phase 3 exit met. DEC-008 decided.
 
 | # | Task | Depends on | Acceptance criteria |
 |---|---|---|---|
 | T-18 | Add `pFull` to `EmpiricalBucket` — share of that bucket's sailings reaching ≥99 — computed in the same pass | T-16 | Fixture: `from-kingston` peak Saturday 14:00 reports `pFull ≥ 0.5`; buckets under the sample floor report `undefined`, never `0` |
-| T-19 | Surface it on `/ferry` and `/ferry/plan` as an explicit chance-of-full, alongside the level rather than replacing it | Round 2 | Copy states the base rate in plain words and never implies certainty. Renders correctly when `pFull` is `undefined` |
+| T-19 | Surface it on `/ferry` and `/ferry/plan` per DEC-008, alongside the level rather than replacing it | DEC-008, T-20 | Copy states the base rate in the form DEC-008 chose and never implies certainty. Renders correctly when `pFull` is `undefined`. Ships only after T-20's calibration check passes |
 | T-20 | Add a calibration metric (Brier score + a reliability table) to the accuracy panel, and extend `accuracyVerdict` to read it | T-18 | Predicted-vs-actual full rate agrees within 0.1 across deciles with ≥20 sailings |
 
 **Exit criteria**: p(full) calibrated within 0.1 across populated deciles; the
