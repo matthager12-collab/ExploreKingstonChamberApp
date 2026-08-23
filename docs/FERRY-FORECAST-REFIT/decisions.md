@@ -11,8 +11,8 @@
 | DEC-007 | What shape holds two accuracy numbers, and which one gates? | Decided | B — one entry, `{ walkForward, coldPath, method }`; gates on `walkForward` | R2 |
 | DEC-008 | What is the p(full) contract and where does it render? | Decided | C — coarse frequency, gated on calibration | R2 |
 | DEC-009 | The actual level cut points | Decided | A — 35 / 50 / 80 / 92 | R2 |
-| DEC-010 | Level agreement is unreachable under those cuts — what gives? | Open | | R3 |
-| DEC-011 | How is the refit evaluated without grading on its own fit? | Open | | R3 |
+| DEC-010 | Level agreement is unreachable under those cuts — what gives? | Decided | A — keep the cuts, rebalance what gates | R3 |
+| DEC-011 | How is the refit evaluated without grading on its own fit? | Decided | C — time-blocked hold-out, both numbers reported | R3 |
 
 Two-way doors, decided in passing and recorded here so they are not re-litigated:
 
@@ -485,9 +485,9 @@ from findings confirmed by measurement rather than argument.
 
 ### DEC-010: Level agreement is unreachable under the DEC-009 cuts — what gives?
 
-**Date**:
-**Decided by**:
-**Status**: Open
+**Date**: 2026-08-23
+**Decided by**: Mat
+**Status**: Decided
 
 **Context**: Review finding F-1. Walk-forward on a trailing 28-day window, 969
 graded sailings, MAE already at the 10.6-point noise floor:
@@ -520,19 +520,54 @@ the floor, and phase 4 adds a calibration measure that is not gameable by band
 width. The verification guard is reworded rather than removed: thresholds may
 change before phase 2 as a recorded decision, never after a phase-3 result.
 
-**Decision**:
+**Decision**: **A** — keep 35 / 50 / 80 / 92 and rebalance `ferry-accuracy-verdict.ts` so the
+gate reads the metrics that are neither at the noise floor nor gameable by band
+width. Grounded in the walk-forward measurement (MAE 10.2, within-1 0.92,
+bias ~0, level match 0.551):
+
+| Tone | Gate |
+|---|---|
+| `ready` | MAE <= 12 **and** abs(bias) <= 8 **and** within-1 >= 0.90 |
+| `borderline` | MAE <= 18 **and** abs(bias) <= 15 **and** within-1 >= 0.80 |
+| `not-ready` | anything else |
+
+`levelMatchRate` is still computed, still shown, and no longer gates. MAE
+becomes a gate for the first time — it is already on `VerdictInput` and was
+simply unused.
+
+**The guard that makes this legitimate:** the change lands in phase 2, before
+any phase-3 number exists. A test asserts the thresholds are unchanged since the
+phase-2 commit, so they cannot be moved once a result is in view.
 
 **Consequences**:
 
+**Easier**: The gate stops being unreachable by construction, and stops
+rewarding a label vocabulary that says less. Within-1 bounds the damage when the
+exact band misses, which is the property that actually matters to a visitor.
+
+**Harder**: Several tests in `ferry-accuracy-verdict.test.ts` change, including
+the one pinning the real 2026-07-31 production numbers. The verdict prose leads
+with level match today and must be rewritten to lead with within-1.
+`MIN_SAMPLE`'s rationale comment ("200 readings is roughly a day of snapshots")
+becomes wrong once `n` counts sailings — 200 sailings is about four days.
+
+**Foreclosed**: Using `levelMatchRate` as evidence across the cutover. It is
+measured against different cuts on both sides.
+
 **Applied to**:
+
+- `plan.md` T-11 (extended to cover the verdict rebalance)
+- `verification.md` Phase 3 exit, "Verdict returns `ready` without post-hoc goalpost-moving"
+- `review.md` F-1
 
 ---
 
+
 ### DEC-011: How is the refit evaluated without grading on its own fit?
 
-**Date**:
-**Decided by**:
-**Status**: Open
+**Date**: 2026-08-23
+**Decided by**: Mat
+**Status**: Decided
 
 **Context**: Review finding F-2. T-08 fits `CURVES` from the fixture and the
 phase-2 exit grades the result "against the fixture" — in-sample by
@@ -552,8 +587,29 @@ evaluation set too.
 phase-2 exit gates on the held-out days, and both numbers are reported so the
 in-fit/held-out gap stays visible.
 
-**Decision**:
+**Decision**: **C** — `scripts/refit-ferry-curves.ts` grows a `--holdout` flag doing a
+time-blocked split: fit on the first 40 days, evaluate on the last 10. The
+phase-2 exit gates on the held-out days only. The shipped constants are refit on
+all 50 days, and **both numbers are reported** so the in-fit/held-out gap stays
+visible — a large gap means the fit is memorising rather than generalising.
 
 **Consequences**:
 
+**Easier**: The cold-path target stops being self-graded, and the gap between
+the two numbers becomes a standing diagnostic rather than a thing nobody
+measured.
+
+**Harder**: The 10 hold-out days are a thin and seasonally narrow sample, so the
+held-out number carries real variance — read it as a floor, not a point
+estimate. The constants actually shipped are not the ones measured, which has to
+be said plainly wherever the number is quoted.
+
+**Foreclosed**: Quoting a single cold-path accuracy figure without saying which
+split produced it.
+
 **Applied to**:
+
+- `plan.md` T-08, Phase 2 exit criteria
+- `verification.md` Phase 2 exit, "Cold path hits its target out of sample"
+- `review.md` F-2
+
