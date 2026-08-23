@@ -61,7 +61,7 @@ recorded in this plan so the change is attributable.
 | T-03 | Rewrite `getEmpiricalBusyness` over `collapseToSailings`; `EmpiricalBucket.n` counts distinct sailings | T-01 | Fixture assertion: the peak-summer `from-kingston` Saturday 14:00 bucket reports `s ≥ 85` (today it reports ~21). `EMP_MIN_SAMPLES = 3` can no longer be satisfied by one sailing |
 | T-04 | Characterise the 1,673 post-departure rows aged 60m+ (mean fullness 26.8, well below the 66.9 sailing mean). Write the finding into design.md § Context; add a lead-time guard **only if** it changes `min(driveUp)` for any sailing | T-01 | A written characterisation with counts, plus either a guard with a test or a one-line statement that `min()` is provably unaffected |
 | T-05 | Exclude holiday-dated sailings from `getEmpiricalBusyness` and both backtests, mirroring `scoreAt`'s existing gate via the exported `holiday`/`parseParts` helpers | T-02, T-03 | Unit test: a July 4 sailing keyed into a peak-Saturday bucket does not move that bucket's `s`. Both sides of the gate use the same helper, so they cannot drift |
-| T-06 | Add `AccuracyMetrics.method` per DEC-002 and handle the history discontinuity in `plateauDays()` and `accuracy-trend.tsx` | DEC-002 | `plateauDays()` does not count across a `method` change; the trend chart renders the break rather than a cliff |
+| T-06 | Land the DEC-007 record shape once — `{ method, coldPath, walkForward? }` — wrapping existing history entries as `method: "per-snapshot"`, and handle the discontinuity in `plateauDays()`, `accuracy-trend.tsx`, `ops/page.tsx` and `prediction-control.tsx` | DEC-002, DEC-007 | `plateauDays()` does not count across a `method` change; the trend chart renders the break rather than a cliff; every reader handles `walkForward` absent; no existing entry is rewritten |
 | T-07 | Build the refit/regression fixture: 2,156 per-sailing outcomes as `tests/fixtures/ferry/sailings-2026-summer.json`, with the generating query in a header comment | T-01 | Fixture is < 500 KB, contains no field beyond `dir`/`departs`/`observed`/`snapshots`, and regenerating it from the documented query reproduces it byte-for-byte |
 
 **Exit criteria**: backtest reports ~28.1 MAE and **−21.8 bias** against
@@ -70,16 +70,14 @@ suite, types, lint and boundaries green.
 
 ### Phase 2: Refit the fallback
 
-**Entry criteria**: phase 1 exit met. DEC-004 and DEC-005 decided. **T-11 is
-blocked until DEC-009 pins the cut points** — every other task in this phase can
-proceed without it.
+**Entry criteria**: phase 1 exit met. DEC-004, DEC-005 and DEC-009 decided.
 
 | # | Task | Depends on | Acceptance criteria |
 |---|---|---|---|
 | T-08 | `scripts/refit-ferry-curves.ts` (tsx, matching the existing `scripts/*.ts` convention): reads the fixture, emits `CURVES` arrays per day-category × direction × hour, smoothing buckets under the sample floor from their neighbours rather than emitting noise | T-07 | Running it prints 8 arrays of 24 integers in `[0,100]`; no hour is left at a raw mean with `n < 5`; output is deterministic across runs |
 | T-09 | Commit the refit `CURVES` with a provenance header naming the fixture, the window, the row count and the date | T-08 | The diff is constants and comments only. `ferry-forecast.ts` still imports nothing but `./types` — purity preserved |
 | T-10 | Add the season-staleness guard per DEC-004, following the `FEED_VALID_THRU` pattern the code review recommends for `kitsap.ts` | DEC-004 | A named constant carries the fit window; `ops-health` surfaces it; passing the guard date produces a visible warning rather than silently serving summer constants in December |
-| T-11 | Re-derive `scoreToLevel` thresholds to the DEC-009 cut points and update `LEVELS` blurbs, `BOAT_WAIT` and the admin copy to match the risk ladder | DEC-005, DEC-009 | Threshold edge test in `ferry-model.test.ts` updated with the new cuts and the measured fill risk behind each; `light` and `moderate` copy states that no sailing in the fit window reached a full boat; no blurb names a wait inconsistent with its level |
+| T-11 | Re-derive `scoreToLevel` thresholds to **35 / 50 / 80 / 92** (DEC-009) and update `LEVELS` blurbs, `BOAT_WAIT` and the admin copy to match the risk ladder | DEC-005, DEC-009 | Threshold edge test in `ferry-model.test.ts` updated with the new cuts and the measured fill risk behind each; `light` and `moderate` copy states that no sailing in the fit window reached a full boat; no blurb names a wait inconsistent with its level |
 | T-12 | Update the boarding-pass parity sweep and the `empiricalBucketKey` golden-string test if — and only if — DEC-004 changes the key | T-11, DEC-004 | Parity across every day of 2026 at hours {7,8,13,19,20} still passes; any golden-string change is deliberate and commented |
 
 **Exit criteria**: backtest MAE ≤ 13, |bias| ≤ 3, level match ≥ 0.55 against the
@@ -113,7 +111,7 @@ A point estimate also hides a 10.6-point noise floor.
 | # | Task | Depends on | Acceptance criteria |
 |---|---|---|---|
 | T-18 | Add `pFull` to `EmpiricalBucket` — share of that bucket's sailings reaching ≥99 — computed in the same pass | T-16 | Fixture: `from-kingston` peak Saturday 14:00 reports `pFull ≥ 0.5`; buckets under the sample floor report `undefined`, never `0` |
-| T-19 | Surface it on `/ferry` and `/ferry/plan` per DEC-008, alongside the level rather than replacing it | DEC-008, T-20 | Copy states the base rate in the form DEC-008 chose and never implies certainty. Renders correctly when `pFull` is `undefined`. Ships only after T-20's calibration check passes |
+| T-19 | Surface it on `/ferry` and `/ferry/plan` as a coarse frequency per DEC-008 ("roughly 3 in 5 of these boats fill"), at every level, alongside the level rather than replacing it | DEC-008, T-20 | Copy uses the coarse frequency form, states the rate is drawn from summer sailings, and never implies certainty. Renders correctly when `pFull` is `undefined`. Ships only after T-20's calibration check passes |
 | T-20 | Add a calibration metric (Brier score + a reliability table) to the accuracy panel, and extend `accuracyVerdict` to read it | T-18 | Predicted-vs-actual full rate agrees within 0.1 across deciles with ≥20 sailings |
 
 **Exit criteria**: p(full) calibrated within 0.1 across populated deciles; the
@@ -137,7 +135,7 @@ graph LR
   T01 --> T07[T-07 fixture]
   T02 --> T05[T-05 holiday gate]
   T03 --> T05
-  T06[T-06 method field]
+  T06[T-06 record shape]
   T07 --> T08[T-08 refit script] --> T09[T-09 commit curves]
   T09 --> T11[T-11 thresholds] --> T12[T-12 parity]
   T10[T-10 season guard]

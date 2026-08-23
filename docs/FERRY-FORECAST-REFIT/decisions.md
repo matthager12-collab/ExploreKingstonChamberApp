@@ -8,9 +8,9 @@
 | DEC-004 | How is season handled once the window is trailing? | Decided | C — `seasonFactor` on the heuristic term only | R1 |
 | DEC-005 | Where do the busyness level thresholds cut? | Decided | C — operational meaning, **as a risk ladder** (cut points → DEC-009) | R1 |
 | DEC-006 | What does the backtest grade? | Decided | D — walk-forward primary, cold path reported alongside | R1 |
-| DEC-007 | What shape holds two accuracy numbers, and which one gates? | Open | | R2 |
-| DEC-008 | What is the p(full) contract and where does it render? | Open | | R2 |
-| DEC-009 | The actual level cut points | Open | | R2 |
+| DEC-007 | What shape holds two accuracy numbers, and which one gates? | Decided | B — one entry, `{ walkForward, coldPath, method }`; gates on `walkForward` | R2 |
+| DEC-008 | What is the p(full) contract and where does it render? | Decided | C — coarse frequency, gated on calibration | R2 |
+| DEC-009 | The actual level cut points | Decided | A — 35 / 50 / 80 / 92 | R2 |
 
 Two-way doors, decided in passing and recorded here so they are not re-litigated:
 
@@ -328,9 +328,9 @@ deferred here deliberately because it depends on DEC-005.
 
 ### DEC-007: What shape holds two accuracy numbers, and which one gates?
 
-**Date**:
-**Decided by**:
-**Status**: Open
+**Date**: 2026-08-23
+**Decided by**: Mat
+**Status**: Decided
 
 **Context**: DEC-006 says report a walk-forward number *and* a cold-path
 number. DEC-002 says tag each stored entry with a `method`. Those two collide:
@@ -349,19 +349,43 @@ so one-way.
 dataset and are only meaningful side by side. `accuracyVerdict()` gates on
 `walkForward`; `coldPath` is displayed and alarmed on, never gating.
 
-**Decision**:
+**Decision**: **B** — one history entry per run:
+`{ walkForward?: AccuracyMetrics, coldPath: AccuracyMetrics, method }`.
+`accuracyVerdict()` gates on `walkForward`; `coldPath` is displayed and alarmed
+on, never gating.
+
+**Two-way door settled in passing:** the shape lands **once, in phase 1**, with
+`coldPath` populated and `walkForward` absent — phase 3 fills it in rather than
+reshaping the record a second time. Readers treat `walkForward` as optional,
+which they must anyway for pre-cutover entries.
 
 **Consequences**:
 
+**Easier**: One entry per day, so `plateauDays()` and the trend chart read a
+single series with no filtering — the silent-interleave failure mode of option A
+cannot occur. The cold path becomes continuously monitored rather than
+spot-checked.
+
+**Harder**: Existing history entries must be wrapped at cutover, and every
+reader (`accuracy-trend.tsx`, `ops/page.tsx`, `prediction-control.tsx`) updated
+in one pass. `walkForward` is optional, so every consumer needs the absent case.
+
+**Foreclosed**: Reporting more than two grading regimes without another reshape.
+
 **Applied to**:
+
+- `design.md` § Contracts (`AccuracyMetrics`)
+- `plan.md` T-06 (shape + backfill), T-16 (populates `walkForward`)
+- `verification.md` Phase 3 exit, "Both numbers are stored and only one gates"
 
 ---
 
+
 ### DEC-008: What is the p(full) contract and where does it render?
 
-**Date**:
-**Decided by**:
-**Status**: Open
+**Date**: 2026-08-23
+**Decided by**: Mat
+**Status**: Decided
 
 **Context**: Phase 4. 20.5% of summer sailings finish ≥99% full, and for those
 the 0–100 score is censored. `pFull` is a public-facing probability claim on a
@@ -378,19 +402,39 @@ Chamber surface, which makes both the number and its wording a contract.
 so the claim ships only once it is measured, and A becomes the fallback if it
 is not.
 
-**Decision**:
+**Decision**: **C** — a coarse frequency in the app's plain-English voice ("roughly 3 in 5 of
+these boats fill"), shown at every level rather than only the top ones, so a
+light sailing reads as reassurance rather than missing data. **Gated on T-20:**
+the claim ships only once calibration is measured within 0.1 across populated
+deciles. If it does not calibrate, it falls back to option A — admin-only for a
+season.
 
 **Consequences**:
 
+**Easier**: Answers the question the fullness score structurally cannot for the
+20.5% of sailings that saturate. Coarse wording resists over-reading, and the
+calibration gate means we never publish a probability we have not checked.
+
+**Harder**: Coarsening loses resolution at the top of the range, exactly where
+the difference between "most fill" and "all fill" matters most. The underlying
+rate is peak-season only, so the copy must not imply a year-round base rate.
+
+**Foreclosed**: Nothing — a percentage remains available if the coarse form
+proves too blunt in use.
+
 **Applied to**:
+
+- `plan.md` T-18, T-19, T-20
+- `verification.md` Phase 4 exit; Manual checks, "Public copy honesty"
 
 ---
 
+
 ### DEC-009: The actual level cut points
 
-**Date**:
-**Decided by**:
-**Status**: Open
+**Date**: 2026-08-23
+**Decided by**: Mat
+**Status**: Decided
 
 **Context**: DEC-005 settled the *principle* (a risk ladder) and produced the
 evidence table above. This pins the numbers, which are a public contract.
@@ -407,8 +451,26 @@ nothing has ever filled) and 92 (above it, more than half do). B optimises the
 metric we are graded on rather than the claim we are making, which is the wrong
 way round.
 
-**Decision**:
+**Decision**: **A — 35 / 50 / 80 / 92.** The two load-bearing cuts are 35 (no sailing below
+it reached a full boat in the fit window) and 92 (above it, being bumped is more
+likely than not, at 57–70%).
 
 **Consequences**:
 
+**Easier**: `light` and `moderate` become defensible claims rather than
+adjectives, and `extreme` becomes falsifiable. The ladder maps directly onto
+phase 4's `pFull`, so the two features tell one story.
+
+**Harder**: `levelMatchRate` is not comparable across the cutover — it is
+measured against different cuts on both the prediction and the outcome side.
+The risk figures behind each cut are peak-season only and inherit DEC-004's
+staleness guard.
+
+**Foreclosed**: Comparing any stored `levelMatchRate` to a pre-cutover one.
+
 **Applied to**:
+
+- `design.md` § Contracts (level thresholds)
+- `plan.md` T-11, T-12
+- `verification.md` Phase 2 exit, "Level cuts and copy agree"
+

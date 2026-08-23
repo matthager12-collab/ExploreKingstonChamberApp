@@ -52,7 +52,7 @@ prod access or a network call.
 | Cold path hits its target | `npm test -- ferry-accuracy-fixture` with the empirical table omitted | `mae <= 13`, `abs(bias) <= 3`, `levelMatchRate >= 0.55` |
 | Boarding-pass parity survives the refit | `npm test -- ferry-model` | the every-day-of-2026 sweep at hours {7,8,13,19,20} passes |
 | Season guard exists and fires | `npm test -- ferry-season-guard` | a date past the fit window produces the warning; `ops-health` reports it |
-| Level cuts and copy agree | `npm test -- ferry-model` | threshold edge test matches the DEC-009 cut points exactly; no blurb names a wait inconsistent with its level; `light`/`moderate` copy is consistent with a measured 0% fill rate |
+| Level cuts and copy agree | `npm test -- ferry-model` | threshold edge test matches **35 / 50 / 80 / 92** exactly; no blurb names a wait inconsistent with its level; `light`/`moderate` copy is consistent with a measured 0% fill rate |
 
 ## Phase 3 exit — make the data primary
 
@@ -75,6 +75,7 @@ prod access or a network call.
 | `pFull` computed and gated | `npm test -- ferry-pfull` | peak Saturday 14:00 `pFull >= 0.5`; sub-floor buckets are `undefined`, never `0` |
 | Calibrated | `npm test -- ferry-calibration` | predicted vs actual full-rate within 0.1 across every decile holding ≥20 sailings |
 | Renders without the field | `npm test -- ferry-busy-today` | `pFull: undefined` renders the level alone, no empty chrome |
+| Claim ships only if calibrated | `npm test -- ferry-pfull-gate` | with calibration outside 0.1, the public surface is suppressed and the admin view still renders — DEC-008's fallback to A |
 | Build is clean | `npm run build` | exit 0 |
 
 ## Manual checks

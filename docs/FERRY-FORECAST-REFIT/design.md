@@ -175,12 +175,27 @@ return bucket && bucket.n >= EMP_MIN_SAILINGS
 not silently mix two incompatible measurement regimes (DEC-002), and per DEC-006
 each run produces two numbers — the walk-forward blended metric that gates, and
 the heuristic-only cold-path metric that is displayed and alarmed on but never
-gates. The record shape that carries both is `Pending DEC-007`.
+gates. Per DEC-007 both live in one history entry, and the shape lands once, in
+phase 1:
+
+```ts
+interface AccuracyRecordEntry {
+  method: "per-snapshot" | "per-sailing";
+  coldPath: AccuracyMetrics;      // heuristic only — the fallback path
+  walkForward?: AccuracyMetrics;  // blended, out-of-sample; absent before phase 3
+  computedAt: string;
+}
+```
+
+`accuracyVerdict()` reads `walkForward` and nothing else. `coldPath` is
+displayed and alarmed on but never gates — so a fallback that quietly rots is
+visible without being able to block or unblock the feature.
 
 **Level thresholds.** `scoreToLevel` stops being a scale-shaped guess and
 becomes a risk ladder (DEC-005): each cut sits where the measured chance of the
 boat actually filling changes materially — 0% below 35, 5–10% in the middle, and
-better-than-even above 92. The cut points themselves are `Pending DEC-009`.
+better-than-even above 92. Per DEC-009 the cuts are **35 / 50 / 80 / 92**, carrying measured fill risks of
+0% / 0% / 5–10% / 31–50% / 57–70%.
 Because the same cuts classify both prediction and outcome, moving them changes
 `levelMatchRate` on both sides — which is why they are pinned once, before the
 phase-2 exit measurement, and not tuned afterwards.
@@ -195,9 +210,9 @@ phase-2 exit measurement, and not tuned afterwards.
 | DEC-004 | Season handling under a trailing window | § Approach, phase 2 and 3 |
 | DEC-005 | Level thresholds | phase 2 |
 | DEC-006 | Backtest split policy | § Key flows, § Contracts (`AccuracyMetrics`), phase 3 |
-| DEC-007 | Shape holding both accuracy numbers | § Contracts — **open** |
-| DEC-008 | p(full) contract and surface | phase 4 — **open** |
-| DEC-009 | Level cut points | § Contracts — **open** |
+| DEC-007 | Shape holding both accuracy numbers | § Contracts (`AccuracyRecordEntry`) |
+| DEC-008 | p(full) contract and surface | phase 4 |
+| DEC-009 | Level cut points | § Contracts (level thresholds) |
 
 ## Testing strategy
 
