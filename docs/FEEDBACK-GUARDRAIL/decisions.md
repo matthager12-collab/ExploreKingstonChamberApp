@@ -8,7 +8,7 @@
 | DEC-004 | Where does moderation run? | Decided | A — inline in the POST path | R1 |
 | DEC-005 | Is an unverified email a valid privacy key? | Decided | A — accepted, admin-mediated | R1 |
 | DEC-006 | Fail open or fail closed? | Decided | A — fail open | R2 |
-| DEC-007 | Bump `PRIVACY_NOTICE_VERSION`? | Decided | A — bump to `2026-09` | R2 |
+| DEC-007 | Bump `PRIVACY_NOTICE_VERSION`? | Decided | A — bump to `2026-09`; Chamber approved 2026-08-23 | R2 |
 
 ---
 
@@ -266,6 +266,21 @@ field is precisely the material change the gate was built to catch.
 the prompt the Chamber's decision, so Phase 4 seeks their agreement before deploy
 rather than merely warning them. If they decline, DEC-007 is reopened, not overridden
 in passing.
+
+**Chamber's answer — approved, 2026-08-23.** Reported by Mat. T-17's question is
+therefore settled ahead of Phase 4 rather than during it: the Chamber accepts that
+bumping the notice re-prompts every returning visitor for consent. DEC-007 stays
+`Decided` and does not reopen.
+
+Two things this does not settle, and the executor should not assume it does:
+
+- **It approves the consent re-prompt, not the notice wording.** T-14 still writes the
+  copy naming Anthropic as a processor, and that copy is the Chamber's to review.
+- **The approval predates the deploy by some margin.** If Phase 4 slips well past
+  2026-08-23, re-confirm rather than relying on this line.
+
+Attach the Chamber's written approval to the engagement record — this entry is a
+second-hand note of it, not the record itself.
 
 **Consequences**: A visible one-off dip in consent rate after deploy, which should be
 flagged to the Chamber in advance so it is not read as a bug or a traffic problem. The

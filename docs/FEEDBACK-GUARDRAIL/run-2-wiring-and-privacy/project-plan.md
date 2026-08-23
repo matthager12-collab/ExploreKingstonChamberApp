@@ -55,7 +55,7 @@ another session may be in the same tree.
 | # | Task | Depends on | Acceptance criteria |
 |---|---|---|---|
 | T-16 | Set `ANTHROPIC_API_KEY` on the Render service | T-15 | Set in the Render dashboard only. In no commit, note, or message. |
-| T-17 | **Ask** the Chamber, **before deploy**, whether they accept the notice bump re-prompting every returning visitor | — | Their answer recorded in writing. This is their call per `policy.ts:18-21` and has gone the other way before; a decline reopens DEC-007. |
+| T-17 | ~~Ask the Chamber about the notice bump~~ — **approved 2026-08-23 (DEC-007)** | — | Settled ahead of Phase 4. Re-confirm only if the deploy slips well past that date. Covers the re-prompt, **not** the T-14 notice wording. |
 | T-18 | Squash-merge to `main`; one-line entry at the top of `engagement/activity.md` | T-16, T-17 | Branch deleted after merge. |
 | T-19 | Watch `/admin/feedback` for two weeks | T-18 | The proportion of rows marked "rewritten" is checked against expectation. Sustained over-firing reopens the rewrite instruction from T-03. |
 
