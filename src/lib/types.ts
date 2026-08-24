@@ -268,24 +268,53 @@ export const FEEDBACK_MAX_RATING = 5;
  *  a rejection would lose the whole submission. */
 export const FEEDBACK_COMMENT_MAX = 2_000;
 
+/** Longest name and address stored. 254 is the RFC 5321 limit on an address;
+ *  80 is a round number with room to spare for a name. Both bound a hostile
+ *  client rather than a real visitor. */
+export const FEEDBACK_NAME_MAX = 80;
+export const FEEDBACK_EMAIL_MAX = 254;
+
 /** One in-app feedback submission from the site-wide side tab.
  *
- *  NO contact field, by design: the widget never asks for one, so the store
- *  holds no identifier to look a person up by. `comment` is still free text a
- *  visitor can type anything into, so this is treated as the app's
- *  highest-PII-risk log — 12-month retention, never exported to anyone but an
- *  admin. Do not add an email field here without also giving feedback_response
- *  real find/export/delete handlers in PII_STORES. */
+ *  THIS STORE HOLDS AN IDENTIFIER. It did not until DEC-002
+ *  (docs/FEEDBACK-GUARDRAIL/decisions.md), and the note that used to sit here
+ *  forbidding one has been honoured rather than deleted: `feedback_response` is
+ *  now a full PiiStore in src/lib/privacy/pii-inventory.ts with real
+ *  find/export/delete handlers, keyed on `email`.
+ *
+ *  Two things that follow, and neither is optional:
+ *   - The address is OPTIONAL and UNVERIFIED (DEC-005). Anyone can type anyone
+ *     else's. The fulfilment flow is admin-reviewed for exactly that reason, so
+ *     never build automated deletion on it.
+ *   - Rows carrying no address stay findable only by their own wording, exactly
+ *     as every row was before. The store is PARTIALLY searchable, and the
+ *     privacy notice says so.
+ *
+ *  Still the app's highest-PII-risk log — 12-month retention, the shortest in
+ *  the schedule, never exported to anyone but an admin. */
 export interface FeedbackResponse {
   submittedAt: string;
   /** 1–5. Always present — the widget cannot submit without a rating. */
   rating: number;
-  /** The open text answer. Absent when the visitor rated without writing. */
+  /** The open text answer. Absent when the visitor rated without writing.
+   *  When `moderated` is true this is a neutral rewrite, NOT what the visitor
+   *  typed — the original is never stored (DEC-003). */
   comment?: string;
   /** In-app path the tab was opened from, e.g. "/ferry" — never a full URL,
    *  query string, or hash. `REDACTED_PATH` when the page is a sensitive
    *  destination (src/lib/privacy/policy.ts). */
   path: string;
+  /** Optional, unverified. Offered so the Chamber can reply; never required,
+   *  and absent on most rows. */
+  name?: string;
+  /** Optional, unverified. The key the privacy access/delete path searches by
+   *  — see the block above and DEC-005. */
+  email?: string;
+  /** True when `comment` is a rewrite the guardrail produced because the
+   *  visitor's wording was rude. Absent means the comment is verbatim.
+   *  Load-bearing: it is the only signal that shows the classifier over-firing
+   *  (DEC-003), so the admin table renders it. */
+  moderated?: boolean;
 }
 
 /** Stand-in stored instead of a real path when feedback comes from a page in

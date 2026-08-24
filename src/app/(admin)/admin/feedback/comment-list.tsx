@@ -119,6 +119,29 @@ export function CommentList({ rows }: { rows: CommentRow[] }) {
                   blowing out the page width. */}
               <p className="whitespace-pre-line break-words text-ink">{row.response.comment}</p>
 
+              {/* The over-firing signal, and the only one this design has.
+                  DEC-003 discards the original, so nobody can compare a
+                  rewrite against what was actually typed — what they CAN do is
+                  notice that a suspicious share of rows carry this marker and
+                  say so. Text, not a glyph: it has to be announced, and it has
+                  to say what it means without a legend. */}
+              {row.response.moderated && (
+                <p className="mt-2 text-xs font-medium text-ink-soft">
+                  Rewritten by the tone filter — the visitor&rsquo;s original wording is not stored.
+                </p>
+              )}
+
+              {/* Optional, unverified, and usually absent. Rendered as plain
+                  text rather than a mailto: — one click from an admin console
+                  into a mail client, on an address a stranger typed, is not a
+                  convenience worth the phishing surface. */}
+              {(row.response.name || row.response.email) && (
+                <p className="mt-2 break-words text-xs text-ink-soft">
+                  Left contact details:{" "}
+                  {[row.response.name, row.response.email].filter(Boolean).join(" — ")}
+                </p>
+              )}
+
               <div className="mt-3 flex items-center gap-3">
                 {confirming === row.id ? (
                   <>
