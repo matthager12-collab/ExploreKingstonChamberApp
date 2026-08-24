@@ -26,7 +26,7 @@
  * E16/R3 membership-records tense flip relies on exactly that behavior.
  * Format: "YYYY-MM" of the notice revision.
  */
-export const PRIVACY_NOTICE_VERSION = "2026-08";
+export const PRIVACY_NOTICE_VERSION = "2026-09";
 
 export interface PrivacyNoticeChange {
   version: string;
@@ -36,6 +36,12 @@ export interface PrivacyNoticeChange {
 
 /** Rendered on /privacy; newest first. */
 export const PRIVACY_NOTICE_CHANGELOG: PrivacyNoticeChange[] = [
+  {
+    version: "2026-09",
+    date: "2026-08-23",
+    summary:
+      "Page feedback now offers an optional name and email so the Chamber can reply, which makes feedback searchable and deletable by address where one was left. Comments are also sent to Anthropic's API to be checked for abusive wording and rewritten neutrally if so — the rewrite is what gets stored, and a name or email is never sent. Bumped rather than edited quietly because this adds both a personal-data field and an outside processor; the Chamber agreed to the re-prompt.",
+  },
   {
     version: "2026-08",
     date: "2026-08-06",

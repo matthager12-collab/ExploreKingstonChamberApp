@@ -23,7 +23,7 @@ implements `findByIdentifier` / `exportRecords` / `deleteOrAnonymize`; the
 | `worklist_item` | payload `contact` | Privacy/accuracy request contact (OPEN items only) | scrubbed at resolution | Postgres `worklist_item` |
 | `hunt-submissions` | *(no identifier)* | Photo + optional precise check-in location | 12 months | `record` + fs/blob photos |
 | `survey_response` | *(none — anonymous)* | LTAC survey answers | 36 months | Postgres `survey_response` |
-| `feedback_response` | *(no identifier)* | Page feedback: 1–5 star rating, free-text comment, source path | 12 months | Postgres `feedback_response` |
+| `feedback_response` | `email` *(optional, unverified)* | Page feedback: 1–5 star rating, free-text comment, source path, optional name + email | 12 months | Postgres `feedback_response` |
 | `analytics_event` | *(none — anonymous)* | Pageviews / outbound / geo-ping (area only) / consent / web vital (page timing) | 90 days (geo) / 25 months | Postgres `analytics_event` |
 | `quarantine` | *(none)* | Importer-parked failed-validation docs (may carry legacy contact fields) | resolved via runbook | Postgres `quarantine` |
 
@@ -32,29 +32,43 @@ row to a person (a per-browser session id that resets on close is not one). A
 delete request against them is fulfilled by explanation, surfaced in the
 fulfillment UI.
 
-**`feedback_response` is a weaker claim than that, deliberately.** It collects
-no name, email, or device id, so there is no key to search it by — but its
-comment is a free-text box, and a visitor can type their own phone number into
-one no matter what the form asks. So it is *unindexed*, not *provably
-anonymous*: a request can only be matched by quoting the wording back, and what
-actually bounds the exposure is the window. That is why it carries 12 months,
-the shortest in `RETENTION_POLICY` and a third of the survey's 36, and why
-`/api/feedback` drops any contact-shaped field a client sends rather than
-storing it. Adding a contact field to that route would make this an identified
-store and require real `findByIdentifier` / `exportRecords` /
-`deleteOrAnonymize` handlers, not the no-identifier entry it has today.
+**`feedback_response` is a partially indexed store, deliberately.** Since the
+feedback panel began offering an **optional, unverified** name and email
+(`docs/FEEDBACK-GUARDRAIL`, DEC-002/DEC-005), it carries real
+`findByIdentifier` / `exportRecords` / `deleteOrAnonymize` handlers keyed on
+that address. It is registered with `hasEmailIdentifier: true`.
 
-**The published notice states this gap rather than papering over it** (notice
-version `2026-08`, its "Feedback you send us" section). Four of the five
-promises there are structural and already enforced in code — not linked to an
-identifier, never published, admin-read only, deleted at 12 months. The fifth
-is an **operator commitment with no automation behind it**: if a visitor quotes
-wording they wrote, the Chamber finds that row on `/admin/feedback` and deletes
-it by hand. There is no by-identifier lookup that could do it for them, which
-is exactly why the promise is worded around quoting the text. Whoever fulfils a
-feedback deletion request does it manually — treat that as part of the
-access/delete workflow even though `PII_STORES` reports the store as
-no-identifier.
+That covers only the rows where someone chose to leave an address. **Most rows
+have none**, and those remain exactly as they always were: unindexed, matchable
+only by quoting the wording back. The comment is also still a free-text box a
+visitor can type their own phone number into, whatever the form asks. So the
+honest description is *partially searchable*, and both the registry note and
+the published notice say so rather than implying a clean lookup.
+
+What actually bounds the exposure is still the window: 12 months, the shortest
+in `RETENTION_POLICY` and a third of the survey's 36.
+
+**The address is unverified, and that is a deliberate limit on automation.**
+Anyone can type anyone else's. Fulfilment is admin-operated and a person
+reviews matches before acting, which is the only reason an unverified key is
+acceptable here — **never automate deletion off it** (DEC-005).
+
+**A third party now sees comment text.** The rudeness guardrail sends the
+comment — and only the comment, never the name or the address — to Anthropic's
+API for classification and, where the wording is abusive, a neutral rewrite.
+When it rewrites, the rewrite is what gets stored and the visitor's original
+wording is **never written to the database** (DEC-003). The call is stateless,
+carries no tools and no history, and fails open: if it is unavailable the
+comment stores exactly as written (DEC-006).
+
+**The published notice states all of this** (notice version `2026-09`, its
+"Feedback you send us" section). Four of the original five promises are
+structural and enforced in code — never published, admin-read only, deleted at
+12 months, and now *findable by address where one was left*. The operator
+commitment survives for everything else: if a visitor quotes wording they
+wrote, the Chamber finds that row on `/admin/feedback` and deletes it by hand.
+Whoever fulfils a feedback deletion request should expect to do both — run the
+by-address lookup, and search by wording for the rows it cannot reach.
 
 **Web vitals are page measurements, not people measurements.** A `webvital`
 row carries a metric name (`LCP`/`CLS`/`INP`) and a number the browser
