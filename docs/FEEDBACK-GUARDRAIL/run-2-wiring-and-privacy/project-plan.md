@@ -38,7 +38,7 @@ another session may be in the same tree.
 | T-07 | `src/lib/outbox.ts`: `submitOrQueue` returns `body?: unknown` on the `sent` branch | entry | Existing outbox tests pass **unedited**. A non-JSON response yields `body: undefined`, not a throw. The contract block at line 192 documents it as the `httpStatus` addition is documented. |
 | T-08 | Copy registry: reword `feedback.panel.intro`; add `feedback.name.label`, `feedback.email.label`, `feedback.contact.hint`, `feedback.thankyou.moderated` | T-05 | The intro no longer tells visitors to omit contact details. All four keys render on `/admin/content`. The moderated wording matches [../plan.md](../plan.md) § Agreed copy. |
 | T-09 | `src/components/feedback-tab.tsx`: optional Name and Email inputs; branch the done-state on `body.moderated`; rewrite the PRIVACY header comment | T-07, T-08 | Both inputs labelled, `autoComplete`-hinted, meeting the panel's 44px target rule. Submit enabled with both blank. |
-| T-10 | `src/app/(site)/admin/feedback/comment-list.tsx`: a "rewritten" marker on `moderated` rows | T-05 | Text, not a glyph alone; announced by a screen reader. Unflagged rows visually unchanged. |
+| T-10 | `src/app/(admin)/admin/feedback/comment-list.tsx`: a "rewritten" marker on `moderated` rows | T-05 | Text, not a glyph alone; announced by a screen reader. Unflagged rows visually unchanged. |
 | T-11 | Extend `src/app/api/__tests__/feedback-route.test.ts` | T-06 | Contact validation, malformed-email-dropped, `moderated` persisted, replay-makes-no-model-call. |
 
 ### Phase 3 — privacy promotion

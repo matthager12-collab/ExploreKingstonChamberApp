@@ -55,19 +55,22 @@ cannot be validated by script:
 - **T-16 sets the key in the Render dashboard only.** It goes in no commit, no note,
   and no message.
 
-## The red-suite window
+## The red-suite window that never happened
 
-From run 2's T-05 until its T-15, `src/lib/privacy/pii-inventory.test.ts` fails by
-design. This is DEC-002's tripwire working, not a regression.
+Run 2's plan said `pii-inventory.test.ts` would fail by design from T-05 to T-15, and
+that this red window was what forced the privacy work to ship with the feature.
 
-Rules for that window:
+**It did not go red.** The suite stayed green through the whole of Phase 2 with contact
+fields live in the route and the store still registered as identifier-free. The old
+coverage tests could not see it — see DEC-002 § Correction.
 
-- **Do not merge to `main` inside it.** Run 2's exit is the first point after T-05 at
-  which the tree is releasable.
-- **Do not "fix" the coverage test.** It is telling the truth: the store gained an
-  identifier and has no handlers yet. Silencing it removes the only thing enforcing
-  the privacy work.
-- Any *other* test failing in that window is a real regression and stops the run.
+A real tripwire was added during run 2 and mutation-tested. The rule the window was
+meant to enforce still stands and is now actually enforced:
+
+- **Do not merge with contact fields live and the store registered identifier-free.**
+  That combination now fails the suite. It previously did not.
+- **Do not "fix" a failing tripwire by relaxing it.** It is the only thing keeping the
+  published notice honest about what the store holds.
 
 ## Execution
 
