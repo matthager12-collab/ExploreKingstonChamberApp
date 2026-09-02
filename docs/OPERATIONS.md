@@ -52,8 +52,8 @@ Phase-2 Vercel path, DNS, pre-launch checklist),
 
 **Prereqs:** **Node 22+** (the production image is `node:22-alpine`; Next 16
 needs ≥ 20.9), npm, and — since E05 — a **Postgres** to point `DATABASE_URL`
-at (a throwaway Docker container or a personal Neon dev branch; see the table
-below). No paid service required.
+at (a throwaway Docker container; see the table below). No paid service
+required.
 
 ```bash
 npm install
@@ -77,7 +77,7 @@ working copy's `.env.local` — reference that, don't reprint secrets.
 | `NEXT_PUBLIC_SITE_URL` | No locally (defaults to `http://localhost:3000`); **set in production** | Absolute production origin for share-card/canonical URLs (`src/app/layout.tsx` `metadataBase` — the app spreads by visitors texting links). **Build-time var** — inlined into the client bundle at `npm run build`; a dashboard-only change needs a rebuild. |
 | `DATA_DIR` | No locally (defaults to `<repo>/.data`); **set in production** | Absolute path to the mutable-state root, resolved via `src/lib/data-dir.ts`. Leave unset locally. In production it **must** be an absolute path on a mounted persistent volume (`/data` on Render/Fly) or redeploys wipe accounts, portal edits, and photos. |
 | `SETUP_TOKEN` | Only to bootstrap the first admin (locally or in production) — `POST /api/auth/setup` 403s fail-closed without it | Any string you choose, e.g. `openssl rand -hex 16`. Only consulted while zero users exist (`hasAnyUsers()` is checked first) — once an admin exists, it's never read again. Set it in `.env.local` before running `/portal/setup` on a fresh `.data/`; on Render it's `generateValue: true`. |
-| `DATABASE_URL` | **Yes since E05** — structured data (listings, events, auth, …) lives in Postgres; `next dev` pages fail without it. Images/photos stay on disk under `DATA_DIR`. | A throwaway local Postgres (`docker run -e POSTGRES_PASSWORD=ci -p 5432:5432 postgres:16` → `postgres://postgres:ci@127.0.0.1:5432/postgres`) or a personal Neon dev branch. Migrations under `db/migrations/` apply automatically at server start. **Never point local dev at the production database.** |
+| `DATABASE_URL` | **Yes since E05** — structured data (listings, events, auth, …) lives in Postgres; `next dev` pages fail without it. Images/photos stay on disk under `DATA_DIR`. | A throwaway local Postgres (`docker run -e POSTGRES_PASSWORD=ci -p 5432:5432 postgres:16` → `postgres://postgres:ci@127.0.0.1:5432/postgres`). Migrations under `db/migrations/` apply automatically at server start. **Never point local dev at the production database** — since 2026-09-02 it is internal-only on Render anyway (`ipAllowList: []`). |
 | `WORKLIST_SWEEP_TOKEN` | No — only for the E08 staleness-sweep cron; the sweep also runs from any admin session, and unset simply disables the token path (fail-closed, never open) | `openssl rand -hex 32`, set on Render (both services) and in whatever scheduler calls `POST /api/admin/worklist/sweep` with `Authorization: Bearer …` — see §5 "Worklist & moderation". |
 | `EVENTS_INGEST_TOKEN` | No — only for the E12 hourly events-ingest cron (`render.yaml` `events-ingest`); ingest also runs from any admin session ("Sync now" on `/admin/events-sources`). Fail-closed like the sweep token: production token callers get 503 while it's unset; `next dev` is open without it. | `openssl rand -hex 32`, set on Render (web service + the `events-ingest` cron; same value) — see §5 "Unified events calendar & ingest". |
 | `AMS_CALENDAR_FEED_URL` | No — optional staff-generated GrowthZone whole-calendar iCal URL (§9 item 6b). While unset the ingest scrapes per-event `.ics` files instead. Transitional: the whole GrowthZone source ends ~April 2027 (docs/adr/ADR-0005-events-canonical-source.md). | Chamber staff mint it in the GrowthZone back office (Events → Calendars settings → "Calendar Feed"); paste into Render (both services) or the `calendar-sources` record. |
