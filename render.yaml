@@ -412,37 +412,6 @@ services:
       - key: NOINDEX
         value: "1"
 
-  # ── ONE-SHOT (v2): copy Neon -> Render Postgres as a built image ──────────
-  #
-  # Same job as db-copy-neon-to-render above, but the script ships INSIDE the
-  # image (ops/db-copy/) and runs as the Dockerfile's CMD, because three runs
-  # of the runtime:image form died with "not found" before the script started:
-  # however Render tokenises dockerCommand, `sh -c "..."` reached the shell as
-  # one quoted word. A CMD in the Dockerfile bypasses that parsing entirely.
-  # Manual-trigger only (the schedule never matches); same guards, same env.
-  # Blueprint sync never deletes a resource: delete both copy crons in the
-  # dashboard once the cutover is verified.
-  - type: cron
-    name: db-copy-neon-to-render-v2
-    runtime: docker
-    branch: main
-    dockerfilePath: ./ops/db-copy/Dockerfile
-    dockerContext: ./ops/db-copy
-    schedule: "0 0 31 2 *" # never matches; run via "Trigger Run" only
-    region: oregon
-    envVars:
-      - key: SOURCE_URL
-        fromService:
-          type: web
-          name: explore-kingston
-          envVarKey: DATABASE_URL
-      - key: TARGET_URL
-        fromDatabase:
-          name: explore-kingston-db
-          property: connectionString
-      - key: PGSSLROOTCERT
-        value: /etc/ssl/certs/ca-certificates.crt
-
 databases:
   # E05 substrate, moved off Neon on 2026-09-02. Neon billed compute-awake
   # hours and this always-on app never let it sleep (~$33/mo for a 70 MB
