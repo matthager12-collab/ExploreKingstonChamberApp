@@ -3,8 +3,10 @@
 The authoritative deploy guide for Explore Kingston. **July 2026.**
 
 **Status:** Phase 1 is **LIVE on Render** at <https://explore-kingston.onrender.com>
-— since E05, Neon Postgres holds all structured data (`DATABASE_URL` is
-required) and a private Cloudflare R2 bucket holds uploaded images (E15 —
+— since E05, Postgres holds all structured data (`DATABASE_URL` is required):
+**Render Postgres** (`explore-kingston-db`, Blueprint-managed, internal-only)
+since 2026-09-02, Neon before that. A private Cloudflare R2 bucket holds
+uploaded images (E15 —
 the persistent disk was removed, so deploys are zero-downtime). Phase 2 (Vercel
 serverless) is fully built but **not yet the running home** — it's the
 documented alternative / future move, not a pending chore.
@@ -21,7 +23,8 @@ DNS facts), [SYNDICATION.md](SYNDICATION.md) (outbound feeds / any future email)
 The app writes all of its mutable state — accounts, portal edits, hunts +
 photos, analytics, survey responses, ferry observations, CMS copy/visibility,
 map views/features — outside the code tree. Since E05, **structured data has
-exactly one home: Neon Postgres** (`record` + append tables; every write goes
+exactly one home: Postgres** — Render Postgres `explore-kingston-db` since
+2026-09-02, Neon until then (`record` + append tables; every write goes
 through the audited zod choke point `src/lib/db/records.ts`), and
 `DATABASE_URL` is required on every deploy — `/api/health` reports
 `db:false` and 503s without it. Since E15 removed the persistent disk, an
@@ -38,14 +41,15 @@ above the store modules (routes, components, domain types) ever branches:
 Two consequences:
 
 - **Phase 1** sets `DATABASE_URL` **and `R2_IMAGES_*`**, and since E15 leaves
-  `DATA_DIR` unset → Neon holds structured data, the private R2 bucket holds
-  images, and there is no disk. This is the current live shape on Render.
+  `DATA_DIR` unset → Render Postgres holds structured data, the private R2
+  bucket holds images, and there is no disk. This is the current live shape.
 - **Phase 2** additionally sets Blob/Upstash → images go to Blob and rate
-  limiting to Redis; the DB is the same Neon either way. This is the Vercel
-  shape.
+  limiting to Redis; the DB is the same Postgres either way — but
+  `explore-kingston-db` is internal-only today, so Phase 2 would first need
+  its `ipAllowList` opened or the database moved. This is the Vercel shape.
 
 `npm run dev` needs a `DATABASE_URL` too (a throwaway local Postgres container
-or a personal Neon dev branch — see [OPERATIONS.md §1](OPERATIONS.md)); images
+— see [OPERATIONS.md §1](OPERATIONS.md)); images
 land under `.data/` — the same code path Phase 1 uses in production, just at a
 different `DATA_DIR`.
 
@@ -127,20 +131,31 @@ that is what makes deploys zero-downtime.
      read the value from the dashboard to complete first-run bootstrap once
      (see [§4 First run](#4-first-run-in-production)); already-bootstrapped
      deploys never consult it (`hasAnyUsers()` is checked first).
-   - `DATABASE_URL` — `sync: false` (E05); the Neon **pooled** connection
-     string, entered in the dashboard, never in `render.yaml`. Must end
-     `?sslmode=verify-full` — see [§2e](#2e-tls-mode-sslmodeverify-full);
-     Neon's copy button gives you `sslmode=require`, which is the wrong thing
-     to paste. **Required**: a
-     release booted without it fails `/api/health` (`db:false`) and Render
-     503s. **Since E15 removed the disk this now DOES keep the previous
-     release serving** — with no volume to hand over the instances overlap, so
-     an unhealthy release is held back instead of taking the site down. (While
-     a disk was attached the opposite was true, verified on staging
-     2026-07-19.) Validate the URL from your laptop first — `psql` is **not**
-     installed on the operator Mac, so use the repo's own `pg` driver, run from
-     the repo root with the exact string you are about to paste on the
-     clipboard:
+   - `DATABASE_URL` — **Blueprint-managed since 2026-09-02**:
+     `fromDatabase: {name: explore-kingston-db, property: connectionString}`,
+     the Render Postgres **internal** URL. Nobody types it, it is not in the
+     dashboard by hand, and it is not in git. It carries no `sslmode`: the hop
+     stays on Render's private network — see [§2e](#2e-tls-mode-sslmodeverify-full).
+     **Required**: a release booted without a reachable database fails
+     `/api/health` (`db:false`) and, since E15 removed the disk, is **held
+     back** while the previous release keeps serving (while a disk was
+     attached the opposite was true, verified on staging 2026-07-19).
+
+     **Rollback to Neon** (the Neon project is kept until ~2026-09-09, then
+     deleted): (1) in the dashboard set the web service's `DATABASE_URL` to
+     the Neon **pooled** URL ending `?sslmode=verify-full` — that alone
+     triggers a deploy back onto Neon; (2) revert the flip commit so the
+     Blueprint says `sync: false` again, otherwise the next sync overwrites
+     the pasted value. That order. Rows written on Render after the flip are
+     not carried back. (Before 2026-09-02 this var was a `sync: false`
+     dashboard paste of the Neon URL; Neon's copy button gives
+     `sslmode=require`, which is the wrong thing to paste.)
+
+     For any **external** URL — the Neon rollback URL, or Render's external
+     URL if `ipAllowList` is ever opened — validate it from your laptop first.
+     `psql` is **not** installed on the operator Mac, so use the repo's own
+     `pg` driver, run from the repo root with the exact string you are about
+     to paste on the clipboard:
 
      ```bash
      node -e 'const {Client}=require("pg");
@@ -277,9 +292,17 @@ creates it (Render dashboard), per the new-spend sign-off rule.
 
 ### 2e. TLS mode (`sslmode=verify-full`)
 
-Every `DATABASE_URL` — production, staging, and any local pointed at Neon —
-ends `?sslmode=verify-full`. Neon's dashboard copy button hands you
-`sslmode=require` instead; that string is **not** safe to paste forward.
+**Production since 2026-09-02 is the exception to this section:** the
+Blueprint-managed internal URL carries no `sslmode`, the connection never
+leaves Render's private network, and whether that hop is TLS is undocumented
+by Render (libpq and node-postgres negotiate it only if the internal listener
+offers it). The rule below applies to every **external** URL: the Neon
+rollback URL, a Render external URL when `ipAllowList` is opened, and any
+local `.env.local` pointed at a hosted database.
+
+Every such external `DATABASE_URL` ends `?sslmode=verify-full`. Neon's
+dashboard copy button hands you `sslmode=require` instead; that string is
+**not** safe to paste forward.
 
 The reason is a rename, not a behaviour change. node-postgres has always been
 stricter than libpq: `require`, `prefer`, and `verify-ca` were all treated as
@@ -463,8 +486,10 @@ it backs up is not a backup:
 15 3 * * * DATA_DIR=/data BACKUP_DIR=/data/backups /app/scripts/backup-data.sh >> /var/log/kingston-backup.log 2>&1
 ```
 
-**Since E05 the backup surface is split: Neon holds structured data** (use its
-PITR/branching) **and `DATA_DIR` holds images/hunt photos** — everything else
+**Since E05 the backup surface is split: Postgres holds structured data** —
+Render Postgres since 2026-09-02, with Render's daily logical backups and
+point-in-time recovery (Neon's PITR/branching before that) — **and `DATA_DIR`
+holds images/hunt photos** — everything else
 (code, seed content, brand assets, generated parking overlay) rebuilds from
 git + `npm install`. The JSON-bundle route and `backup-data.sh` still walk the
 whole `DATA_DIR`. `.data/` is gitignored on purpose (photos; pre-E05 disks
@@ -610,12 +635,12 @@ actually live.
 
 | | **Render (Phase 1, LIVE)** | **Vercel (Phase 2, ready)** |
 |---|---|---|
-| Persistence | Neon Postgres (structured data, E05) + private R2 bucket for images (E15, no disk) | Neon + Blob + Upstash |
+| Persistence | Render Postgres `explore-kingston-db` (structured data, E05; internal-only since 2026-09-02) + private R2 bucket for images (E15, no disk) | Neon + Blob + Upstash |
 | Env shape | `DATA_DIR=/data` + `DATABASE_URL`, no Blob/Upstash vars | all cloud vars set, `DATA_DIR` unset |
 | Schema/migration | Drizzle migrations (`db/migrations/`, applied at boot — E05) | same migrations; image move to Blob |
 | Rate limit | in-process `Map` (single instance, correct) | Upstash shared window (required) |
-| Cost | ~$7/mo (Starter, no disk) + Neon free tier + R2 ~$0–1 | ~$20/mo Pro + free-tier stores |
-| Backups | Neon PITR + daily disk snapshots + off-site JSON bundle | Neon PITR + Blob versioning |
+| Cost | $25/mo Standard web instance + $6/mo Render Postgres + ~$1/mo per cron + R2 ~$0–1 | ~$20/mo Pro + free-tier stores |
+| Backups | Render Postgres daily logical backups + PITR + off-site JSON bundle | Neon PITR + Blob versioning |
 | Scaling | single warm instance | serverless, multi-instance |
 | Ops burden | one box, one disk, snapshots | three managed services |
 | Status | **running the app today** | supported alternative / future move |
