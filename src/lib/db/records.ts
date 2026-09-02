@@ -413,23 +413,21 @@ export async function insertQuarantineRow(row: {
     });
 }
 
-// Health probe (SELECT 1), memoized so Render + UptimeRobot polling doesn't
-// keep Neon awake. The TTL is asymmetric on purpose:
+// Health probe (SELECT 1), memoized 60s either way so Render + UptimeRobot
+// polling doesn't hammer the database.
 //
-//  - SUCCESS is cached 15 min. Neon suspends its compute after ~5 quiet
-//    minutes, so any heartbeat under that keeps it awake 24/7 — the old 60s
-//    memo alone cost a full month of compute hours every month. The steady-
-//    state probe must be RARER than the suspend window; 15 min caps the
-//    health-driven duty cycle at ~⅓ even when nothing else runs. Trade-off:
-//    a DB outage can read healthy here for up to 15 min — real page loads
-//    fail immediately regardless, and the boot gate below is unaffected.
-//  - FAILURE is cached only 60s, so recovery (and a mid-deploy fix) is
+//  - From 2026-08-08 to 2026-09-02, SUCCESS was cached 15 min instead of
+//    60 s so health polling stayed rarer than Neon's ~5-quiet-minute suspend
+//    window and let its compute sleep. That also meant a DB outage could
+//    read healthy here for up to 15 min. Render Postgres is always on, so
+//    that cache is gone; SUCCESS and FAILURE now share the same 60 s TTL.
+//  - FAILURE stays cached 60s, so recovery (and a mid-deploy fix) is
 //    noticed fast, and a flapping DB still can't get hammered.
 //
 // The fail-closed deploy property lives in the FIRST probe: a fresh process
 // has no cached result, so a release booted without a reachable DATABASE_URL
 // never reports healthy and Render keeps the previous release serving.
-const HEALTHY_TTL_MS = 15 * 60_000;
+const HEALTHY_TTL_MS = 60_000;
 const UNHEALTHY_TTL_MS = 60_000;
 let lastProbe: { at: number; ok: boolean } | null = null;
 

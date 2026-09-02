@@ -45,7 +45,7 @@ the `users` table (E06: auth is Postgres-only — nothing is written to the temp
 `DATA_DIR`, which now backs only photos and the health route's write probe), and
 still strips `UPSTASH_*`; the parent shell's `DATABASE_URL` is deliberately ignored
 — only the explicit test var is used, so the suite can never point at real
-Neon/Redis.
+Postgres/Redis.
 
 ## The route-gating walk (`tests/server/admin-walk.test.ts`)
 
