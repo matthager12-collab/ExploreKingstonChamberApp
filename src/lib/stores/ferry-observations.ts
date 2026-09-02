@@ -67,8 +67,12 @@ let lastRecordAt = 0;
 let writesSincePrune = 0;
 let aggCache: { at: number; value: EmpiricalResult } | null = null;
 // Declared up here with its sibling (not beside computeDailyAccuracy, which is
-// defined much further down) so recordSailingSpaceSnapshot can clear it.
+// defined much further down). Neither is cleared by a write anymore — both are
+// plain TTL caches now, left stale for up to CACHE_TTL_MS after a snapshot.
 let dailyCache: { at: number; value: DailyAccuracyPoint[] } | null = null;
+// In-flight refresh of aggCache, so concurrent stale/cold reads share one scan
+// instead of each kicking off their own.
+let aggInflight: Promise<EmpiricalResult> | null = null;
 
 function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
@@ -152,8 +156,6 @@ export async function recordSailingSpaceSnapshot(
     await appendFerryObservation(obs);
   }
 
-  aggCache = null; // fresh data — let the next read recompute
-  dailyCache = null; // ditto for the admin trend series
   if (++writesSincePrune >= PRUNE_EVERY) {
     writesSincePrune = 0;
     void prune(now).catch(() => {});
@@ -166,20 +168,17 @@ async function readObservations(sinceIso?: string): Promise<FerryObservation[]> 
 }
 
 /**
- * Aggregate logged observations into the empirical busyness table the forecast
- * blends in: per direction × season × weekday × hour, the mean observed
- * fullness (0–100) nudged up a little by mean delay. Cached briefly so repeated
- * forecasts don't rescan the log.
+ * Scan-and-aggregate body for getEmpiricalBusyness, split out so it can run as
+ * a single background refresh shared by every caller (see aggInflight below).
  */
-export async function getEmpiricalBusyness(): Promise<EmpiricalResult> {
-  if (aggCache && Date.now() - aggCache.at < CACHE_TTL_MS) return aggCache.value;
-
+async function refreshEmpiricalBusyness(): Promise<EmpiricalResult> {
   // Bound the scan to the retention window (+1 day of slack for prune lag):
   // pruning only runs every ~48 snapshot writes (~8h), so the table can
   // overshoot 90 days when crons stall, and the aggregate shouldn't rescan
   // rows retention is about to delete. The accuracy backtest below reads the
   // full log on purpose — do not add a cutoff there.
   const sinceIso = new Date(Date.now() - (RETENTION_DAYS + 1) * 24 * 60 * 60 * 1000).toISOString();
+  // ponytail: full 90-day scan aggregated in JS, kept off the request path by SWR; move to a SQL GROUP BY if the background refresh ever takes more than a few seconds.
   const observations = await readObservations(sinceIso);
   const acc = new Map<string, { sumFull: number; nFull: number; sumDelay: number; nDelay: number }>();
   const days = new Set<string>();
@@ -221,6 +220,36 @@ export async function getEmpiricalBusyness(): Promise<EmpiricalResult> {
   };
   aggCache = { at: Date.now(), value };
   return value;
+}
+
+/**
+ * Aggregate logged observations into the empirical busyness table the forecast
+ * blends in: per direction × season × weekday × hour, the mean observed
+ * fullness (0–100) nudged up a little by mean delay. Stale-while-revalidate:
+ * a fresh cache returns immediately; a stale one is still returned immediately
+ * while a single background refresh brings it current (concurrent callers
+ * share that one refresh rather than each rescanning the log).
+ */
+export async function getEmpiricalBusyness(): Promise<EmpiricalResult> {
+  if (aggCache) {
+    if (Date.now() - aggCache.at < CACHE_TTL_MS) return aggCache.value;
+    // Stale — serve it now, refresh in the background (single-flight).
+    if (!aggInflight) {
+      aggInflight = refreshEmpiricalBusyness()
+        .catch(() => aggCache!.value)
+        .finally(() => {
+          aggInflight = null;
+        });
+    }
+    return aggCache.value;
+  }
+  // No cache yet: nothing stale to fall back to, so let the caller await the
+  // scan (and share it — no swallowing errors here, there's nothing to serve).
+  if (aggInflight) return aggInflight;
+  aggInflight = refreshEmpiricalBusyness().finally(() => {
+    aggInflight = null;
+  });
+  return aggInflight;
 }
 
 /** Drop observations older than the retention window. Best-effort. */
