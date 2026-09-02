@@ -346,8 +346,14 @@ services:
   # single transaction, so a failed copy leaves the target unchanged and a
   # rerun over a previous copy is idempotent (--clean --if-exists).
   #
-  # The script lives in COPY_SCRIPT (no double quotes inside, on purpose —
-  # it must survive whichever way Render hands dockerCommand to a shell).
+  # The script lives in COPY_SCRIPT and the command reads it back with
+  # printenv instead of naming it as $COPY_SCRIPT. Learned on the first two
+  # runs (2026-09-02): Render substitutes $VARs in dockerCommand with
+  # single-QUOTED values, and when it splits the command into arguments it
+  # strips double quotes but keeps single quotes as literal characters — so
+  # both `sh -c "$COPY_SCRIPT"` and `sh -c '...'` reach the shell as one
+  # quoted word and die with "not found". Double quotes, no $, is the shape
+  # that survives. The script itself avoids double quotes for the same reason.
   - type: cron
     name: db-copy-neon-to-render
     runtime: image
@@ -355,7 +361,7 @@ services:
       url: docker.io/library/postgres:17-alpine
     schedule: "0 0 31 2 *" # never matches; run via "Trigger Run" only
     region: oregon
-    dockerCommand: sh -c "$COPY_SCRIPT"
+    dockerCommand: sh -c "printenv COPY_SCRIPT | sh"
     envVars:
       - key: COPY_SCRIPT
         value: |
