@@ -11,7 +11,7 @@ Next.js 16 deployable that surfaces ferry, dining, lodging, events, parking,
 give-back, and scavenger-hunt content for visitors to Kingston, WA, plus
 invite-only portals for businesses / nonprofits and an admin CMS for the
 Chamber. The headline architectural fact in this version is the **Postgres
-substrate (E05)**: all structured data lives in Neon Postgres (`record` +
+substrate (E05)**: all structured data lives in Render Postgres (`record` +
 append tables), every write goes through one audited, zod-validated choke
 point (`src/lib/db/records.ts`), and `DATABASE_URL` is required at runtime —
 `/api/health` 503s without it. The `DATA_DIR` disk remains only for images and
@@ -33,7 +33,7 @@ hunt photos (until E15); nothing above the store layer knows any of this.
  Search engines    ◀─└───────────┬──────────────────┬───────────────┘
                                  │                  │
               ┌──────────────────┘                  └────────────────────┐
-              ▼ NEON POSTGRES (required, E05)        DATA_DIR disk (/data on Render) ▼
+              ▼ RENDER POSTGRES (required, E05)      DATA_DIR disk (/data on Render) ▼
      record + audit + quarantine tables          images only: hunt photos + map
        analytics_event · survey_response ·        images (until E15), plus the
        ferry_observation (append logs)            health disk-probe + backup walk
@@ -47,7 +47,7 @@ hunt photos (until E15); nothing above the store layer knows any of this.
 The app is **one deployable unit**: pages, portals, admin CMS, API routes, and
 feeds in a single `output: "standalone"` Next.js image. What the system *owns*
 lives in the repo (typed seed data) plus exactly one mutable substrate — and
-since E05 that substrate is **Neon Postgres**: the `record` table + append logs
+since E05 that substrate is **Render Postgres**: the `record` table + append logs
 hold every piece of structured data, with schema DDL generated from
 `src/lib/db/schema.ts` into `db/migrations/` and applied at boot. The seeds in
 git remain the merge baseline. The old "no `DATABASE_URL` = filesystem mode"
@@ -71,7 +71,7 @@ SaaS is required.
    baseline content; runtime edits are stored as overlays that win by id, with
    `{_deleted:true}` tombstones hiding seed rows. `readMerged(name, seed)` in
    `src/lib/stores/json-store.ts` does the merge — since E05 as a thin delegate
-   over `src/lib/db/records.ts`, with overlay rows living in the Neon `record`
+   over `src/lib/db/records.ts`, with overlay rows living in the Render `record`
    table — and nothing above the store notices. Result: git-reviewable defaults,
    portal/admin editability without deploys, trivially resettable state.
 
@@ -97,7 +97,7 @@ SaaS is required.
 
 6. **No third party until forced — and the DB is now the required substrate
    (E05).** Auth, analytics, feeds, ICS, embeds are self-implemented. The store
-   seam was *always designed* to accept a database; since E05 Neon Postgres is
+   seam was *always designed* to accept a database; since E05 Render Postgres is
    no longer an optional backend but **the** home for structured data —
    `DATABASE_URL` must be set on every deploy, and there is no filesystem
    fallback. Blob/Upstash remain env-selected serverless seams. External SaaS
@@ -131,7 +131,7 @@ domain layer (src/lib/)
    auth/           users, orgs, invites, sessions, can() over 5 roles (E06)
    ▼
 persistence substrate   db/records.ts (audited zod write choke) | data-dir.ts | blob-store.ts | rate-limit.ts
-   ├─ POSTGRES (required)  Neon: record + audit + quarantine + append tables
+   ├─ POSTGRES (required)  Render: record + audit + quarantine + append tables
    │                       (schema.ts → db/migrations, applied at boot) · seeds in git = merge baseline
    └─ DISK (DATA_DIR)      images/hunt photos only, until E15 (Blob on Vercel) · Upstash = serverless rate limit
    generated       public/geo/street-parking.json (scripts/gen-street-parking.py)
@@ -193,7 +193,7 @@ All are seed+overlay via `json-store.ts` unless marked append.
 | `auth` (`src/lib/auth/` + `db/auth-store.ts`) | users + orgs + invites | **not** the `record` table — dedicated `users` / `orgs` / `invites` tables since E06 |
 
 ### 4.3 The Postgres substrate (the headline fact — E05)
-Structured data no longer branches on env: it lives in Neon Postgres,
+Structured data no longer branches on env: it lives in Render Postgres,
 **every write goes through the audited zod choke point**
 `src/lib/db/records.ts` (`readRecords` / `readMergedRecords` / `writeRecord`),
 and `DATABASE_URL` is required — `/api/health` reports `db:false` and 503s
@@ -414,19 +414,20 @@ general-purpose map system on `map-store` + `src/lib/map/`:
 
 ## 10. Deployment topology
 
-**Two phases; DEPLOY.md is the step-by-step.** Neon Postgres is common to both
-(E05); the remaining image/rate-limit seams (§4.3) are the entire difference
-between them.
+**Two phases; DEPLOY.md is the step-by-step.** Phase 1 runs on Render Postgres
+(E05), which is internal-only (`ipAllowList: []`); Phase 2 would need that
+opened or the database moved. The remaining image/rate-limit seams (§4.3) are
+otherwise the entire difference between them.
 
 | | Phase 1 — **LIVE** | Phase 2 — supported alternative |
 |--|--------------------|---------------------------------|
 | Host | **Render** Blueprint (`render.yaml`), Docker `output:"standalone"`, Starter web + 1GB disk at `/data` (~$7.25/mo) | Vercel serverless (no persistent disk) |
 | URL | https://explore-kingston.onrender.com | (not the running home) |
-| Mode | **Postgres + disk (E05)** — `DATABASE_URL` (Neon) for structured data, `DATA_DIR=/data` for images/photos | **Cloud** — Neon + Blob + Upstash; `DATA_DIR` unset |
+| Mode | **Postgres + disk (E05)** — `DATABASE_URL` (Render, via `fromDatabase`) for structured data, `DATA_DIR=/data` for images/photos | **Cloud** — Neon + Blob + Upstash; `DATA_DIR` unset |
 | Rate limit | in-process Map (one instance — correct) | Upstash Redis (shared) |
 | Images | under `/data`, served by app routes | Vercel Blob CDN URLs |
 | Health | `/api/health` → `{ok, db, storage, time}`; **503 until Postgres answers** (E15 — it no longer touches the filesystem, which is what allowed the disk to be removed). `storage` is reported but never gates. With no disk the instances overlap, so a release that never goes healthy is **held back** and deploys are zero-downtime — see [RUNBOOK-CUTOVER.md](RUNBOOK-CUTOVER.md) | `/api/health` (same DB gate) |
-| Secrets | `AUTH_SECRET` (Render-generated, stable), `SETUP_TOKEN` (Render-generated, first-run bootstrap only), `WSDOT_API_KEY`, `NEXT_PUBLIC_SITE_URL` (**build-time**, baked into the client bundle), `DATABASE_URL` (Neon pooled url — E05) set in dashboard | + `BLOB_READ_WRITE_TOKEN`, `UPSTASH_REDIS_REST_URL/TOKEN` |
+| Secrets | `AUTH_SECRET` (Render-generated, stable), `SETUP_TOKEN` (Render-generated, first-run bootstrap only), `WSDOT_API_KEY`, `NEXT_PUBLIC_SITE_URL` (**build-time**, baked into the client bundle), `DATABASE_URL` (Render internal URL, Blueprint-managed via `fromDatabase` — E05) | + `BLOB_READ_WRITE_TOKEN`, `UPSTASH_REDIS_REST_URL/TOKEN` |
 
 Environment variables (authoritative — `.env.production.example`, `render.yaml`,
 `fly.toml`):
@@ -438,7 +439,7 @@ Environment variables (authoritative — `.env.production.example`, `render.yaml
 | `NEXT_PUBLIC_SITE_URL` | **required in production**, **build-time** | absolute origin for share-card/canonical URLs (`layout.tsx` `metadataBase`); inlined at `npm run build`, not read at runtime |
 | `SETUP_TOKEN` | optional (first-run bootstrap only) | gates `POST /api/auth/setup` fail-closed; never consulted once an admin exists |
 | `DATA_DIR` | disk hosts | persistent volume path (e.g. `/data`) — images/hunt photos only since E05; **unset on Vercel** |
-| `DATABASE_URL` | **yes (E05)** | Neon Postgres (POOLED url, host has `-pooler`, `?sslmode=verify-full` — docs/DEPLOY.md §2e) — the structured-data home; `/api/health` 503s without it |
+| `DATABASE_URL` | **yes (E05)** | Render Postgres internal URL, Blueprint-managed via `fromDatabase` (no `-pooler`, no `sslmode` — docs/DEPLOY.md §2) — the structured-data home; `/api/health` 503s without it |
 | `BLOB_READ_WRITE_TOKEN` | Phase 2 | Vercel Blob for uploaded images |
 | `UPSTASH_REDIS_REST_URL` / `_TOKEN` | Phase 2 | shared rate limiter |
 

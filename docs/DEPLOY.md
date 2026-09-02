@@ -198,8 +198,9 @@ that is what makes deploys zero-downtime.
 disk** since E15 (~$7/mo), auto-deploy on push **on**, admin account created
 and persisted, WSDOT key set (ferry live). Note the disk removal also retired
 Render's daily disk snapshots as a backup layer — that cost nothing, because
-the disk held no durable data by then; Neon PITR and the encrypted off-site
-bundle are the live layers (see [§5](#5-backups)).
+the disk held no durable data by then; Render Postgres's daily logical
+backups + PITR and the encrypted off-site bundle are the live layers (see
+[§5](#5-backups)).
 
 ### 2b. Fly.io (alternative)
 
@@ -332,20 +333,22 @@ Neon. That is a libpq parameter; node-postgres reads `enableChannelBinding`
 from *client config* and nothing maps the URL param onto it, so it has no
 effect. Harmless, but do not read it as an assurance that channel binding is on.
 
-Dropping `sslmode` entirely is not an option — Neon refuses the connection
-outright (`28000 connection is insecure`), which is a useful sanity check that
-TLS is genuinely being negotiated.
+For an external Neon URL, dropping `sslmode` entirely is not an option — Neon
+refuses the connection outright (`28000 connection is insecure`), which is a
+useful sanity check that TLS is genuinely being negotiated. (Production's
+internal URL carries no `sslmode` at all — see the exception noted above.)
 
 ---
 
 ## 3. Phase 2 — Vercel serverless (built, not yet used)
 
 Vercel has no persistent filesystem: writes land on an ephemeral instance and
-vanish. Structured data already lives in Neon on every deploy (E05); the
-Vercel deltas are Vercel Blob (images) and Upstash Redis (shared rate limit),
-auto-detected from env presence
-(see [§1](#1-the-persistence-seam-why-there-are-two-phases)), with `DATA_DIR`
-left unset. This section is the one-time stand-up.
+vanish. Structured data already lives in Neon on every deploy (E05, this
+design's choice — the live Phase 1 database is Render Postgres since
+2026-09-02); the Vercel deltas are Vercel Blob (images) and Upstash Redis
+(shared rate limit), auto-detected from env presence (see
+[§1](#1-the-persistence-seam-why-there-are-two-phases)), with `DATA_DIR` left
+unset. This section is the one-time stand-up.
 
 ### Steps
 

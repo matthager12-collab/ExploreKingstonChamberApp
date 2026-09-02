@@ -82,7 +82,7 @@ parking-zone editor; structured admin-editable ferry facts; self-service
 account management (name/email/password) and admin password reset; outbound
 feeds + syndication tooling; first-party anonymous analytics incl. opt-in
 device location; LTAC survey; a production persistence seam (file, or
-Neon/Blob/Upstash) with health probe and backup/restore.
+Postgres/Blob/Upstash) with health probe and backup/restore.
 
 **Out of scope (v1, explicitly):** payment processing; user accounts for
 *visitors*; native mobile apps; scraping any ToS-protected platform (Airbnb
@@ -524,7 +524,7 @@ full audit + keyboard-first map alternative formalized.
 
 The system must run unchanged on a persistent-disk host **or** a serverless host
 with no code change above the store layer. Since E05 structured data lives in
-Neon Postgres on every host; only the image and rate-limit seams
+Render Postgres on every host; only the image and rate-limit seams
 (`src/lib/data-dir.ts`, `blob-store.ts`, `rate-limit.ts`) still branch on env
 presence, and nothing above the stores knows which backend is active.
 
@@ -577,7 +577,7 @@ it learns from.
 | `SETUP_TOKEN` | no | Gates first-run admin bootstrap fail-closed; unused once an admin exists |
 | `DATA_DIR` | disk hosts | Persistent volume path (e.g. `/data`) — images/hunt photos since E05 |
 | `FERRY_OBSERVE_TOKEN` | no | Locks `/api/ferry/observe` when an off-site scheduler calls it |
-| `DATABASE_URL` | **yes** (E05) | Neon Postgres (pooled URL) — the structured-data home; health 503s without it |
+| `DATABASE_URL` | **yes** (E05) | Render Postgres (internal URL via `fromDatabase`) — the structured-data home; health 503s without it |
 | `BLOB_READ_WRITE_TOKEN` | Phase 2 | Vercel Blob for uploaded images |
 | `UPSTASH_REDIS_REST_URL` / `_TOKEN` | Phase 2 | Shared rate-limit backend |
 
@@ -630,7 +630,7 @@ it learns from.
 4. Does the Chamber want volunteer *signup* handled in-app (accounts for
    volunteers) or is the contact-the-org path permanent?
 5. PWA scope for v2: offline schedules only, or full page caching?
-6. Phase 2 trigger: structured data already moved to Neon (E05, live in
+6. Phase 2 trigger: structured data already moved to Render Postgres (E05, live in
    production). What event moves the remaining seams — image storage and rate
    limiting — off Render's disk to the Blob/Upstash backends (traffic, cost, or
    the custom-domain launch)?

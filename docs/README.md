@@ -7,7 +7,7 @@ the companion to [explorekingstonwa.com](https://explorekingstonwa.com).
 
 **Status:** Phase 1 is **deployed and live on Render**
 (https://explore-kingston.onrender.com) — Next.js 16 in a Docker/standalone
-image; since E05 all structured data lives in **Neon Postgres**
+image; since E05 all structured data lives in **Render Postgres**
 (`DATABASE_URL` required — health fails closed without it) and the persistent
 disk holds images/hunt photos. A serverless Phase 2 (Vercel + Vercel Blob +
 Upstash) is built and ready but not yet in use.
@@ -29,7 +29,7 @@ rules, platform-sync feasibility) that were the expensive part to establish.
 | [DATA_SOURCES.md](DATA_SOURCES.md) | Every external data source — endpoints, access, cost, verified facts, gotchas (WCF dates, GTFS expiry 2026-09-12, WSF "Best Times" calibration, NWS/NOAA), self-collected ferry observations, Chamber action items, hosting/DNS plan | Touching any adapter; seasonal maintenance; new source |
 | [SYNDICATION.md](SYNDICATION.md) | "Update once, everywhere" — the shipped feeds/embeds/JSON-LD, and the verified per-platform plan for Google / Apple / Yelp / Meta / TikTok | Building outbound integrations; setting member expectations |
 | [OPERATIONS.md](OPERATIONS.md) | Runbook for the live deployment — setup, env vars, the `DATA_DIR` state tree + two backup layers, admin operations, DB-migration path, dated seasonal maintenance calendar, human action items, troubleshooting | Running the thing; onboarding an operator |
-| [DEPLOY.md](DEPLOY.md) | Two-phase go-live — Phase 1 (Docker/Render/Fly + Neon Postgres, `DATA_DIR` disk for images, `/api/health`) which is the current live shape, and Phase 2 (Vercel serverless: Blob/Upstash, migration, DNS CNAME) | Deploying; planning the Vercel move |
+| [DEPLOY.md](DEPLOY.md) | Two-phase go-live — Phase 1 (Docker/Render/Fly + Render Postgres, `DATA_DIR` disk for images, `/api/health`) which is the current live shape, and Phase 2 (Vercel serverless: Blob/Upstash, migration, DNS CNAME) | Deploying; planning the Vercel move |
 | [ROADMAP-V2.md](ROADMAP-V2.md) | What shipped since v1 (DB seam, deploy, rate limiting, CMSs) vs the prioritized P0/P1/P2 backlog — mobile/PWA, ferry-forecast maturation, events ingest, tests/CI, a11y — plus keep/change guidance for a rebuild | Planning the next phase or a v2 rewrite |
 | [KIOSK.md](KIOSK.md) | Software design for a fullscreen touch "kiosk mode" that replaces the third-party Qwick Tourist kiosk — the decision to build it as an in-app `(kiosk)` route group (not a separate app), routing/layout, the `KioskShell` client runtime, ISR-driven remote updates, offline/PWA, and the on-device Chromium-kiosk setup | Building the ferry-terminal kiosk; replacing Qwick |
 | [KIOSK-POWER.md](KIOSK-POWER.md) | Hardware power budget + off-grid solar/battery feasibility for that kiosk at Kingston's latitude — mini-PC picks (12V-native), the display-dominates math, the PNW-winter solar reality (Dec ~1.3 sun-hours), a measured-wattage lookup table, and a straight power-drop-vs-solar verdict | Siting/powering the kiosk; sizing solar+battery |

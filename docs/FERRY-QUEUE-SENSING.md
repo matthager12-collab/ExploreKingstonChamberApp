@@ -392,7 +392,7 @@ This resolves the earlier contradiction: there is **one** aggregate schema, it c
 - **Behavioral thresholds** (`CORRIDOR_M`/per-segment, `DWELL_MIN`, `BEHAVIORAL_MIN`) and `SPACING_M` are field-calibrated against self-mark/QR labels **before behavioral is trusted beyond admin preview.**
 - **Precedent to watch:** the planner's first accuracy sample showed the heuristic over-predicts busyness on near-empty early-July-evening boats (bias ≈ +22). The queue signal may *correct* that once probes arrive — validate before enabling public.
 
-**Cron (reuse the exact pattern of the `ferry-observe` / `ferry-accuracy` Render crons in `render.yaml` — app crons live on Render since E15 slice 4, service-hours-gated so overnight polls don't keep the Neon compute awake):**
+**Cron (reuse the exact pattern of the `ferry-observe` / `ferry-accuracy` Render crons in `render.yaml` — app crons live on Render since E15 slice 4, service-hours-gated since there is nothing to observe overnight):**
 - `queue-observe` Render cron → `GET /api/ferry/queue/observe?token=FERRY_OBSERVE_TOKEN` every 5–10 min during service hours (~5 AM–12:30 AM Pacific). Token-gated identically to `/api/ferry/observe` (`src/app/api/ferry/observe/route.ts` lines 22–32; curl-image cron with retries). **This cron flushes the roll-up; it is unrelated to live probe ingest.**
 - `queue-accuracy` Render cron → runs post-observe to update the accuracy snapshot against the label sources above.
 

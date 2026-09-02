@@ -35,7 +35,7 @@ committed in the repo (needs periodic re-verification) · **planned** = document
 yet built. "Derived" = the app manufactures the data itself (forecast model + observation log).
 
 > **Persistence note.** Every mutable store branches on env presence: filesystem under
-> `DATA_DIR` on the persistent-disk host (Render, live), or Neon Postgres / Vercel Blob /
+> `DATA_DIR` on the persistent-disk host (Render, live), or Postgres / Vercel Blob /
 > Upstash on serverless. This is invisible to the data sources below but see
 > [ARCHITECTURE.md](ARCHITECTURE.md) and the env table at the end.
 
@@ -172,7 +172,7 @@ them itself and learns from the record.
 |---|---|
 | Producer | `recordSailingSpaceSnapshot()` in `src/lib/stores/ferry-observations.ts`, called fire-and-forget from `ferry-status.ts` on organic traffic (throttled ≥ 10 min) |
 | Backfill | `POST /api/ferry/observe` — point a scheduler at it for overnight gaps; write is internally throttled so extra hits return `recorded:false` |
-| Scheduler | `ferry-observe` Render cron in `render.yaml`, `*/15 0-7,11-23 * * *` UTC — every 15 min during ferry service hours (08–10 UTC skipped: overnight sailing gap, lets the Neon compute suspend) |
+| Scheduler | `ferry-observe` Render cron in `render.yaml`, `*/15 0-7,11-23 * * *` UTC — every 15 min during ferry service hours (08–10 UTC skipped: overnight sailing gap) |
 | Scope | Edmonds–Kingston only; the next `SAILINGS_PER_DIR = 2` upcoming sailings per direction; delay stamped only on the soonest |
 | Storage | Append-only, same file/DB seam as analytics: JSONL at `DATA_DIR/ferry/observations.jsonl`, or the `ferry_observation(ts, obs jsonb)` Postgres table. Retention `RETENTION_DAYS = 90`, pruned ~every 48 writes |
 | Consumer | `getEmpiricalBusyness()` aggregates snapshots into an `EmpiricalTable` keyed direction × season × weekday × hour; `scoreAt()` blends it into the heuristic, weighted by sample count (`EMP_MIN_SAMPLES = 3`, ramping to `EMP_MAX_WEIGHT = 0.75` at n = 40) so early estimates stay heuristic and grow data-driven. **Holidays skip the blend** (rare spikes would wash out against ordinary-day averages) |
@@ -599,7 +599,7 @@ Authoritative source: `.env.production.example`, `render.yaml`, `fly.toml`. See
 | `NEXT_PUBLIC_SITE_URL` | **required in production** | Absolute origin for shared-link cards / feeds (`layout.tsx` `metadataBase`) | Wired in `render.yaml`/`fly.toml`/`.env.production.example`. **Build-time** — a dashboard-only change needs a rebuild. Defaults to `http://localhost:3000` if unset |
 | `FERRY_OBSERVE_TOKEN` | **required in production** | Gates `/api/ferry/{observe,accuracy}` | `Authorization: Bearer` header only; unset in production → those routes answer 503 (fail closed). Open without it only under `npm run dev` |
 | `AUTH_SECRET` | **required** | Signs session cookies (`auth.ts`) | Not a data source, but required to boot |
-| `DATABASE_URL` | **required (all deploys, E05)** | Neon Postgres — `record` + append tables (`analytics_event`/`survey_response`/`ferry_observation`); the only home for structured data | POOLED url (host has `-pooler`), ending `?sslmode=verify-full` (docs/DEPLOY.md §2e — Neon's copy button gives `require`, which pg v9 will reinterpret as unauthenticated). `/api/health` 503s without it, so a deploy missing it fails closed |
+| `DATABASE_URL` | **required (all deploys, E05)** | Render Postgres — `record` + append tables (`analytics_event`/`survey_response`/`ferry_observation`); the only home for structured data | Internal URL, Blueprint-managed via `fromDatabase` — never typed, no `-pooler` host, no `sslmode` param (docs/DEPLOY.md §2). `/api/health` 503s without it, so a deploy missing it fails closed |
 | `BLOB_READ_WRITE_TOKEN` | prod-only (Vercel) | Vercel Blob for uploaded images | `hasBlob()` auto-detects |
 | `UPSTASH_REDIS_REST_URL` / `_TOKEN` | prod-only (Vercel) | Shared rate limiter (`rate-limit.ts`) | Needed on serverless; else in-process Map |
 | `DATA_DIR` | disk hosts | Persistent-disk root (`/data` on Render) — since E05 holds only images/hunt photos (until E15) | **NOT set on Vercel** — Blob takes over images |
