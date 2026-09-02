@@ -320,6 +320,77 @@ services:
           name: explore-kingston
           envVarKey: WORKLIST_SWEEP_TOKEN
 
+  # ── ONE-SHOT: copy Neon -> Render Postgres (2026-09-02 cutover) ───────────
+  #
+  # MANUAL-TRIGGER ONLY. The schedule below (31 Feb) never matches, so this
+  # runs only from the dashboard's "Trigger Run". Both URLs flow inside
+  # Render: SOURCE_URL is the web service's own (Neon) DATABASE_URL via
+  # fromService, TARGET_URL is the new database's internal URL via
+  # fromDatabase — nobody types a secret, and the log carries only counts.
+  #
+  # Guards: the script refuses unless the source host is *.neon.tech and
+  # differs from the target, so a run after the web service has been
+  # repointed at explore-kingston-db (when SOURCE_URL would equal the live
+  # Render DB) exits 1 instead of pg_restore --clean'ing production into
+  # itself. Blueprint sync NEVER deletes a resource, so removing this block
+  # from render.yaml later leaves the cron alive: delete it in the dashboard
+  # once the cutover is verified (remove from this file first, then delete,
+  # or the next sync recreates it).
+  #
+  # Neon's pooled host (-pooler, PgBouncer) can't serve pg_dump's session-
+  # level features, so the direct host is derived by dropping "-pooler."
+  # from the hostname. The Neon URL's sslmode=verify-full needs a root
+  # store: PGSSLROOTCERT points at the image's CA bundle (a FILE path — the
+  # "system" keyword would force verify-full onto the Render-internal target
+  # URL too, and that host has no public certificate). pg_restore runs in a
+  # single transaction, so a failed copy leaves the target unchanged and a
+  # rerun over a previous copy is idempotent (--clean --if-exists).
+  #
+  # The script lives in COPY_SCRIPT (no double quotes inside, on purpose —
+  # it must survive whichever way Render hands dockerCommand to a shell).
+  - type: cron
+    name: db-copy-neon-to-render
+    runtime: image
+    image:
+      url: docker.io/library/postgres:17-alpine
+    schedule: "0 0 31 2 *" # never matches; run via "Trigger Run" only
+    region: oregon
+    dockerCommand: sh -c "$COPY_SCRIPT"
+    envVars:
+      - key: COPY_SCRIPT
+        value: |
+          set -eu
+          set -f
+          set -o pipefail 2>/dev/null || true
+          SRC=$(printf %s $SOURCE_URL | sed 's/-pooler\././')
+          case $SRC in
+            *.neon.tech*) ;;
+            *) echo SOURCE_URL is not a Neon host, refusing; exit 1;;
+          esac
+          [ $SRC != $TARGET_URL ] || { echo source equals target, refusing; exit 1; }
+          echo copy: start
+          pg_dump --no-owner --no-privileges -Fc $SRC | pg_restore --no-owner --no-privileges --clean --if-exists --single-transaction -d $TARGET_URL
+          echo copy: restored
+          for u in $SRC $TARGET_URL; do
+            echo ===
+            psql $u -At <<'SQL'
+          select 'collation ' || datcollate || ' ' || datctype from pg_database where datname = current_database();
+          select table_schema || '.' || table_name || ' ' || (xpath('/row/c/text()', query_to_xml(format('select count(*) as c from %I.%I', table_schema, table_name), false, true, '')))[1]::text from information_schema.tables where table_schema in ('public', 'drizzle') and table_type = 'BASE TABLE' order by 1;
+          SQL
+          done
+          echo copy: done
+      - key: SOURCE_URL
+        fromService:
+          type: web
+          name: explore-kingston
+          envVarKey: DATABASE_URL
+      - key: TARGET_URL
+        fromDatabase:
+          name: explore-kingston-db
+          property: connectionString
+      - key: PGSSLROOTCERT
+        value: /etc/ssl/certs/ca-certificates.crt
+
   # NOT MOVED, deliberately:
   #  - backup-offsite (.github/workflows/backup-offsite.yml) stays on Actions.
   #    It installs `age` and encrypts the bundle ON THE RUNNER before anything
@@ -408,3 +479,19 @@ services:
       # and branch on this at request time.
       - key: NOINDEX
         value: "1"
+
+databases:
+  # E05 substrate, moved off Neon on 2026-09-02. Neon billed compute-awake
+  # hours and this always-on app never let it sleep (~$33/mo for a 70 MB
+  # database). 0.1c-256mb is $6/mo with 1 GB of storage included.
+  # Internal-only: ipAllowList [] refuses every public connection; the web
+  # service reaches it over Render's private network via fromDatabase. For a
+  # one-off external session add your IP here, merge, and remove it after —
+  # the Blueprint pins this list at every sync, so a dashboard edit would be
+  # reverted anyway.
+  - name: explore-kingston-db
+    plan: 0.1c-256mb
+    region: oregon
+    postgresMajorVersion: "17"
+    diskSizeGB: 1
+    ipAllowList: []
