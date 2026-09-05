@@ -23,6 +23,8 @@ import {
   anonymizeSignupsByEmail,
   findSignupsByEmail,
 } from "@/lib/db/volunteer-signups";
+import { deleteFeedbackByEmail, findFeedbackByEmail } from "@/lib/db/append";
+import type { FeedbackResponse } from "@/lib/types";
 import {
   anonymizeInvitesByEmail,
   anonymizeUser,
@@ -274,6 +276,63 @@ const volunteerSignups: PiiStore = {
   },
 };
 
+/**
+ * DEC-002 (docs/FEEDBACK-GUARDRAIL/decisions.md). This was a noIdentifierStore
+ * until the feedback panel started offering an optional address, and the note
+ * that used to sit in types.ts forbidding that field is honoured here rather
+ * than deleted.
+ *
+ * PARTIALLY searchable, and the wording below says so rather than implying
+ * otherwise. Most rows carry no address — the field is optional and always
+ * will be — and those remain findable only by their own wording, exactly as
+ * every row was before this change. Claiming a clean lookup would be the
+ * comfortable answer and the false one.
+ *
+ * The address is UNVERIFIED (DEC-005): anyone can type anyone else's. That is
+ * survivable only because fulfilment is admin-operated and a person reviews
+ * the matches before anything is deleted. Never automate deletion off this.
+ */
+const FEEDBACK_LOOKUP_NOTE =
+  "Feedback rows only carry an email if the visitor chose to leave one, and it was never verified, " +
+  "so an admin confirms a match before acting on it. Rows left without an email — most of them — can " +
+  "still only be found by their own wording: quote the text you remember writing and the Chamber will " +
+  "locate that row by hand. Everything here is deleted automatically 12 months after it was sent.";
+
+const feedbackResponses: PiiStore = {
+  store: "feedback_response",
+  description:
+    "In-app page feedback: a 1–5 star rating, an open comment, the page it was sent from, " +
+    "and an OPTIONAL, unverified name and email. The app's highest-PII-risk log — the comment " +
+    "is unstructured text a visitor can type anything into — which is why it carries the " +
+    "shortest retention window in the schedule at 12 months.",
+  hasEmailIdentifier: true,
+  async findByIdentifier(email) {
+    return findFeedbackByEmail<FeedbackResponse>(email);
+  },
+  async exportRecords(email) {
+    const rows = await findFeedbackByEmail<FeedbackResponse>(email);
+    return {
+      store: "feedback_response",
+      records: rows.map((r) => ({ id: r.id, ...r.response })),
+      note: FEEDBACK_LOOKUP_NOTE,
+    };
+  },
+  async deleteOrAnonymize(email) {
+    // Hard delete, not anonymize. The comment text IS the sensitive part, so a
+    // scrubbed shell would keep the risk and lose the point — the same call
+    // deleteFeedbackResponsesBefore makes for the retention purge.
+    const affected = await deleteFeedbackByEmail(email);
+    return {
+      store: "feedback_response",
+      affected,
+      note:
+        affected > 0
+          ? `Deleted ${affected} feedback submission(s) carrying that address. ${FEEDBACK_LOOKUP_NOTE}`
+          : FEEDBACK_LOOKUP_NOTE,
+    };
+  },
+};
+
 export const PII_STORES: PiiStore[] = [
   users,
   invites,
@@ -295,17 +354,7 @@ export const PII_STORES: PiiStore[] = [
     "Anonymous LTAC visitor-survey answers.",
     "Structurally anonymous — no field ties a survey response to a person, so there is nothing to find, export, or delete by identifier.",
   ),
-  noIdentifierStore(
-    "feedback_response",
-    "In-app page feedback: a 1–5 star rating, an open comment, and the page it was sent from.",
-    // Deliberately a different explanation from the survey's. The survey is
-    // anonymous by CONSTRUCTION — there is no free-text field to hide in. This
-    // store has no identifier FIELD, but its comment is unstructured text a
-    // visitor can type anything into, so an honest answer says the lookup is
-    // impossible rather than implying the store is provably clean. The 12-month
-    // window (the shortest published) is what actually bounds that exposure.
-    "The feedback form collects no name, email, or device identifier, so there is no key to search by — a comment can only be located by its own wording. If you recognise text you wrote, quote it in your request and the Chamber will find and delete that row by hand; otherwise everything here is deleted automatically 12 months after it was sent.",
-  ),
+  feedbackResponses,
   noIdentifierStore(
     "analytics_event",
     "Anonymous page/outbound/geo-ping/consent events.",

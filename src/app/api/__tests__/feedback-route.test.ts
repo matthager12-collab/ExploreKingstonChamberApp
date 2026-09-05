@@ -10,7 +10,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { POST, normalizeFeedbackPath } from "@/app/api/feedback/route";
 import { readFeedbackResponses } from "@/lib/db/append";
-import { FEEDBACK_COMMENT_MAX, REDACTED_PATH, type FeedbackResponse } from "@/lib/types";
+import {
+  FEEDBACK_COMMENT_MAX,
+  FEEDBACK_NAME_MAX,
+  REDACTED_PATH,
+  type FeedbackResponse,
+} from "@/lib/types";
 import { createTestDb, type TestDb } from "../../../../tests/setup/pglite-db";
 
 let tdb: TestDb;
@@ -99,23 +104,63 @@ describe("POST /api/feedback validation", () => {
     expect(saved).not.toHaveProperty("comment");
   });
 
-  it("never persists a contact field, even when a client sends one", async () => {
-    // The widget has no contact input; this proves the ROUTE is what keeps
-    // feedback_response a no-identifier store in PII_STORES, so a future
-    // client (or a hand-rolled POST) cannot quietly make it an identified one.
+  // This test used to assert the OPPOSITE — that the route dropped every
+  // contact-shaped field, which is what kept feedback_response a no-identifier
+  // store. DEC-002 reversed that deliberately, and the store now carries real
+  // find/export/delete handlers to match. What survives from the old test is
+  // the part that still matters: only the two fields we chose are kept, and a
+  // client cannot smuggle in a third.
+  it("keeps the name and address it was offered, and nothing else", async () => {
     const res = await post("198.51.100.24", {
       rating: 4,
       path: "/stay",
       comment: "call me",
-      email: "someone@example.com",
-      contact: "360-555-0100",
+      email: "Someone@Example.COM",
       name: "A Visitor",
+      contact: "360-555-0100",
+      phone: "360-555-0101",
     });
     expect(res.status).toBe(200);
     const saved = (await rows()).find((r) => r.path === "/stay");
-    expect(saved).not.toHaveProperty("email");
+    expect(saved?.name).toBe("A Visitor");
+    // Lowercased so the privacy lookup matches without a functional index.
+    expect(saved?.email).toBe("someone@example.com");
+    // Fields we never offered stay unstored, whatever a hand-rolled POST sends.
     expect(saved).not.toHaveProperty("contact");
+    expect(saved).not.toHaveProperty("phone");
+  });
+
+  it("drops a malformed address rather than rejecting the submission", async () => {
+    // The outbox deletes its copy on any 4xx, so a 400 over a typo would cost
+    // the Chamber the whole submission. The feedback is worth more than the
+    // address.
+    const res = await post("198.51.100.31", {
+      rating: 2,
+      path: "/eat",
+      comment: "the hours are wrong",
+      email: "not-an-address",
+      name: "   ",
+    });
+    expect(res.status).toBe(200);
+    const saved = (await rows()).find((r) => r.path === "/eat");
+    expect(saved?.comment).toBe("the hours are wrong");
+    expect(saved).not.toHaveProperty("email");
     expect(saved).not.toHaveProperty("name");
+  });
+
+  it("bounds a hostile name and address rather than storing them whole", async () => {
+    const res = await post("198.51.100.32", {
+      rating: 3,
+      path: "/do",
+      name: "n".repeat(500),
+      email: `${"e".repeat(400)}@example.com`,
+    });
+    expect(res.status).toBe(200);
+    const saved = (await rows()).find((r) => r.path === "/do");
+    expect(saved?.name?.length).toBe(FEEDBACK_NAME_MAX);
+    // Truncation breaks the address shape, so it is dropped rather than stored
+    // as a mangled identifier the privacy lookup could never match.
+    expect(saved).not.toHaveProperty("email");
   });
 });
 
@@ -128,13 +173,16 @@ describe("POST /api/feedback idempotent intake", () => {
 
     const first = await post("198.51.100.30", body, key);
     expect(first.status).toBe(200);
-    expect(await first.json()).toEqual({ ok: true });
+    expect(await first.json()).toEqual({ ok: true, moderated: false });
     expect(await countOf()).toBe(1);
 
     // What flushOutbox does when the 200 never reached the device.
     const replay = await post("198.51.100.30", body, key);
     expect(replay.status).toBe(200);
-    expect(await replay.json()).toEqual({ ok: true, duplicate: true });
+    // `moderated: false` on a replay is about THIS request, not the stored
+    // row: the original submission already told the visitor what happened, and
+    // the guardrail is deliberately not re-run (and not re-billed) on a replay.
+    expect(await replay.json()).toEqual({ ok: true, duplicate: true, moderated: false });
     expect(await countOf()).toBe(1);
   });
 

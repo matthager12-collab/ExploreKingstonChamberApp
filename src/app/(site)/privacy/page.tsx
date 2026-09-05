@@ -43,9 +43,10 @@ export default function PrivacyPage() {
               dropped and never stored.
             </li>
             <li>
-              The <strong>feedback tab</strong> asks for a rating and a comment, never for your
-              name or contact details. If you type personal details into the comment anyway, we
-              don&rsquo;t use them to identify you and you can have them deleted — see below.
+              The <strong>feedback tab</strong> asks for a rating and a comment, and offers your
+              name and email as <strong>optional</strong> fields so we can reply. Leave them blank
+              and your feedback stays anonymous. Comments are checked for abusive wording by an
+              outside service before we store them — see below.
             </li>
             <li>Everything we keep is on a published schedule and then deleted (see below).</li>
             <li>
@@ -157,26 +158,38 @@ export default function PrivacyPage() {
           <p className="text-sm text-ink-soft">
             The feedback tab on the side of each page asks two things: a star rating, and whatever
             you want to tell us. It also records <em>which page</em> you were on when you opened it,
-            so we can tell which part of the site you meant. It does not ask for your name, your
-            email, or any way to reach you — there is no field for any of those, and if a
-            submission arrives carrying one anyway, our server discards it before anything is
-            saved.
+            so we can tell which part of the site you meant.
           </p>
           <p className="mt-3 text-sm text-ink-soft">
-            That leaves one gap we can&rsquo;t close by design, so we will be plain about it
-            instead: <strong>a comment box will accept anything you type into it</strong>, including
-            your own name or phone number. If you put personal details in there, this is what
-            happens to them:
+            It also offers your <strong>name and email, both optional</strong>. They exist so
+            someone can reply to you. Leave them blank and nothing identifies your submission —
+            that is still the normal case, and the form works exactly the same either way. We
+            don&rsquo;t check that an address is really yours, so if you ask us to delete feedback
+            by email, a person reviews the match before anything is deleted.
+          </p>
+          <p className="mt-3 text-sm text-ink-soft">
+            <strong>Your comment is read by an outside service before we store it.</strong> This
+            site is built and maintained by one person, unpaid, and comments are sent to
+            Anthropic&rsquo;s API to check whether the wording is abusive. If it is, the comment is
+            rewritten in neutral language and <em>only the rewrite is saved</em> — your original
+            wording never reaches our database. Your name and email are <strong>never</strong> sent
+            to that service; only the comment text is. Nothing else you do on this site is sent
+            anywhere like this.
+          </p>
+          <p className="mt-3 text-sm text-ink-soft">
+            One gap we can&rsquo;t close by design, so we will be plain about it instead:{" "}
+            <strong>a comment box will accept anything you type into it</strong>, including your own
+            name or phone number. If you put personal details in there, this is what happens to
+            them:
           </p>
           <ul className="mt-3 space-y-2 text-sm text-ink-soft">
             <li>
               <strong>We don&rsquo;t use them to identify you.</strong> Feedback isn&rsquo;t linked
-              to an account, a profile, or anything else you did on this site — there is no
-              identifier stored next to it to link it to.
+              to an account, a profile, or anything else you did on this site.
             </li>
             <li>
-              <strong>We don&rsquo;t reply from it</strong> and we don&rsquo;t add you to any list.
-              If you want an answer, contact the Chamber directly.
+              <strong>We only reply if you asked us to</strong> by leaving an email, and we
+              don&rsquo;t add you to any list.
             </li>
             <li>
               <strong>Only Chamber administrators can read it.</strong> Feedback is never published
@@ -187,10 +200,10 @@ export default function PrivacyPage() {
               above. It is set short for exactly this reason.
             </li>
             <li>
-              <strong>You can have it removed sooner.</strong> Use the form below and quote the
-              wording you remember writing. Because feedback is stored without any identifier,
-              that quote is the only way we can locate your entry — but with it, we can find it and
-              delete it.
+              <strong>You can have it removed sooner.</strong> If you left an email, use the form
+              below and we can find your submissions by it. If you didn&rsquo;t — and most people
+              don&rsquo;t — quote the wording you remember writing instead, because that is then
+              the only way we can locate your entry.
             </li>
           </ul>
         </Card>

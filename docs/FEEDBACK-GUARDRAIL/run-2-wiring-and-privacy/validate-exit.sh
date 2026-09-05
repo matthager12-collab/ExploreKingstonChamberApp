@@ -61,10 +61,30 @@ if [[ ! -f package.json ]]; then
 fi
 
 echo "=== Entry criteria ==="
-# Re-run run 1's gate rather than trusting the handoff.
-check "run 1 exit criteria still hold" "$HERE/../run-1-sealed-seam/validate-exit.sh"
+# What run 2 actually depends on from run 1: the seam exists, still exports the
+# contract, and is still sealed.
+#
+# It deliberately does NOT nest run 1's whole gate, which was the first version
+# of this check and was wrong. Run 1's gate asserts a blast radius confined to
+# five files — correct on run 1's branch, and guaranteed to fail on run 2's,
+# whose entire job is to change the fourteen files run 1 was forbidden to
+# touch. Nesting it made this gate report failure for doing the work. (Found
+# 2026-08-23, running run 2's own gate.)
+absent_from() { # absent_from <file> <extended-regex>; filenames stripped first
+  test -f "$1" || return 1
+  ! sed -E 's/[A-Za-z0-9_-]+\.(ts|tsx|js|mjs|md)//g' "$1" | grep -qiE "$2"
+}
+export -f absent_from
+
+check "the seam is present" test -f "$MODULE"
 check "moderateComment is exported" \
   bash -c 'grep -qE "export (async )?function moderateComment" "$0"' "$MODULE"
+check "C1 — the seam still declares no tools" \
+  bash -c 'absent_from "$0" "\"?tools\"?[[:space:]]*:"' "$MODULE"
+check "C8 — the seam still never throws" \
+  bash -c 'absent_from "$0" "throw |Promise\.reject"' "$MODULE"
+check "C6 — no contact data reachable from the seam" \
+  bash -c 'absent_from "$0" "\bemail\b|\bfullName\b|body\.name"' "$MODULE"
 check "T-01 finding recorded (no implementation-order note left)" \
   bash -c '! grep -q "Implementation-order note" "$0"' "$HERE/../design.md"
 
@@ -112,7 +132,7 @@ check "feedback_response no longer registered as identifier-free" \
 
 # 6. No raw HTML sink anywhere on the feedback path (control C5).
 check "no dangerouslySetInnerHTML on the feedback path" \
-  bash -c '! grep -rq "dangerouslySetInnerHTML" src/components/feedback-tab.tsx "src/app/(site)/admin/feedback/"'
+  bash -c '! grep -rq "dangerouslySetInnerHTML" src/components/feedback-tab.tsx "src/app/(admin)/admin/feedback/"'
 
 # 7. No secret in the run's commits.
 check "no API key value in any tracked file" \

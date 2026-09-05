@@ -803,7 +803,7 @@ export const COPY_BLOCKS = [
     page: "Page feedback (client)",
     label: "Panel intro",
     multiline: true,
-    fallback: "Tell the Chamber what's working and what isn't. Anonymous — don't include your name or contact details.",
+    fallback: "Tell the Chamber what's working and what isn't. Your name and email are optional — leave them only if you'd like a reply.",
   },
   {
     key: "feedback.rating.legend",
@@ -829,6 +829,39 @@ export const COPY_BLOCKS = [
     label: "Thank-you message",
     multiline: true,
     fallback: "Thanks — the Chamber reads every one of these.",
+  },
+  {
+    key: "feedback.name.label",
+    page: "Page feedback (client)",
+    label: "Name field label",
+    fallback: "Your name (optional)",
+  },
+  {
+    key: "feedback.email.label",
+    page: "Page feedback (client)",
+    label: "Email field label",
+    fallback: "Your email (optional)",
+  },
+  {
+    // Sits under the two contact fields. Says why they are being asked for and
+    // what happens if they are left blank, because the previous version of this
+    // panel told visitors NOT to leave contact details and some will remember.
+    key: "feedback.contact.hint",
+    page: "Page feedback (client)",
+    label: "Contact fields hint",
+    multiline: true,
+    fallback: "Only used to reply to you. Leave both blank to stay anonymous.",
+  },
+  {
+    // Shown instead of feedback.thankyou when the guardrail rewrote the
+    // comment. The wording is deliberately direct — it is the whole reason the
+    // feature exists — and lives here so the Chamber can soften or sharpen it
+    // from /admin/content without a deploy.
+    key: "feedback.thankyou.moderated",
+    page: "Page feedback (client)",
+    label: "Thank-you message (comment rewritten)",
+    multiline: true,
+    fallback: "Thanks for your feedback. This tool is built for free by one person. He uses feedback to make it better, but doesn't appreciate rude people. Your feedback has been submitted with the substance kept and the tone removed. If you'd like to discuss it, leave your email.",
   },
   {
     // Shown instead of feedback.thankyou when the submission went to the

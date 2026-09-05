@@ -5,19 +5,33 @@
 // public POSTs carried by the offline outbox, and two intake routes that drift
 // apart is how one of them quietly stops being safe.
 //
-// What is NOT here, on purpose: any contact field. The widget never asks for
-// one and this route would drop it, which is what keeps feedback_response a
-// no-identifier store in PII_STORES.
+// Two things this route now does that it deliberately did not before, both
+// from docs/FEEDBACK-GUARDRAIL:
+//
+//   1. It accepts an OPTIONAL name and address (DEC-002/DEC-005). That is what
+//      turned feedback_response from a no-identifier store into a full
+//      PiiStore, so the handlers in src/lib/privacy/pii-inventory.ts are part
+//      of this feature, not a follow-up.
+//   2. It runs the comment past the rudeness guardrail and stores the neutral
+//      rewrite instead of the original when one comes back (DEC-003/DEC-004).
+//
+// Bad contact input is DROPPED, never rejected. The outbox deletes its copy on
+// any 4xx, so a 400 over a mistyped address would cost the Chamber the whole
+// submission — the same reasoning that makes an over-long comment truncate
+// rather than fail.
 
 import { NextRequest } from "next/server";
 import { claimIdempotencyKey, releaseIdempotencyKey } from "@/lib/db/idempotency";
 import { feedbackStore } from "@/lib/feedback-store";
+import { moderateComment } from "@/lib/feedback-moderation";
 import { isSensitivePath } from "@/lib/privacy/policy";
 import { checkRateLimit, clientKey } from "@/lib/rate-limit";
 import {
   FEEDBACK_COMMENT_MAX,
+  FEEDBACK_EMAIL_MAX,
   FEEDBACK_MAX_RATING,
   FEEDBACK_MIN_RATING,
+  FEEDBACK_NAME_MAX,
   REDACTED_PATH,
   type FeedbackResponse,
 } from "@/lib/types";
@@ -52,6 +66,39 @@ export function normalizeFeedbackPath(raw: unknown): string {
   if (!pathOnly.startsWith("/")) return "(unknown)";
   const bounded = pathOnly.slice(0, MAX_PATH_LENGTH);
   return isSensitivePath(bounded) ? REDACTED_PATH : bounded;
+}
+
+/**
+ * Deliberately loose. This is not validation in the "reject bad input" sense —
+ * it is a filter that keeps a usable address and silently discards anything
+ * else, because the submission must survive either way (see the header).
+ *
+ * The shape test is one `@` with something either side and a dot in the domain.
+ * Chasing RFC 5322 with a regex is a well-known dead end, and the address is
+ * unverified regardless (DEC-005), so a stricter pattern would only reject
+ * real addresses while proving nothing about the ones it lets through.
+ */
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@.]+\.[^\s@]+$/;
+
+export function normalizeContact(body: {
+  name?: unknown;
+  email?: unknown;
+}): { name?: string; email?: string } {
+  const out: { name?: string; email?: string } = {};
+
+  if (typeof body.name === "string") {
+    const name = body.name.trim().slice(0, FEEDBACK_NAME_MAX);
+    if (name) out.name = name;
+  }
+
+  if (typeof body.email === "string") {
+    // Lowercased so the privacy lookup can match without a functional index,
+    // and so two submissions from one person collate.
+    const email = body.email.trim().toLowerCase().slice(0, FEEDBACK_EMAIL_MAX);
+    if (EMAIL_SHAPE.test(email)) out.email = email;
+  }
+
+  return out;
 }
 
 export async function POST(request: NextRequest) {
@@ -107,8 +154,15 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: "invalid idempotency key" }, { status: 400 });
     }
     if (claim === "duplicate") {
-      // A replay of something already stored. Success, without a second row.
-      return Response.json({ ok: true, duplicate: true });
+      // A replay of something already stored. Success, without a second row —
+      // and, just as importantly, without a second model call. That is why the
+      // guardrail runs BELOW this point and not above it: an outbox replaying
+      // a week of queued submissions must not pay for them twice.
+      //
+      // `moderated: false` here is about THIS request, not the stored row. The
+      // original submission already told the visitor whether it was rewritten;
+      // a replay has no visitor waiting on an answer.
+      return Response.json({ ok: true, duplicate: true, moderated: false });
     }
   }
 
@@ -117,11 +171,22 @@ export async function POST(request: NextRequest) {
       ? body.comment.trim().slice(0, FEEDBACK_COMMENT_MAX)
       : undefined;
 
+  // The guardrail. Skipped entirely when there is no comment, which is most
+  // submissions (control C9). `moderateComment` never rejects, by contract, and
+  // reports `checked: false` for every failure — unset key, timeout, 5xx, or an
+  // off-schema reply. In all of those the visitor's words are stored exactly as
+  // written and they see the ordinary thank-you (DEC-006).
+  const verdict = comment ? await moderateComment(comment) : { checked: false as const };
+  const rewritten = verdict.checked && verdict.rude;
+  const storedComment = rewritten ? verdict.cleaned : comment;
+
   const response: FeedbackResponse = {
     submittedAt: new Date().toISOString(),
     rating,
-    ...(comment ? { comment } : {}),
+    ...(storedComment ? { comment: storedComment } : {}),
     path: normalizeFeedbackPath(body.path),
+    ...(rewritten ? { moderated: true } : {}),
+    ...normalizeContact(body),
   };
 
   try {
@@ -137,7 +202,11 @@ export async function POST(request: NextRequest) {
     if (idempotencyKey) await releaseIdempotencyKey(idempotencyKey);
     console.warn("feedback: store unavailable, response dropped");
   }
-  return Response.json({ ok: true });
+  // `moderated` tells the widget which thank-you to render. It is the ONLY
+  // thing the client learns about the guardrail: the rewrite itself is not
+  // echoed back, because showing someone a sanitised version of what they just
+  // wrote invites them to try again with the sanitiser in view.
+  return Response.json({ ok: true, moderated: rewritten });
 }
 
 /** Aggregate summary for the admin page. Admin-only — the free text here is

@@ -32,6 +32,11 @@ function mutatedRows(res: unknown): number {
   return r.rowCount ?? r.affectedRows ?? 0;
 }
 
+/** Rows off a raw `execute`. Same shape as the helper in privacy-retention.ts. */
+function rowsOf<T>(res: unknown): T[] {
+  return ((res as { rows?: unknown[] }).rows ?? []) as T[];
+}
+
 export async function appendAnalyticsEvent(event: unknown): Promise<void> {
   await getDb().insert(analyticsEvent).values({ event });
 }
@@ -142,6 +147,47 @@ export async function deleteFeedbackResponseById(id: number): Promise<number> {
   const res = await getDb()
     .delete(feedbackResponse)
     .where(eq(feedbackResponse.id, id));
+  return mutatedRows(res);
+}
+
+/**
+ * Feedback rows carrying this address, newest first.
+ *
+ * The other half of DEC-002: `feedback_response` stopped being a no-identifier
+ * store when the widget started offering an optional address, and a store with
+ * an identifier owes the person behind it a working access and deletion path.
+ *
+ * Case-insensitive because the address is whatever a visitor typed. The route
+ * lowercases on the way in, so this mostly matters for rows written by an
+ * older client or by hand.
+ *
+ * `= lower(...)` and not `like`: the parameter is a requester-supplied string,
+ * and under `like` a `%` in it would match every row in the table. That is a
+ * privacy incident wearing a convenience feature's clothes.
+ */
+export async function findFeedbackByEmail<T>(email: string): Promise<{ id: number; response: T }[]> {
+  const res = await getDb().execute(
+    sql`SELECT id, response FROM feedback_response
+        WHERE lower(response->>'email') = lower(${email})
+        ORDER BY id DESC`,
+  );
+  return rowsOf<{ id: number; response: T }>(res);
+}
+
+/**
+ * Hard-delete every feedback row carrying this address, and report how many
+ * went.
+ *
+ * A hard delete, not an anonymisation, matching deleteFeedbackResponsesBefore
+ * in privacy-retention.ts and for the same reason: the comment text IS the
+ * sensitive part here, so a scrubbed shell of the row would keep the risk and
+ * lose the point.
+ */
+export async function deleteFeedbackByEmail(email: string): Promise<number> {
+  const res = await getDb().execute(
+    sql`DELETE FROM feedback_response
+        WHERE lower(response->>'email') = lower(${email})`,
+  );
   return mutatedRows(res);
 }
 

@@ -132,6 +132,28 @@ future reader of design.md § Contracts does.
 
 The flaky-suite finding above is the only blocker.
 
+## Two gate defects found by running the gates (2026-08-23)
+
+Both were in scripts this project wrote, and both were the kind that report the wrong
+answer rather than no answer.
+
+**Run 1's C6 check passed against a file that did not exist.** `grep` on a missing file
+exits 2, and the `!` inversion turned that into success — so four containment checks
+reported PASS before the module was written. Fixed with a `test -f` guard, then
+re-verified in both directions.
+
+**Run 2's entry check nested run 1's entire gate, including its blast-radius check.**
+That check asserts nothing outside the seam changed: correct on run 1's branch, and
+guaranteed to fail on run 2's, whose whole job is to change the fourteen files run 1 was
+forbidden to touch. The gate reported failure for doing the work. It now checks what run
+2 actually depends on — the seam exists, still exports the contract, and its containment
+greps still hold.
+
+A third failure was environmental rather than a defect: *"Standalone server did not
+become healthy within 60s"* is what `test:server` reports when an **orphaned server from
+a killed run still holds port 3105**. `lsof -nP -iTCP:3105 -sTCP:LISTEN` before believing
+it. It cost time twice in one session and was misread the first time as a harness quirk.
+
 ## Validation scripts — executed, not just written
 
 Both `validate-exit.sh` scripts were run on 2026-08-21, each in both directions.

@@ -75,10 +75,24 @@ change.
 **Decision**: A.
 
 **Consequences**: Phase 3 is as large as Phases 1 and 2 together, and cannot be
-deferred or shipped separately — the coverage test fails the moment the identifier
-lands, so the feature and its privacy work are one atomic release. Historic rows with
-no email stay unfindable, which the export note must say plainly rather than implying
-the whole store became searchable.
+deferred or shipped separately. Historic rows with no email stay unfindable, which the
+export note must say plainly rather than implying the whole store became searchable.
+
+**Correction, 2026-08-23 (found while executing run 2).** This entry originally said
+"the coverage test fails the moment the identifier lands, so the feature and its
+privacy work are one atomic release." **That was false, and it was the enforcement
+this decision leaned on.** Adding `email` to `FeedbackResponse` and storing it left the
+whole suite green: `pii-inventory.test.ts` checked that *registered* stores implement
+handlers and that the known-store list is complete, neither of which can notice that a
+store's *data* grew an identifier while its registration stayed identifier-free — the
+exact mistake worth catching, because it silently makes `docs/PRIVACY.md` and the
+public notice untrue.
+
+A tripwire that does trip was added in the same run (`tests/unit/pii-inventory.test.ts`
+§ "the tripwire actually trips"), asserting that any store whose rows can carry an
+address declares `hasEmailIdentifier`. It was mutation-tested: flipping
+`feedback_response` back to `false` fails two tests. **The atomicity is now enforced by
+that test rather than by assumption.**
 
 **Applied to**:
 - [design.md](./design.md) § Contracts
