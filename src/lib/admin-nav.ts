@@ -109,6 +109,15 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     section: "experiences",
   },
   {
+    id: "scarecrow",
+    href: "/admin/scarecrow",
+    title: "Scarecrow Crawl",
+    navLabel: "Scarecrow",
+    blurb: "Running vote counts for the crawl, and the photos visitors sent in.",
+    capability: "manage-site",
+    section: "experiences",
+  },
+  {
     id: "ferry",
     href: "/admin/ferry-info",
     title: "Ferry settings",
