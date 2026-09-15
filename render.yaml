@@ -80,6 +80,12 @@ services:
       - key: WSDOT_API_KEY
         sync: false
 
+      # Reads a pasted Facebook/Instagram post into a draft event in the
+      # business portal (src/lib/events/extract-post.ts). Without it the paste
+      # button 502s and members fill the form in by hand. Metered per call.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+
       # GitHub token for the "Request permanent change" button on /admin/content
       # (src/lib/github.ts). A fine-grained PAT with Issues: Read & Write on the
       # app repo. Without it the button is hidden and the API returns 503 — the
@@ -352,6 +358,9 @@ services:
       - key: AUTH_SECRET
         generateValue: true
       - key: WSDOT_API_KEY
+        sync: false
+      # Paste-a-post event extraction (see the production service above).
+      - key: ANTHROPIC_API_KEY
         sync: false
       # Own origin for share-card/canonical URLs — set to this service's
       # onrender.com URL in the dashboard once it's provisioned.
