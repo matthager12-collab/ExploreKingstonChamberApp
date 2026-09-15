@@ -69,6 +69,13 @@ export function EventsForm({
 }) {
   const [events, setEvents] = useState<EventItem[]>(initialEvents);
   const [draft, setDraft] = useState<EventDraft | null>(null);
+  // Paste-a-post: the member brings the text from Facebook or Instagram and we
+  // pre-fill the form from it. `hint` rides along into the draft — what we read
+  // back is a starting point to correct, never an answer to trust.
+  const [paste, setPaste] = useState<{ open: boolean; text: string; busy: boolean; error: string }>(
+    { open: false, text: "", busy: false, error: "" },
+  );
+  const [hint, setHint] = useState("");
   // Fetched deconfliction results, remembered with the date they answer for —
   // the visible list is derived, so a date change instantly clears stale hits.
   const [dayCheck, setDayCheck] = useState<{ date: string; events: EventItem[] }>({
@@ -112,7 +119,34 @@ export function EventsForm({
     };
   }
 
+  async function readPost() {
+    setPaste((p) => ({ ...p, busy: true, error: "" }));
+    try {
+      const res = await fetch("/api/portal/events/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: paste.text, ownerId: initial.id }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        draft?: Omit<EventDraft, "repeat"> & { unsure: boolean; notes: string };
+      };
+      if (!res.ok || !data.draft) throw new Error(data.error ?? "Couldn't read that one.");
+      const { unsure, notes, ...fields } = data.draft;
+      setDraft({ ...fields, venue: fields.venue || initial.name, repeat: {} });
+      setHint(
+        unsure
+          ? `Check this one before you save${notes ? ` — ${notes}` : ", especially the date."}`
+          : notes,
+      );
+      setPaste({ open: false, text: "", busy: false, error: "" });
+    } catch (err) {
+      setPaste((p) => ({ ...p, busy: false, error: (err as Error).message }));
+    }
+  }
+
   function editEvent(ev: EventItem) {
+    setHint("");
     setDraft({
       id: ev.id,
       title: ev.title,
@@ -240,6 +274,8 @@ export function EventsForm({
             {draft.id ? "Edit event" : "New event"}
           </p>
           <form onSubmit={saveDraft} className="mt-4 flex flex-col gap-5">
+            {hint && <Callout title="Read from your post">{hint}</Callout>}
+
             <TextField label="Title" value={draft.title} onChange={setE("title")} required />
 
             <div className="grid gap-5 sm:grid-cols-2">
@@ -322,17 +358,73 @@ export function EventsForm({
               <Button type="submit" pending={eventSave.busy}>
                 {draft.id ? "Save changes" : "Add event"}
               </Button>
-              <Button variant="ghost" type="button" onClick={() => setDraft(null)}>
+              <Button
+                variant="ghost"
+                type="button"
+                onClick={() => {
+                  setDraft(null);
+                  setHint("");
+                }}
+              >
                 Cancel
               </Button>
               <SaveMessage message={eventSave.message} />
             </div>
           </form>
         </div>
+      ) : paste.open ? (
+        <div className="rounded-xl border border-border bg-surface-sunken p-4">
+          <p className="font-display text-lg font-semibold text-primary-deep">
+            Paste your post
+          </p>
+          <p className="mt-1 text-sm text-ink-soft">
+            Copy the text of a Facebook or Instagram post — or an email, or a flyer — and
+            we&apos;ll fill the form in. You get to check it before anything is saved.
+          </p>
+          <TextAreaField
+            label="The post"
+            value={paste.text}
+            onChange={(e) => setPaste((p) => ({ ...p, text: e.target.value }))}
+            rows={6}
+          />
+          {paste.error && (
+            <p className="mt-2 text-sm font-semibold text-ink">{paste.error}</p>
+          )}
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              pending={paste.busy}
+              disabled={!paste.text.trim()}
+              onClick={() => void readPost()}
+            >
+              Read it
+            </Button>
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={() => setPaste({ open: false, text: "", busy: false, error: "" })}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
       ) : (
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" onClick={() => setDraft(blankDraft())}>
+          <Button
+            type="button"
+            onClick={() => {
+              setHint("");
+              setDraft(blankDraft());
+            }}
+          >
             + Add an event
+          </Button>
+          <Button
+            variant="ghost"
+            type="button"
+            onClick={() => setPaste({ open: true, text: "", busy: false, error: "" })}
+          >
+            Paste from Facebook or Instagram
           </Button>
           <SaveMessage message={eventSave.message} />
         </div>

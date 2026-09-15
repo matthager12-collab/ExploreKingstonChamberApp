@@ -39,7 +39,12 @@ export function sourceRank(source: string): number {
 /**
  * The ONLY hosts ingest may fetch (compile-time constant; adapters reject
  * anything else, unit-tested). Facebook is never a source (ToS; decided
- * output-channel-only). If the staff-generated whole-calendar feed URL
+ * output-channel-only) and this still stands: the public events API was
+ * removed in 2018 and scraping breaches ToS, so nothing here fetches Meta.
+ * The paste-a-post path (./extract-post.ts) is NOT an exception — the member
+ * brings their own post's text to the portal by hand; ingest never reaches
+ * out. An automated Instagram source would be a real relaxation and needs a
+ * decision with Mat first. If the staff-generated whole-calendar feed URL
  * (docs/OPERATIONS.md §9 item 6b) arrives on the tenant's staff hostname
  * (greaterkingstoncommunitychamberofcommerce.growthzoneapp.com — same tenant
  * 3508 per ADR-0001), add that EXACT host here; no other relaxation.
