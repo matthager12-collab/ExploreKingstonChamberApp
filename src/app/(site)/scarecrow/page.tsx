@@ -14,10 +14,10 @@ import type { Metadata } from "next";
 import { FeatureMap } from "@/components/feature-map";
 import { ScarecrowVote } from "@/components/scarecrow-vote";
 import { PageHeader, Section } from "@/components/ui";
-import { CRAWL_VIEW_ID, crawlPhase } from "@/lib/data/scarecrows";
+import { CRAWL_VIEW_ID } from "@/lib/data/scarecrows";
 import { resolveMapView } from "@/lib/map/resolve";
 import { HiddenPageBanner, assertPageVisible } from "@/lib/page-visibility";
-import { getCrawlScarecrows, getVoteCounts } from "@/lib/stores/scarecrow-store";
+import { getCrawlPhase, getCrawlScarecrows, getVoteCounts } from "@/lib/stores/scarecrow-store";
 import { copyText, getCopyOverrides } from "@/lib/stores/site-store";
 
 export const metadata: Metadata = {
@@ -37,12 +37,12 @@ export const dynamic = "force-dynamic";
 
 export default async function ScarecrowPage() {
   const hiddenPreview = await assertPageVisible("/scarecrow");
-  const [copy, scarecrows, resolved] = await Promise.all([
+  const [copy, scarecrows, resolved, phase] = await Promise.all([
     getCopyOverrides(),
     getCrawlScarecrows(),
     resolveMapView(CRAWL_VIEW_ID),
+    getCrawlPhase(),
   ]);
-  const phase = crawlPhase();
   // Results stay shut until the crawl does. Before then the page never reads a
   // count, so there is no number to leak, cache, or argue with mid-contest.
   const counts = phase === "closed" ? await getVoteCounts() : {};

@@ -28,10 +28,15 @@ import {
 import { dataPath } from "@/lib/data-dir";
 import {
   CRAWL_VIEW_ID,
+  effectiveCrawlPhase,
+  isVotingOverride,
   scarecrowsFromFeatures,
+  type CrawlPhase,
   type Scarecrow,
+  type VotingOverride,
 } from "@/lib/data/scarecrows";
 import { getFeaturesForView } from "@/lib/stores/map-store";
+import { readMerged, writeOverlayRecord, type WriteMeta } from "@/lib/stores/json-store";
 // The MIME/extension tables and the 8 MB ceiling are hunt-store's, reused
 // rather than restated: one upload cap for the whole app is the point.
 import { MAX_PHOTO_BYTES, contentTypeForPath, imageExtension } from "@/lib/hunt-store";
@@ -39,6 +44,7 @@ import { stripImageMetadata } from "@/lib/image-sanitize";
 import {
   countVotes,
   countVotesBefore,
+  deleteAllVotes,
   deleteVote,
   deleteVotesBefore,
   getVoteById,
@@ -77,6 +83,52 @@ const REL_PATH = /^photos\/[A-Za-z0-9._-]+\.(jpg|png|webp|heic)$/;
  */
 export async function getCrawlScarecrows(): Promise<Scarecrow[]> {
   return scarecrowsFromFeatures(await getFeaturesForView(CRAWL_VIEW_ID));
+}
+
+// ---------------------------------------------------------------------------
+// The voting switch — one record, so the Chamber can rehearse the crawl
+// ---------------------------------------------------------------------------
+
+const SETTINGS_STORE = "scarecrow-settings";
+const SETTINGS_ID = "settings";
+
+interface CrawlSettingsRecord {
+  id: string;
+  voting: VotingOverride;
+}
+
+/** The switch's position. NO RECORD MEANS "auto": a wiped store, a restore or
+ *  a fresh database leaves the real crawl on its real dates rather than stuck
+ *  in whatever state someone last tested in. */
+export async function getVotingOverride(): Promise<VotingOverride> {
+  const rows = await readMerged<CrawlSettingsRecord>(SETTINGS_STORE, []);
+  const row = rows.find((r) => r.id === SETTINGS_ID);
+  return row && isVotingOverride(row.voting) ? row.voting : "auto";
+}
+
+export async function setVotingOverride(
+  voting: VotingOverride,
+  meta?: WriteMeta,
+): Promise<void> {
+  await writeOverlayRecord<CrawlSettingsRecord>(SETTINGS_STORE, { id: SETTINGS_ID, voting }, meta);
+}
+
+/** THE phase read: the dates, with the Chamber's switch on top. The page and
+ *  the vote route both come through here so a rehearsal cannot half-happen. */
+export async function getCrawlPhase(now?: Date): Promise<CrawlPhase> {
+  return effectiveCrawlPhase(await getVotingOverride(), now);
+}
+
+/** Delete every vote and every photo — the "clear the test votes" button.
+ *  Returns how many votes went, which is what the confirmation quoted. */
+export async function clearAllVotes(): Promise<number> {
+  const { deleted, photoPaths } = await deleteAllVotes();
+  for (const p of photoPaths) {
+    // A photo we cannot reach is logged by its absence, not by keeping the
+    // vote: the Chamber asked for the tally to be empty.
+    await deletePhotoBytes(p).catch(() => undefined);
+  }
+  return deleted;
 }
 
 /**
@@ -174,16 +226,18 @@ export async function removeVote(id: string): Promise<boolean> {
 export async function purgeVotesBefore(
   cutoff: string,
 ): Promise<{ deleted: number; photoFailures: number }> {
-  const paths = await deleteVotesBefore(cutoff);
+  const { deleted, photoPaths } = await deleteVotesBefore(cutoff);
   let photoFailures = 0;
-  for (const p of paths) {
+  for (const p of photoPaths) {
     try {
       await deletePhotoBytes(p);
     } catch {
       photoFailures++;
     }
   }
-  return { deleted: paths.length, photoFailures };
+  // `deleted` counts ROWS; photoPaths counts the subset that carried a photo.
+  // Reporting paths.length here would under-report every photoless vote.
+  return { deleted, photoFailures };
 }
 
 async function deletePhotoBytes(stored: string): Promise<void> {

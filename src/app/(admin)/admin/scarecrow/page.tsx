@@ -16,22 +16,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader, Section } from "@/components/ui";
-import {
-  CRAWL_END,
-  CRAWL_MAP_CENTER,
-  CRAWL_START,
-  CRAWL_VIEW_ID,
-  crawlPhase,
-} from "@/lib/data/scarecrows";
+import { CRAWL_END, CRAWL_MAP_CENTER, CRAWL_START, CRAWL_VIEW_ID } from "@/lib/data/scarecrows";
 import {
   countVotes,
+  getCrawlPhase,
   getCrawlScarecrows,
   getVoteCounts,
+  getVotingOverride,
   listVotesWithPhotos,
   photoUrl,
 } from "@/lib/stores/scarecrow-store";
 import { CrawlEditor, type EditableScarecrow } from "./crawl-editor";
 import { PhotoList, type CrawlPhoto } from "./photo-list";
+import { VotingControls } from "./voting-controls";
 
 export const dynamic = "force-dynamic";
 
@@ -60,13 +57,14 @@ function formatDay(iso: string): string {
 }
 
 export default async function AdminScarecrowPage() {
-  const [scarecrows, counts, total, withPhotos] = await Promise.all([
+  const [scarecrows, counts, total, withPhotos, voting, phase] = await Promise.all([
     getCrawlScarecrows(),
     getVoteCounts(),
     countVotes(),
     listVotesWithPhotos(),
+    getVotingOverride(),
+    getCrawlPhase(),
   ]);
-  const phase = crawlPhase();
 
   const ranked: EditableScarecrow[] = scarecrows
     .map((s) => ({
@@ -137,6 +135,15 @@ export default async function AdminScarecrowPage() {
             </ul>
           </div>
         ) : null}
+      </Section>
+
+      <Section title="Voting">
+        <p className="mb-4 text-ink-soft">
+          Force voting open to rehearse the whole thing — vote, photo, permission box — before the
+          crawl starts, then clear the test votes and set it back to the dates. While the page is
+          hidden, only signed-in Chamber staff can reach it, so a rehearsal reaches no visitors.
+        </p>
+        <VotingControls voting={voting} phase={phase} totalVotes={total} />
       </Section>
 
       <Section title="Photos">

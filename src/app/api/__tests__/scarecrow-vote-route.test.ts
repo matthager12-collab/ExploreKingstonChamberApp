@@ -16,9 +16,11 @@ import { CRAWL_VIEW_ID } from "@/lib/data/scarecrows";
 import { saveMapFeature } from "@/lib/stores/map-store";
 import {
   MAX_PHOTO_BYTES,
+  clearAllVotes,
   getVoteCounts,
   listVotes,
   listVotesWithPhotos,
+  setVotingOverride,
 } from "@/lib/stores/scarecrow-store";
 import { POST } from "@/app/api/scarecrow/vote/route";
 
@@ -221,6 +223,22 @@ describe("POST /api/scarecrow/vote", () => {
     expect(res.status).toBe(413);
   });
 
+  it("obeys the Chamber's voting switch, in both directions", async () => {
+    // Forced open before the crawl — the rehearsal the switch exists for.
+    vi.setSystemTime(new Date("2026-10-01T12:00:00-07:00"));
+    await setVotingOverride("open");
+    expect((await votePost("203.0.113.40")).status).toBe(200);
+
+    // Forced shut mid-crawl — the stop-it-now case.
+    vi.setSystemTime(new Date("2026-10-20T12:00:00-07:00"));
+    await setVotingOverride("closed");
+    expect((await votePost("203.0.113.41")).status).toBe(403);
+
+    // Back to the dates.
+    await setVotingOverride("auto");
+    expect((await votePost("203.0.113.42")).status).toBe(200);
+  });
+
   it("rate-limits one IP: 5 pre-parse 400s, then a 429", async () => {
     const ip = "203.0.113.19";
     for (let i = 0; i < 5; i++) {
@@ -229,5 +247,17 @@ describe("POST /api/scarecrow/vote", () => {
     const sixth = await emptyPost(ip);
     expect(sixth.status).toBe(429);
     expect(sixth.headers.get("Retry-After")).toBeTruthy();
+  });
+  it("empties the tally when the Chamber clears the test votes", async () => {
+    // Runs last on purpose: it deletes every row the tests above created.
+    await votePost("203.0.113.44", {
+      photo: new File([TINY_PNG], "scarecrow.png", { type: "image/png" }),
+    });
+    expect((await listVotes(200)).length).toBeGreaterThan(0);
+
+    const deleted = await clearAllVotes();
+    expect(deleted).toBeGreaterThan(0);
+    expect(await listVotes(200)).toEqual([]);
+    expect(await getVoteCounts()).toEqual({});
   });
 });
