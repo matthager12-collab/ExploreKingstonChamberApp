@@ -18,8 +18,9 @@ import type { CrawlPhase } from "@/lib/data/scarecrows";
 /** Serializable scarecrow the server page maps into props. */
 export interface VotableScarecrow {
   id: string;
-  business: string;
   title: string;
+  /** The Chamber's own line about it — business, address, whatever they typed. */
+  notes?: string;
 }
 
 const VOTED_KEY = "scarecrow-crawl-2026-voted";
@@ -162,7 +163,8 @@ export function ScarecrowVote({
                     className="h-5 w-5"
                   />
                   <span>
-                    <span className="font-semibold">{s.title}</span> — {s.business}
+                    <span className="font-semibold">{s.title}</span>
+                    {s.notes ? ` — ${s.notes}` : ""}
                   </span>
                 </label>
               ))}

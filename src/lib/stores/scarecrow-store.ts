@@ -26,6 +26,12 @@ import {
   putObject,
 } from "@/lib/blob-store";
 import { dataPath } from "@/lib/data-dir";
+import {
+  CRAWL_VIEW_ID,
+  scarecrowsFromFeatures,
+  type Scarecrow,
+} from "@/lib/data/scarecrows";
+import { getFeaturesForView } from "@/lib/stores/map-store";
 // The MIME/extension tables and the 8 MB ceiling are hunt-store's, reused
 // rather than restated: one upload cap for the whole app is the point.
 import { MAX_PHOTO_BYTES, contentTypeForPath, imageExtension } from "@/lib/hunt-store";
@@ -58,6 +64,18 @@ const PHOTO_PREFIX = "photos";
 /** What a stored relative path is allowed to look like — we generate every
  *  one of them, so anything else is a bug or a doctored value. */
 const REL_PATH = /^photos\/[A-Za-z0-9._-]+\.(jpg|png|webp|heic)$/;
+
+/**
+ * The crawl's entries: the markers the Chamber has put on the crawl map view.
+ *
+ * THE ONE READ. The public page, the words list and the vote route's allowlist
+ * all come through here, so "what is on the map" and "what can be voted for"
+ * cannot drift apart — an entry the Chamber removes stops accepting votes the
+ * moment the page next renders.
+ */
+export async function getCrawlScarecrows(): Promise<Scarecrow[]> {
+  return scarecrowsFromFeatures(await getFeaturesForView(CRAWL_VIEW_ID));
+}
 
 /**
  * Record one vote, with the voter's optional photo.

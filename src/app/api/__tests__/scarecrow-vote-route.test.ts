@@ -12,7 +12,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 // Votes are Postgres-only — run over PGlite.
 import { createTestDb, type TestDb } from "../../../../tests/setup/pglite-db";
 import { dataPath } from "@/lib/data-dir";
-import { SCARECROWS } from "@/lib/data/scarecrows";
+import { CRAWL_VIEW_ID } from "@/lib/data/scarecrows";
+import { saveMapFeature } from "@/lib/stores/map-store";
 import { MAX_PHOTO_BYTES, getVoteCounts, listVotesWithPhotos } from "@/lib/stores/scarecrow-store";
 import { POST } from "@/app/api/scarecrow/vote/route";
 
@@ -21,7 +22,9 @@ const TINY_PNG = Buffer.from(
   "base64",
 );
 
-const ID = SCARECROWS[0].id;
+// The crawl's entries are markers the Chamber puts on the crawl map view, so
+// the fixture is a saved feature rather than a constant.
+const ID = "scarecrow-test-entry";
 
 /** Serialize a FormData the way the wire does — bytes plus the declared
  *  Content-Length every browser sends — so the route's pre-parse length guard
@@ -69,6 +72,15 @@ async function votePost(
 let tdb: TestDb;
 beforeAll(async () => {
   tdb = await createTestDb();
+  await saveMapFeature({
+    id: ID,
+    kind: "marker",
+    title: "Test scarecrow",
+    notes: "Main Street",
+    category: "event",
+    views: [CRAWL_VIEW_ID],
+    point: [47.798, -122.497],
+  });
   // Mid-crawl: a Tuesday between the two Saturdays.
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-20T12:00:00-07:00"));
@@ -103,6 +115,20 @@ describe("POST /api/scarecrow/vote", () => {
     const res = await votePost("203.0.113.12", { scarecrowId: "no-such-scarecrow" });
     expect(res.status).toBe(400);
     expect((await res.json()).error).toMatch(/unknown scarecrow/i);
+  });
+
+  it("refuses a marker that exists but is not on the crawl view (400)", async () => {
+    // The allowlist is the crawl view, not the map: a pin on Explore Kingston
+    // is not an entry in the contest.
+    await saveMapFeature({
+      id: "some-other-pin",
+      kind: "marker",
+      title: "A viewpoint",
+      views: ["explore"],
+      point: [47.799, -122.497],
+    });
+    const res = await votePost("203.0.113.20", { scarecrowId: "some-other-pin" });
+    expect(res.status).toBe(400);
   });
 
   it("refuses a vote before the crawl opens, and after it closes (403)", async () => {

@@ -1,30 +1,21 @@
 // The Scarecrow Crawl — the Chamber's Halloween trail of business-built
 // scarecrows, with a public vote for the favourite (2026).
 //
-// SEED ONLY, on purpose. There is no admin editor and no overlay store: the
-// list is fixed for the fortnight the crawl runs, and a typed file the Chamber
-// can read is a smaller thing to maintain for two weeks than a CRUD screen.
-// Editing this file and deploying is the update path.
+// WHERE THE LIST LIVES: not here. Each scarecrow is a marker on the
+// "scarecrow-crawl" map view (src/lib/data/map-views.ts), so the Chamber adds,
+// moves, renames and removes entries itself — in /admin/maps or on the crawl
+// console — and the public page, the map and the ballot all follow with no
+// deploy. Businesses sign up late and drop out the day before; a list only a
+// developer could edit would be wrong by the time it mattered.
 //
-// The window is the whole gate. Voting opens at CRAWL_START and closes at
-// CRAWL_END; the API refuses votes outside it (a client clock cannot be
-// trusted), and the page shows results only once it is closed.
+// WHAT STAYS IN CODE: the dates. They are printed on the Chamber's flyer, and
+// a mistyped date field would silently open or close the vote on the wrong
+// day. Changing them is a deliberate, reviewed edit.
 
-/** One participating business's scarecrow. */
-export interface Scarecrow {
-  /** Stable id — the vote key. Never reuse one across years. */
-  id: string;
-  /** Business hosting it, as the Chamber would print it. */
-  business: string;
-  /** The scarecrow's own name, when it has one. */
-  title: string;
-  /** Where to stand to see it. */
-  address: string;
-  lat: number;
-  lng: number;
-  /** One line for the map popup and the list. */
-  blurb?: string;
-}
+import type { MapFeature } from "@/lib/map/types";
+
+/** The map view whose markers are the crawl. */
+export const CRAWL_VIEW_ID = "scarecrow-crawl";
 
 // Pacific time, written with the offset so the window does not drift when the
 // server runs in UTC. Oct 17–31 2026 are both Saturdays; DST ends Nov 1, so
@@ -32,58 +23,37 @@ export interface Scarecrow {
 export const CRAWL_START = "2026-10-17T00:00:00-07:00";
 export const CRAWL_END = "2026-10-31T17:00:00-07:00";
 
-/**
- * PLACEHOLDER ENTRIES — not real participants.
- *
- * The Chamber's list of participating businesses had not arrived when this
- * shipped. These four exist so the page, the map and the vote work end to
- * end; the coordinates are points around downtown Kingston, not surveyed
- * locations. REPLACE THE WHOLE ARRAY with the real list before the crawl
- * opens — ids included, since a placeholder id that collects a vote would
- * carry that vote onto whichever business inherits the slot.
- */
-export const SCARECROWS: Scarecrow[] = [
-  {
-    id: "placeholder-1",
-    business: "Placeholder — business one",
-    title: "Scarecrow one",
-    address: "Main Street, Kingston",
-    lat: 47.7981,
-    lng: -122.496,
-    blurb: "Replace with the Chamber's real entry.",
-  },
-  {
-    id: "placeholder-2",
-    business: "Placeholder — business two",
-    title: "Scarecrow two",
-    address: "Main Street, Kingston",
-    lat: 47.7975,
-    lng: -122.4972,
-    blurb: "Replace with the Chamber's real entry.",
-  },
-  {
-    id: "placeholder-3",
-    business: "Placeholder — business three",
-    title: "Scarecrow three",
-    address: "NE West Kingston Road, Kingston",
-    lat: 47.7992,
-    lng: -122.4988,
-    blurb: "Replace with the Chamber's real entry.",
-  },
-  {
-    id: "placeholder-4",
-    business: "Placeholder — business four",
-    title: "Scarecrow four",
-    address: "Near the ferry dock, Kingston",
-    lat: 47.7967,
-    lng: -122.4969,
-    blurb: "Replace with the Chamber's real entry.",
-  },
-];
-
-/** The map's opening frame: downtown Kingston, tight enough to walk. */
+/** Where a new pin lands when the Chamber adds one without coordinates: the
+ *  middle of downtown, to be dragged into place in the map builder. */
 export const CRAWL_MAP_CENTER: [number, number] = [47.798, -122.4971];
-export const CRAWL_MAP_ZOOM = 15.5;
+
+/** One participating business's scarecrow, as the page and the ballot see it. */
+export interface Scarecrow {
+  /** The map feature's id — the vote key. Stable across edits to the name. */
+  id: string;
+  /** What the Chamber called it: usually the business, or the scarecrow. */
+  title: string;
+  /** The free-text line under it — business, address, a word about it. */
+  notes?: string;
+  lat: number;
+  lng: number;
+}
+
+/** Markers on the crawl view, as scarecrows. Anything without a point (a line
+ *  or area someone drew on the view) is not a scarecrow and is skipped rather
+ *  than rendered as a votable entry with no location. */
+export function scarecrowsFromFeatures(features: MapFeature[]): Scarecrow[] {
+  return features
+    .filter((f) => f.kind === "marker" && Array.isArray(f.point))
+    .map((f) => ({
+      id: f.id,
+      title: f.title,
+      ...(f.notes ? { notes: f.notes } : {}),
+      lat: f.point![0],
+      lng: f.point![1],
+    }))
+    .sort((a, b) => a.title.localeCompare(b.title));
+}
 
 export type CrawlPhase = "before" | "open" | "closed";
 
@@ -97,10 +67,4 @@ export function crawlPhase(now: Date = new Date()): CrawlPhase {
   if (t < Date.parse(CRAWL_START)) return "before";
   if (t > Date.parse(CRAWL_END)) return "closed";
   return "open";
-}
-
-/** The scarecrow with this id, or undefined. The vote route's allowlist: an
- *  id that is not in this file is not a thing anyone can vote for. */
-export function scarecrowById(id: string): Scarecrow | undefined {
-  return SCARECROWS.find((s) => s.id === id);
 }

@@ -113,7 +113,7 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     href: "/admin/scarecrow",
     title: "Scarecrow Crawl",
     navLabel: "Scarecrow",
-    blurb: "Running vote counts for the crawl, and the photos visitors sent in.",
+    blurb: "Add the businesses taking part, watch the vote, review the photos.",
     capability: "manage-site",
     section: "experiences",
   },

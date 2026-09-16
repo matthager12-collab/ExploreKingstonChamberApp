@@ -1,10 +1,20 @@
-// The crawl window and the id allowlist — the two pure gates the vote route
-// leans on. Tested here as well as through the route because these are what a
-// wrong date or a renamed scarecrow breaks, and a broken window is invisible
-// until the day it matters.
+// The crawl window and the map-feature mapping — the two pure pieces the vote
+// route leans on. Tested here as well as through the route because these are
+// what a wrong date or a stray shape on the map view breaks, and a broken
+// window is invisible until the day it matters.
 
 import { describe, expect, it } from "vitest";
-import { CRAWL_END, CRAWL_START, SCARECROWS, crawlPhase, scarecrowById } from "@/lib/data/scarecrows";
+import { CRAWL_END, CRAWL_START, crawlPhase, scarecrowsFromFeatures } from "@/lib/data/scarecrows";
+import type { MapFeature } from "@/lib/map/types";
+
+const marker = (id: string, title: string, extra: Partial<MapFeature> = {}): MapFeature => ({
+  id,
+  kind: "marker",
+  title,
+  views: ["scarecrow-crawl"],
+  point: [47.798, -122.497],
+  ...extra,
+});
 
 describe("crawlPhase", () => {
   it("is closed before the start and after the end, open in between", () => {
@@ -23,15 +33,25 @@ describe("crawlPhase", () => {
   });
 });
 
-describe("scarecrowById", () => {
-  it("finds a seeded scarecrow and refuses anything else", () => {
-    expect(scarecrowById(SCARECROWS[0].id)?.id).toBe(SCARECROWS[0].id);
-    expect(scarecrowById("not-a-scarecrow")).toBeUndefined();
-    expect(scarecrowById("")).toBeUndefined();
+describe("scarecrowsFromFeatures", () => {
+  it("keeps markers, in name order, with their notes", () => {
+    const list = scarecrowsFromFeatures([
+      marker("b", "Bakery", { notes: "Main Street" }),
+      marker("a", "Antiques"),
+    ]);
+    expect(list.map((s) => s.title)).toEqual(["Antiques", "Bakery"]);
+    expect(list[1].notes).toBe("Main Street");
+    expect(list[0].lat).toBe(47.798);
   });
 
-  it("has no duplicate ids — a duplicate would split or merge votes", () => {
-    const ids = SCARECROWS.map((s) => s.id);
-    expect(new Set(ids).size).toBe(ids.length);
+  it("skips anything that is not a placeable marker", () => {
+    // A line or area drawn on the view is not a business, and a marker with no
+    // point cannot be found — neither belongs on the ballot.
+    const list = scarecrowsFromFeatures([
+      { id: "route", kind: "trail", title: "Walking route", views: ["scarecrow-crawl"], path: [] },
+      { id: "ghost", kind: "marker", title: "No location", views: ["scarecrow-crawl"] },
+      marker("real", "A real one"),
+    ]);
+    expect(list.map((s) => s.id)).toEqual(["real"]);
   });
 });

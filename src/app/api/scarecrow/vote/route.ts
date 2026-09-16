@@ -15,10 +15,15 @@
 // (type, size, and a fail-closed metadata strip before anything is stored).
 
 import { NextRequest } from "next/server";
-import { crawlPhase, scarecrowById } from "@/lib/data/scarecrows";
+import { crawlPhase } from "@/lib/data/scarecrows";
 import { UnstrippableImageError } from "@/lib/image-sanitize";
 import { checkRateLimit, clientKey } from "@/lib/rate-limit";
-import { MAX_PHOTO_BYTES, castVote, imageExtension } from "@/lib/stores/scarecrow-store";
+import {
+  MAX_PHOTO_BYTES,
+  castVote,
+  getCrawlScarecrows,
+  imageExtension,
+} from "@/lib/stores/scarecrow-store";
 
 export const dynamic = "force-dynamic";
 
@@ -73,8 +78,11 @@ export async function POST(request: NextRequest) {
   }
 
   const scarecrowId = form.get("scarecrowId");
-  if (typeof scarecrowId !== "string" || !scarecrowById(scarecrowId)) {
-    // An id that is not in the seed list is not a thing anyone can vote for.
+  // The allowlist is whatever the Chamber currently has on the crawl map —
+  // read per request, so an entry removed mid-crawl stops taking votes at once
+  // and an invented id never counts.
+  const known = await getCrawlScarecrows();
+  if (typeof scarecrowId !== "string" || !known.some((s) => s.id === scarecrowId)) {
     return Response.json({ ok: false, error: "unknown scarecrow" }, { status: 400 });
   }
 
