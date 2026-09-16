@@ -20,7 +20,7 @@ implements `findByIdentifier` / `exportRecords` / `deleteOrAnonymize`; the
 | `users` | email | Account email, name, scrypt password hash | 25 months (event logs); account lives until anonymized | Postgres `users` |
 | `invites` | email | Optional invitee email + note | until redeemed/expired | Postgres `invites` |
 | `charities` | `contactEmail` | Optional public contact email on a listing | until scrubbed | `record` store `charities` |
-| `worklist_item` | payload `contact` | Privacy/accuracy request contact (OPEN items only) | scrubbed at resolution | Postgres `worklist_item` |
+| `worklist_item` | payload `contact`, `suggest.contact` | Follow-up contact on OPEN items: privacy/accuracy requests, event suggestions, scarecrow registrations (`suggest` also carries the submitter's name) | scrubbed at resolution; never written to audit snapshots | Postgres `worklist_item` |
 | `hunt-submissions` | *(no identifier)* | Photo + optional precise check-in location | 12 months | `record` + fs/blob photos |
 | `scarecrow_vote` | *(none — anonymous)* | Scarecrow Crawl vote + optional visitor photo (metadata stripped; never shown on the page; reposted on Chamber social only when the visitor left the permission box ticked, which is recorded on the row) | 12 months | Postgres `scarecrow_vote` + R2/fs photos |
 | `survey_response` | *(none — anonymous)* | LTAC survey answers | 36 months | Postgres `survey_response` |

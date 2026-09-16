@@ -157,7 +157,7 @@ export const RETENTION_POLICY: RetentionRule[] = [
   {
     store: "worklist-request-contacts",
     description:
-      "The contact you give us to answer a privacy or accuracy request. Redacted from the request record once the request is resolved.",
+      "The name and contact you give us so we can follow up — on a privacy or accuracy request, an event you suggest, or a scarecrow you register. Removed from the record once it has been dealt with, and never kept in our change history.",
     label: "Until the request is resolved",
     action: "redact-at-resolution",
   },
