@@ -74,8 +74,20 @@ export const HIDEABLE_PAGES: { path: string; label: string }[] = [
  * DO NOT remove `/line` from this list as a tidy-up. With no record present,
  * removing it flips the page from fail-closed to PUBLIC BY DEFAULT — the exact
  * opposite of the intent. It is unadvertised, not un-public: see UNLISTED_PAGES.
+ *
+ * `/scarecrow` (2026 crawl) SHIPS DARK for a different reason than the two
+ * above: not safety, timing. The page went up in September with an empty list
+ * while the Chamber was still signing businesses up, and a visitor finding
+ * "we are still adding this year's scarecrows" in the nav is worse than not
+ * finding the page at all. Hidden by default means the Chamber turns it on
+ * when the trail is ready, and — because this page uses the session-reading
+ * gate — they can open it signed in beforehand and see exactly what the
+ * public will get.
+ *
+ * After the crawl, hiding it again is the same switch. When 2027 comes round,
+ * whoever revives it should decide afresh rather than inherit this entry.
  */
-export const DEFAULT_HIDDEN_PAGES: readonly string[] = ["/es", "/line"];
+export const DEFAULT_HIDDEN_PAGES: readonly string[] = ["/es", "/line", "/scarecrow"];
 
 /**
  * Public pages that must not be ADVERTISED to search engines, even when

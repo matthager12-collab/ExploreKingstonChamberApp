@@ -16,7 +16,7 @@ import { ScarecrowVote } from "@/components/scarecrow-vote";
 import { PageHeader, Section } from "@/components/ui";
 import { CRAWL_VIEW_ID, crawlPhase } from "@/lib/data/scarecrows";
 import { resolveMapView } from "@/lib/map/resolve";
-import { assertPageVisibleStatic } from "@/lib/page-visibility";
+import { HiddenPageBanner, assertPageVisible } from "@/lib/page-visibility";
 import { getCrawlScarecrows, getVoteCounts } from "@/lib/stores/scarecrow-store";
 import { copyText, getCopyOverrides } from "@/lib/stores/site-store";
 
@@ -26,10 +26,17 @@ export const metadata: Metadata = {
     "Find every scarecrow in Kingston, vote for your favourite, and share it — Saturday 17 October to 5pm Saturday 31 October 2026.",
 };
 
-export const revalidate = 60;
+// Rendered per request, not prerendered, for the preview: the bare
+// assertPageVisible gate reads the session, so while the page is hidden the
+// Chamber can open it and see exactly what the public will get — entries,
+// map, vote and all — behind a banner, and everyone else gets a 404. The
+// static gate cannot do that (it never touches the session), and the crawl
+// needs to be checked before it goes up far more than it needs to be a
+// prerendered page.
+export const dynamic = "force-dynamic";
 
 export default async function ScarecrowPage() {
-  await assertPageVisibleStatic("/scarecrow");
+  const hiddenPreview = await assertPageVisible("/scarecrow");
   const [copy, scarecrows, resolved] = await Promise.all([
     getCopyOverrides(),
     getCrawlScarecrows(),
@@ -49,6 +56,7 @@ export default async function ScarecrowPage() {
 
   return (
     <>
+      {hiddenPreview && <HiddenPageBanner />}
       <PageHeader
         eyebrow={copyText(copy, "scarecrow.header.eyebrow")}
         title={copyText(copy, "scarecrow.header.title")}

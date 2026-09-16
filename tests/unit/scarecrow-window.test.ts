@@ -6,6 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { CRAWL_END, CRAWL_START, crawlPhase, scarecrowsFromFeatures } from "@/lib/data/scarecrows";
 import type { MapFeature } from "@/lib/map/types";
+import { effectiveHiddenPaths } from "@/lib/page-visibility";
 
 const marker = (id: string, title: string, extra: Partial<MapFeature> = {}): MapFeature => ({
   id,
@@ -56,5 +57,20 @@ describe("scarecrowsFromFeatures", () => {
       marker("real", "A real one"),
     ]);
     expect(list.map((s) => s.id)).toEqual(["real"]);
+  });
+});
+
+describe("the crawl page ships dark", () => {
+  it("is hidden when the site-pages store says nothing about it", () => {
+    // The trail was public with an empty list for a day in September. Absent a
+    // record, the page must be dark — the Chamber turns it on when the
+    // businesses are in, and a wiped store or a restore puts it back to dark
+    // rather than republishing a half-built page.
+    expect(effectiveHiddenPaths([])).toContain("/scarecrow");
+  });
+
+  it("is public only when a record explicitly says it is visible", () => {
+    expect(effectiveHiddenPaths([{ id: "/scarecrow", hidden: false }])).not.toContain("/scarecrow");
+    expect(effectiveHiddenPaths([{ id: "/scarecrow", hidden: true }])).toContain("/scarecrow");
   });
 });
