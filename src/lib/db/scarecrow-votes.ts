@@ -113,14 +113,39 @@ export async function countVotesBefore(cutoff: string): Promise<number> {
   return row?.n ?? 0;
 }
 
+/** Delete EVERY vote, handing back the photo paths so the caller can delete
+ *  the bytes too. The Chamber's "clear the test votes" button, and nothing
+ *  else — it is gated, confirmed and audited at the boundary. */
+export async function deleteAllVotes(): Promise<DeletedVotes> {
+  const rows = await getDb().delete(scarecrowVote).returning({ photoPath: scarecrowVote.photoPath });
+  return countDeleted(rows);
+}
+
+/** Rows removed, and the photos among them that still need deleting. The two
+ *  numbers differ — most votes carry no photo — so a caller reporting "deleted
+ *  N" must not count paths. */
+export interface DeletedVotes {
+  deleted: number;
+  photoPaths: string[];
+}
+
+function countDeleted(rows: { photoPath: string | null }[]): DeletedVotes {
+  return {
+    deleted: rows.length,
+    photoPaths: rows
+      .map((r) => r.photoPath)
+      .filter((p): p is string => typeof p === "string" && p !== ""),
+  };
+}
+
 /** Retention purge: delete expired votes, handing back the photo paths so the
  *  caller can delete the bytes too. Rows and photos die together. */
-export async function deleteVotesBefore(cutoff: string): Promise<string[]> {
+export async function deleteVotesBefore(cutoff: string): Promise<DeletedVotes> {
   const rows = await getDb()
     .delete(scarecrowVote)
     .where(lt(scarecrowVote.createdAt, new Date(cutoff)))
     .returning({ photoPath: scarecrowVote.photoPath });
-  return rows.map((r) => r.photoPath).filter((p): p is string => typeof p === "string" && p !== "");
+  return countDeleted(rows);
 }
 
 function toRow(row: typeof scarecrowVote.$inferSelect): ScarecrowVoteRow {

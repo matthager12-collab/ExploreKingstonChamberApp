@@ -15,12 +15,12 @@
 // (type, size, and a fail-closed metadata strip before anything is stored).
 
 import { NextRequest } from "next/server";
-import { crawlPhase } from "@/lib/data/scarecrows";
 import { UnstrippableImageError } from "@/lib/image-sanitize";
 import { checkRateLimit, clientKey } from "@/lib/rate-limit";
 import {
   MAX_PHOTO_BYTES,
   castVote,
+  getCrawlPhase,
   getCrawlScarecrows,
   imageExtension,
 } from "@/lib/stores/scarecrow-store";
@@ -45,7 +45,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const phase = crawlPhase();
+  // The dates, with the Chamber's switch on top — the same read the page
+  // makes, so a rehearsal cannot leave the form live against a shut endpoint.
+  const phase = await getCrawlPhase();
   if (phase !== "open") {
     return Response.json(
       {

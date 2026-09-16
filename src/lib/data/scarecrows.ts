@@ -63,6 +63,35 @@ export function scarecrowsFromFeatures(features: MapFeature[]): Scarecrow[] {
 export type CrawlPhase = "before" | "open" | "closed";
 
 /**
+ * The Chamber's switch, sitting on top of the dates.
+ *
+ * "auto" is the dates deciding, and is what runs the real crawl. The other two
+ * exist so the Chamber can try the whole thing — vote, photo, permission box —
+ * before 17 October, and stop it early if they need to. The page is hidden
+ * while they do that, so "open" before the crawl reaches nobody else.
+ */
+export type VotingOverride = "auto" | "open" | "closed";
+
+export const VOTING_OVERRIDES: readonly VotingOverride[] = ["auto", "open", "closed"];
+
+export function isVotingOverride(value: unknown): value is VotingOverride {
+  return typeof value === "string" && (VOTING_OVERRIDES as readonly string[]).includes(value);
+}
+
+/**
+ * What the page and the vote route both ask. THE SWITCH WINS: a forced phase
+ * ignores the clock entirely, which is the point of having it.
+ */
+export function effectiveCrawlPhase(
+  override: VotingOverride,
+  now: Date = new Date(),
+): CrawlPhase {
+  if (override === "open") return "open";
+  if (override === "closed") return "closed";
+  return crawlPhase(now);
+}
+
+/**
  * Where the crawl is right now. THE server decides this — the vote route calls
  * it with its own clock, so a device with a wrong date (or a hand-edited
  * request) cannot vote early or late.

@@ -4,7 +4,13 @@
 // window is invisible until the day it matters.
 
 import { describe, expect, it } from "vitest";
-import { CRAWL_END, CRAWL_START, crawlPhase, scarecrowsFromFeatures } from "@/lib/data/scarecrows";
+import {
+  CRAWL_END,
+  CRAWL_START,
+  crawlPhase,
+  effectiveCrawlPhase,
+  scarecrowsFromFeatures,
+} from "@/lib/data/scarecrows";
 import type { MapFeature } from "@/lib/map/types";
 import { effectiveHiddenPaths } from "@/lib/page-visibility";
 
@@ -72,5 +78,21 @@ describe("the crawl page ships dark", () => {
   it("is public only when a record explicitly says it is visible", () => {
     expect(effectiveHiddenPaths([{ id: "/scarecrow", hidden: false }])).not.toContain("/scarecrow");
     expect(effectiveHiddenPaths([{ id: "/scarecrow", hidden: true }])).toContain("/scarecrow");
+  });
+});
+
+describe("effectiveCrawlPhase", () => {
+  const beforeCrawl = new Date("2026-10-01T12:00:00-07:00");
+  const midCrawl = new Date("2026-10-20T12:00:00-07:00");
+
+  it("follows the dates on auto", () => {
+    expect(effectiveCrawlPhase("auto", beforeCrawl)).toBe("before");
+    expect(effectiveCrawlPhase("auto", midCrawl)).toBe("open");
+  });
+
+  it("lets the switch beat the calendar, both ways", () => {
+    // The rehearsal, and the stop-it-now.
+    expect(effectiveCrawlPhase("open", beforeCrawl)).toBe("open");
+    expect(effectiveCrawlPhase("closed", midCrawl)).toBe("closed");
   });
 });
