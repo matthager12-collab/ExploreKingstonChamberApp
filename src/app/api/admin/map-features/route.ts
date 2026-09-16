@@ -165,6 +165,14 @@ export async function POST(request: NextRequest) {
       ? body.color.trim()
       : undefined;
   const notes = typeof body.notes === "string" && body.notes.trim() ? body.notes.trim() : undefined;
+  // Same reasoning as `cost` and `member` above: this route rebuilds each
+  // feature from known fields only, so a field missing here is dropped the
+  // first time an admin saves that feature — attribution would vanish on the
+  // first drag of the pin.
+  const creator =
+    typeof body.creator === "string" && body.creator.trim()
+      ? body.creator.trim().slice(0, 200)
+      : undefined;
   const link =
     typeof body.link === "string" && /^https?:\/\//.test(body.link.trim())
       ? body.link.trim()
@@ -247,6 +255,7 @@ export async function POST(request: NextRequest) {
     title,
     views,
     ...(notes ? { notes } : {}),
+    ...(creator ? { creator } : {}),
     ...(label ? { label } : {}),
     ...(category ? { category } : {}),
     ...(cost ? { cost } : {}),

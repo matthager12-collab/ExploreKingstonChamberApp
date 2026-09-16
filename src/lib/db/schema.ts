@@ -224,6 +224,10 @@ export const scarecrowVote = pgTable(
     /** Stored photo: a relative path, or a blob URL in legacy blob mode. Null
      *  when the visitor voted without one — the photo is optional on purpose. */
     photoPath: text("photo_path"),
+    /** Did the visitor leave the "the Chamber may use this photo" box ticked?
+     *  NULL when no photo came with the vote — distinct from false, which is a
+     *  visitor who sent a photo and deliberately withheld permission. */
+    photoSocialOk: boolean("photo_social_ok"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

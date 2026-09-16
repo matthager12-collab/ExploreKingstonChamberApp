@@ -15,6 +15,7 @@ import { useState } from "react";
 export interface EditableScarecrow {
   id: string;
   title: string;
+  creator?: string;
   notes?: string;
   votes: number;
 }
@@ -47,6 +48,7 @@ function featureId(title: string, taken: Set<string>): string {
 export function CrawlEditor({ scarecrows, viewId, defaultPoint }: CrawlEditorProps) {
   const router = useRouter();
   const [title, setTitle] = useState("");
+  const [creator, setCreator] = useState("");
   const [notes, setNotes] = useState("");
   const [coords, setCoords] = useState("");
   const [busy, setBusy] = useState(false);
@@ -82,6 +84,7 @@ export function CrawlEditor({ scarecrows, viewId, defaultPoint }: CrawlEditorPro
           id: featureId(title, new Set(scarecrows.map((s) => s.id))),
           kind: "marker",
           title: title.trim(),
+          ...(creator.trim() ? { creator: creator.trim() } : {}),
           ...(notes.trim() ? { notes: notes.trim() } : {}),
           category: "event",
           views: [viewId],
@@ -94,6 +97,7 @@ export function CrawlEditor({ scarecrows, viewId, defaultPoint }: CrawlEditorPro
         return;
       }
       setTitle("");
+      setCreator("");
       setNotes("");
       setCoords("");
       setNote(
@@ -142,6 +146,7 @@ export function CrawlEditor({ scarecrows, viewId, defaultPoint }: CrawlEditorPro
           scarecrows.map((s) => (
             <li key={s.id} className="flex flex-wrap items-baseline gap-x-3 text-ink">
               <span className="font-semibold">{s.title}</span>
+              {s.creator ? <span>by {s.creator}</span> : null}
               {s.notes ? <span className="text-ink-soft">{s.notes}</span> : null}
               <span className="text-ink-soft">
                 · {s.votes} {s.votes === 1 ? "vote" : "votes"}
@@ -173,6 +178,20 @@ export function CrawlEditor({ scarecrows, viewId, defaultPoint }: CrawlEditorPro
           className="mt-1 mb-3 block w-full rounded-xl border border-sand px-3 py-2 text-ink"
           required
         />
+
+        <label className="block text-sm font-semibold text-ink" htmlFor="crawl-creator">
+          Business or maker
+        </label>
+        <input
+          id="crawl-creator"
+          value={creator}
+          onChange={(e) => setCreator(e.target.value)}
+          placeholder="Kingston Cooperative Preschool"
+          className="mt-1 mb-3 block w-full rounded-xl border border-sand px-3 py-2 text-ink"
+        />
+        <p className="-mt-2 mb-3 text-xs text-ink-soft">
+          Who built it, or whose shop it stands outside. Shown as its own line on the page.
+        </p>
 
         <label className="block text-sm font-semibold text-ink" htmlFor="crawl-notes">
           Line underneath (optional)

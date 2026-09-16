@@ -72,6 +72,7 @@ export default async function AdminScarecrowPage() {
     .map((s) => ({
       id: s.id,
       title: s.title,
+      ...(s.creator ? { creator: s.creator } : {}),
       ...(s.notes ? { notes: s.notes } : {}),
       votes: counts[s.id] ?? 0,
     }))
@@ -88,6 +89,10 @@ export default async function AdminScarecrowPage() {
     label: scarecrows.find((s) => s.id === vote.scarecrowId)?.title ?? vote.scarecrowId,
     when: formatWhen(vote.createdAt),
     src: photoUrl(vote.id),
+    // Photos stored before the permission box existed have no answer on the
+    // row. They read as "do not post", which is the only safe way to render a
+    // consent nobody was asked for.
+    socialOk: vote.photoSocialOk === true,
   }));
 
   return (
@@ -136,8 +141,10 @@ export default async function AdminScarecrowPage() {
 
       <Section title="Photos">
         <p className="mb-4 text-ink-soft">
-          Visitors are told these reach the Chamber only and are never published. Location data is
-          stripped before storage, and everything here is deleted after 12 months.
+          Visitors are told these are not published on the page, and are asked whether the Chamber
+          may use them on Facebook and Instagram — each photo says which answer it carries, and
+          &ldquo;do not post&rdquo; means exactly that. Location data is stripped before storage,
+          and everything here is deleted after 12 months.
         </p>
         <PhotoList photos={photos} />
       </Section>

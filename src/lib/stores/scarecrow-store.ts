@@ -44,6 +44,7 @@ import {
   getVoteById,
   getVoteCounts,
   insertVote,
+  listVotes,
   listVotesWithPhotos,
   type ScarecrowVoteRow,
 } from "@/lib/db/scarecrow-votes";
@@ -54,6 +55,7 @@ export {
   countVotesBefore,
   getVoteById,
   getVoteCounts,
+  listVotes,
   listVotesWithPhotos,
   type ScarecrowVoteRow,
 };
@@ -87,12 +89,21 @@ export async function getCrawlScarecrows(): Promise<Scarecrow[]> {
 export async function castVote(input: {
   scarecrowId: string;
   photo?: { bytes: Uint8Array; ext: string };
+  /** The visitor's answer to "the Chamber may use this photo" — recorded with
+   *  the photo it applies to, so a later "can we post this?" is answered by
+   *  the row rather than by someone's memory. */
+  photoSocialOk?: boolean;
 }): Promise<{ id: string }> {
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const photoPath = input.photo
     ? await savePhoto(id, input.photo.bytes, input.photo.ext)
     : undefined;
-  await insertVote({ id, scarecrowId: input.scarecrowId, photoPath });
+  await insertVote({
+    id,
+    scarecrowId: input.scarecrowId,
+    photoPath,
+    ...(input.photoSocialOk !== undefined ? { photoSocialOk: input.photoSocialOk } : {}),
+  });
   return { id };
 }
 

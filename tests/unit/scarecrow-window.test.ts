@@ -34,13 +34,16 @@ describe("crawlPhase", () => {
 });
 
 describe("scarecrowsFromFeatures", () => {
-  it("keeps markers, in name order, with their notes", () => {
+  it("keeps markers, in name order, with their maker and notes", () => {
     const list = scarecrowsFromFeatures([
-      marker("b", "Bakery", { notes: "Main Street" }),
+      marker("b", "Bakery", { notes: "Main Street", creator: "The Preschool" }),
       marker("a", "Antiques"),
     ]);
     expect(list.map((s) => s.title)).toEqual(["Antiques", "Bakery"]);
     expect(list[1].notes).toBe("Main Street");
+    // Attribution is its own field, not folded into the notes line.
+    expect(list[1].creator).toBe("The Preschool");
+    expect(list[0].creator).toBeUndefined();
     expect(list[0].lat).toBe(47.798);
   });
 

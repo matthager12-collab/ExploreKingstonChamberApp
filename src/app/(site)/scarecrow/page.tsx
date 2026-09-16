@@ -69,6 +69,7 @@ export default async function ScarecrowPage() {
               scarecrows={scarecrows.map((s) => ({
                 id: s.id,
                 title: s.title,
+                ...(s.creator ? { creator: s.creator } : {}),
                 ...(s.notes ? { notes: s.notes } : {}),
               }))}
               phase={phase}
@@ -88,7 +89,8 @@ export default async function ScarecrowPage() {
               {scarecrows.map((s) => (
                 <li key={s.id}>
                   <h3 className="font-semibold text-ink">{s.title}</h3>
-                  {s.notes ? <p className="text-ink">{s.notes}</p> : null}
+                  {s.creator ? <p className="text-ink">by {s.creator}</p> : null}
+                  {s.notes ? <p className="text-ink-soft">{s.notes}</p> : null}
                 </li>
               ))}
             </ul>
@@ -106,7 +108,7 @@ export default async function ScarecrowPage() {
             {ranked.map(({ scarecrow, votes }) => (
               <li key={scarecrow.id} className="text-ink">
                 <span className="font-semibold">{scarecrow.title}</span>
-                {scarecrow.notes ? ` — ${scarecrow.notes}` : ""} · {votes}{" "}
+                {scarecrow.creator ? ` by ${scarecrow.creator}` : ""} · {votes}{" "}
                 {votes === 1 ? "vote" : "votes"}
               </li>
             ))}
