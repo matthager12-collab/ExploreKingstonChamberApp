@@ -350,6 +350,11 @@ export const PII_STORES: PiiStore[] = [
     "A counter, not a log \u2014 there is no row per visitor, no session id, and no coordinate, so no field ties a tap to a person. Nothing to find, export, or delete by identifier.",
   ),
   noIdentifierStore(
+    "scarecrow_vote",
+    "Scarecrow Crawl votes and the photos sent with them.",
+    "A vote carries no account, session id, cookie, IP or coordinate — nothing ties one to a person, and photo metadata is stripped before storage. There is nothing to find, export or delete by identifier; the Chamber can remove an individual photo on request from the crawl console, and retention destroys photo and vote together at 12 months.",
+  ),
+  noIdentifierStore(
     "survey_response",
     "Anonymous LTAC visitor-survey answers.",
     "Structurally anonymous — no field ties a survey response to a person, so there is nothing to find, export, or delete by identifier.",

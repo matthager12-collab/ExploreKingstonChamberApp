@@ -34,6 +34,9 @@ export const HIDEABLE_PAGES: { path: string; label: string }[] = [
   { path: "/map", label: "Town Map" },
   { path: "/give", label: "Give Back" },
   { path: "/hunt", label: "Scavenger Hunt" },
+  // Seasonal: the 2026 Scarecrow Crawl (17–31 October). Hideable so the
+  // Chamber can take it down after the prize is awarded without a deploy.
+  { path: "/scarecrow", label: "Scarecrow Crawl" },
   { path: "/about", label: "About" },
   // E14 — the non-app fallbacks (M-14-03 / M-18-07). Visible by default like
   // every other entry; listed here so the Chamber can hide them from the same

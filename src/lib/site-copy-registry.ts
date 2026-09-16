@@ -315,6 +315,28 @@ export const COPY_BLOCKS = [
       "Pick a layer — where to eat, where to park, what to explore — and see it all on one map of downtown Kingston.",
   },
 
+  // ------------------------------------------------------- /scarecrow (2026)
+  {
+    key: "scarecrow.header.eyebrow",
+    page: "Scarecrow Crawl",
+    label: "Header eyebrow",
+    fallback: "17–31 October",
+  },
+  {
+    key: "scarecrow.header.title",
+    page: "Scarecrow Crawl",
+    label: "Page title",
+    fallback: "Scarecrow Crawl",
+  },
+  {
+    key: "scarecrow.header.intro",
+    page: "Scarecrow Crawl",
+    label: "Header intro",
+    multiline: true,
+    fallback:
+      "Kingston businesses build the scarecrows; you pick the best one. Find them on the map, vote for your favourite, then tag @explorekingstonwa in your own photo to be in for a prize. Voting closes at 5pm on Saturday 31 October.",
+  },
+
   // ---------------------------------------------------- /map/restrooms (E27)
   {
     key: "restrooms.header.eyebrow",

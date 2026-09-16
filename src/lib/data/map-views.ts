@@ -50,6 +50,24 @@ export const mapViews: MapView[] = [
     published: true,
   },
   {
+    // The 2026 Scarecrow Crawl. Its markers ARE the crawl: /scarecrow reads
+    // this view, so adding a pin in /admin/maps (or on the crawl console) adds
+    // a business to the trail and to the ballot, with no deploy.
+    //
+    // published: false keeps it out of the public /map switcher — the crawl has
+    // its own page, and a seasonal layer on the town map would outlive it.
+    // resolveMapView() does not gate on `published`, so /scarecrow still draws
+    // it, and /admin/maps still lists it for editing.
+    id: "scarecrow-crawl",
+    name: "Scarecrow Crawl",
+    description:
+      "Participating businesses' scarecrows. Each marker is one entry on the crawl — the public page lists and maps exactly these.",
+    center: [47.798, -122.4971],
+    zoom: 15.5,
+    sources: [],
+    published: false,
+  },
+  {
     id: "explore",
     name: "Explore Kingston",
     description:

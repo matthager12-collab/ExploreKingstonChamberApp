@@ -22,6 +22,7 @@ implements `findByIdentifier` / `exportRecords` / `deleteOrAnonymize`; the
 | `charities` | `contactEmail` | Optional public contact email on a listing | until scrubbed | `record` store `charities` |
 | `worklist_item` | payload `contact` | Privacy/accuracy request contact (OPEN items only) | scrubbed at resolution | Postgres `worklist_item` |
 | `hunt-submissions` | *(no identifier)* | Photo + optional precise check-in location | 12 months | `record` + fs/blob photos |
+| `scarecrow_vote` | *(none — anonymous)* | Scarecrow Crawl vote + optional visitor photo (metadata stripped, never published) | 12 months | Postgres `scarecrow_vote` + R2/fs photos |
 | `survey_response` | *(none — anonymous)* | LTAC survey answers | 36 months | Postgres `survey_response` |
 | `feedback_response` | `email` *(optional, unverified)* | Page feedback: 1–5 star rating, free-text comment, source path, optional name + email | 12 months | Postgres `feedback_response` |
 | `analytics_event` | *(none — anonymous)* | Pageviews / outbound / geo-ping (area only) / consent / web vital (page timing) | 90 days (geo) / 25 months | Postgres `analytics_event` |

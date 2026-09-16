@@ -1,0 +1,118 @@
+// The Scarecrow Crawl (2026) — pins, a vote, and a share link.
+//
+// The entries come from the "scarecrow-crawl" map view, which the Chamber
+// edits itself (in /admin/maps, or from the crawl console). This page renders
+// exactly what is on that view: same markers on the map, same names in the
+// list, same ids on the ballot.
+//
+// ACCESSIBILITY: the map is an enhancement, not the page. "Every scarecrow, in
+// words" below it carries the same facts in text — the same rule /parking
+// follows (docs/ACCESSIBILITY.md, "text alternative"), and the thing that
+// actually works on a phone in a Kitsap October.
+
+import type { Metadata } from "next";
+import { FeatureMap } from "@/components/feature-map";
+import { ScarecrowVote } from "@/components/scarecrow-vote";
+import { PageHeader, Section } from "@/components/ui";
+import { CRAWL_VIEW_ID, crawlPhase } from "@/lib/data/scarecrows";
+import { resolveMapView } from "@/lib/map/resolve";
+import { assertPageVisibleStatic } from "@/lib/page-visibility";
+import { getCrawlScarecrows, getVoteCounts } from "@/lib/stores/scarecrow-store";
+import { copyText, getCopyOverrides } from "@/lib/stores/site-store";
+
+export const metadata: Metadata = {
+  title: "Scarecrow Crawl",
+  description:
+    "Find every scarecrow in Kingston, vote for your favourite, and share it — Saturday 17 October to 5pm Saturday 31 October 2026.",
+};
+
+export const revalidate = 60;
+
+export default async function ScarecrowPage() {
+  await assertPageVisibleStatic("/scarecrow");
+  const [copy, scarecrows, resolved] = await Promise.all([
+    getCopyOverrides(),
+    getCrawlScarecrows(),
+    resolveMapView(CRAWL_VIEW_ID),
+  ]);
+  const phase = crawlPhase();
+  // Results stay shut until the crawl does. Before then the page never reads a
+  // count, so there is no number to leak, cache, or argue with mid-contest.
+  const counts = phase === "closed" ? await getVoteCounts() : {};
+
+  const ranked =
+    phase === "closed"
+      ? scarecrows
+          .map((s) => ({ scarecrow: s, votes: counts[s.id] ?? 0 }))
+          .sort((a, b) => b.votes - a.votes || a.scarecrow.title.localeCompare(b.scarecrow.title))
+      : [];
+
+  return (
+    <>
+      <PageHeader
+        eyebrow={copyText(copy, "scarecrow.header.eyebrow")}
+        title={copyText(copy, "scarecrow.header.title")}
+        intro={copyText(copy, "scarecrow.header.intro")}
+      />
+
+      {scarecrows.length === 0 ? (
+        <Section>
+          <p className="text-ink">
+            The Chamber is still adding this year&rsquo;s scarecrows. Check back before Saturday 17
+            October.
+          </p>
+        </Section>
+      ) : (
+        <>
+          <Section>
+            <ScarecrowVote
+              scarecrows={scarecrows.map((s) => ({
+                id: s.id,
+                title: s.title,
+                ...(s.notes ? { notes: s.notes } : {}),
+              }))}
+              phase={phase}
+            />
+          </Section>
+
+          <Section title="Where the scarecrows are">
+            <p className="mb-4 text-ink">
+              Tap a pin for the business hosting it. Everything on this map is within a walk of
+              downtown Kingston.
+            </p>
+            <FeatureMap resolved={resolved} height="460px" />
+          </Section>
+
+          <Section title="Every scarecrow, in words">
+            <ul className="space-y-4">
+              {scarecrows.map((s) => (
+                <li key={s.id}>
+                  <h3 className="font-semibold text-ink">{s.title}</h3>
+                  {s.notes ? <p className="text-ink">{s.notes}</p> : null}
+                </li>
+              ))}
+            </ul>
+          </Section>
+        </>
+      )}
+
+      {phase === "closed" && scarecrows.length > 0 ? (
+        <Section title="Results">
+          <p className="mb-4 text-ink-soft">
+            Votes are counted once per device, not per person — a good measure of which scarecrow
+            people liked, not an audited ballot.
+          </p>
+          <ol className="space-y-2">
+            {ranked.map(({ scarecrow, votes }) => (
+              <li key={scarecrow.id} className="text-ink">
+                <span className="font-semibold">{scarecrow.title}</span>
+                {scarecrow.notes ? ` — ${scarecrow.notes}` : ""} · {votes}{" "}
+                {votes === 1 ? "vote" : "votes"}
+              </li>
+            ))}
+          </ol>
+        </Section>
+      ) : null}
+    </>
+  );
+}
