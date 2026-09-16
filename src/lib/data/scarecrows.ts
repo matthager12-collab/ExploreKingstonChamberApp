@@ -41,6 +41,10 @@ export interface Scarecrow {
   notes?: string;
   lat: number;
   lng: number;
+  /** False while the pin still sits on CRAWL_MAP_CENTER — added without
+   *  coordinates and not yet dragged into place. It is listed and votable, but
+   *  the public map leaves it off rather than show it somewhere it isn't. */
+  placed: boolean;
 }
 
 /** Markers on the crawl view, as scarecrows. Anything without a point (a line
@@ -56,9 +60,40 @@ export function scarecrowsFromFeatures(features: MapFeature[]): Scarecrow[] {
       ...(f.notes ? { notes: f.notes } : {}),
       lat: f.point![0],
       lng: f.point![1],
+      placed: !isUnplaced(f.point),
     }))
     .sort((a, b) => a.title.localeCompare(b.title));
 }
+
+/** A pin still on the placeholder: added without coordinates — by a business
+ *  registering, or on the console — and waiting to be dragged into place in
+ *  the map builder. An exact match on purpose: CRAWL_MAP_CENTER is our own
+ *  value, and no real scarecrow stands on that exact point. */
+export function isUnplaced(point: [number, number] | undefined): boolean {
+  return !point || (point[0] === CRAWL_MAP_CENTER[0] && point[1] === CRAWL_MAP_CENTER[1]);
+}
+
+// ---------------------------------------------------------------------------
+// Registration — businesses put their own scarecrow forward
+// ---------------------------------------------------------------------------
+
+/**
+ * Registration closes when the crawl opens, so the trail and the ballot stay
+ * fixed for the fortnight. Dates only — the voting switch does not reopen it.
+ * The register route calls this with the server's clock.
+ */
+export function registrationOpen(now: Date = new Date()): boolean {
+  return now.getTime() < Date.parse(CRAWL_START);
+}
+
+/** Field caps, shared by the form (maxLength) and the route (the real check). */
+export const REGISTRATION_LIMITS = {
+  title: 80,
+  creator: 120,
+  notes: 300,
+  submitterName: 100,
+  contact: 200,
+} as const;
 
 export type CrawlPhase = "before" | "open" | "closed";
 
@@ -67,8 +102,9 @@ export type CrawlPhase = "before" | "open" | "closed";
  *
  * "auto" is the dates deciding, and is what runs the real crawl. The other two
  * exist so the Chamber can try the whole thing — vote, photo, permission box —
- * before 17 October, and stop it early if they need to. The page is hidden
- * while they do that, so "open" before the crawl reaches nobody else.
+ * before 17 October, and stop it early if they need to. The page is PUBLIC
+ * while registration runs, so a forced-open vote is visible to visitors: hide
+ * the page in Admin → Site content first to rehearse in private.
  */
 export type VotingOverride = "auto" | "open" | "closed";
 

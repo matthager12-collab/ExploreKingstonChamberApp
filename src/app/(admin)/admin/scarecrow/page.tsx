@@ -26,6 +26,7 @@ import {
   listVotesWithPhotos,
   photoUrl,
 } from "@/lib/stores/scarecrow-store";
+import { listWorklistItems } from "@/lib/stores/worklist-store";
 import { CrawlEditor, type EditableScarecrow } from "./crawl-editor";
 import { PhotoList, type CrawlPhoto } from "./photo-list";
 import { VotingControls } from "./voting-controls";
@@ -57,14 +58,25 @@ function formatDay(iso: string): string {
 }
 
 export default async function AdminScarecrowPage() {
-  const [scarecrows, counts, total, withPhotos, voting, phase] = await Promise.all([
+  const [scarecrows, counts, total, withPhotos, voting, phase, heldMarkers] = await Promise.all([
     getCrawlScarecrows(),
     getVoteCounts(),
     countVotes(),
     listVotesWithPhotos(),
     getVotingOverride(),
     getCrawlPhase(),
+    listWorklistItems({
+      type: "moderation",
+      state: ["open", "in_progress"],
+      subjectStore: "map-features",
+    }),
   ]);
+  // Business registrations are the only 'new' holds on map-features; a report
+  // or takedown about some other pin is a different kind and not counted here.
+  const waiting = heldMarkers.filter(
+    (item) => (item.payload as { kind?: string }).kind === "new",
+  ).length;
+  const unplaced = scarecrows.filter((s) => !s.placed);
 
   const ranked: EditableScarecrow[] = scarecrows
     .map((s) => ({
@@ -100,6 +112,38 @@ export default async function AdminScarecrowPage() {
         title="Scarecrow Crawl"
         intro="The businesses taking part, who is winning, and the photos visitors sent with their votes."
       />
+
+      {waiting > 0 || unplaced.length > 0 ? (
+        <Section>
+          <div className="rounded-2xl border border-sand bg-white p-5 text-ink">
+            {waiting > 0 ? (
+              <p>
+                <span className="font-semibold">
+                  {waiting} {waiting === 1 ? "registration is" : "registrations are"} waiting for
+                  approval.
+                </span>{" "}
+                <Link href="/admin/worklist" className="underline">
+                  Review in the Worklist
+                </Link>{" "}
+                — approving one puts it on the trail straight away.
+              </p>
+            ) : null}
+            {unplaced.length > 0 ? (
+              <p className={waiting > 0 ? "mt-3" : undefined}>
+                <span className="font-semibold">
+                  Not on the map yet: {unplaced.map((s) => s.title).join(", ")}.
+                </span>{" "}
+                They are listed and can be voted for, but have no pin until someone drags one into
+                place in the{" "}
+                <Link href="/admin/maps" className="underline">
+                  map builder
+                </Link>{" "}
+                (Scarecrow Crawl view — they sit in the middle of downtown).
+              </p>
+            ) : null}
+          </div>
+        </Section>
+      ) : null}
 
       <Section title="Entries">
         <p className="mb-4 text-ink-soft">
@@ -140,8 +184,9 @@ export default async function AdminScarecrowPage() {
       <Section title="Voting">
         <p className="mb-4 text-ink-soft">
           Force voting open to rehearse the whole thing — vote, photo, permission box — before the
-          crawl starts, then clear the test votes and set it back to the dates. While the page is
-          hidden, only signed-in Chamber staff can reach it, so a rehearsal reaches no visitors.
+          crawl starts, then clear the test votes and set it back to the dates. The page is public
+          while registration runs, so a forced-open vote is visible to visitors — hide the page in
+          Site content first to rehearse in private, and unhide it afterwards.
         </p>
         <VotingControls voting={voting} phase={phase} totalVotes={total} />
       </Section>

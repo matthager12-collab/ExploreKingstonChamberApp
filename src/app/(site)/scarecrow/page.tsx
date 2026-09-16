@@ -1,4 +1,9 @@
-// The Scarecrow Crawl (2026) — pins, a vote, and a share link.
+// The Scarecrow Crawl (2026) — registration, pins, a vote, and a share link.
+//
+// Two lives. Until the crawl opens on 17 October the page leads with
+// "register your scarecrow" for businesses and makers, and approved entries
+// appear underneath as the Chamber accepts them. From the 17th the form is
+// gone and the page is the trail: map, list, vote.
 //
 // The entries come from the "scarecrow-crawl" map view, which the Chamber
 // edits itself (in /admin/maps, or from the crawl console). This page renders
@@ -12,9 +17,10 @@
 
 import type { Metadata } from "next";
 import { FeatureMap } from "@/components/feature-map";
+import { ScarecrowRegister } from "@/components/scarecrow-register";
 import { ScarecrowVote } from "@/components/scarecrow-vote";
 import { PageHeader, Section } from "@/components/ui";
-import { CRAWL_VIEW_ID } from "@/lib/data/scarecrows";
+import { CRAWL_VIEW_ID, isUnplaced, registrationOpen } from "@/lib/data/scarecrows";
 import { resolveMapView } from "@/lib/map/resolve";
 import { HiddenPageBanner, assertPageVisible } from "@/lib/page-visibility";
 import { getCrawlPhase, getCrawlScarecrows, getVoteCounts } from "@/lib/stores/scarecrow-store";
@@ -46,6 +52,20 @@ export default async function ScarecrowPage() {
   // Results stay shut until the crawl does. Before then the page never reads a
   // count, so there is no number to leak, cache, or argue with mid-contest.
   const counts = phase === "closed" ? await getVoteCounts() : {};
+  const registering = registrationOpen();
+
+  // A crawl marker still on the placeholder point has not been placed yet —
+  // registered without coordinates, or added on the console without them.
+  // It stays OFF the public map until someone drags it into place, so no pin
+  // ever sits where the scarecrow isn't; it is still listed below, with the
+  // address the business gave. Only markers: a route drawn on the view keeps
+  // showing.
+  const mapView = resolved
+    ? {
+        ...resolved,
+        features: resolved.features.filter((f) => f.kind !== "marker" || !isUnplaced(f.point)),
+      }
+    : resolved;
 
   const ranked =
     phase === "closed"
@@ -63,11 +83,23 @@ export default async function ScarecrowPage() {
         intro={copyText(copy, "scarecrow.header.intro")}
       />
 
+      {registering ? (
+        <Section title="Register your scarecrow">
+          <p className="mb-4 text-ink">
+            Building a scarecrow for the crawl? Tell us about it here. The Chamber checks each entry
+            and it appears on this page once approved. Registration closes when the crawl opens on
+            Saturday 17 October.
+          </p>
+          <ScarecrowRegister />
+        </Section>
+      ) : null}
+
       {scarecrows.length === 0 ? (
         <Section>
           <p className="text-ink">
-            The Chamber is still adding this year&rsquo;s scarecrows. Check back before Saturday 17
-            October.
+            {registering
+              ? "No scarecrows on the trail yet — approved entries will appear here."
+              : "The Chamber is still putting this year\u2019s trail together. Check back soon."}
           </p>
         </Section>
       ) : (
@@ -89,7 +121,7 @@ export default async function ScarecrowPage() {
               Tap a pin for the business hosting it. Everything on this map is within a walk of
               downtown Kingston.
             </p>
-            <FeatureMap resolved={resolved} height="460px" />
+            <FeatureMap resolved={mapView} height="460px" />
           </Section>
 
           <Section title="Every scarecrow, in words">
@@ -99,6 +131,9 @@ export default async function ScarecrowPage() {
                   <h3 className="font-semibold text-ink">{s.title}</h3>
                   {s.creator ? <p className="text-ink">by {s.creator}</p> : null}
                   {s.notes ? <p className="text-ink-soft">{s.notes}</p> : null}
+                  {s.placed ? null : (
+                    <p className="text-xs text-ink-soft">Not on the map yet.</p>
+                  )}
                 </li>
               ))}
             </ul>

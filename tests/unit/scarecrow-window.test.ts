@@ -6,13 +6,15 @@
 import { describe, expect, it } from "vitest";
 import {
   CRAWL_END,
+  CRAWL_MAP_CENTER,
   CRAWL_START,
   crawlPhase,
   effectiveCrawlPhase,
+  isUnplaced,
+  registrationOpen,
   scarecrowsFromFeatures,
 } from "@/lib/data/scarecrows";
 import type { MapFeature } from "@/lib/map/types";
-import { effectiveHiddenPaths } from "@/lib/page-visibility";
 
 const marker = (id: string, title: string, extra: Partial<MapFeature> = {}): MapFeature => ({
   id,
@@ -66,21 +68,6 @@ describe("scarecrowsFromFeatures", () => {
   });
 });
 
-describe("the crawl page ships dark", () => {
-  it("is hidden when the site-pages store says nothing about it", () => {
-    // The trail was public with an empty list for a day in September. Absent a
-    // record, the page must be dark — the Chamber turns it on when the
-    // businesses are in, and a wiped store or a restore puts it back to dark
-    // rather than republishing a half-built page.
-    expect(effectiveHiddenPaths([])).toContain("/scarecrow");
-  });
-
-  it("is public only when a record explicitly says it is visible", () => {
-    expect(effectiveHiddenPaths([{ id: "/scarecrow", hidden: false }])).not.toContain("/scarecrow");
-    expect(effectiveHiddenPaths([{ id: "/scarecrow", hidden: true }])).toContain("/scarecrow");
-  });
-});
-
 describe("effectiveCrawlPhase", () => {
   const beforeCrawl = new Date("2026-10-01T12:00:00-07:00");
   const midCrawl = new Date("2026-10-20T12:00:00-07:00");
@@ -94,5 +81,30 @@ describe("effectiveCrawlPhase", () => {
     // The rehearsal, and the stop-it-now.
     expect(effectiveCrawlPhase("open", beforeCrawl)).toBe("open");
     expect(effectiveCrawlPhase("closed", midCrawl)).toBe("closed");
+  });
+});
+
+describe("registrationOpen", () => {
+  it("accepts registrations right up to the moment the crawl opens, then stops", () => {
+    expect(registrationOpen(new Date("2026-09-20T12:00:00-07:00"))).toBe(true);
+    expect(registrationOpen(new Date("2026-10-16T23:59:59-07:00"))).toBe(true);
+    expect(registrationOpen(new Date(CRAWL_START))).toBe(false);
+  });
+});
+
+describe("isUnplaced", () => {
+  it("treats the placeholder point, and a missing point, as not yet placed", () => {
+    expect(isUnplaced([CRAWL_MAP_CENTER[0], CRAWL_MAP_CENTER[1]])).toBe(true);
+    expect(isUnplaced(undefined)).toBe(true);
+    expect(isUnplaced([47.7981, -122.496])).toBe(false);
+  });
+
+  it("marks a scarecrow on the placeholder as unplaced and a real point as placed", () => {
+    const [waiting, real] = scarecrowsFromFeatures([
+      marker("a", "A waiting one", { point: [CRAWL_MAP_CENTER[0], CRAWL_MAP_CENTER[1]] }),
+      marker("b", "B real one", { point: [47.7981, -122.496] }),
+    ]);
+    expect(waiting.placed).toBe(false);
+    expect(real.placed).toBe(true);
   });
 });
