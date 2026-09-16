@@ -6,7 +6,7 @@
 // Deliberately separate from dbHealthy() (records.ts), which the /api/health
 // readiness gate owns: that one is memoized ~60s and collapses "unconfigured"
 // into false. The ops page needs the three-way OK / DOWN / UNKNOWN split and its
-// own short timeout so a hung Neon never stalls the page render.
+// own short timeout so a hung database never stalls the page render.
 import "server-only";
 
 import { sql } from "drizzle-orm";

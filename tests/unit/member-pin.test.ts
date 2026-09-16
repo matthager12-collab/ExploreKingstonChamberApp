@@ -25,7 +25,7 @@ const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const read = (p: string) => readFileSync(path.join(REPO_ROOT, p), "utf8");
 
 const ROUTE = read("src/app/api/admin/map-features/route.ts");
-const EDITOR = read("src/app/(site)/admin/maps/editor.tsx");
+const EDITOR = read("src/app/(admin)/admin/maps/editor.tsx");
 const MAP = read("src/components/feature-map.tsx");
 const TYPES = read("src/lib/map/types.ts");
 

@@ -96,18 +96,21 @@ services:
       - key: NEXT_PUBLIC_SITE_URL
         sync: false
 
-      # E05 Postgres substrate: structured data lives in Neon. Value is set
-      # ONLY in the dashboard (production at cutover, staging for rehearsal) —
-      # never in this file. A release started without it fails /api/health
-      # (dbOk:false) and 503s. NOTE: this does NOT keep the previous release
-      # serving. Both services mount a persistent disk, and a disk can be
-      # mounted by only ONE instance — so Render must stop the old instance
-      # before starting the new one. A release that never goes healthy takes
-      # the service DOWN. Verified on staging 2026-07-19: pushing the E06
-      # release to a service with no DATABASE_URL produced 502 on every path.
-      # Validate the URL from your laptop BEFORE pasting it here.
+      # E05 Postgres substrate. Since 2026-09-02 structured data lives in
+      # explore-kingston-db (the `databases:` block at the end of this file)
+      # and this var is Blueprint-managed: Render fills in the INTERNAL
+      # connection string at every sync — private network, no sslmode, never
+      # typed, never in git. Before that it was a dashboard-only paste of the
+      # Neon pooled URL (sync: false). A release started without a reachable
+      # database fails /api/health (dbOk:false); since E15 removed the disk,
+      # Render then holds that release back and the previous one keeps
+      # serving (the older "takes the service DOWN" note applied only while
+      # a persistent disk was mounted — verified on staging 2026-07-19).
+      # Rollback to Neon, and the order that makes it stick: docs/DEPLOY.md §2.
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: explore-kingston-db
+          property: connectionString
 
       # Gates POST /api/auth/setup (first-run admin bootstrap) fail-closed.
       # Render generates a random value on first deploy; the operator reads it
@@ -157,16 +160,17 @@ services:
       - key: BACKUP_TOKEN
         sync: false
 
-      # Shared secret the ferry-observe/ferry-accuracy GitHub Actions crons
-      # send as a Bearer token. Optional — those routes are open (throttled)
-      # when unset.
+      # Shared secret the ferry-observe/ferry-accuracy crons (below) send as
+      # a Bearer token. FAIL-CLOSED like the other machine tokens: unset in
+      # production means those routes answer 503 until it is configured —
+      # they never open up.
       - key: FERRY_OBSERVE_TOKEN
         sync: false
 
       # Bearer token for the E08 staleness-sweep cron to call
       # POST /api/admin/worklist/sweep without an admin session. FAIL-CLOSED:
       # unset just disables the token path (the sweep still works from an
-      # admin session) — unlike FERRY_OBSERVE_TOKEN it never opens the route.
+      # admin session) — it never opens the route.
       - key: WORKLIST_SWEEP_TOKEN
         sync: false
 
@@ -407,3 +411,19 @@ services:
       # and branch on this at request time.
       - key: NOINDEX
         value: "1"
+
+databases:
+  # E05 substrate, moved off Neon on 2026-09-02. Neon billed compute-awake
+  # hours and this always-on app never let it sleep (~$33/mo for a 70 MB
+  # database). 0.1c-256mb is $6/mo with 1 GB of storage included.
+  # Internal-only: ipAllowList [] refuses every public connection; the web
+  # service reaches it over Render's private network via fromDatabase. For a
+  # one-off external session add your IP here, merge, and remove it after —
+  # the Blueprint pins this list at every sync, so a dashboard edit would be
+  # reverted anyway.
+  - name: explore-kingston-db
+    plan: 0.1c-256mb
+    region: oregon
+    postgresMajorVersion: "18" # Neon reported 18.6 at the first copy attempt; match it
+    diskSizeGB: 1
+    ipAllowList: []

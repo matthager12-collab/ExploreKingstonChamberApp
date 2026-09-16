@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { ADMIN_NAV, adminNavFor, type AdminNavEntry } from "@/lib/admin-nav";
+import {
+  ADMIN_NAV,
+  ADMIN_SECTIONS,
+  adminNavFor,
+  adminSectionsFor,
+  type AdminNavEntry,
+} from "@/lib/admin-nav";
 import type { AuthSubject } from "@/lib/auth/authz";
 import type { Role } from "@/lib/db/schema";
 
@@ -16,7 +22,7 @@ describe("admin nav manifest ↔ routes", () => {
     "%s resolves to a page.tsx",
     (href) => {
       // Route-group aware since E22 — /admin/* is served from
-      // src/app/(site)/admin/*, and the group is stripped from the URL.
+      // src/app/(admin)/admin/*, and the group is stripped from the URL.
       expect(
         resolvesToPage(href),
         `${href} matched no page.tsx — looked in:\n  ${candidatePageFiles(href).join("\n  ")}`,
@@ -76,5 +82,63 @@ describe("adminNavFor(user) capability filtering", () => {
       "manage-site",
     ]);
     for (const e of ADMIN_NAV) expect(actions.has(e.capability)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SECTIONS (the N5 rail). The manifest gained a `section` per entry; these guard
+// the grouping the way the block above guards the hrefs.
+
+describe("admin nav sections", () => {
+  // Local subject: the one above is scoped to its own describe block.
+  const subject = (role: Role): AuthSubject => ({
+    id: "u1",
+    email: "u@example.com",
+    name: "U",
+    role,
+    orgId: null,
+    editableIds: [],
+    entitlements: {},
+  });
+
+  it("gives every entry a section that actually exists", () => {
+    const known = new Set(ADMIN_SECTIONS.map((s) => s.id));
+    for (const entry of ADMIN_NAV) {
+      expect(known.has(entry.section), `${entry.id} → unknown section "${entry.section}"`).toBe(
+        true,
+      );
+    }
+  });
+
+  it("leaves no section empty", () => {
+    // An empty section renders a rail entry that leads nowhere.
+    for (const section of ADMIN_SECTIONS) {
+      const count = ADMIN_NAV.filter((e) => e.section === section.id).length;
+      expect(count, `section "${section.id}" has no surfaces`).toBeGreaterThan(0);
+    }
+  });
+
+  it("keeps sections small enough to scan", () => {
+    // The whole point of grouping was that 19 flat chips overflowed the bar. A
+    // section that grows past ~6 pages has re-created the problem one level down.
+    for (const section of ADMIN_SECTIONS) {
+      const count = ADMIN_NAV.filter((e) => e.section === section.id).length;
+      expect(count, `section "${section.id}" is getting long`).toBeLessThanOrEqual(6);
+    }
+  });
+
+  it("adminSectionsFor(admin) covers every surface exactly once", () => {
+    const sections = adminSectionsFor(subject("admin"));
+    const hrefs = sections.flatMap((s) => s.items.map((i) => i.href));
+    expect(new Set(hrefs).size).toBe(hrefs.length);
+    expect(hrefs.sort()).toEqual(ADMIN_NAV.map((e) => e.href).sort());
+  });
+
+  it("drops sections a role cannot see rather than rendering them empty", () => {
+    for (const role of ["admin", "moderator", "viewer"] as const) {
+      for (const section of adminSectionsFor(subject(role))) {
+        expect(section.items.length, `${role}/${section.id}`).toBeGreaterThan(0);
+      }
+    }
   });
 });

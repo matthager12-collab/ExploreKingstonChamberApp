@@ -11,7 +11,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 
 import JoinPage from "@/app/(site)/portal/join/page";
-import { JoinForm } from "@/app/(site)/portal/forms";
+import { JoinForm } from "@/components/portal/auth-forms";
 
 afterEach(cleanup);
 

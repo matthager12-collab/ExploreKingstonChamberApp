@@ -10,7 +10,7 @@ import "@/test/setup";
 
 // Force the FILE backend for every store: hasDb() in src/lib/db.ts keys off
 // DATABASE_URL, and the Upstash rate-limiter keys off these two. An operator shell
-// that happens to export any of them must never point unit tests at real Neon/Redis.
+// that happens to export any of them must never point unit tests at a real Postgres/Redis.
 delete process.env.DATABASE_URL;
 delete process.env.UPSTASH_REDIS_REST_URL;
 delete process.env.UPSTASH_REDIS_REST_TOKEN;

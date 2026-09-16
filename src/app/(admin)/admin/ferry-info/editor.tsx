@@ -1,0 +1,723 @@
+"use client";
+
+// Client half of /admin/ferry-info: a field-level editor for the four ferry
+// FACT records (payment, boarding-pass, cash-tips, sources). Deliberately plain
+// (fetch + local state), in the same spirit as admin/content/manager.tsx. All
+// authorization is server-side — this UI talks to /api/admin/ferry-info, which
+// requires role admin and rebuilds each doc from known fields.
+//
+// Each record is edited as a live draft and saved as a whole doc for its id.
+// The machine-down note (boarding-pass.currentNote) is surfaced at the very top
+// because it changes most often; it edits the same boarding-pass draft, so
+// saving either place persists it.
+
+import { useId, useState } from "react";
+import {
+  WALK_ON_ROUND_TRIP_KEY,
+  type BoardingPass,
+  type FareRow,
+  type FerryFares,
+  type FerryInfo,
+  type FerryPayment,
+  type Source,
+} from "@/lib/data/ferry-info";
+import { Badge, Card } from "@/components/ui";
+import { Provenance } from "@/components/admin/provenance";
+import { RecordHistory } from "@/components/admin/record-history";
+
+/* --------------------------------- styles --------------------------------- */
+
+const inputClass =
+  "mt-1 block w-full rounded-lg border border-sand bg-white px-3 py-2 text-base";
+const buttonClass =
+  "rounded-full bg-sound px-5 py-2 text-sm font-semibold text-white hover:bg-sound-deep disabled:opacity-50";
+const ghostButtonClass =
+  "rounded-full border border-sand bg-white px-4 py-2 text-sm font-semibold text-tide-deep hover:border-tide disabled:opacity-50";
+const smallGhost =
+  "rounded-full border border-sand bg-white px-3 py-1 text-xs font-semibold text-tide-deep hover:border-tide disabled:opacity-50";
+
+/* ------------------------------- API helper ------------------------------- */
+
+type RecordId = "payment" | "boarding-pass" | "cash-tips" | "sources" | "fares";
+
+async function saveRecord(id: RecordId, doc: unknown): Promise<string | null> {
+  try {
+    const res = await fetch("/api/admin/ferry-info", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, doc }),
+    });
+    if (res.ok) return null;
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    return data.error ?? "Something went wrong";
+  } catch {
+    return "Network error — try again";
+  }
+}
+
+/* ----------------------------- field building blocks ---------------------- */
+
+function TextField({
+  label,
+  value,
+  onChange,
+  rows = 3,
+  hint,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  rows?: number;
+  hint?: string;
+}) {
+  // htmlFor + id, never a WRAPPING <label> — same rule as components/portal/form.tsx:
+  // a wrapper folds the hint into the control's accessible name. The label was
+  // previously bare, pointing at nothing, so this textarea had no accessible
+  // name at all (axe "label", critical).
+  const id = useId();
+  return (
+    <div>
+      <label htmlFor={id} className="text-sm font-medium text-ink">
+        {label}
+      </label>
+      {hint && (
+        <p id={`${id}-hint`} className="text-xs text-ink-soft">
+          {hint}
+        </p>
+      )}
+      <textarea
+        id={id}
+        aria-describedby={hint ? `${id}-hint` : undefined}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={rows}
+        maxLength={4000}
+        className={inputClass}
+      />
+    </div>
+  );
+}
+
+/** Editable string list: reorder-free, add/remove/edit rows. */
+function StringListEditor({
+  label,
+  items,
+  onChange,
+  placeholder = "Add a line…",
+}: {
+  label: string;
+  items: string[];
+  onChange: (next: string[]) => void;
+  placeholder?: string;
+}) {
+  const set = (i: number, v: string) => {
+    const next = items.slice();
+    next[i] = v;
+    onChange(next);
+  };
+  const remove = (i: number) => onChange(items.filter((_, idx) => idx !== i));
+  const add = () => onChange([...items, ""]);
+  const move = (i: number, dir: -1 | 1) => {
+    const j = i + dir;
+    if (j < 0 || j >= items.length) return;
+    const next = items.slice();
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange(next);
+  };
+
+  // The heading is a <p>, so it named nothing: every row's textarea was an
+  // unnamed control (axe "label", critical). A group wrapper carries the shared
+  // name, and each row gets its own visually-hidden label — "Line 3 of Payment
+  // notes" is what distinguishes one row from the next when the visible design
+  // deliberately shows no per-row text.
+  const id = useId();
+  return (
+    <div role="group" aria-labelledby={`${id}-label`}>
+      <p id={`${id}-label`} className="text-sm font-medium text-ink">
+        {label}
+      </p>
+      <div className="mt-1 space-y-2">
+        {items.map((item, i) => (
+          <div key={i} className="flex items-start gap-2">
+            <label htmlFor={`${id}-${i}`} className="sr-only">
+              {`Line ${i + 1} of ${label}`}
+            </label>
+            <textarea
+              id={`${id}-${i}`}
+              value={item}
+              onChange={(e) => set(i, e.target.value)}
+              rows={2}
+              maxLength={4000}
+              className="block w-full rounded-lg border border-sand bg-white px-3 py-2 text-base"
+            />
+            <div className="flex shrink-0 flex-col gap-1">
+              <button
+                type="button"
+                onClick={() => move(i, -1)}
+                disabled={i === 0}
+                aria-label="Move up"
+                className={smallGhost}
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                onClick={() => move(i, 1)}
+                disabled={i === items.length - 1}
+                aria-label="Move down"
+                className={smallGhost}
+              >
+                ↓
+              </button>
+              <button
+                type="button"
+                onClick={() => remove(i)}
+                aria-label="Remove line"
+                className="rounded-full border border-coral/40 bg-coral/5 px-3 py-1 text-xs font-semibold text-coral-deep hover:bg-coral/10"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <button type="button" onClick={add} className={`mt-2 ${ghostButtonClass}`}>
+        + {placeholder}
+      </button>
+    </div>
+  );
+}
+
+/** Editable list of {label, url} sources. */
+function SourcesEditor({
+  items,
+  onChange,
+}: {
+  items: Source[];
+  onChange: (next: Source[]) => void;
+}) {
+  const set = (i: number, patch: Partial<Source>) => {
+    const next = items.slice();
+    next[i] = { ...next[i], ...patch };
+    onChange(next);
+  };
+  const remove = (i: number) => onChange(items.filter((_, idx) => idx !== i));
+  const add = () => onChange([...items, { label: "", url: "" }]);
+  const id = useId();
+
+  return (
+    <div role="group" aria-labelledby={`${id}-label`}>
+      <p id={`${id}-label`} className="text-sm font-medium text-ink">
+        Sources
+      </p>
+      <p className="text-xs text-ink-soft">
+        Label plus an https link — shown as the citations for these facts.
+      </p>
+      <div className="mt-1 space-y-3">
+        {items.map((src, i) => (
+          <div key={i} className="rounded-lg border border-sand p-3">
+            {/* Both labels were bare, so neither input had an accessible name
+                (axe "label", critical). The visible text stays exactly as it
+                was — it just points at its control now. The number is in the
+                name because "Label" repeated down a list of sources tells a
+                screen-reader user nothing about which source they are in. */}
+            <label htmlFor={`${id}-${i}-label`} className="text-xs font-medium text-ink">
+              Label
+              <span className="sr-only">{` for source ${i + 1}`}</span>
+            </label>
+            <input
+              id={`${id}-${i}-label`}
+              value={src.label}
+              onChange={(e) => set(i, { label: e.target.value })}
+              maxLength={300}
+              className={inputClass}
+            />
+            <label
+              htmlFor={`${id}-${i}-url`}
+              className="mt-2 block text-xs font-medium text-ink"
+            >
+              URL
+              <span className="sr-only">{` for source ${i + 1}`}</span>
+            </label>
+            <input
+              id={`${id}-${i}-url`}
+              value={src.url}
+              onChange={(e) => set(i, { url: e.target.value })}
+              maxLength={600}
+              placeholder="https://…"
+              className={inputClass}
+            />
+            <button
+              type="button"
+              onClick={() => remove(i)}
+              className="mt-2 rounded-full border border-coral/40 bg-coral/5 px-3 py-1 text-xs font-semibold text-coral-deep hover:bg-coral/10"
+            >
+              Remove source
+            </button>
+          </div>
+        ))}
+      </div>
+      <button type="button" onClick={add} className={`mt-2 ${ghostButtonClass}`}>
+        + Add source
+      </button>
+    </div>
+  );
+}
+
+/** Editable list of {label, amount, note?} fare rows for one fare group. */
+function FareGroupEditor({
+  label,
+  hint,
+  items,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  items: FareRow[];
+  onChange: (next: FareRow[]) => void;
+}) {
+  const set = (i: number, patch: Partial<FareRow>) => {
+    const next = items.slice();
+    next[i] = { ...next[i], ...patch };
+    onChange(next);
+  };
+  const remove = (i: number) => onChange(items.filter((_, idx) => idx !== i));
+  const add = () => onChange([...items, { label: "", amount: "" }]);
+
+  return (
+    <div>
+      <p className="text-sm font-medium text-ink">{label}</p>
+      {hint && <p className="text-xs text-ink-soft">{hint}</p>}
+      <div className="mt-1 space-y-3">
+        {items.map((row, i) => (
+          <div key={i} className="rounded-lg border border-sand p-3">
+            {/* A row other pages quote inside a sentence says so, because the
+                consequence of removing it is invisible from here: /simple and
+                /es stop naming a fare at all. The row is safe to rename and
+                reorder — the pages follow its hidden key, not its label. */}
+            {row.key === WALK_ON_ROUND_TRIP_KEY && (
+              <p className="mb-2 text-xs font-medium text-tide-deep">
+                Also quoted in a sentence on /ferry, /simple and /es. Rename or move it
+                freely; delete it and those pages say &ldquo;the fare posted at
+                Edmonds&rdquo; instead of a number.
+              </p>
+            )}
+            <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+              <div>
+                <label className="text-xs font-medium text-ink">What</label>
+                <input
+                  value={row.label}
+                  onChange={(e) => set(i, { label: e.target.value })}
+                  maxLength={120}
+                  placeholder="e.g. Round trip on foot"
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-ink">Amount</label>
+                <input
+                  value={row.amount}
+                  onChange={(e) => set(i, { amount: e.target.value })}
+                  maxLength={60}
+                  // Not a real fare: a placeholder showing a live figure is one
+                  // more copy of it to go stale each October.
+                  placeholder="$0.00 or Free"
+                  className={inputClass}
+                />
+              </div>
+            </div>
+            <label className="mt-2 block text-xs font-medium text-ink">
+              Note (optional)
+            </label>
+            <input
+              value={row.note ?? ""}
+              onChange={(e) => set(i, { note: e.target.value })}
+              maxLength={400}
+              placeholder="Any caveat a rider should know"
+              className={inputClass}
+            />
+            <button
+              type="button"
+              onClick={() => remove(i)}
+              className="mt-2 rounded-full border border-coral/40 bg-coral/5 px-3 py-1 text-xs font-semibold text-coral-deep hover:bg-coral/10"
+            >
+              Remove fare
+            </button>
+          </div>
+        ))}
+      </div>
+      <button type="button" onClick={add} className={`mt-2 ${ghostButtonClass}`}>
+        + Add fare
+      </button>
+    </div>
+  );
+}
+
+/** Save/Reset row shared by every record group. */
+function SaveBar({
+  busy,
+  saved,
+  error,
+  onSave,
+  onReset,
+}: {
+  busy: boolean;
+  saved: boolean;
+  error: string | null;
+  onSave: () => void;
+  onReset: () => void;
+}) {
+  return (
+    <>
+      {error && (
+        <p role="alert" className="mt-3 text-sm font-medium text-coral-deep">{error}</p>
+      )}
+      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-sand pt-4">
+        <button type="button" onClick={onSave} disabled={busy} className={buttonClass}>
+          {busy ? "Saving…" : "Save"}
+        </button>
+        <button
+          type="button"
+          onClick={onReset}
+          disabled={busy}
+          className={ghostButtonClass}
+        >
+          Revert edits
+        </button>
+        {saved && <Badge tone="green">Saved</Badge>}
+      </div>
+    </>
+  );
+}
+
+/** Deep-copy the fares record so drafts never alias the initial arrays. */
+function cloneFares(f: FerryFares): FerryFares {
+  const rows = (list: FareRow[]) => list.map((r) => ({ ...r }));
+  return {
+    walkOn: rows(f.walkOn),
+    drive: rows(f.drive),
+    fastFerry: rows(f.fastFerry),
+    ratesAsOf: f.ratesAsOf,
+    sources: f.sources.map((s) => ({ ...s })),
+  };
+}
+
+/* --------------------------------- editor --------------------------------- */
+
+export function FerryInfoEditor({ initial }: { initial: FerryInfo }) {
+  // One draft per record. `initial` is the merged (overlay-or-seed) value.
+  const [payment, setPayment] = useState<FerryPayment>(() => ({
+    ...initial.payment,
+    methods: [...initial.payment.methods],
+  }));
+  const [boarding, setBoarding] = useState<BoardingPass>(() => ({
+    ...initial.boardingPass,
+    how: [...initial.boardingPass.how],
+  }));
+  const [cashTips, setCashTips] = useState<string[]>(() => [...initial.cashTips]);
+  const [sources, setSources] = useState<Source[]>(() =>
+    initial.sources.map((s) => ({ ...s })),
+  );
+  const [fares, setFares] = useState<FerryFares>(() => cloneFares(initial.fares));
+
+  // Per-record UI state.
+  const [busy, setBusy] = useState<Record<RecordId, boolean>>({
+    payment: false,
+    "boarding-pass": false,
+    "cash-tips": false,
+    sources: false,
+    fares: false,
+  });
+  const [saved, setSaved] = useState<Record<RecordId, boolean>>({
+    payment: false,
+    "boarding-pass": false,
+    "cash-tips": false,
+    sources: false,
+    fares: false,
+  });
+  const [errors, setErrors] = useState<Record<RecordId, string | null>>({
+    payment: null,
+    "boarding-pass": null,
+    "cash-tips": null,
+    sources: null,
+    fares: null,
+  });
+
+  async function commit(id: RecordId, doc: unknown) {
+    setBusy((p) => ({ ...p, [id]: true }));
+    setErrors((p) => ({ ...p, [id]: null }));
+    const failure = await saveRecord(id, doc);
+    setBusy((p) => ({ ...p, [id]: false }));
+    if (failure) {
+      setErrors((p) => ({ ...p, [id]: failure }));
+      return;
+    }
+    setSaved((p) => ({ ...p, [id]: true }));
+    setTimeout(() => setSaved((p) => ({ ...p, [id]: false })), 1800);
+  }
+
+  function reset(id: RecordId) {
+    if (id === "payment")
+      setPayment({ ...initial.payment, methods: [...initial.payment.methods] });
+    else if (id === "boarding-pass")
+      setBoarding({ ...initial.boardingPass, how: [...initial.boardingPass.how] });
+    else if (id === "cash-tips") setCashTips([...initial.cashTips]);
+    else if (id === "sources") setSources(initial.sources.map((s) => ({ ...s })));
+    else setFares(cloneFares(initial.fares));
+    setErrors((p) => ({ ...p, [id]: null }));
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Machine-down note first — it changes most often. */}
+      <Card>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="font-display text-lg font-semibold text-sound-deep">
+            Machine-down note
+          </p>
+          <Badge tone="coral">changes often</Badge>
+        </div>
+        <p className="mt-1 text-sm text-ink-soft">
+          The temporary “current note” under the boarding-pass section — e.g. the
+          dispenser is down and officers are handing passes out by hand. Clear it
+          when the machine is back. (Saves as part of the boarding-pass record.)
+        </p>
+        <div className="mt-3">
+          <TextField
+            label="Current note"
+            value={boarding.currentNote}
+            onChange={(v) => setBoarding((b) => ({ ...b, currentNote: v }))}
+            rows={3}
+          />
+        </div>
+        <SaveBar
+          busy={busy["boarding-pass"]}
+          saved={saved["boarding-pass"]}
+          error={errors["boarding-pass"]}
+          onSave={() => commit("boarding-pass", boarding)}
+          onReset={() => reset("boarding-pass")}
+        />
+      </Card>
+
+      {/* Fares (E27) */}
+      <Card>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="font-display text-lg font-semibold text-sound-deep">Fares</p>
+          <Badge tone="coral">check each October</Badge>
+        </div>
+        <p className="mt-1 text-sm text-ink-soft">
+          The fare figures shown on /ferry. WSF usually adjusts fares each October —
+          when they do, update the amounts here and the &ldquo;rates as of&rdquo; line
+          below. No deploy needed.
+        </p>
+        <div className="mt-3 space-y-5">
+          <FareGroupEditor
+            label="Walk-on fares"
+            hint="Passenger fares. Put the senior / disability (RRFP) discount here so it stays a prominent line."
+            items={fares.walkOn}
+            onChange={(walkOn) => setFares((f) => ({ ...f, walkOn }))}
+          />
+          <FareGroupEditor
+            label="Drive-on fares"
+            hint="Vehicle fares (car + driver, motorcycle, extra passenger)."
+            items={fares.drive}
+            onChange={(drive) => setFares((f) => ({ ...f, drive }))}
+          />
+          <FareGroupEditor
+            label="Fast ferry fares"
+            hint="Kitsap Transit passenger-only fast ferry to Seattle."
+            items={fares.fastFerry}
+            onChange={(fastFerry) => setFares((f) => ({ ...f, fastFerry }))}
+          />
+          <TextField
+            label="Rates as of (freshness label)"
+            value={fares.ratesAsOf}
+            onChange={(ratesAsOf) => setFares((f) => ({ ...f, ratesAsOf }))}
+            rows={2}
+            hint="Shown under the fares so a visitor knows how current they are."
+          />
+          <SourcesEditor
+            items={fares.sources}
+            onChange={(fareSources) => setFares((f) => ({ ...f, sources: fareSources }))}
+          />
+        </div>
+        <SaveBar
+          busy={busy.fares}
+          saved={saved.fares}
+          error={errors.fares}
+          onSave={() => commit("fares", fares)}
+          onReset={() => reset("fares")}
+        />
+      </Card>
+
+      {/* Payment */}
+      <Card>
+        <p className="font-display text-lg font-semibold text-sound-deep">
+          Paying for the ferry
+        </p>
+        <div className="mt-3 space-y-4">
+          <StringListEditor
+            label="Payment methods"
+            items={payment.methods}
+            onChange={(methods) => setPayment((p) => ({ ...p, methods }))}
+            placeholder="Add a payment method"
+          />
+          <TextField
+            label="Kiosk note"
+            value={payment.kioskNote}
+            onChange={(v) => setPayment((p) => ({ ...p, kioskNote: v }))}
+            rows={2}
+          />
+          <TextField
+            label="Cash note"
+            value={payment.cashNote}
+            onChange={(v) => setPayment((p) => ({ ...p, cashNote: v }))}
+            rows={2}
+          />
+          <TextField
+            label="Card surcharge note"
+            value={payment.surchargeNote}
+            onChange={(v) => setPayment((p) => ({ ...p, surchargeNote: v }))}
+            rows={3}
+          />
+          <TextField
+            label="Free-leg note (walking on from Kingston)"
+            value={payment.freeLegNote}
+            onChange={(v) => setPayment((p) => ({ ...p, freeLegNote: v }))}
+            rows={3}
+          />
+        </div>
+        <SaveBar
+          busy={busy.payment}
+          saved={saved.payment}
+          error={errors.payment}
+          onSave={() => commit("payment", payment)}
+          onReset={() => reset("payment")}
+        />
+      </Card>
+
+      {/* Boarding pass */}
+      <Card>
+        <p className="font-display text-lg font-semibold text-sound-deep">
+          Vehicle boarding pass
+        </p>
+        <div className="mt-3 space-y-4">
+          <TextField
+            label="Summary"
+            value={boarding.summary}
+            onChange={(v) => setBoarding((b) => ({ ...b, summary: v }))}
+            rows={3}
+          />
+          <TextField
+            label="When it's required"
+            value={boarding.whenRequired}
+            onChange={(v) => setBoarding((b) => ({ ...b, whenRequired: v }))}
+            rows={4}
+          />
+          <TextField
+            label="Where (dispenser + advisory sign)"
+            value={boarding.where}
+            onChange={(v) => setBoarding((b) => ({ ...b, where: v }))}
+            rows={3}
+          />
+          <StringListEditor
+            label="How it works (steps)"
+            items={boarding.how}
+            onChange={(how) => setBoarding((b) => ({ ...b, how }))}
+            placeholder="Add a step"
+          />
+          <TextField
+            label="Who's exempt"
+            value={boarding.exempt}
+            onChange={(v) => setBoarding((b) => ({ ...b, exempt: v }))}
+            rows={2}
+          />
+          <TextField
+            label="Current note (machine-down — also editable up top)"
+            value={boarding.currentNote}
+            onChange={(v) => setBoarding((b) => ({ ...b, currentNote: v }))}
+            rows={3}
+          />
+        </div>
+        <SaveBar
+          busy={busy["boarding-pass"]}
+          saved={saved["boarding-pass"]}
+          error={errors["boarding-pass"]}
+          onSave={() => commit("boarding-pass", boarding)}
+          onReset={() => reset("boarding-pass")}
+        />
+      </Card>
+
+      {/* Cash tips */}
+      <Card>
+        <p className="font-display text-lg font-semibold text-sound-deep">
+          Cash tips
+        </p>
+        <p className="mt-1 text-sm text-ink-soft">
+          Quick, scannable dock tips — no ATM at the dock, ORCA beats the
+          surcharge, and so on.
+        </p>
+        <div className="mt-3">
+          <StringListEditor
+            label="Tips"
+            items={cashTips}
+            onChange={setCashTips}
+            placeholder="Add a tip"
+          />
+        </div>
+        <SaveBar
+          busy={busy["cash-tips"]}
+          saved={saved["cash-tips"]}
+          error={errors["cash-tips"]}
+          onSave={() => commit("cash-tips", cashTips)}
+          onReset={() => reset("cash-tips")}
+        />
+      </Card>
+
+      {/* Sources */}
+      <Card>
+        <p className="font-display text-lg font-semibold text-sound-deep">
+          Sources
+        </p>
+        <div className="mt-3">
+          <SourcesEditor items={sources} onChange={setSources} />
+        </div>
+        <SaveBar
+          busy={busy.sources}
+          saved={saved.sources}
+          error={errors.sources}
+          onSave={() => commit("sources", sources)}
+          onReset={() => reset("sources")}
+        />
+      </Card>
+
+      {/* E09: each ferry-info card is a fixed record — its provenance and
+          change history mount here rather than per-card, keeping the editing
+          cards uncluttered. */}
+      <Card>
+        <p className="font-display text-lg font-semibold text-sound-deep">
+          Change history
+        </p>
+        <div className="mt-3 space-y-4">
+          {(
+            [
+              ["payment", "Payment"],
+              ["boarding-pass", "Boarding pass"],
+              ["cash-tips", "Cash & tips"],
+              ["sources", "Sources"],
+              ["fares", "Fares"],
+            ] as const
+          ).map(([id, label]) => (
+            <div key={id} className="space-y-2">
+              <p className="text-sm font-medium text-ink">{label}</p>
+              <Provenance store="ferry-info" recordId={id} />
+              <RecordHistory store="ferry-info" recordId={id} />
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <p className="text-sm text-ink-soft">Public pages update within a minute.</p>
+    </div>
+  );
+}

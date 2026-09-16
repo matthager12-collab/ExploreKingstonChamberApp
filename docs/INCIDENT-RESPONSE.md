@@ -16,9 +16,10 @@ second person early — breach clocks are short.
   matching GitHub secrets + 1Password.
 - **Revoke sessions.** Rotating `AUTH_SECRET` does this globally; for a single
   compromised account, disable it (bumps `sessionVersion`).
-- **If the database may be exposed:** rotate `DATABASE_URL` (new Neon password),
-  and rotate the `age` backup keypair if a bundle may have leaked (keep the old
-  private key — old backups need it).
+- **If the database may be exposed:** rotate the database credentials in the
+  Render dashboard (`DATABASE_URL` is Blueprint-managed via `fromDatabase` —
+  never paste it by hand), and rotate the `age` backup keypair if a bundle may
+  have leaked (keep the old private key — old backups need it).
 
 ## 2. Assess scope
 

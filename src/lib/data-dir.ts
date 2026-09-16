@@ -1,7 +1,7 @@
 // Where filesystem state lives — LOCAL DEVELOPMENT ONLY since E15.
 //
 // Production no longer sets DATA_DIR and no longer mounts a disk. Everything
-// durable moved off-box: structured state to Neon Postgres (E05) and uploaded
+// durable moved off-box: structured state to Render Postgres (E05) and uploaded
 // images to the private Cloudflare R2 bucket (E15 slice 1). In the deployed
 // container this resolves to an ephemeral <cwd>/.data that is discarded on
 // every deploy — which is fine, because nothing that must survive is written

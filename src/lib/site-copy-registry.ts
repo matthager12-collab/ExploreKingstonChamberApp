@@ -150,7 +150,7 @@ export const COPY_BLOCKS = [
     label: "Header intro",
     multiline: true,
     fallback:
-      "Ready-made Kingston days built around ferry arrivals and local spots. Steal one whole or mix and match — everything downtown is a few blocks from the dock.",
+      "Ready-made days built around ferry arrivals and places we have actually checked — half a day on foot, a full day with the car, or a whole weekend. Steal one whole or mix and match. Each plan says which days its stops are open, because the fastest way to ruin a trip over here is a locked door.",
   },
 
   // -------------------------------------------------------------- /stay
@@ -313,6 +313,28 @@ export const COPY_BLOCKS = [
     multiline: true,
     fallback:
       "Pick a layer — where to eat, where to park, what to explore — and see it all on one map of downtown Kingston.",
+  },
+
+  // ------------------------------------------------------- /scarecrow (2026)
+  {
+    key: "scarecrow.header.eyebrow",
+    page: "Scarecrow Crawl",
+    label: "Header eyebrow",
+    fallback: "17–31 October",
+  },
+  {
+    key: "scarecrow.header.title",
+    page: "Scarecrow Crawl",
+    label: "Page title",
+    fallback: "Scarecrow Crawl",
+  },
+  {
+    key: "scarecrow.header.intro",
+    page: "Scarecrow Crawl",
+    label: "Header intro",
+    multiline: true,
+    fallback:
+      "Kingston businesses build the scarecrows; you pick the best one. Find them on the map, vote for your favourite, then tag @explorekingstonwa in your own photo to be in for a prize. Voting closes at 5pm on Saturday 31 October.",
   },
 
   // ---------------------------------------------------- /map/restrooms (E27)
@@ -803,7 +825,7 @@ export const COPY_BLOCKS = [
     page: "Page feedback (client)",
     label: "Panel intro",
     multiline: true,
-    fallback: "Tell the Chamber what's working and what isn't. Anonymous — don't include your name or contact details.",
+    fallback: "Tell the Chamber what's working and what isn't. Your name and email are optional — leave them only if you'd like a reply.",
   },
   {
     key: "feedback.rating.legend",
@@ -829,6 +851,39 @@ export const COPY_BLOCKS = [
     label: "Thank-you message",
     multiline: true,
     fallback: "Thanks — the Chamber reads every one of these.",
+  },
+  {
+    key: "feedback.name.label",
+    page: "Page feedback (client)",
+    label: "Name field label",
+    fallback: "Your name (optional)",
+  },
+  {
+    key: "feedback.email.label",
+    page: "Page feedback (client)",
+    label: "Email field label",
+    fallback: "Your email (optional)",
+  },
+  {
+    // Sits under the two contact fields. Says why they are being asked for and
+    // what happens if they are left blank, because the previous version of this
+    // panel told visitors NOT to leave contact details and some will remember.
+    key: "feedback.contact.hint",
+    page: "Page feedback (client)",
+    label: "Contact fields hint",
+    multiline: true,
+    fallback: "Only used to reply to you. Leave both blank to stay anonymous.",
+  },
+  {
+    // Shown instead of feedback.thankyou when the guardrail rewrote the
+    // comment. The wording is deliberately direct — it is the whole reason the
+    // feature exists — and lives here so the Chamber can soften or sharpen it
+    // from /admin/content without a deploy.
+    key: "feedback.thankyou.moderated",
+    page: "Page feedback (client)",
+    label: "Thank-you message (comment rewritten)",
+    multiline: true,
+    fallback: "Thanks for your feedback. This tool is built for free by one person. He uses feedback to make it better, but doesn't appreciate rude people. Your feedback has been submitted with the substance kept and the tone removed. If you'd like to discuss it, leave your email.",
   },
   {
     // Shown instead of feedback.thankyou when the submission went to the

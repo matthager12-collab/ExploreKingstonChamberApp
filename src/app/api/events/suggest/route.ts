@@ -40,6 +40,7 @@ import {
   saveAttachment,
 } from "@/lib/events/attachment-store";
 import { UnstrippableImageError } from "@/lib/image-sanitize";
+import { UnstrippablePdfError } from "@/lib/pdf-sanitize";
 import { getUnifiedCalendarAccess } from "@/lib/stores/unified-calendar-store";
 import { WorklistValidationError } from "@/lib/schemas/worklist";
 import type { EventItem } from "@/lib/types";
@@ -48,6 +49,10 @@ export const dynamic = "force-dynamic";
 
 const MAX_NAME = 200;
 const MAX_CONTACT = 200;
+
+// Multipart framing slack on top of the attachment budget: boundaries, part
+// headers, and the bounded text fields (title, venue, description, contacts).
+const MULTIPART_OVERHEAD_BYTES = 64 * 1024;
 
 function slugify(title: string): string {
   return (
@@ -81,6 +86,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: "too many suggestions, please try again later" },
       { status: 429, headers: { "Retry-After": String(ipLimit.retryAfterSeconds) } },
+    );
+  }
+
+  // Bound the request BEFORE request.formData() buffers it — the per-file
+  // and per-run caps below run after the whole body is already in memory, so
+  // they bound what we STORE, not what the parse costs. The declared
+  // Content-Length is a trustworthy ceiling (Node reads exactly that many
+  // bytes); a request without one (chunked transfer) is refused rather than
+  // trusted — every browser multipart POST declares it.
+  const declaredBytes = Number(request.headers.get("content-length"));
+  if (!Number.isInteger(declaredBytes) || declaredBytes <= 0) {
+    return NextResponse.json({ error: "missing request length" }, { status: 411 });
+  }
+  if (declaredBytes > MAX_ATTACHMENTS * MAX_ATTACHMENT_BYTES + MULTIPART_OVERHEAD_BYTES) {
+    return NextResponse.json(
+      { error: `attachments too large (max ${MAX_ATTACHMENTS} files, 8 MB each)` },
+      { status: 413 },
     );
   }
 
@@ -198,6 +220,9 @@ export async function POST(request: NextRequest) {
       // an unreadable image than store bytes we could not verify.
       if (err instanceof UnstrippableImageError) {
         return fail(400, `"${file.name}" could not be processed — please re-save or export it and try again`);
+      }
+      if (err instanceof UnstrippablePdfError) {
+        return fail(400, `"${file.name}" is password-protected or couldn't be read — please export an unprotected copy and try again`);
       }
       return fail(500, "could not save an attachment — please try again");
     }

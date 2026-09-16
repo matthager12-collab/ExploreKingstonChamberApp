@@ -25,6 +25,7 @@ import {
 import { appendPrivacyAudit, heldRecordIds } from "@/lib/db/privacy-delete";
 import { deleteSubmission, listSubmissions } from "@/lib/hunt-store";
 import { countGoingBefore, deleteGoingBefore } from "@/lib/stores/event-going-store";
+import { countVotesBefore, purgeVotesBefore } from "@/lib/stores/scarecrow-store";
 
 export interface RetentionLine {
   store: string;
@@ -217,6 +218,27 @@ export async function runRetention(opts: {
           applied,
           heldSkipped: allHeld.length,
           note: `deleted ${applied} submission(s) + photo(s)${failures.length > 0 ? `; ${failures.length} photo-delete failure(s), rows kept for retry` : ""}${allHeld.length > 0 ? `; ${allHeld.length} legal-hold skip(s) logged` : ""}`,
+        });
+        break;
+      }
+
+      case "scarecrow-votes": {
+        const cutoff = cutoffFor(rule, now).toISOString();
+        const planned = await countVotesBefore(cutoff);
+        // Photo bytes go with the row: purgeVotesBefore deletes the blob for
+        // every row it removes, so an expired vote cannot leave an orphaned
+        // photo behind in storage.
+        const result = opts.apply ? await purgeVotesBefore(cutoff) : undefined;
+        lines.push({
+          store: rule.store,
+          action: rule.action,
+          planned,
+          ...(result ? { applied: result.deleted } : {}),
+          note: `${opts.apply ? "deleted" : "would delete"} ${planned} crawl vote(s) + photo(s) past ${rule.label}${
+            result && result.photoFailures > 0
+              ? `; ${result.photoFailures} photo(s) could not be deleted from storage`
+              : ""
+          }`,
         });
         break;
       }

@@ -103,6 +103,19 @@ export function stripRequestContact(
     const { applicantEmail: _omit, ...rest } = payload as { applicantEmail?: unknown };
     return rest;
   }
+  if (type === "moderation" && payload.suggest !== undefined) {
+    // Public submissions held for review — E12 event suggestions and the
+    // Scarecrow Crawl registrations — carry the submitter's name and one
+    // contact so the Chamber can follow up. That is their PII, on exactly the
+    // footing of the request types above: the OPEN item keeps it, the resolved
+    // row and every audit snapshot do not. Until 2026-09 this branch did not
+    // exist and those contacts were kept forever in the audit table.
+    //
+    // `suggest` goes whole rather than being emptied: its schema requires both
+    // fields, so a hollow object left behind would no longer validate.
+    const { suggest: _omit, ...rest } = payload as { suggest?: unknown };
+    return rest;
+  }
   return payload;
 }
 

@@ -200,11 +200,19 @@ function requestInitFor(entry: OutboxEntry): RequestInit {
  * every non-2xx (a 429 from the rate limiter, a 400 from validation) rendered
  * as success and the visitor was told their submission landed when it had
  * not. Purely additive: callers that only read `.status` are unaffected.
+ *
+ * `body` is the same kind of addition, for the same kind of reason. The
+ * feedback route answers `{ok, moderated}`, and the widget has to know which
+ * thank-you to render — without the parsed body it would be reduced to
+ * guessing from a status code that says nothing about it. Parsed leniently:
+ * a non-JSON or empty response yields `undefined` rather than rejecting,
+ * because a caller that only wants `.status` must not start failing on a
+ * route that answers with an empty 204.
  */
 export async function submitOrQueue(
   url: string,
   payload: unknown,
-): Promise<{ status: "sent"; httpStatus: number } | { status: "queued" }> {
+): Promise<{ status: "sent"; httpStatus: number; body?: unknown } | { status: "queued" }> {
   const entry: OutboxEntry = {
     id: newIdempotencyKey(),
     url,
@@ -218,7 +226,8 @@ export async function submitOrQueue(
     // Reached the server. Even a 500 stays out of the queue: the caller owns
     // that retry decision, and blind re-queueing of server errors is how a
     // poison-pill loop starts.
-    return { status: "sent", httpStatus: res.status };
+    const body = await res.json().catch(() => undefined);
+    return { status: "sent", httpStatus: res.status, body };
   } catch {
     // fetch threw — DNS/transport failure, i.e. genuinely offline.
     await putEntry(entry);

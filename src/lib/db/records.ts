@@ -413,23 +413,21 @@ export async function insertQuarantineRow(row: {
     });
 }
 
-// Health probe (SELECT 1), memoized so Render + UptimeRobot polling doesn't
-// keep Neon awake. The TTL is asymmetric on purpose:
+// Health probe (SELECT 1), memoized 60s either way so Render + UptimeRobot
+// polling doesn't hammer the database.
 //
-//  - SUCCESS is cached 15 min. Neon suspends its compute after ~5 quiet
-//    minutes, so any heartbeat under that keeps it awake 24/7 — the old 60s
-//    memo alone cost a full month of compute hours every month. The steady-
-//    state probe must be RARER than the suspend window; 15 min caps the
-//    health-driven duty cycle at ~⅓ even when nothing else runs. Trade-off:
-//    a DB outage can read healthy here for up to 15 min — real page loads
-//    fail immediately regardless, and the boot gate below is unaffected.
-//  - FAILURE is cached only 60s, so recovery (and a mid-deploy fix) is
+//  - From 2026-08-08 to 2026-09-02, SUCCESS was cached 15 min instead of
+//    60 s so health polling stayed rarer than Neon's ~5-quiet-minute suspend
+//    window and let its compute sleep. That also meant a DB outage could
+//    read healthy here for up to 15 min. Render Postgres is always on, so
+//    that cache is gone; SUCCESS and FAILURE now share the same 60 s TTL.
+//  - FAILURE stays cached 60s, so recovery (and a mid-deploy fix) is
 //    noticed fast, and a flapping DB still can't get hammered.
 //
 // The fail-closed deploy property lives in the FIRST probe: a fresh process
 // has no cached result, so a release booted without a reachable DATABASE_URL
 // never reports healthy and Render keeps the previous release serving.
-const HEALTHY_TTL_MS = 15 * 60_000;
+const HEALTHY_TTL_MS = 60_000;
 const UNHEALTHY_TTL_MS = 60_000;
 let lastProbe: { at: number; ok: boolean } | null = null;
 
@@ -461,6 +459,77 @@ export async function deleteRecord(
     _deleted?: boolean;
   } & WithId;
   await writeRecord(store, { ...doc, _deleted: true } as OverlayRow<WithId>, meta);
+}
+
+/** Outcome of a detach attempt. `refused` is not an error: it means an
+ *  overlay row exists but carries state the seed cannot represent, so the
+ *  caller must fall back to a normal write instead of discarding it. */
+export type DetachResult = "detached" | "absent" | "refused";
+
+/**
+ * Remove a record's overlay row outright, RE-ATTACHING it to the shipped seed
+ * so future edits to the seed file surface again. The inverse of the
+ * seed+overlay merge, and the only operation in this module that hard-deletes
+ * from `record` — everything else upserts, and "delete" elsewhere means a
+ * tombstone (which HIDES the seed record rather than restoring it).
+ *
+ * Audited as 'revert' with the discarded doc as `before` and a null `after`:
+ * after this the record has no overlay at all, and its content is whatever the
+ * shipped seed says — not ours to snapshot. 'revert' is deliberately absent
+ * from RESTORABLE_ACTIONS (E09's allowlist is fail-closed), so the restore
+ * button stays disabled on these rows; there is no snapshot to replay.
+ *
+ * Guards — each one is state the seed cannot carry, so deleting the row would
+ * destroy information rather than restore it:
+ *  - `deleted`: a tombstone hides the seed record on purpose;
+ *  - `status !== 'live'`: a non-live row is E08 moderation state — a pending
+ *    submission, a rejection, or a takedown (setRecordStatus prescribes
+ *    "overlay the seed doc at a non-live status" for the latter). None of it
+ *    survives on a seed-only record, so dropping the row would erase a
+ *    deliberate decision. NB: for a SEED record a non-live row does not
+ *    actually hide the page today — readMergedRecords skips the row and
+ *    renders the seed anyway — but that gap is not this function's to paper
+ *    over, and refusing here keeps the moderation state intact either way;
+ *  - `ownerOrgId` / `externalId`: E17 ownership claims and the E16 AMS seam
+ *    live only on the row.
+ *
+ * Not guarded, by design: `lastVerifiedAt` / `verifyIntervalDays`. Detaching
+ * drops the verification stamp and the record leaves the E08 staleness engine
+ * — which is exactly right, since seed-only records are out of its scope
+ * (see listVerifyDue). Re-verifying is one click if it ever matters.
+ */
+export async function detachOverlayRecord(
+  store: string,
+  id: string,
+  meta?: WriteMeta,
+): Promise<DetachResult> {
+  if (buildingWithoutDb()) return "absent";
+  const db = getDb();
+  const actor = meta?.actor ?? "system";
+  const source = meta?.source ?? "admin";
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(record)
+      .where(and(eq(record.store, store), eq(record.id, id)))
+      .for("update");
+    if (!row) return "absent" as DetachResult;
+    if (row.deleted || row.status !== "live" || row.ownerOrgId !== null || row.externalId !== null) {
+      return "refused" as DetachResult;
+    }
+
+    await tx.delete(record).where(and(eq(record.store, store), eq(record.id, id)));
+    await tx.insert(audit).values({
+      actor,
+      action: "revert",
+      store,
+      recordId: id,
+      before: stripSnapshotKeys(store, redactSecrets(row.doc) as Record<string, unknown>),
+      after: null,
+      source,
+    });
+    return "detached" as DetachResult;
+  });
 }
 
 /* ------------------------- E20 volunteer slot counter ------------------------- */

@@ -2,7 +2,7 @@
 //
 // A pure overlay store (src/lib/stores/json-store.ts → the Postgres record
 // table, no git seed): every marker is written at runtime and rides the same
-// seam as the content stores, so it works identically on the file and Neon
+// seam as the content stores, so it works identically on the file and Postgres
 // backends and lands in the backup bundle for free — no separate DDL, no
 // migration.
 //

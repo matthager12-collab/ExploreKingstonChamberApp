@@ -45,8 +45,8 @@ const PARKING_ZONES_BUILTIN = "parkingZones";
  *
  *   git grep -nE 'text-\[[0-9]+px\]' -- 'src/' \
  *     ':!src/components/feature-map.tsx' \
- *     ':!src/app/(site)/admin/maps/editor.tsx' \
- *     ':!src/app/(site)/admin/map/editor.tsx'
+ *     ':!src/app/(admin)/admin/maps/editor.tsx' \
+ *     ':!src/app/(admin)/admin/map/editor.tsx'
  *
  * The reason is `.agent-frozen`: all three are frozen-zone files that no agent
  * may edit, so "fix the px size" is not an available move for them. The test
@@ -55,21 +55,21 @@ const PARKING_ZONES_BUILTIN = "parkingZones";
  */
 const FROZEN_PX_HOLDOUTS = [
   "src/components/feature-map.tsx",
-  "src/app/(site)/admin/maps/editor.tsx",
-  "src/app/(site)/admin/map/editor.tsx",
+  "src/app/(admin)/admin/maps/editor.tsx",
+  "src/app/(admin)/admin/map/editor.tsx",
 ];
 
 /**
  * Frozen files that still pair `text-fern` with a fern tint. Both are in
  * `.agent-frozen`, so repairing them in place is not an available move:
- *   - src/app/(site)/admin/map/editor.tsx — an admin-only toggle button.
+ *   - src/app/(admin)/admin/map/editor.tsx — an admin-only toggle button.
  *   - src/lib/ferry-forecast.ts — LEVELS.light.chip, which IS repaired, at the
  *     two non-frozen components that render it (see src/lib/ferry-chip.ts).
  * The test below re-reads the manifest and fails if either is ever unfrozen
  * without this list being revisited.
  */
 const FERN_TINT_HOLDOUTS = [
-  "src/app/(site)/admin/map/editor.tsx",
+  "src/app/(admin)/admin/map/editor.tsx",
   "src/lib/ferry-forecast.ts",
 ];
 
@@ -115,11 +115,19 @@ const ARBITRARY_PX_FONT_RE = /text-\[\d+px\]/;
  * and the same assumption the fern rule already made.
  * ----------------------------------------------------------------------- */
 
-/** Brand palette, read from the single source of truth rather than restated. */
+/** Brand palette, read from the single source of truth rather than restated.
+ *
+ * Scoped to the @theme block ON PURPOSE. globals.css also carries subtree
+ * overrides — [data-surface="portal"] re-points --color-ink-soft for the portal
+ * shell — and a whole-file regex takes the LAST match, so it would quietly
+ * measure a value these public surfaces never render, and every ink-soft
+ * invariant below would start passing for the wrong reason. */
 function readPalette(): Record<string, string> {
   const css = readFileSync(path.join(SRC_ROOT, "app", "globals.css"), "utf8");
+  const theme = css.match(/@theme inline\s*\{([\s\S]*?)\n\}/);
+  if (!theme) throw new Error("no @theme inline block found in globals.css");
   const out: Record<string, string> = {};
-  for (const m of css.matchAll(/--color-([a-z-]+):\s*(#[0-9a-fA-F]{6})/g))
+  for (const m of theme[1].matchAll(/--color-([a-z-]+):\s*(#[0-9a-fA-F]{6})/g))
     out[m[1]] = m[2];
   return out;
 }

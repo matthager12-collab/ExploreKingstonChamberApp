@@ -115,6 +115,13 @@ export const STORE_SCHEMAS: Record<string, z.ZodType> = {
     rotateDeg: z.number().finite(),
     scale: z.number().finite().positive(),
   }),
+  // One record, id "settings": the Scarecrow Crawl's voting switch. Its
+  // absence means "auto" — the dates decide — so a wiped store leaves the real
+  // crawl running on its real dates rather than stuck in a test state.
+  "scarecrow-settings": z.looseObject({
+    id: entityId,
+    voting: z.enum(["auto", "open", "closed"]),
+  }),
   "map-views": z.looseObject({ id: entityId, name: nonempty }),
   "map-features": z.looseObject({ id: entityId, title: nonempty }),
   // expiresAt: optional "YYYY-MM-DD" auto-restore date (site-store.activeRows).

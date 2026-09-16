@@ -250,7 +250,7 @@ describe("upload paths write to R2 with metadata stripped (M-16-02)", () => {
     expectStoredClean(`hunts/${submission.photoPath}`);
   });
 
-  it("event attachment: flyer is stripped, PDF passes through untouched", async () => {
+  it("event attachment: flyer is stripped, and the PDF's document metadata is too", async () => {
     const { saveAttachment } = await import("@/lib/events/attachment-store");
 
     const flyer = await saveAttachment("evt-1", gps("gps.png"), "png");
@@ -258,11 +258,27 @@ describe("upload paths write to R2 with metadata stripped (M-16-02)", () => {
     expectNoBucketUrl(flyer);
     expectStoredClean(`events/${flyer}`);
 
-    // PDFs are a documented carve-out: authored artwork, not camera output.
-    // They must still be STORED, just not rewritten.
-    const pdfBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34]);
-    const doc = await saveAttachment("evt-1", pdfBytes, "pdf");
-    expect(bucket.get(`events/${doc}`)!.bytes).toEqual(pdfBytes);
+    // PDFs were a documented carve-out (stored verbatim); they now get the
+    // same strip-before-store treatment as the images beside them: the Info
+    // dictionary and XMP stream are removed, the document itself is kept.
+    // Byte-scan the stored object like expectStoredClean does for images —
+    // pdf-sanitize serializes without object streams so nothing hides.
+    const { PDFDocument } = await import("pdf-lib");
+    const src = await PDFDocument.create(); // create() stamps Producer + dates
+    src.addPage([100, 100]);
+    src.setAuthor("Fixture Author");
+    const doc = await saveAttachment(
+      "evt-1",
+      await src.save({ useObjectStreams: false }),
+      "pdf",
+    );
+    expect(doc).toMatch(/^evt-1\/\d+-[a-z0-9]+\.pdf$/);
+    const stored = bucket.get(`events/${doc}`)!.bytes;
+    const text = new TextDecoder("latin1").decode(stored);
+    expect(text.startsWith("%PDF-")).toBe(true);
+    for (const key of ["/Author", "/Producer", "/CreationDate", "/ModDate"]) {
+      expect(text, `${key} survived into R2 object events/${doc}`).not.toContain(key);
+    }
   });
 
   it("every key written mirrors the on-disk layout", async () => {

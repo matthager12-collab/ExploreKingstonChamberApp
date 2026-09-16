@@ -47,12 +47,12 @@ export default async function setup() {
 
   // E05: structured data lives in Postgres — the server tier needs a REAL,
   // THROWAWAY database. It must come from the explicit TEST_DATABASE_URL (CI:
-  // the postgres:16 service container; locally: `docker run postgres:16` or a
-  // Neon dev branch). The parent's DATABASE_URL is still deliberately ignored
-  // so an operator shell can never point tests at real Neon — same hygiene as
-  // before, now with an explicit opt-in var. The setup migrates the schema
-  // (same checked-in db/migrations the boot migrator uses), WIPES record/
-  // audit/quarantine, and seeds the admin into the auth-users store.
+  // the postgres:16 service container; locally: `docker run postgres:16`).
+  // The parent's DATABASE_URL is still deliberately ignored so an operator
+  // shell can never point tests at the real production database — same
+  // hygiene as before, now with an explicit opt-in var. The setup migrates
+  // the schema (same checked-in db/migrations the boot migrator uses), WIPES
+  // record/audit/quarantine, and seeds the admin into the auth-users store.
   const testDbUrl = process.env.TEST_DATABASE_URL;
   if (!testDbUrl) {
     throw new Error(

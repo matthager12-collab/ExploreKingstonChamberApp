@@ -2,7 +2,7 @@
 
 **Project:** `visit-kingston` — the interactive companion to explorekingstonwa.com, built with the Greater Kingston Chamber of Commerce. Product name in the UI: **Explore Kingston**.
 **Date:** July 2026
-**Stack:** Next.js 16.2.10 (App Router, `output: "standalone"`), React 19.2, TypeScript 5, Tailwind CSS 4 (`@tailwindcss/postcss`, config-less), Leaflet 1.9 + OSM tiles, `@geoman-io/leaflet-geoman-free` (admin polygon/feature drawing). Production persistence deps: `@neondatabase/serverless`, `@vercel/blob`, `@upstash/ratelimit` + `@upstash/redis`.
+**Stack:** Next.js 16.2.10 (App Router, `output: "standalone"`), React 19.2, TypeScript 5, Tailwind CSS 4 (`@tailwindcss/postcss`, config-less), Leaflet 1.9 + OSM tiles, `@geoman-io/leaflet-geoman-free` (admin polygon/feature drawing). Production persistence deps: `pg` (node-postgres, over Drizzle), `@vercel/blob`, `@upstash/ratelimit` + `@upstash/redis`.
 **Audience:** an engineer (or AI agent) maintaining, extending, or faithfully re-implementing the system.
 
 > **Caution for re-implementers** (`AGENTS.md`): this Next.js 16 differs from older training data. Route-handler/page `params` and `searchParams` are `Promise`s that must be awaited (visible throughout `src/app/**`). Read `node_modules/next/dist/docs/` before writing route/page code.

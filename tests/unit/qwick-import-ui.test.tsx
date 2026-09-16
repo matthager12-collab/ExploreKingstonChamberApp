@@ -27,14 +27,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 
-import { QwickImportManager } from "@/app/(site)/admin/import/qwick/manager";
+import { QwickImportManager } from "@/app/(admin)/admin/import/qwick/manager";
 
 // jsdom rewrites import.meta.url to an http URL, so the file-URL trick the
 // node-environment suites use is unavailable here. Vitest always runs from the
 // repo root (vitest.config.ts lives there), so cwd is the equivalent anchor.
 const REPO_ROOT = process.cwd();
 const SRC_ROOT = path.join(REPO_ROOT, "src");
-const QWICK_UI_DIR = path.join(SRC_ROOT, "app", "(site)", "admin", "import", "qwick");
+// (admin), not (site): /admin moved into its own route group so it stops
+// rendering the public tourist navigation above its own nav bar. Route groups
+// do not change URLs, but they do change on-disk paths — and this one is built
+// from segments, so the import rewrite that caught every other reference
+// stepped straight over it.
+const QWICK_UI_DIR = path.join(SRC_ROOT, "app", "(admin)", "admin", "import", "qwick");
 
 /* ---------------------------------------------------------------------------
  * Contrast machinery. Same WCAG arithmetic as
@@ -46,11 +51,23 @@ const QWICK_UI_DIR = path.join(SRC_ROOT, "app", "(site)", "admin", "import", "qw
 
 type Rgb = [number, number, number];
 
-/** Brand palette, read from the single source of truth. */
+/** Brand palette, read from the single source of truth.
+ *
+ * Scoped to the @theme block ON PURPOSE. globals.css also carries subtree
+ * overrides — [data-surface="portal"] re-points --color-ink-soft to a darker
+ * value for the portal shell — and a whole-file regex takes the LAST match, so
+ * it would silently swap the portal's value in here and measure a palette this
+ * page never renders. That is not hypothetical: it turned the positive control
+ * below green, which is exactly the "guards the guard" failure that test warns
+ * about. This file measures PUBLIC surfaces, so it reads the public tokens. */
 function readPalette(): Record<string, string> {
   const css = readFileSync(path.join(SRC_ROOT, "app", "globals.css"), "utf8");
+  const theme = css.match(/@theme inline\s*\{([\s\S]*?)\n\}/);
+  if (!theme) throw new Error("no @theme inline block found in globals.css");
   const out: Record<string, string> = {};
-  for (const m of css.matchAll(/--color-([a-z-]+):\s*(#[0-9a-fA-F]{6})/g)) out[m[1]] = m[2];
+  for (const m of theme[1].matchAll(/--color-([a-z-]+):\s*(#[0-9a-fA-F]{6})/g)) {
+    out[m[1]] = m[2];
+  }
   // Tailwind ships these two outside the @theme block; both are used here.
   out.white = "#ffffff";
   out.black = "#000000";

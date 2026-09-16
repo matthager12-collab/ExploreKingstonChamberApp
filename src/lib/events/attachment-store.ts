@@ -27,6 +27,7 @@ import {
   putObject,
 } from "@/lib/blob-store";
 import { canStrip, stripImageMetadata } from "@/lib/image-sanitize";
+import { stripPdfMetadata } from "@/lib/pdf-sanitize";
 import {
   ATTACHMENT_EXT_CONTENT_TYPES,
   attachmentContentType,
@@ -101,12 +102,18 @@ export async function saveAttachment(
   // widest-audience upload path in the app — a phone photo of a poster carries
   // the photographer's location to every visitor who loads the events page.
   //
-  // PDFs are passed through deliberately: they are authored artwork rather than
-  // camera output, so they are not a GPS vector, and hand-rewriting a PDF to
-  // drop /Info risks producing a file some viewer rejects. canStrip() is the
-  // explicit allow-list — see the "NOT COVERED" note in image-sanitize.ts and
-  // the corresponding line in docs/LAUNCH.md.
-  const clean = canStrip(contentType) ? stripImageMetadata(bytes, contentType) : bytes;
+  // PDFs get the matching treatment for their document-level metadata (the
+  // Info dictionary + XMP stream): a flyer submitted as a PDF should not keep
+  // the author/producer/timestamp fields the same flyer submitted as a PNG
+  // loses. Same fail-closed posture, too — an encrypted or unparseable PDF is
+  // rejected by the route, never stored unverified. canStrip() remains the
+  // explicit image allow-list; the extension allowlist above means every type
+  // reaching this line is either a strippable image or a PDF.
+  const clean = canStrip(contentType)
+    ? stripImageMetadata(bytes, contentType)
+    : contentType === "application/pdf"
+      ? await stripPdfMetadata(bytes)
+      : bytes;
 
   const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
   const relPath = `${eventId}/${fileName}`;

@@ -9,9 +9,14 @@
 // it on every page rather than on a single /feedback route. "3 stars" is noise;
 // "3 stars, sent from /parking" is a work item.
 //
-// PRIVACY: no contact field, deliberately (see FeedbackResponse in types.ts).
-// The intro copy tells visitors not to type one, /api/feedback would drop it,
-// and feedback_response stays a no-identifier store in PII_STORES.
+// PRIVACY: the panel now offers an OPTIONAL name and email, which is what made
+// feedback_response a real PiiStore with find/export/delete handlers (DEC-002).
+// Both fields are optional and unverified, submit works with them blank, and
+// the hint under them says so. See FeedbackResponse in types.ts.
+//
+// The panel also shows a different thank-you when the guardrail rewrote the
+// comment. That branch is driven by `moderated` on the route's response, never
+// by anything the model wrote — no model-authored text reaches a visitor.
 //
 // STATIC RENDERING: usePathname() is a client hook reading the router on the
 // client — it does NOT make the tree dynamic the way cookies()/headers() in
@@ -23,7 +28,13 @@ import { usePathname } from "next/navigation";
 
 import { EditableText, useCopy } from "@/lib/copy-context";
 import { isDeliveredStatus, submitOrQueue } from "@/lib/outbox";
-import { FEEDBACK_COMMENT_MAX, FEEDBACK_MAX_RATING, FEEDBACK_MIN_RATING } from "@/lib/types";
+import {
+  FEEDBACK_COMMENT_MAX,
+  FEEDBACK_EMAIL_MAX,
+  FEEDBACK_MAX_RATING,
+  FEEDBACK_MIN_RATING,
+  FEEDBACK_NAME_MAX,
+} from "@/lib/types";
 
 /**
  * Route prefixes that never show the tab.
@@ -56,6 +67,9 @@ export function FeedbackTab() {
   const [open, setOpen] = useState(false);
   const [rating, setRating] = useState<number | null>(null);
   const [comment, setComment] = useState("");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [moderated, setModerated] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
   const [queued, setQueued] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +80,9 @@ export function FeedbackTab() {
   const legendId = useId();
   const commentId = useId();
   const countId = useId();
+  const nameId = useId();
+  const emailId = useId();
+  const contactHintId = useId();
 
   const tabLabel = useCopy("feedback.tab.label");
 
@@ -113,6 +130,9 @@ export function FeedbackTab() {
     setPhase("idle");
     setRating(null);
     setComment("");
+    setName("");
+    setEmail("");
+    setModerated(false);
     setError(null);
     setQueued(false);
   }
@@ -129,6 +149,8 @@ export function FeedbackTab() {
       rating,
       ...(comment.trim() ? { comment: comment.trim() } : {}),
       path: pathname,
+      ...(name.trim() ? { name: name.trim() } : {}),
+      ...(email.trim() ? { email: email.trim() } : {}),
     });
 
     if (result.status === "queued") {
@@ -153,6 +175,11 @@ export function FeedbackTab() {
       setPhase("idle");
       return;
     }
+    // The route's own answer, not a guess from the status code. Anything other
+    // than an explicit `true` renders the ordinary thank-you, which is the
+    // right default for an older route, a proxy that ate the body, or the
+    // guardrail failing open (DEC-006).
+    setModerated((result.body as { moderated?: unknown } | undefined)?.moderated === true);
     setPhase("done");
   }
 
@@ -212,6 +239,8 @@ export function FeedbackTab() {
             <p className="font-medium text-ink" role="status">
               {queued ? (
                 <EditableText copyKey="feedback.queued" />
+              ) : moderated ? (
+                <EditableText copyKey="feedback.thankyou.moderated" />
               ) : (
                 <EditableText copyKey="feedback.thankyou" />
               )}
@@ -278,6 +307,50 @@ export function FeedbackTab() {
                   {remaining <= 100 ? `${remaining} characters left` : ""}
                 </p>
               </div>
+
+              {/* Optional contact. Deliberately BELOW the comment: the feedback
+                  is the point, and putting identity fields first makes an
+                  anonymous panel feel like a sign-up form. Both are plain
+                  optional inputs — no required attribute, no validation
+                  gating, and submit stays enabled when they are blank. A
+                  malformed address is dropped server-side rather than
+                  rejected, so a typo never costs the visitor their feedback. */}
+              <div className="mb-4 grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label htmlFor={nameId} className="block text-sm font-medium text-ink">
+                    <EditableText copyKey="feedback.name.label" />
+                  </label>
+                  <input
+                    id={nameId}
+                    type="text"
+                    value={name}
+                    maxLength={FEEDBACK_NAME_MAX}
+                    autoComplete="name"
+                    aria-describedby={contactHintId}
+                    onChange={(e) => setName(e.target.value)}
+                    className="mt-1 block min-h-11 w-full rounded-lg border border-sand bg-white px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label htmlFor={emailId} className="block text-sm font-medium text-ink">
+                    <EditableText copyKey="feedback.email.label" />
+                  </label>
+                  <input
+                    id={emailId}
+                    type="email"
+                    value={email}
+                    maxLength={FEEDBACK_EMAIL_MAX}
+                    autoComplete="email"
+                    inputMode="email"
+                    aria-describedby={contactHintId}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="mt-1 block min-h-11 w-full rounded-lg border border-sand bg-white px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+              <p id={contactHintId} className="mb-4 text-xs text-ink-soft">
+                <EditableText copyKey="feedback.contact.hint" />
+              </p>
 
               {error && (
                 <p className="mb-3 text-sm font-medium text-coral-deep" role="alert">

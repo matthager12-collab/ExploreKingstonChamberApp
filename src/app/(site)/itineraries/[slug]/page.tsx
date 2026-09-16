@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getItinerary } from "@/lib/stores/itinerary-store";
+import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
 import {
   Badge,
   Callout,
@@ -21,6 +22,13 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
+  // Gated too, and for the same reason the page body is: generateMetadata
+  // runs on the SAME request and reads the same record store. Ungated, a
+  // hidden section still answers a real slug with the record's title and a
+  // bogus one with the fallback — the exists-oracle the body gate closes,
+  // relocated into <head>. notFound() from generateMetadata is supported,
+  // and the admin pass-through still returns the real title for a preview.
+  await assertPageVisible("/itineraries");
   const itinerary = await getItinerary(slug);
   if (!itinerary) return { title: "Itinerary not found" };
   return {
@@ -41,6 +49,11 @@ export default async function ItineraryPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
+  // Before the store read, so hiding "/itineraries" hides the whole section:
+  // every detail URL 404s uniformly rather than leaking which slugs exist.
+  // The bare gate (not ...Static) is right here because the route is
+  // force-dynamic — see src/lib/page-visibility.tsx.
+  const hiddenPreview = await assertPageVisible("/itineraries");
   const itinerary = await getItinerary(slug);
   if (!itinerary) notFound();
 
@@ -48,6 +61,7 @@ export default async function ItineraryPage({
 
   return (
     <>
+      {hiddenPreview && <HiddenPageBanner />}
       <PageHeader eyebrow="Itinerary" title={itinerary.title} intro={itinerary.tagline} />
       <Section>
         <div className="mb-8 flex flex-wrap items-center gap-2">
@@ -67,7 +81,13 @@ export default async function ItineraryPage({
                 aria-hidden
                 className="absolute top-1.5 -left-[7px] h-3 w-3 rounded-full border-2 border-white bg-tide"
               />
-              <div className="w-20 shrink-0 pt-0.5 pl-5 text-sm font-semibold whitespace-nowrap text-sound-deep sm:w-24">
+              {/* Multi-day itineraries time their stops "Day 2 9:30 AM", which
+                  does not fit the old w-20 + whitespace-nowrap column — it
+                  overflowed into the stop title rather than wrapping, because
+                  nothing here clips. Slightly wider, and allowed to wrap, so a
+                  multi-day label stacks as "Day 2" over "9:30 AM" while a plain
+                  "10:25 AM" still sits on one line. */}
+              <div className="w-24 shrink-0 pt-0.5 pl-5 text-sm font-semibold text-sound-deep sm:w-28">
                 {stop.time}
               </div>
               <div className="min-w-0 flex-1">

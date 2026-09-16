@@ -22,6 +22,11 @@ export const dynamic = "force-dynamic";
 const MAX_MESSAGE = 2_000;
 const MAX_CONTACT = 200;
 
+// Cap the raw body before parsing (same pattern as the feedback intake):
+// MAX_MESSAGE bounds what we KEEP, but only after JSON.parse has already
+// materialized whatever was sent. 8 KB comfortably fits every legal payload.
+const MAX_BODY_BYTES = 8_192;
+
 function tooMany(retryAfterSeconds: number): NextResponse {
   return NextResponse.json(
     { error: "too many reports, please try again later" },
@@ -38,7 +43,11 @@ export async function POST(request: NextRequest) {
 
   let body: Record<string, unknown>;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    const raw = await request.text();
+    if (raw.length > MAX_BODY_BYTES) {
+      return NextResponse.json({ error: "body too large" }, { status: 413 });
+    }
+    body = JSON.parse(raw) as Record<string, unknown>;
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }

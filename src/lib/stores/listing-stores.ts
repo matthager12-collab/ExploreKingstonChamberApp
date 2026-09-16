@@ -8,9 +8,14 @@ import type { Lodging, Webcam } from "../types";
 import { lodging as lodgingSeed } from "../data/lodging";
 import { webcams as webcamSeed } from "../data/webcams";
 import {
+  detachOverlayRecord,
   readMerged,
   readMergedAdmin,
+  readSeedOverrides,
   writeOverlayRecord,
+  writeOverlayRecordSeedAware,
+  type DetachResult,
+  type SeedOverrideFlags,
   type WithStatus,
   type WriteMeta,
 } from "./json-store";
@@ -30,7 +35,15 @@ export async function getLodgingAdmin(): Promise<WithStatus<Lodging>[]> {
 }
 
 export async function saveLodging(record: Lodging, meta?: WriteMeta): Promise<void> {
-  await writeOverlayRecord(LODGING_STORE, record, meta);
+  await writeOverlayRecordSeedAware<Lodging>(LODGING_STORE, lodgingSeed, record, meta);
+}
+
+export async function getLodgingOverrides(): Promise<Record<string, SeedOverrideFlags>> {
+  return readSeedOverrides<Lodging>(LODGING_STORE, lodgingSeed);
+}
+
+export async function revertLodging(id: string, meta?: WriteMeta): Promise<DetachResult> {
+  return detachOverlayRecord(LODGING_STORE, id, meta);
 }
 
 export async function deleteLodging(id: string, meta?: WriteMeta): Promise<void> {
@@ -53,7 +66,15 @@ export async function getWebcamsAdmin(): Promise<WithStatus<Webcam>[]> {
 }
 
 export async function saveWebcam(record: Webcam, meta?: WriteMeta): Promise<void> {
-  await writeOverlayRecord(WEBCAM_STORE, record, meta);
+  await writeOverlayRecordSeedAware<Webcam>(WEBCAM_STORE, webcamSeed, record, meta);
+}
+
+export async function getWebcamOverrides(): Promise<Record<string, SeedOverrideFlags>> {
+  return readSeedOverrides<Webcam>(WEBCAM_STORE, webcamSeed);
+}
+
+export async function revertWebcam(id: string, meta?: WriteMeta): Promise<DetachResult> {
+  return detachOverlayRecord(WEBCAM_STORE, id, meta);
 }
 
 export async function deleteWebcam(id: string, meta?: WriteMeta): Promise<void> {

@@ -22,8 +22,15 @@ export const mapFeatures: MapFeature[] = [
     id: "point-no-point",
     kind: "marker",
     title: "Point No Point Lighthouse",
+    // Accuracy pass 2026-08-19: two corrections here, both the kind a local
+    // notices. (1) The tower was BUILT in 1879 but not first lit until 1880
+    // (US Lighthouse Society) — "1879" alone read as the lighting date.
+    // (2) The old note promised tide-pooling. No source supports it and the
+    // beach is sand, not rock; the tide-pooling everyone means is Foulweather
+    // Bluff, a few miles west. Sending someone to the wrong beach for the
+    // thing they came for is the same failure as naming the wrong lighthouse.
     notes:
-      "Puget Sound's oldest lighthouse (1879), driftwood beach, and a county park ~15 min north. Great tide-pooling at low tide.",
+      "Puget Sound's oldest lighthouse — built 1879, first lit 1880 — with a wide driftwood beach and a county park ~20 min north. Docent tours of the tower run Sat & Sun noon–4, April–September.",
     category: "viewpoint",
     views: ["explore"],
     point: [47.9126, -122.5266],

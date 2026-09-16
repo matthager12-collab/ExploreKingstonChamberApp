@@ -4,9 +4,14 @@
 import type { Restaurant } from "../types";
 import { restaurants as seed } from "../data/restaurants";
 import {
+  detachOverlayRecord,
   readMerged,
   readMergedAdmin,
+  readSeedOverrides,
   writeOverlayRecord,
+  writeOverlayRecordSeedAware,
+  type DetachResult,
+  type SeedOverrideFlags,
   type WithStatus,
   type WriteMeta,
 } from "./json-store";
@@ -27,7 +32,15 @@ export async function getRestaurantsAdmin(): Promise<WithStatus<Restaurant>[]> {
 }
 
 export async function saveRestaurant(record: Restaurant, meta?: WriteMeta): Promise<void> {
-  await writeOverlayRecord(STORE, record, meta);
+  await writeOverlayRecordSeedAware<Restaurant>(STORE, seed, record, meta);
+}
+
+export async function getRestaurantOverrides(): Promise<Record<string, SeedOverrideFlags>> {
+  return readSeedOverrides<Restaurant>(STORE, seed);
+}
+
+export async function revertRestaurant(id: string, meta?: WriteMeta): Promise<DetachResult> {
+  return detachOverlayRecord(STORE, id, meta);
 }
 
 // Permanent removal: custom records vanish; seed records get a tombstone that

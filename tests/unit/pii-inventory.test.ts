@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PII_STORES, PII_STORE_IDS } from "@/lib/privacy/pii-inventory";
 import { insertUser, findUserByEmail, insertInvite } from "@/lib/db/auth-store";
 import { writeRecord, readRecordRows } from "@/lib/db/records";
+import { appendFeedbackResponse } from "@/lib/db/append";
 import { saveCharity } from "@/lib/stores/charity-store";
 import { createTestDb, type TestDb } from "../setup/pglite-db";
 
@@ -42,6 +43,44 @@ describe("PII inventory coverage (the E16 tripwire)", () => {
     // AC-12: at least four identifier-backed find handlers.
     expect(PII_STORES.filter((s) => s.hasEmailIdentifier).length).toBeGreaterThanOrEqual(4);
   });
+});
+
+describe("the tripwire actually trips (added during run 2)", () => {
+  // WHY THIS EXISTS. docs/FEEDBACK-GUARDRAIL claimed the coverage tests above
+  // would fail "the moment the identifier lands" on feedback_response, and
+  // that this was the mechanism forcing the privacy work to ship with the
+  // feature. That was wrong, and it was checked: adding `email` to
+  // FeedbackResponse and storing it left the whole suite green.
+  //
+  // The tests above verify that every REGISTERED store has handlers and that
+  // the known-store list is complete. Neither can notice that a store's DATA
+  // grew an identifier while its registration stayed identifier-free — which
+  // is exactly the mistake worth catching, because it is the one that silently
+  // makes docs/PRIVACY.md and the public notice untrue.
+  //
+  // So: any store whose stored shape carries an email must declare it.
+  it("a store whose rows can carry an email declares hasEmailIdentifier", () => {
+    // Keyed on the store id, so adding a contact field to one of these types
+    // and forgetting the registration fails here rather than in production.
+    const storesWithAnEmailField = ["users", "invites", "volunteer_signup", "feedback_response"];
+
+    for (const id of storesWithAnEmailField) {
+      const entry = PII_STORES.find((s) => s.store === id);
+      expect(entry, `${id} must be registered`).toBeDefined();
+      expect(entry?.hasEmailIdentifier, `${id} stores an email, so it must be searchable by one`).toBe(
+        true,
+      );
+    }
+  });
+
+  it("feedback_response is no longer a no-identifier store", () => {
+    // The specific regression this run could have shipped: contact fields on
+    // the widget, and a registry still telling a requester there is no key to
+    // search by.
+    const entry = PII_STORES.find((s) => s.store === "feedback_response");
+    expect(entry?.hasEmailIdentifier).toBe(true);
+  });
+
 });
 
 describe("PII inventory handlers round-trip against real data", () => {
@@ -118,6 +157,71 @@ describe("PII inventory handlers round-trip against real data", () => {
     await clearLegalHold("users", "u-held", "admin@example.test");
     expect((await store("users").deleteOrAnonymize(HOLD_EMAIL, "admin@example.test")).affected).toBe(1);
     expect(await findUserByEmail(HOLD_EMAIL)).toBeUndefined();
+  });
+
+  it("feedback: finds, exports and hard-deletes by the address a visitor left", async () => {
+    const entry = PII_STORES.find((s) => s.store === "feedback_response")!;
+    const mine = "leaver@example.com";
+
+    await appendFeedbackResponse({
+      submittedAt: new Date().toISOString(),
+      rating: 2,
+      comment: "bay 14 is mislabelled",
+      path: "/parking",
+      name: "A Visitor",
+      email: mine,
+    });
+    // Someone else's row, and one with no address at all. Neither may be
+    // touched by a request naming `mine`.
+    await appendFeedbackResponse({
+      submittedAt: new Date().toISOString(),
+      rating: 5,
+      comment: "someone else's words",
+      path: "/eat",
+      email: "other@example.com",
+    });
+    await appendFeedbackResponse({
+      submittedAt: new Date().toISOString(),
+      rating: 3,
+      comment: "anonymous, unreachable by any lookup",
+      path: "/do",
+    });
+
+    expect(await entry.findByIdentifier(mine)).toHaveLength(1);
+
+    const exported = await entry.exportRecords(mine);
+    expect(exported.records).toHaveLength(1);
+    expect(exported.records[0]).toMatchObject({ comment: "bay 14 is mislabelled", email: mine });
+    // The note has to stay honest about what this lookup cannot reach.
+    expect(exported.note).toMatch(/without an email/i);
+
+    // Case-insensitive: the address is whatever a visitor typed.
+    expect(await entry.findByIdentifier("LEAVER@EXAMPLE.COM")).toHaveLength(1);
+
+    const deleted = await entry.deleteOrAnonymize(mine, "admin@test");
+    expect(deleted.affected).toBe(1);
+    expect(await entry.findByIdentifier(mine)).toHaveLength(0);
+    // A hard delete, and only of the row that was asked about.
+    expect(await entry.findByIdentifier("other@example.com")).toHaveLength(1);
+  });
+
+  it("feedback: a wildcard in the requested address matches literally, not everything", async () => {
+    // `like` here instead of `=` would let a requester delete the whole table
+    // with a single `%`. Guarding it in a test because the failure is silent
+    // and total.
+    const entry = PII_STORES.find((s) => s.store === "feedback_response")!;
+    await appendFeedbackResponse({
+      submittedAt: new Date().toISOString(),
+      rating: 1,
+      comment: "should survive a wildcard",
+      path: "/map",
+      email: "wildcard-probe@example.com",
+    });
+
+    expect(await entry.findByIdentifier("%")).toHaveLength(0);
+    expect(await entry.findByIdentifier("%@example.com")).toHaveLength(0);
+    expect((await entry.deleteOrAnonymize("%", "admin@test")).affected).toBe(0);
+    expect(await entry.findByIdentifier("wildcard-probe@example.com")).toHaveLength(1);
   });
 
   it("no-identifier stores return an explanatory note, not silent nothing", async () => {

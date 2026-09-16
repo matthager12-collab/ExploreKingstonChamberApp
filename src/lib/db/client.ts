@@ -5,9 +5,11 @@
 // no-restricted-imports + a dependency-cruiser rule). `server-only` poisons
 // any accidental client-component import at build time.
 //
-// Driver: node-postgres Pool over the POOLED Neon DATABASE_URL (host contains
-// "-pooler"). Render runs one long-lived Node process, so a small TCP pool —
-// not the per-request HTTP client the old serverless seam used — is correct.
+// Driver: node-postgres Pool over DATABASE_URL. Since 2026-09-02 that is the
+// Render Postgres internal URL (render.yaml `fromDatabase`, private network,
+// no sslmode); before that it was Neon's pooled endpoint. Render runs one
+// long-lived Node process, so a small TCP pool — not the per-request HTTP
+// client the old serverless seam used — is correct.
 // DDL is owned by checked-in migrations (db/migrations/, applied at boot by
 // src/instrumentation.ts); there is deliberately no lazy schema creation here.
 
@@ -41,7 +43,7 @@ export function getDb(): Db {
   if (!process.env.DATABASE_URL) {
     throw new Error(
       "DATABASE_URL is not set — structured data lives in Postgres (E05). " +
-        "Local dev: point DATABASE_URL at a Neon dev branch or a local " +
+        "Local dev: point DATABASE_URL at a throwaway local " +
         "`docker run postgres:16` (see docs/OPERATIONS.md §1).",
     );
   }

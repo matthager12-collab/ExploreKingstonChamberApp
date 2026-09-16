@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { hasAnyUsers } from "@/lib/auth";
 import { Callout, PageHeader, Section } from "@/components/ui";
-import { SetupForm } from "../forms";
+import { SetupForm } from "@/components/portal/auth-forms";
 
 export const metadata: Metadata = { title: "First-run setup" };
 export const dynamic = "force-dynamic";

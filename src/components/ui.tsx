@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { safeExternalHref } from "@/lib/safe-href";
 import { OutboundLink } from "./tracker";
 
 /** Deep link into Google Maps — works on every platform, no API key. */
@@ -131,9 +132,15 @@ export function ExternalLink({
   // onClick — no preventDefault; sendBeacon survives the navigation. It lives
   // in tracker.tsx so this module stays server-safe (server pages call
   // mapSearchUrl/mapDirectionsUrl above at render time).
+  //
+  // Hrefs here are frequently store-fed (event.url, place.website, booking
+  // links), so this is the render-side floor: anything that isn't plainly
+  // http(s) renders as text, not a link (see src/lib/safe-href.ts).
+  const safe = safeExternalHref(href);
+  if (!safe) return <span className={className}>{children}</span>;
   return (
     <OutboundLink
-      href={href}
+      href={safe}
       className={`font-medium text-tide-deep underline decoration-seaglass underline-offset-2 hover:text-sound ${className}`}
     >
       {children}

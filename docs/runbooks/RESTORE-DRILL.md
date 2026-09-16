@@ -14,8 +14,9 @@ at the bottom of this file.
    survey & analytics) in one file. It contains **account password hashes** —
    treat the file as sensitive.
 2. **Render disk snapshots** — automatic, daily, 7-day window (Render dashboard →
-   the service → Disk → Snapshots). Plus **Neon** point-in-time restore for the
-   database.
+   the service → Disk → Snapshots). Plus **Render Postgres**'s own daily logical
+   backups and point-in-time recovery, from the database's Recovery page in the
+   dashboard.
 
 You do **not** need to be a programmer to run the filesystem-mode drill below.
 It uses only copy-paste terminal commands.
@@ -62,37 +63,39 @@ it, without touching production. ~15 minutes.
 
 > **Note (the database half).** Since the E05 cutover, structured data lives in
 > Postgres, so step 4 needs a `DATABASE_URL`. For a self-contained drill, point
-> it at a **Neon scratch branch** (Mode B) or a throwaway local
+> it at a throwaway local
 > `docker run -e POSTGRES_PASSWORD=x -p 5432:5432 postgres:16`, then import the
 > bundle's `db` section with `npm run restore:db`. See `docs/OPERATIONS.md` §1.
 
 ---
 
-## Mode B — Neon / Postgres restore (database point-in-time)
+## Mode B — Render Postgres restore (database point-in-time)
 
 The database is the system of record for accounts, listings, events, and survey
-data. Restoring it is a Neon-console operation:
+data. Restoring it is a Render-dashboard operation, from the database's
+**Recovery page** (`explore-kingston-db` → Recovery):
 
-1. In the **Neon console** → the project → **Branches** → create a branch from a
-   point in time (Neon keeps a restore window — confirm the retention on the
-   plan). Name it e.g. `restore-drill-YYYY-MM-DD`.
-2. Copy that branch's **pooled connection string**.
-3. Point a local run at it: `DATABASE_URL="<branch url>" AUTH_SECRET=drill npm run dev`,
-   open `/api/health` (expect `dbOk: true`), and spot-check an account/listing.
-4. Where the nightly JSON export lands and how to re-import it is in
-   `docs/OPERATIONS.md` §1 / §4; the bundle's `db` section restores with
-   `scripts/restore-db.ts` (`npm run restore:db`).
+1. The Recovery page (`explore-kingston-db` → Recovery in the Render dashboard)
+   holds daily logical backups and point-in-time recovery; retention depends on
+   the workspace plan (3 days on Hobby) — confirm before assuming a date is
+   covered.
+2. An ad-hoc `pg_dump` runs as a one-off Render job against the internal URL —
+   `ops/db-copy/` is the worked example.
+3. Rehearse against a throwaway local Postgres (the same `docker run` as Mode A)
+   plus `npm run restore:db`; the production database is internal-only
+   (`ipAllowList: []`) and unreachable from a laptop without an entry added first
+   (and removed after).
 
 ### Documented gap (FR-A24)
 
-The **full Neon point-in-time restore is NOT yet a copy-paste, non-programmer
-procedure** — it requires Neon-console judgement (choosing the restore point,
-promoting a branch) and a valid `DATABASE_URL`. **Compensating control:** Neon's
-built-in point-in-time restore covers the database independently of this app, and
-**Mat** performs or supervises a database restore. The **filesystem-mode drill
-(Mode A) is the non-programmer-runnable half** and is what the quarterly log
-below attests. This gap is recorded deliberately per FR-A24, which permits a
-documented gap with a compensating control rather than silence.
+A restore from the Recovery page has been read, not rehearsed (as of 2026-09-02);
+the compensating control is still Mode A, which has been drilled.
+**Compensating control:** the off-site bundle restore (Mode A) covers the same
+data and **HAS** been drilled — see the log below. **Mat** performs or supervises
+a database restore. The **filesystem-mode drill (Mode A) is the
+non-programmer-runnable half** and is what the quarterly log below attests. This
+gap is recorded deliberately per FR-A24, which permits a documented gap with a
+compensating control rather than silence.
 
 ---
 

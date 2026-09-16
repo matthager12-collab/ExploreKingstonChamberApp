@@ -30,6 +30,13 @@ const eslintConfig = defineConfig([
   // failure is a nasty one to read, because it points at frozen files and reads
   // as "E22 broke the map editor" when nothing in them changed at all.
   //
+  // REPOINTED AGAIN, same reason: /admin moved out of (site) into its own
+  // (admin) route group so it stops rendering the public tourist navigation
+  // above its own nav. Pure `git mv`, zero content changed — and this list had
+  // to move in the same commit, exactly as the E22 note above warns. It did
+  // not, and the 32 "errors" that appeared pointed at frozen map editors
+  // nobody had touched. The comment predicted its own failure precisely.
+  //
   // The ferry-nav-feedback fix repointed the home page again after its pure
   // R100 `git mv` into (site)/(home) — the scoped segment that carries the
   // instant-nav loading boundary without wrapping /es (see
@@ -37,9 +44,9 @@ const eslintConfig = defineConfig([
   // pre-existing occurrence, new path.
   {
     files: [
-      "src/app/(site)/admin/accounts/manager.tsx",
-      "src/app/(site)/admin/map/editor.tsx",
-      "src/app/(site)/admin/maps/editor.tsx",
+      "src/app/(admin)/admin/accounts/manager.tsx",
+      "src/app/(admin)/admin/map/editor.tsx",
+      "src/app/(admin)/admin/maps/editor.tsx",
       "src/app/(site)/ferry/ferry-board.tsx",
       "src/app/(site)/(home)/page.tsx",
       "src/app/(site)/portal/nonprofit/\\[id\\]/editor.tsx",

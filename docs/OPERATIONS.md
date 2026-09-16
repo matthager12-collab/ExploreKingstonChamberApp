@@ -22,14 +22,14 @@ Phase-2 Vercel path, DNS, pre-launch checklist),
 
 1. **Postgres is the structured-data home; `DATA_DIR` keeps the images**
    (since E05). Every account, portal edit, ferry override, analytics and
-   survey row lives in Neon Postgres (accounts in the dedicated
+   survey row lives in Render Postgres (accounts in the dedicated
    `users`/`orgs`/`invites` tables since E06, everything else in `record` +
    the append tables; writes go through the audited choke point
    `src/lib/db/records.ts`). The `DATA_DIR` directory
    (resolved by `src/lib/data-dir.ts`) holds hunt photos and map
    images (until E15). Code, seed content, brand assets, and the generated
    parking overlay are all reproducible from git + `npm install`. Back up
-   **both** Neon (PITR/branching) and `DATA_DIR`.
+   **both** Render Postgres (backups + PITR) and `DATA_DIR`.
 2. **`DATABASE_URL` is required on every deploy** — `/api/health` reports
    `db:false` and 503s without it. **Since E15 removed the persistent disk that
    gate finally holds a bad release back** instead of taking the site down:
@@ -52,8 +52,8 @@ Phase-2 Vercel path, DNS, pre-launch checklist),
 
 **Prereqs:** **Node 22+** (the production image is `node:22-alpine`; Next 16
 needs ≥ 20.9), npm, and — since E05 — a **Postgres** to point `DATABASE_URL`
-at (a throwaway Docker container or a personal Neon dev branch; see the table
-below). No paid service required.
+at (a throwaway Docker container; see the table below). No paid service
+required.
 
 ```bash
 npm install
@@ -77,7 +77,7 @@ working copy's `.env.local` — reference that, don't reprint secrets.
 | `NEXT_PUBLIC_SITE_URL` | No locally (defaults to `http://localhost:3000`); **set in production** | Absolute production origin for share-card/canonical URLs (`src/app/layout.tsx` `metadataBase` — the app spreads by visitors texting links). **Build-time var** — inlined into the client bundle at `npm run build`; a dashboard-only change needs a rebuild. |
 | `DATA_DIR` | No locally (defaults to `<repo>/.data`); **set in production** | Absolute path to the mutable-state root, resolved via `src/lib/data-dir.ts`. Leave unset locally. In production it **must** be an absolute path on a mounted persistent volume (`/data` on Render/Fly) or redeploys wipe accounts, portal edits, and photos. |
 | `SETUP_TOKEN` | Only to bootstrap the first admin (locally or in production) — `POST /api/auth/setup` 403s fail-closed without it | Any string you choose, e.g. `openssl rand -hex 16`. Only consulted while zero users exist (`hasAnyUsers()` is checked first) — once an admin exists, it's never read again. Set it in `.env.local` before running `/portal/setup` on a fresh `.data/`; on Render it's `generateValue: true`. |
-| `DATABASE_URL` | **Yes since E05** — structured data (listings, events, auth, …) lives in Postgres; `next dev` pages fail without it. Images/photos stay on disk under `DATA_DIR`. | A throwaway local Postgres (`docker run -e POSTGRES_PASSWORD=ci -p 5432:5432 postgres:16` → `postgres://postgres:ci@127.0.0.1:5432/postgres`) or a personal Neon dev branch. Migrations under `db/migrations/` apply automatically at server start. **Never point local dev at the production database.** |
+| `DATABASE_URL` | **Yes since E05** — structured data (listings, events, auth, …) lives in Postgres; `next dev` pages fail without it. Images/photos stay on disk under `DATA_DIR`. | A throwaway local Postgres (`docker run -e POSTGRES_PASSWORD=ci -p 5432:5432 postgres:16` → `postgres://postgres:ci@127.0.0.1:5432/postgres`). Migrations under `db/migrations/` apply automatically at server start. **Never point local dev at the production database** — since 2026-09-02 it is internal-only on Render anyway (`ipAllowList: []`). |
 | `WORKLIST_SWEEP_TOKEN` | No — only for the E08 staleness-sweep cron; the sweep also runs from any admin session, and unset simply disables the token path (fail-closed, never open) | `openssl rand -hex 32`, set on Render (both services) and in whatever scheduler calls `POST /api/admin/worklist/sweep` with `Authorization: Bearer …` — see §5 "Worklist & moderation". |
 | `EVENTS_INGEST_TOKEN` | No — only for the E12 hourly events-ingest cron (`render.yaml` `events-ingest`); ingest also runs from any admin session ("Sync now" on `/admin/events-sources`). Fail-closed like the sweep token: production token callers get 503 while it's unset; `next dev` is open without it. | `openssl rand -hex 32`, set on Render (web service + the `events-ingest` cron; same value) — see §5 "Unified events calendar & ingest". |
 | `AMS_CALENDAR_FEED_URL` | No — optional staff-generated GrowthZone whole-calendar iCal URL (§9 item 6b). While unset the ingest scrapes per-event `.ics` files instead. Transitional: the whole GrowthZone source ends ~April 2027 (docs/adr/ADR-0005-events-canonical-source.md). | Chamber staff mint it in the GrowthZone back office (Events → Calendars settings → "Calendar Feed"); paste into Render (both services) or the `calendar-sources` record. |
@@ -226,10 +226,16 @@ container cannot be parsed is REJECTED with a 4xx rather than stored
 unverified. If an operator reports "my image won't upload", that is this — ask
 them to re-save or export it.
 
-Two documented gaps, both deliberate:
-- **PDF** event attachments pass through untouched. PDFs carry document
-  metadata (author, producer) but are authored artwork rather than camera
-  output, so they are not a GPS vector.
+**PDF** event attachments get the matching treatment in
+`src/lib/pdf-sanitize.ts`: the document-level Info dictionary (title, author,
+subject, keywords, producer, creator, dates) and XMP metadata stream are
+removed before storage, so a flyer submitted as a PDF keeps no more than the
+same flyer submitted as a PNG. Same fail-closed posture: an **encrypted or
+unparseable PDF is rejected with a 4xx**, never stored unverified. If an
+operator reports "my PDF won't upload", ask them to export an unprotected
+copy from the original document and try again.
+
+One documented gap, deliberate:
 - **Images stored before the E15 cutover** were not re-processed: the migration
   copies bytes verbatim so the parity check can compare by byte equality. A
   one-off sweep of pre-existing images is a backlog item.
@@ -306,7 +312,7 @@ picture.
 |---|---|
 | Blueprint | `render.yaml` — a Docker web service (`runtime: docker`, `dockerfilePath: ./Dockerfile`), region `oregon`, plan **starter** (persistent disks require a paid plan) |
 | Image | Multi-stage `Dockerfile`: `node:22-alpine`, `npm ci`, `npm run build`, ships only the standalone runner (`.next/standalone` + copied `.next/static` + `public/`), runs as non-root `nextjs`, `CMD ["node","server.js"]` on port 3000 |
-| Persistence | **Neon Postgres** for all structured data (E05 — `DATABASE_URL` is `sync: false` in `render.yaml`, set in the dashboard) + **private Cloudflare R2** for uploaded images (E15 — `R2_IMAGES_*`). **No persistent disk since E15 slice 3**: nothing durable is written to the container filesystem, which is what makes deploys zero-downtime |
+| Persistence | **Render Postgres** for all structured data (E05 — `DATABASE_URL` is Blueprint-managed via `fromDatabase` in `render.yaml`) + **private Cloudflare R2** for uploaded images (E15 — `R2_IMAGES_*`). **No persistent disk since E15 slice 3**: nothing durable is written to the container filesystem, which is what makes deploys zero-downtime |
 | Health gate | `healthCheckPath: /api/health` — Render routes traffic only after 200. `/api/health` returns `{ ok, db, storage, time }`, **200 only when Postgres answers, 503 otherwise** (E15: gates on the DB alone). It does NOT touch the filesystem — the earlier `/data` write-probe was removed so the disk can be dropped without bricking the health check. `storage` (`"r2"` \| `"fs"` \| `"unconfigured"`) reports where images are configured to live but **never gates** — an R2 outage must 404 an image, not 503 the site. This catches a release booted without a reachable `DATABASE_URL` before users do |
 | SEO | `/robots.txt` and `/sitemap.xml` are runtime routes (`force-dynamic`), so hiding a page in Admin → Site content removes it from the sitemap on the next fetch. **Staging sets `NOINDEX=1`**, which disallows everything and omits the sitemap line. `NEXT_PUBLIC_SITE_URL` is the single origin for `metadataBase`, the sitemap and the robots sitemap directive (`src/lib/site-url.ts`) — it is **build-time inlined**, so changing it needs a redeploy, not a restart |
 | Secrets | `AUTH_SECRET` and `SETUP_TOKEN` = `generateValue: true` (Render mints them once; **do not rotate `AUTH_SECRET` casually**); `WSDOT_API_KEY` and `NEXT_PUBLIC_SITE_URL` are `sync: false`, entered in the dashboard. `NEXT_PUBLIC_*` is inlined at **build** time — Render bakes it during the Docker build |
@@ -347,10 +353,11 @@ nameservers** — that would break Chamber email. Deferred until launch; the
 
 ## 4. State & backups — three independent layers
 
-Since E05 the backup surface is split: **Neon holds structured data** (its
-PITR/branching is the recovery path for records) and **`DATA_DIR`** (`/data`
-on Render) holds images/hunt photos. The bundle layers below still walk the
-whole `DATA_DIR`. There are **three backup layers**, deliberately independent:
+Since E05 the backup surface is split: **Render Postgres holds structured
+data** (its own backups/PITR are the recovery path for records) and
+**`DATA_DIR`** (`/data` on Render) holds images/hunt photos. The bundle
+layers below still walk the whole `DATA_DIR`. There are **three backup
+layers**, deliberately independent:
 
 > **The nightly export.** The off-site job (Layer 3,
 > `.github/workflows/backup-offsite.yml`, daily 09:23 UTC) pulls
@@ -434,10 +441,10 @@ Gates satisfied **before** deletion, in this order:
 running diskless regardless of whether the volume is still attached.
 
 If a future incident makes you wish the disk were back: it held nothing that
-is not in Neon Postgres or the R2 buckets. Restoring it would restore 456 KB of
+is not in Render Postgres or the R2 buckets. Restoring it would restore 456 KB of
 pre-E05 files that the app no longer reads.
 
-### Layer 1 — Neon Postgres PITR (off-host, automatic)
+### Layer 1 — Render Postgres backups & PITR (off-host, automatic)
 
 **Superseded E15.** This layer used to be Render's daily snapshots of the
 `/data` disk (7-day restore window). **The disk was removed**, so that layer is
@@ -445,10 +452,14 @@ gone — and it lost nothing: by the time it was deleted the disk held 456 KB of
 vestigial pre-E05 directories and **zero** images (verified in the container,
 2026-07-21). Everything durable had already moved off it.
 
-The zero-effort automatic baseline is now **Neon's own point-in-time recovery /
-branching** on the Postgres database, which is where all structured data lives.
-Uploaded images live in the private R2 bucket, which is separately covered by
-Layer 3. Nothing depends on a host-local disk any more.
+The zero-effort automatic baseline is now **Render Postgres's own daily logical
+backups and point-in-time recovery**, on the database's Recovery page in the
+dashboard. Retention depends on the Render workspace plan (3 days on Hobby).
+The database is internal-only (`ipAllowList: []`). A restore is a dashboard
+operation; a laptop cannot reach the database unless an IP is first added to
+`ipAllowList` in render.yaml (and removed after). Uploaded images live in the
+private R2 bucket, which is separately covered by Layer 3. Nothing depends on a
+host-local disk any more.
 
 ### Layer 2 — off-site admin backup bundle (portable, on demand)
 
@@ -461,7 +472,7 @@ contains password hashes, so **treat the download as sensitive**.
 
 This is the *off-Render* copy of the disk. Pull one before risky changes and
 on a regular cadence. (Since E05 LTAC/survey records live in Postgres, not
-`DATA_DIR` — cover them with Neon PITR/branching or a SQL dump.)
+`DATA_DIR` — cover them with Render Postgres PITR or a pg_dump.)
 
 **Restore an off-site bundle** with `scripts/restore-backup.mjs`:
 
@@ -1096,7 +1107,7 @@ not run.**
 | Job | Where | Schedule (UTC) | Calls | Token |
 |---|---|---|---|---|
 | `events-ingest` | Render cron | `23 * * * *` hourly | `POST /api/events/ingest` | `EVENTS_INGEST_TOKEN` |
-| `ferry-observe` | Render cron | `*/15 0-7,11-23 * * *` (every 15 min in service hours; 08–10 UTC skipped — overnight ferry gap, lets Neon suspend) | `POST /api/ferry/observe` | `FERRY_OBSERVE_TOKEN` |
+| `ferry-observe` | Render cron | `*/15 0-7,11-23 * * *` (every 15 min in service hours; 08–10 UTC skipped — overnight ferry gap) | `POST /api/ferry/observe` | `FERRY_OBSERVE_TOKEN` |
 | `ferry-accuracy` | Render cron | `0 8 * * *` (~1 AM Pacific) | `POST /api/ferry/accuracy` | `FERRY_OBSERVE_TOKEN` |
 | `worklist-sweep` | Render cron | `0 14 * * 1` Mondays (~7 AM Pacific) | `POST /api/admin/worklist/sweep` | `WORKLIST_SWEEP_TOKEN` |
 | `backup-offsite` | **GitHub Actions** | `23 9 * * *` daily | `GET /api/admin/backup` | `BACKUP_TOKEN` |
@@ -1301,14 +1312,16 @@ for the hardcoded values called out in §6 (fares, seasonal hours strings).
 ## 8. The DB-migration path (eventual Vercel move)
 
 Phase 2 (Vercel serverless) is a **supported alternative**, not a rewrite —
-since E05 the structured data already lives in Neon Postgres on **every** host
-(`DATABASE_URL` is required everywhere; `/api/health` 503s without it), so a
+since E05 the structured data already lives in Postgres on **every** host
+(`DATABASE_URL` is required everywhere; `/api/health` 503s without it; the
+live Phase 1 database is Render Postgres since 2026-09-02), so a
 Vercel move is a hosting change, not a data-model change. When/if the app moves
 to Vercel:
 
 1. **Provision cloud stores** and set the env (never in git;
    `.env.production.example` documents the shape): `DATABASE_URL` (Neon Postgres
-   **pooled** URL, host contains `-pooler` — already required on any host),
+   **pooled** URL, host contains `-pooler` — required for serverless; the live
+   Render Postgres URL has no pooler, so this differs from production today),
    `BLOB_READ_WRITE_TOKEN` (Vercel Blob, for images), `UPSTASH_REDIS_REST_URL`
    + `_TOKEN` (shared rate limiter). Do **not** set `DATA_DIR` on Vercel.
 2. **Create the schema:** the checked-in Drizzle migrations (`db/migrations/`,
@@ -1442,7 +1455,7 @@ useful first triage step:
 | Code | Body | Meaning | Fix |
 |---|---|---|---|
 | **503** | `{"ok":false,"db":false,…}` | The app is running but has **no database configured** — `DATABASE_URL` unset. The route ran and reported honestly. | Set `DATABASE_URL` on the service and redeploy |
-| **500** | `Internal Server Error` (no JSON) | `DATABASE_URL` **is** set but the host is **unreachable** (wrong host/port/credentials, or Neon down). The boot migrator in `src/instrumentation.ts` fails on `CREATE SCHEMA IF NOT EXISTS "drizzle"`, the instrumentation hook fails to load, and Next 500s **every** route — health never even runs. Check the service logs for `ECONNREFUSED` / `An error occurred while loading instrumentation hook`. | Correct `DATABASE_URL` or wait for Neon; redeploy |
+| **500** | `Internal Server Error` (no JSON) | `DATABASE_URL` **is** set but the host is **unreachable** (wrong host/port/credentials, or Render Postgres down). The boot migrator in `src/instrumentation.ts` fails on `CREATE SCHEMA IF NOT EXISTS "drizzle"`, the instrumentation hook fails to load, and Next 500s **every** route — health never even runs. Check the service logs for `ECONNREFUSED` / `An error occurred while loading instrumentation hook`. | Correct `DATABASE_URL` or wait for Render Postgres; redeploy |
 
 Both are fail-closed — Render withholds traffic from any non-200 release — so
 the safety posture is the same; only the diagnosis differs. (Health no longer

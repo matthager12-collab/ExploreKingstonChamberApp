@@ -10,14 +10,16 @@
 // 2026-03-08, fall-back 2026-11-01). All instants are absolute UTC ISO strings,
 // so the suite is stable regardless of the runner's TZ.
 
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { createTestDb, type TestDb } from "../setup/pglite-db";
 import { appendFerryObservation } from "@/lib/db/append";
+import * as append from "@/lib/db/append";
 import { ferryObservation } from "@/lib/db/schema";
 import {
   computeAccuracy,
   getEmpiricalBusyness,
   pacificParts,
+  recordSailingSpaceSnapshot,
   type FerryObservation,
 } from "@/lib/stores/ferry-observations";
 import { empiricalBucketKey, type EmpiricalTable } from "@/lib/ferry-forecast";
@@ -187,5 +189,62 @@ describe("getEmpiricalBusyness with memoized pacificParts", () => {
       typeof o.max === "number" && o.max > 0 && typeof o.driveUp === "number" && o.driveUp >= 0;
     const metrics = await computeAccuracy();
     expect(metrics.n).toBe([...recent, stale].filter(usable).length);
+  });
+});
+
+// ---- Cache behavior: SWR + single-flight, snapshot writes no longer clear it
+
+describe("getEmpiricalBusyness cache: stale-while-revalidate + single-flight", () => {
+  it("a snapshot write no longer invalidates a fresh aggregate cache", async () => {
+    await getEmpiricalBusyness(); // warm (already warm from the describe block above; harmless)
+
+    const spy = vi.spyOn(append, "readFerryObservations");
+    try {
+      // driveUpSpaces/maxSpaces null (WSF "not reporting") so this write can't
+      // change any fullness-derived count elsewhere in the file.
+      const sampleSpace = {
+        kingston: [
+          { departs: new Date(Date.now() + 20 * 60_000).toISOString(), vessel: "Test", driveUpSpaces: null, maxSpaces: null },
+        ],
+        edmonds: [
+          { departs: new Date(Date.now() + 25 * 60_000).toISOString(), vessel: "Test", driveUpSpaces: null, maxSpaces: null },
+        ],
+      };
+      const wrote = await recordSailingSpaceSnapshot(sampleSpace, { toKingston: 0, fromKingston: 0 });
+      expect(wrote).toBe(true);
+
+      await getEmpiricalBusyness(); // still within TTL — must not rescan
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("cold cache: two concurrent calls share one scan", async () => {
+    // The shared module-level aggCache above is already warm by this point in
+    // the file (by design — writes no longer clear it), so a genuinely cold
+    // cache needs its own module instance: reset the registry and re-import,
+    // rewiring the fresh db/client seam to the same test database.
+    vi.resetModules();
+    try {
+      const client = await import("@/lib/db/client");
+      client.__setDbForTests(tdb.db);
+      const freshAppend = await import("@/lib/db/append");
+      const freshStore = await import("@/lib/stores/ferry-observations");
+
+      const spy = vi.spyOn(freshAppend, "readFerryObservations");
+      try {
+        const [a, b] = await Promise.all([
+          freshStore.getEmpiricalBusyness(),
+          freshStore.getEmpiricalBusyness(),
+        ]);
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(a).toEqual(b);
+      } finally {
+        spy.mockRestore();
+      }
+    } finally {
+      vi.resetModules();
+    }
   });
 });

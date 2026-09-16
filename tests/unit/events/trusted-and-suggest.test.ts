@@ -9,6 +9,7 @@ import { readFileSync } from "fs";
 import path from "path";
 import { NextRequest } from "next/server";
 import { count, eq } from "drizzle-orm";
+import { PDFDocument } from "pdf-lib";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { audit } from "@/lib/db/schema";
@@ -52,7 +53,15 @@ vi.mock("@/lib/auth", () => ({
 
 import { POST as eventsPOST } from "@/app/api/portal/events/route";
 import { POST as orgPOST } from "@/app/api/portal/org/route";
-import { POST as suggestPOST } from "@/app/api/events/suggest/route";
+import { POST as suggestRoutePOST } from "@/app/api/events/suggest/route";
+
+/** The route now length-guards before parsing, so requests must arrive the
+ *  way the wire delivers them: serialized bytes with a declared
+ *  Content-Length (suggestReq builds those async). This shim keeps the call
+ *  sites reading naturally. */
+async function suggestPOST(request: NextRequest | Promise<NextRequest>) {
+  return suggestRoutePOST(await request);
+}
 import { GET as feedsEventsGET } from "@/app/api/feeds/events/route";
 
 const seedRestaurant = restaurantSeed[0];
@@ -242,7 +251,7 @@ describe("(a)-(c) anonymous suggest intake — always pending, no bypass", () =>
    *  the 5/hour bucket (keyed on IP) doesn't bleed across tests; the rate-limit
    *  test pins one IP on purpose. */
   let ipSeq = 0;
-  function suggestReq(
+  async function suggestReq(
     fields: Record<string, string>,
     files: { name: string; type: string; bytes: Uint8Array }[] = [],
     ip = `10.0.0.${++ipSeq}`,
@@ -252,10 +261,19 @@ describe("(a)-(c) anonymous suggest intake — always pending, no bypass", () =>
     for (const f of files) {
       fd.append("attachments", new File([f.bytes as BlobPart], f.name, { type: f.type }));
     }
+    // Serialize the way the wire does: bytes plus the declared Content-Length
+    // every browser sends, so the route's pre-parse length guard sees what
+    // production sees.
+    const wire = new Response(fd);
+    const body = await wire.arrayBuffer();
     return new NextRequest("http://localhost/api/events/suggest", {
       method: "POST",
-      body: fd,
-      headers: { "x-forwarded-for": ip },
+      body,
+      headers: {
+        "content-type": wire.headers.get("content-type") ?? "",
+        "content-length": String(body.byteLength),
+        "x-forwarded-for": ip,
+      },
     });
   }
 
@@ -322,11 +340,15 @@ describe("(a)-(c) anonymous suggest intake — always pending, no bypass", () =>
     // A REAL PNG, not three placeholder bytes: since E15 the save path strips
     // EXIF/GPS (M-16-02) and is fail-closed, so an unparseable image is now
     // correctly rejected with a 400. Using the tagged fixture keeps this test
-    // about attachment plumbing while exercising the real code path.
+    // about attachment plumbing while exercising the real code path. The same
+    // evolution hit the PDF: the save path now strips its document metadata,
+    // also fail-closed, so the placeholder bytes became a real document too.
+    const pdfDoc = await PDFDocument.create();
+    pdfDoc.addPage([200, 200]);
     const res = await suggestPOST(
       suggestReq({ ...SUGGESTION, title: "Gallery Opening" }, [
         { name: "flyer.png", type: "image/png", bytes: GPS_PNG },
-        { name: "program.pdf", type: "application/pdf", bytes: new Uint8Array([4, 5, 6]) },
+        { name: "program.pdf", type: "application/pdf", bytes: await pdfDoc.save() },
       ]),
     );
     expect(res.status).toBe(200);
@@ -358,6 +380,24 @@ describe("(a)-(c) anonymous suggest intake — always pending, no bypass", () =>
     expect(
       (await listWorklistItems({ type: "moderation", state: "open" })).some(
         (i) => i.subjectLabel === "Zip Bomb" || i.subjectLabel === "Huge Poster",
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects a PDF it cannot read (400), storing nothing — parity with the image path", async () => {
+    authState.user = null;
+    const res = await suggestPOST(
+      suggestReq({ ...SUGGESTION, title: "Locked Program" }, [
+        { name: "program.pdf", type: "application/pdf", bytes: new Uint8Array([4, 5, 6]) },
+      ]),
+    );
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toMatch(
+      /password-protected or couldn't be read/,
+    );
+    expect(
+      (await listWorklistItems({ type: "moderation", state: "open" })).some(
+        (i) => i.subjectLabel === "Locked Program",
       ),
     ).toBe(false);
   });

@@ -4,8 +4,9 @@
 // (render.yaml `events-ingest`), and available to a signed-in admin.
 //
 // Auth (pattern from /api/admin/worklist/sweep, FAIL-CLOSED like it):
-//   - `Authorization: Bearer $EVENTS_INGEST_TOKEN` (?token= also accepted —
-//     cron schedulers vary);
+//   - `Authorization: Bearer $EVENTS_INGEST_TOKEN` (header only — a token in
+//     a query string lands in access logs, and the Render cron already sends
+//     the header);
 //   - else an admin session;
 //   - EVENTS_INGEST_TOKEN unset in production → 503 for token callers (the
 //     cron is misconfigured — fail loud, never open); unset in development →
@@ -16,20 +17,17 @@
 // the authoritative gate either way.
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionUser, requireAdmin } from "@/lib/auth";
+import { getSessionUser, requireAdmin, timingSafeEqualStr } from "@/lib/auth";
 import { runIngest } from "@/lib/events/ingest";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   const expected = process.env.EVENTS_INGEST_TOKEN;
-  const provided =
-    request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ??
-    request.nextUrl.searchParams.get("token") ??
-    "";
+  const provided = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
 
   let actor = "system";
-  const tokenOk = Boolean(expected && provided && provided === expected);
+  const tokenOk = Boolean(expected && provided && timingSafeEqualStr(provided, expected));
   if (!tokenOk) {
     const user = await getSessionUser();
     if (user?.role === "admin") {

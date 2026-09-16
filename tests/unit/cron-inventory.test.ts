@@ -24,8 +24,12 @@ function renderCrons(): Array<{ name: string; schedule: string; command: string 
     if (!block.startsWith("cron")) continue;
     const name = /\n\s+name:\s*(\S+)/.exec(block)?.[1] ?? "";
     const schedule = /\n\s+schedule:\s*"([^"]+)"/.exec(block)?.[1] ?? "";
-    // dockerCommand is a folded block; take everything up to the next key.
-    const cmd = /dockerCommand:\s*>-\s*\n([\s\S]*?)(?=\n\s{4}\w+:)/.exec(block)?.[1] ?? "";
+    // dockerCommand is either a folded block (take everything up to the next
+    // key) or a plain one-line scalar.
+    const cmd =
+      /dockerCommand:\s*>-\s*\n([\s\S]*?)(?=\n\s{4}\w+:)/.exec(block)?.[1] ??
+      /\n\s+dockerCommand:\s*([^>\n][^\n]*)/.exec(block)?.[1] ??
+      "";
     out.push({ name, schedule, command: cmd.replace(/\s+/g, " ").trim() });
   }
   return out;
@@ -52,8 +56,17 @@ describe("Render cron services", () => {
     }
   });
 
-  it("authenticates every cron with a token from its own env block", () => {
-    for (const c of crons) {
+  it("authenticates every cron that calls the app with a token from its own env block", () => {
+    // Only crons that POST to the web service need a bearer token. A cron that
+    // talks to something else (the 2026-09-02 one-shot Neon -> Render Postgres
+    // copy runs pg_dump/pg_restore and never touches the app) is exempt — but
+    // the four app crons must still be recognised as app callers, or a lost
+    // curl line would silently exempt one of them too.
+    const appCrons = crons.filter((c) => c.command.includes("https://explore-kingston.onrender.com"));
+    expect(appCrons.map((c) => c.name)).toEqual(
+      expect.arrayContaining(["events-ingest", "ferry-observe", "ferry-accuracy", "worklist-sweep"]),
+    );
+    for (const c of appCrons) {
       expect(c.command, `${c.name} sends no Authorization header`).toContain("Authorization: Bearer");
       expect(c.command, `${c.name} does not interpolate a token`).toMatch(/\$[A-Z_]+/);
     }

@@ -210,6 +210,32 @@ export const eventGoing = pgTable(
   ],
 );
 
+/** Scarecrow Crawl votes (2026). One row per vote, with the voter's optional
+ *  photo. NOTHING identifies the voter: no session, no IP, no cookie — the
+ *  count is honest-but-not-audited (repeat votes are suppressed on the device,
+ *  exactly like event_going), and the photo is private to the Chamber until
+ *  it is reviewed. Retention deletes photo-then-row at 12 months. */
+export const scarecrowVote = pgTable(
+  "scarecrow_vote",
+  {
+    id: text("id").primaryKey(),
+    /** A Scarecrow.id from src/lib/data/scarecrows.ts — validated there, not here. */
+    scarecrowId: text("scarecrow_id").notNull(),
+    /** Stored photo: a relative path, or a blob URL in legacy blob mode. Null
+     *  when the visitor voted without one — the photo is optional on purpose. */
+    photoPath: text("photo_path"),
+    /** Did the visitor leave the "the Chamber may use this photo" box ticked?
+     *  NULL when no photo came with the vote — distinct from false, which is a
+     *  visitor who sent a photo and deliberately withheld permission. */
+    photoSocialOk: boolean("photo_social_ok"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("scarecrow_vote_scarecrow_idx").on(t.scarecrowId),
+    index("scarecrow_vote_created_idx").on(t.createdAt),
+  ],
+);
+
 /** Edmonds–Kingston sailing-fullness snapshots — irreplaceable dataset (WSF
  *  never archives terminalsailingspace); migrated verbatim, count-verified. */
 export const ferryObservation = pgTable("ferry_observation", {

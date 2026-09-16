@@ -154,18 +154,41 @@ export async function checkRateLimit(
 
 /**
  * Derive a rate-limit key from a logical `bucket` (e.g. "login") plus the
- * client's IP. Reads the first hop of `x-forwarded-for`, then `x-real-ip`,
- * falling back to "unknown" when neither is present.
+ * client's IP, most-trusted source first:
  *
- * Note: behind a proxy that does NOT strip client-supplied XFF, the first hop
- * can be spoofed. On the intended persistent-disk deploys the platform proxy
- * (Render/Fly/Railway/nginx) sets a trustworthy XFF, so the first hop is the
- * real client. The per-account buckets (login:<email>, redeem:<code>) add a
- * second dimension that spoofing the IP can't escape.
+ *   1. `cf-connecting-ip`, then `true-client-ip`. Both prod hosts (the
+ *      .onrender.com domain and the custom domain) serve via Cloudflare in
+ *      front of Render — verified live: `server: cloudflare` +
+ *      `x-render-origin-server: Render` on both — and that edge writes these
+ *      single-value headers itself, replacing anything the client sent. A
+ *      request cannot reach the service without passing through it.
+ *
+ *   2. The RIGHTMOST hop of `x-forwarded-for`. Proxies APPEND to XFF rather
+ *      than replace it, so hops the client made up arrive on the left and only
+ *      the rightmost value was written by the edge in front of us. Never read
+ *      the leftmost hop: it lets a caller mint a fresh key per request (an
+ *      unlimited supply of buckets) or pin the blame on someone else's IP.
+ *      Worst case the rightmost hop names an internal proxy rather than the
+ *      end client — that pools clients into one bucket, which is tighter,
+ *      never looser.
+ *
+ *   3. `x-real-ip`, then "unknown" — direct connections: local dev and tests.
+ *
+ * On the live deploy branch 1 always fires; the rest exist for dev and any
+ * future re-hosting. The per-account buckets (login:<email>, redeem:<code>)
+ * add a second dimension that a rotated or shared IP can't escape.
  */
 export function clientKey(request: Request, bucket: string): string {
-  const xff = request.headers.get("x-forwarded-for");
-  const firstHop = xff?.split(",")[0]?.trim();
-  const ip = firstHop || request.headers.get("x-real-ip")?.trim() || "unknown";
+  const platform =
+    request.headers.get("cf-connecting-ip")?.trim() ||
+    request.headers.get("true-client-ip")?.trim();
+  if (platform) return `${bucket}:${platform}`;
+
+  const hops = (request.headers.get("x-forwarded-for") ?? "")
+    .split(",")
+    .map((hop) => hop.trim())
+    .filter(Boolean);
+  const lastHop = hops.length > 0 ? hops[hops.length - 1] : undefined;
+  const ip = lastHop || request.headers.get("x-real-ip")?.trim() || "unknown";
   return `${bucket}:${ip}`;
 }

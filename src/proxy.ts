@@ -29,7 +29,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth/tokens";
+import { SESSION_COOKIE, timingSafeEqualStr, verifySessionToken } from "@/lib/auth/tokens";
 
 // Imported from ./lib/auth/tokens, which is PURE — no next/headers, no DB, no
 // server-only import. Importing the barrel "@/lib/auth" here would drag the
@@ -52,7 +52,10 @@ export const config = {
 };
 
 /** Machine-token paths behind the proxy: cron-driven routes that carry
- *  `Authorization: Bearer <env token>` (or `?token=`) and no session cookie.
+ *  `Authorization: Bearer <env token>` and no session cookie. Header-only on
+ *  purpose — a token in a query string ends up in access logs and shell
+ *  history, and every scheduler we run (render.yaml crons, the Actions
+ *  workflows, scripts/fetch-encrypt-backup.sh) already sends the header.
  *  The proxy compares the token itself — it runs on the Node runtime, so the
  *  env vars are right here — and stays fail-closed: env unset or mismatch
  *  falls through to the cookie check and its 401. Each route re-checks its
@@ -75,11 +78,11 @@ function machineTokenOk(request: NextRequest): boolean {
   if (!envKey) return false;
   const expected = process.env[envKey];
   if (!expected) return false;
-  const provided =
-    request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ??
-    request.nextUrl.searchParams.get("token") ??
-    "";
-  return provided === expected;
+  const provided = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+  // Constant-time compare: the check's duration must not depend on where the
+  // strings differ. The empty-provided case is already rejected by the length
+  // guard inside (expected is non-empty here).
+  return timingSafeEqualStr(provided, expected);
 }
 
 export function proxy(request: NextRequest): NextResponse {

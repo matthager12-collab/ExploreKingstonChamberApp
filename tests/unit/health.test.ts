@@ -11,10 +11,10 @@ import { createTestDb, type TestDb } from "../setup/pglite-db";
 
 type HealthBody = { ok: boolean; db: boolean; storage: string; time: string };
 
-// dbHealthy memoizes its probe (15 min for a healthy result, 60s for a
-// failure — see src/lib/db/records.ts); fake timers step past the LONGER
-// window between cases so every GET below re-probes.
-const PAST_MEMO_MS = 16 * 60_000;
+// dbHealthy memoizes its probe for 60s, healthy or failed alike — see
+// src/lib/db/records.ts; fake timers step past that window between cases
+// so every GET below re-probes.
+const PAST_MEMO_MS = 61_000;
 let tdb: TestDb;
 beforeAll(async () => {
   vi.useFakeTimers({ now: Date.now(), toFake: ["Date"] });

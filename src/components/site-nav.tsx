@@ -27,6 +27,9 @@ const moreLinks = [
   { href: "/webcams", label: "Webcams" },
   { href: "/parking", label: "Parking" },
   { href: "/hunt", label: "Scavenger Hunt" },
+  // Seasonal (2026 crawl). Hiding the page from Admin → Site content drops
+  // this link with it — `visible()` below filters on the same hidden paths.
+  { href: "/scarecrow", label: "Scarecrow Crawl" },
   { href: "/give", label: "Give Back" },
   { href: "/about", label: "About" },
   // Directory-public slice: the ranked public directory ALSO absorbs the

@@ -23,8 +23,7 @@
 // to both; E06 normalized it onto the shared gate so every endpoint reports
 // "who are you?" and "may you?" with distinct codes.
 
-import { timingSafeEqual } from "crypto";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, timingSafeEqualStr } from "@/lib/auth";
 import { dataDir } from "@/lib/data-dir";
 import { serializeDb } from "@/lib/db/export";
 import { streamBundleDocument } from "@/lib/backup-bundle";
@@ -40,9 +39,7 @@ function hasValidBackupToken(request: Request): boolean {
   if (!configured) return false;
   const provided = (request.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
   if (!provided) return false;
-  const a = Buffer.from(provided);
-  const b = Buffer.from(configured);
-  return a.length === b.length && timingSafeEqual(a, b);
+  return timingSafeEqualStr(provided, configured);
 }
 
 export async function GET(request: Request) {

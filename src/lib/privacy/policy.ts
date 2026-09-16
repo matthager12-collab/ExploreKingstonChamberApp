@@ -26,7 +26,7 @@
  * E16/R3 membership-records tense flip relies on exactly that behavior.
  * Format: "YYYY-MM" of the notice revision.
  */
-export const PRIVACY_NOTICE_VERSION = "2026-08";
+export const PRIVACY_NOTICE_VERSION = "2026-09";
 
 export interface PrivacyNoticeChange {
   version: string;
@@ -36,6 +36,12 @@ export interface PrivacyNoticeChange {
 
 /** Rendered on /privacy; newest first. */
 export const PRIVACY_NOTICE_CHANGELOG: PrivacyNoticeChange[] = [
+  {
+    version: "2026-09",
+    date: "2026-08-23",
+    summary:
+      "Page feedback now offers an optional name and email so the Chamber can reply, which makes feedback searchable and deletable by address where one was left. Comments are also sent to Anthropic's API to be checked for abusive wording and rewritten neutrally if so — the rewrite is what gets stored, and a name or email is never sent. Bumped rather than edited quietly because this adds both a personal-data field and an outside processor; the Chamber agreed to the re-prompt.",
+  },
   {
     version: "2026-08",
     date: "2026-08-06",
@@ -141,9 +147,17 @@ export const RETENTION_POLICY: RetentionRule[] = [
     action: "delete",
   },
   {
+    store: "scarecrow-votes",
+    description:
+      "Scarecrow Crawl votes and the photo you chose to send with one. The vote records which scarecrow you picked and nothing about you — no account, no location, no device id. Your photo is never shown on this site; the Chamber may repost it on Facebook or Instagram only if you left the permission box ticked, and your answer is kept with the photo. Photo and vote are destroyed together.",
+    label: "12 months",
+    windowMonths: 12,
+    action: "delete",
+  },
+  {
     store: "worklist-request-contacts",
     description:
-      "The contact you give us to answer a privacy or accuracy request. Redacted from the request record once the request is resolved.",
+      "The name and contact you give us so we can follow up — on a privacy or accuracy request, an event you suggest, or a scarecrow you register. Removed from the record once it has been dealt with, and never kept in our change history.",
     label: "Until the request is resolved",
     action: "redact-at-resolution",
   },
