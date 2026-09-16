@@ -39,6 +39,7 @@ import { getItinerariesAdmin } from "@/lib/stores/itinerary-store";
 import { getLodgingAdmin, getWebcamsAdmin } from "@/lib/stores/listing-stores";
 import { getRestaurantsAdmin } from "@/lib/stores/business-store";
 import { getDirectoryListingsAdmin } from "@/lib/stores/directory-store";
+import { getMapFeaturesAdmin } from "@/lib/stores/map-store";
 
 /** The acting signed-in user (SessionUser satisfies this). */
 export type Actor = { id: string; email: string };
@@ -61,6 +62,14 @@ const ADMIN_GETTERS: Record<string, () => Promise<WithStatus<WithId>[]>> = {
   // land them; before this entry those items could be created but never
   // approved).
   directory: getDirectoryListingsAdmin,
+  // Scarecrow Crawl (2026-09): a business registering its scarecrow is held
+  // as a PENDING marker on the crawl map view, and approval flips it live —
+  // the same 'new' hold every other public suggestion uses. Without this
+  // entry the item could be approved but the pin would never go live.
+  //
+  // Also makes map pins reportable through /api/report and removable through
+  // the takedown path, like every other moderated store.
+  "map-features": getMapFeaturesAdmin,
 };
 
 /** Any-status lookup of a content record by store name — the worklist's

@@ -174,7 +174,7 @@ const charities: PiiStore = {
 const worklistContacts: PiiStore = {
   store: "worklist_item",
   description:
-    "Privacy/accuracy request contacts held on OPEN worklist items (scrubbed automatically at resolution).",
+    "Contacts held on OPEN worklist items — privacy and accuracy requests, event suggestions, scarecrow registrations (scrubbed automatically at resolution).",
   hasEmailIdentifier: true,
   async findByIdentifier(email) {
     // Scan active items whose payload carries a matching contact. Resolved
@@ -211,6 +211,11 @@ const worklistContacts: PiiStore = {
 
 function payloadHasContact(payload: Record<string, unknown>, email: string): boolean {
   if (eq(payload.contact as string | undefined, email)) return true;
+  // Public suggestions (events, scarecrow registrations) nest the contact one
+  // level down. Without this a person asking what we hold on them would be
+  // told "nothing" while an open suggestion still carried their address.
+  const suggest = payload.suggest as { contact?: string } | undefined;
+  if (eq(suggest?.contact, email)) return true;
   if (Array.isArray(payload.messages)) {
     return (payload.messages as Record<string, unknown>[]).some((m) =>
       eq(m.contact as string | undefined, email),

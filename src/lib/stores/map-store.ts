@@ -9,7 +9,7 @@ import { dataPath } from "../data-dir";
 import type { MapFeature, MapView } from "../map/types";
 import { mapViews as viewSeed } from "../data/map-views";
 import { mapFeatures as featureSeed } from "../data/map-features";
-import { readMerged, writeOverlayRecord, type WriteMeta } from "./json-store";
+import { readMerged, readMergedAdmin, writeOverlayRecord, type WriteMeta } from "./json-store";
 import { getObject, hasBlob, hasR2, putImage, putObject } from "../blob-store";
 import { stripImageMetadata } from "../image-sanitize";
 
@@ -35,6 +35,14 @@ export async function deleteMapView(id: string, meta?: WriteMeta): Promise<void>
 
 export async function getMapFeatures(): Promise<MapFeature[]> {
   return readMerged<MapFeature>(FEATURE_STORE, featureSeed);
+}
+
+/** Any-status read (E08): pending records included, each carrying its status.
+ *  For moderation and admin surfaces ONLY — a Scarecrow Crawl registration is
+ *  held here as a pending marker, and every public read (getMapFeatures,
+ *  getFeaturesForView, resolveMapView) must keep not seeing it. */
+export async function getMapFeaturesAdmin() {
+  return readMergedAdmin<MapFeature>(FEATURE_STORE, featureSeed);
 }
 
 /** Custom features assigned to a given view. */
