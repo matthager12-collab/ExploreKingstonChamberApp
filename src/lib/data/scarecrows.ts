@@ -31,9 +31,13 @@ export const CRAWL_MAP_CENTER: [number, number] = [47.798, -122.4971];
 export interface Scarecrow {
   /** The map feature's id — the vote key. Stable across edits to the name. */
   id: string;
-  /** What the Chamber called it: usually the business, or the scarecrow. */
+  /** What the scarecrow is called. */
   title: string;
-  /** The free-text line under it — business, address, a word about it. */
+  /** Who built or hosts it — the business, the school, the family. Shown as
+   *  its own line: a scarecrow is often made by one and hosted by another, and
+   *  the crawl is partly about crediting them. */
+  creator?: string;
+  /** The free-text line under it — where to stand, what to look for. */
   notes?: string;
   lat: number;
   lng: number;
@@ -48,6 +52,7 @@ export function scarecrowsFromFeatures(features: MapFeature[]): Scarecrow[] {
     .map((f) => ({
       id: f.id,
       title: f.title,
+      ...(f.creator ? { creator: f.creator } : {}),
       ...(f.notes ? { notes: f.notes } : {}),
       lat: f.point![0],
       lng: f.point![1],

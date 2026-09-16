@@ -88,6 +88,11 @@ export interface MapFeature {
    *  record, derive this from that store (match by listing/AMS member id) and
    *  retire the hand edits — do not add more hand-flag surfaces. */
   member?: boolean;
+  /** Who made or hosts this — the business behind a Scarecrow Crawl entry, the
+   *  artist of a mural. Kept separate from `title` (what the thing is called)
+   *  and `notes` (where it is, what to look for) because attribution is its own
+   *  line wherever it is shown, and folding it into either loses it on edit. */
+  creator?: string;
   /** Hex color for line/trail/area stroke+fill, or a marker tint override. */
   color?: string;
   /** Relative image path served by /api/map/image?p=… */

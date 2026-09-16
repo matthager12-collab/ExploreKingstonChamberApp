@@ -149,7 +149,7 @@ export const RETENTION_POLICY: RetentionRule[] = [
   {
     store: "scarecrow-votes",
     description:
-      "Scarecrow Crawl votes and the photo you chose to send with one. The vote records which scarecrow you picked and nothing about you — no account, no location, no device id — and the photo reaches the Chamber only; it is never published here. Photo and vote are destroyed together.",
+      "Scarecrow Crawl votes and the photo you chose to send with one. The vote records which scarecrow you picked and nothing about you — no account, no location, no device id. Your photo is never shown on this site; the Chamber may repost it on Facebook or Instagram only if you left the permission box ticked, and your answer is kept with the photo. Photo and vote are destroyed together.",
     label: "12 months",
     windowMonths: 12,
     action: "delete",

@@ -352,7 +352,7 @@ export const PII_STORES: PiiStore[] = [
   noIdentifierStore(
     "scarecrow_vote",
     "Scarecrow Crawl votes and the photos sent with them.",
-    "A vote carries no account, session id, cookie, IP or coordinate — nothing ties one to a person, and photo metadata is stripped before storage. There is nothing to find, export or delete by identifier; the Chamber can remove an individual photo on request from the crawl console, and retention destroys photo and vote together at 12 months.",
+    "A vote carries no account, session id, cookie, IP or coordinate — nothing ties one to a person, and photo metadata is stripped before storage. Each photo carries the visitor's answer to whether the Chamber may repost it, and a photo with no recorded answer is treated as a no. There is nothing to find, export or delete by identifier; the Chamber can remove an individual photo on request from the crawl console, and retention destroys photo and vote together at 12 months.",
   ),
   noIdentifierStore(
     "survey_response",

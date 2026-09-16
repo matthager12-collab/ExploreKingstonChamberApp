@@ -19,7 +19,9 @@ import type { CrawlPhase } from "@/lib/data/scarecrows";
 export interface VotableScarecrow {
   id: string;
   title: string;
-  /** The Chamber's own line about it — business, address, whatever they typed. */
+  /** The business, school or family who built or hosts it. */
+  creator?: string;
+  /** The Chamber's own line about it — where to stand, what to look for. */
   notes?: string;
 }
 
@@ -36,6 +38,10 @@ export function ScarecrowVote({
   phase: CrawlPhase;
 }) {
   const [selected, setSelected] = useState("");
+  // Ticked by default, at the Chamber's request: most people are glad to be
+  // reposted, and the box is in plain sight above the button rather than
+  // buried in small print. Untick is honoured and recorded.
+  const [socialOk, setSocialOk] = useState(true);
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState("");
   const [share, setShare] = useState<ShareState>("idle");
@@ -66,6 +72,9 @@ export function ScarecrowVote({
 
     const form = new FormData(event.currentTarget);
     form.set("scarecrowId", selected);
+    // Always explicit: an unticked box sends "false" rather than nothing, so
+    // the server records a decision instead of inferring one.
+    form.set("socialOk", socialOk ? "true" : "false");
     try {
       const res = await fetch("/api/scarecrow/vote", { method: "POST", body: form });
       const body = (await res.json().catch(() => ({}))) as { error?: string };
@@ -164,7 +173,8 @@ export function ScarecrowVote({
                   />
                   <span>
                     <span className="font-semibold">{s.title}</span>
-                    {s.notes ? ` — ${s.notes}` : ""}
+                    {s.creator ? ` — ${s.creator}` : ""}
+                    {s.notes ? <span className="text-ink-soft"> · {s.notes}</span> : null}
                   </span>
                 </label>
               ))}
@@ -183,9 +193,22 @@ export function ScarecrowVote({
               className="mt-2 block w-full text-sm text-ink"
             />
             <p className="mt-2 text-xs text-ink-soft">
-              Photos go to the Chamber only — they are not published here, and the location
-              information phones bury in a photo is removed before it is stored.
+              Photos are not published on this page, and the location information phones bury in a
+              photo is removed before it is stored.
             </p>
+
+            <label className="mt-3 flex min-h-[44px] items-start gap-3 text-sm text-ink">
+              <input
+                type="checkbox"
+                checked={socialOk}
+                onChange={(e) => setSocialOk(e.target.checked)}
+                className="mt-0.5 h-5 w-5"
+              />
+              <span>
+                The Chamber may use my photo on its Facebook and Instagram. Untick this and it stays
+                between you and the Chamber.
+              </span>
+            </label>
           </div>
 
           <button

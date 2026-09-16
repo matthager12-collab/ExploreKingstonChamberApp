@@ -14,6 +14,8 @@ export interface CrawlPhoto {
   label: string;
   when: string;
   src: string;
+  /** Did the visitor leave the "you may use this" box ticked? */
+  socialOk: boolean;
 }
 
 export function PhotoList({ photos }: { photos: CrawlPhoto[] }) {
@@ -69,6 +71,13 @@ export function PhotoList({ photos }: { photos: CrawlPhoto[] }) {
                 />
                 <p className="text-sm font-semibold text-ink">{photo.label}</p>
                 <p className="text-xs text-ink-soft">{photo.when}</p>
+                <p
+                  className={`mt-1 text-xs font-semibold ${
+                    photo.socialOk ? "text-ink-soft" : "text-ink"
+                  }`}
+                >
+                  {photo.socialOk ? "OK to post" : "Do not post — permission withheld"}
+                </p>
                 <button
                   type="button"
                   onClick={() => remove(photo.id)}

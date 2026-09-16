@@ -1,0 +1,1 @@
+ALTER TABLE "scarecrow_vote" ADD COLUMN "photo_social_ok" boolean;

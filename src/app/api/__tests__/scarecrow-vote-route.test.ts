@@ -14,7 +14,12 @@ import { createTestDb, type TestDb } from "../../../../tests/setup/pglite-db";
 import { dataPath } from "@/lib/data-dir";
 import { CRAWL_VIEW_ID } from "@/lib/data/scarecrows";
 import { saveMapFeature } from "@/lib/stores/map-store";
-import { MAX_PHOTO_BYTES, getVoteCounts, listVotesWithPhotos } from "@/lib/stores/scarecrow-store";
+import {
+  MAX_PHOTO_BYTES,
+  getVoteCounts,
+  listVotes,
+  listVotesWithPhotos,
+} from "@/lib/stores/scarecrow-store";
 import { POST } from "@/app/api/scarecrow/vote/route";
 
 const TINY_PNG = Buffer.from(
@@ -54,11 +59,12 @@ function emptyPost(ip: string) {
 
 async function votePost(
   ip: string,
-  fields: { scarecrowId?: string; photo?: File } = {},
+  fields: { scarecrowId?: string; photo?: File; socialOk?: string } = {},
 ) {
   const form = new FormData();
   form.set("scarecrowId", fields.scarecrowId ?? ID);
   if (fields.photo) form.set("photo", fields.photo);
+  if (fields.socialOk !== undefined) form.set("socialOk", fields.socialOk);
   const { body, headers } = await wireForm(form);
   return POST(
     new NextRequest("http://localhost/api/scarecrow/vote", {
@@ -109,6 +115,35 @@ describe("POST /api/scarecrow/vote", () => {
     });
     expect(res.status).toBe(200);
     expect((await listVotesWithPhotos()).length).toBe(before + 1);
+  });
+
+  it("records the visitor's answer about reposting the photo", async () => {
+    const photo = () => new File([TINY_PNG], "scarecrow.png", { type: "image/png" });
+
+    await votePost("203.0.113.30", { photo: photo(), socialOk: "true" });
+    expect((await listVotesWithPhotos(1))[0].photoSocialOk).toBe(true);
+
+    await votePost("203.0.113.31", { photo: photo(), socialOk: "false" });
+    expect((await listVotesWithPhotos(1))[0].photoSocialOk).toBe(false);
+  });
+
+  it("treats a missing answer as NO, not as the form's default", async () => {
+    // The page ticks the box, but a request that never says so is silence, and
+    // silence about consent is a refusal.
+    await votePost("203.0.113.32", {
+      photo: new File([TINY_PNG], "scarecrow.png", { type: "image/png" }),
+    });
+    expect((await listVotesWithPhotos(1))[0].photoSocialOk).toBe(false);
+  });
+
+  it("leaves the answer unset when the vote carried no photo", async () => {
+    // Nothing to give permission about — null, not false, so a later report
+    // can tell "declined" from "never asked".
+    const res = await votePost("203.0.113.33", { socialOk: "true" });
+    expect(res.status).toBe(200);
+    const [latest] = await listVotes(1);
+    expect(latest.photoPath).toBeNull();
+    expect(latest.photoSocialOk).toBeNull();
   });
 
   it("refuses an id that is not in the seed list (400)", async () => {

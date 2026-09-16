@@ -102,8 +102,19 @@ export async function POST(request: NextRequest) {
     photoInput = { bytes: new Uint8Array(await photo.arrayBuffer()), ext };
   }
 
+  // Permission to use the photo. The form ticks the box by default and sends
+  // an explicit "true"/"false", so an untick is a recorded no rather than a
+  // missing field. A request that omits it entirely records NO: consent is the
+  // one field where the safe reading of silence is refusal, whatever the
+  // default in the UI.
+  const photoSocialOk = photoInput ? form.get("socialOk") === "true" : undefined;
+
   try {
-    await castVote({ scarecrowId, ...(photoInput ? { photo: photoInput } : {}) });
+    await castVote({
+      scarecrowId,
+      ...(photoInput ? { photo: photoInput } : {}),
+      ...(photoSocialOk !== undefined ? { photoSocialOk } : {}),
+    });
     return Response.json({ ok: true });
   } catch (err) {
     // Stripping is fail-closed (M-16-02): a photo we cannot prove is free of

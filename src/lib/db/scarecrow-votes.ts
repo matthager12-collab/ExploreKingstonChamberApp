@@ -22,6 +22,8 @@ export interface ScarecrowVoteRow {
   id: string;
   scarecrowId: string;
   photoPath: string | null;
+  /** null = no photo; false = photo, permission withheld; true = may be used. */
+  photoSocialOk: boolean | null;
   createdAt: Date;
 }
 
@@ -31,11 +33,14 @@ export async function insertVote(input: {
   id: string;
   scarecrowId: string;
   photoPath?: string;
+  photoSocialOk?: boolean;
 }): Promise<void> {
   await getDb().insert(scarecrowVote).values({
     id: input.id,
     scarecrowId: input.scarecrowId,
     photoPath: input.photoPath ?? null,
+    // Only a vote that carried a photo can carry an answer about it.
+    photoSocialOk: input.photoPath ? (input.photoSocialOk ?? false) : null,
   });
 }
 
@@ -57,6 +62,17 @@ export async function getVoteCounts(): Promise<Record<string, number>> {
 export async function countVotes(): Promise<number> {
   const [row] = await getDb().select({ n: count() }).from(scarecrowVote);
   return row?.n ?? 0;
+}
+
+/** Newest votes, photo or not. The photo-carrying subset is what the console
+ *  shows; this is the whole row set, for checks and for a future export. */
+export async function listVotes(limit = 60): Promise<ScarecrowVoteRow[]> {
+  const rows = await getDb()
+    .select()
+    .from(scarecrowVote)
+    .orderBy(desc(scarecrowVote.createdAt))
+    .limit(limit);
+  return rows.map(toRow);
 }
 
 /** Newest votes that carry a photo — the Chamber's review list. */
@@ -112,6 +128,7 @@ function toRow(row: typeof scarecrowVote.$inferSelect): ScarecrowVoteRow {
     id: row.id,
     scarecrowId: row.scarecrowId,
     photoPath: row.photoPath,
+    photoSocialOk: row.photoSocialOk,
     createdAt: row.createdAt,
   };
 }
