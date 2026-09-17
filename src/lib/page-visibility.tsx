@@ -37,6 +37,10 @@ export const HIDEABLE_PAGES: { path: string; label: string }[] = [
   // Seasonal: the 2026 Scarecrow Crawl (17–31 October). Hideable so the
   // Chamber can take it down after the prize is awarded without a deploy.
   { path: "/scarecrow", label: "Scarecrow Crawl" },
+  // The Chamber's paid 5K (7 November 2026). SHIPS DARK — see
+  // DEFAULT_HIDDEN_PAGES; the Chamber flips it live once the Zeffy campaign
+  // is ready, and hides it again after the race without a deploy.
+  { path: "/race", label: "5K Fun Run" },
   { path: "/about", label: "About" },
   // E14 — the non-app fallbacks (M-14-03 / M-18-07). Visible by default like
   // every other entry; listed here so the Chamber can hide them from the same
@@ -75,7 +79,7 @@ export const HIDEABLE_PAGES: { path: string; label: string }[] = [
  * removing it flips the page from fail-closed to PUBLIC BY DEFAULT — the exact
  * opposite of the intent. It is unadvertised, not un-public: see UNLISTED_PAGES.
  */
-export const DEFAULT_HIDDEN_PAGES: readonly string[] = ["/es", "/line"];
+export const DEFAULT_HIDDEN_PAGES: readonly string[] = ["/es", "/line", "/race"];
 
 /**
  * Public pages that must not be ADVERTISED to search engines, even when

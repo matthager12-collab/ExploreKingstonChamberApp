@@ -27,6 +27,7 @@ implements `findByIdentifier` / `exportRecords` / `deleteOrAnonymize`; the
 | `feedback_response` | `email` *(optional, unverified)* | Page feedback: 1–5 star rating, free-text comment, source path, optional name + email | 12 months | Postgres `feedback_response` |
 | `analytics_event` | *(none — anonymous)* | Pageviews / outbound / geo-ping (area only) / consent / web vital (page timing) | 90 days (geo) / 25 months | Postgres `analytics_event` |
 | `quarantine` | *(none)* | Importer-parked failed-validation docs (may carry legacy contact fields) | resolved via runbook | Postgres `quarantine` |
+| `race_registrant` | email | 5K registrations synced from Zeffy: name, email, ticket type, t-shirt answer, check-in time. Every other form answer is dropped by the sync before storage (`src/lib/race/sync.ts`); audit rows carry ids only | anonymized 45 days after race day (name/email/shirt nulled; row kept for counts) | Postgres `race_registrant` — **not yet in the backup bundle or JSON export** (same gap as `volunteer_signup`); Zeffy remains the source of truth and "Sync now" rebuilds the roster |
 
 **Anonymous by construction:** survey and analytics hold no identifier tying a
 row to a person (a per-browser session id that resets on close is not one). A

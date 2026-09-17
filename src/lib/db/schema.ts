@@ -44,6 +44,8 @@ export * from "./claim-schema";
 // Directory-public slice: per-listing membership status/dues for ranking.
 export * from "./member-schema";
 export * from "./volunteer-signup-schema";
+// Race registrants synced from Zeffy + the race-day check-in link.
+export * from "./race-schema";
 
 /** Lifecycle states a structured record can be in. Everything is 'live'
  *  this epic (behavior-preserving); E08 starts writing 'pending' from

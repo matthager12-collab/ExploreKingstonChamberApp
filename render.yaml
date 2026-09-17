@@ -200,6 +200,18 @@ services:
       - key: AMS_CALENDAR_FEED_URL
         sync: false
 
+      # 5K registration roster synced from Zeffy (ADR-0008,
+      # docs/runbooks/RACE-REGISTRATION.md). All three set in the dashboard.
+      # FAIL-CLOSED: unset, /admin/race reports "not connected" and the
+      # webhook receiver answers 503 — nothing opens up. The API key is
+      # WRITE-capable on the Chamber's Zeffy account; never NEXT_PUBLIC_.
+      - key: ZEFFY_API_KEY
+        sync: false
+      - key: ZEFFY_WEBHOOK_SECRET
+        sync: false
+      - key: ZEFFY_CAMPAIGN_ID
+        sync: false
+
   # E12 hourly events ingest — the FIRST Render cron in this blueprint (the
   # binding v2 decision: crons live on Render; the legacy ferry/worklist
   # workflows in .github/workflows/ were deleted once these took over —
@@ -405,6 +417,14 @@ services:
       - key: EVENTS_INGEST_TOKEN
         sync: false
       - key: AMS_CALENDAR_FEED_URL
+        sync: false
+      # Zeffy roster (ADR-0008): point a TEST campaign here for the webhook
+      # rehearsal, never the live one.
+      - key: ZEFFY_API_KEY
+        sync: false
+      - key: ZEFFY_WEBHOOK_SECRET
+        sync: false
+      - key: ZEFFY_CAMPAIGN_ID
         sync: false
       # Makes /robots.txt disallow everything (src/app/robots.ts). Plain
       # runtime value, not NEXT_PUBLIC_ — both services ship the same image

@@ -189,6 +189,15 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     section: "events",
   },
   {
+    id: "race",
+    href: "/admin/race",
+    title: "5K registrations",
+    navLabel: "5K roster",
+    blurb: "Runners synced from Zeffy: counts, check-in, the race-day link, and the pickup sheet.",
+    capability: "manage-site",
+    section: "events",
+  },
+  {
     id: "events-sources",
     href: "/admin/events-sources",
     title: "Events sources",
