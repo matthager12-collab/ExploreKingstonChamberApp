@@ -23,6 +23,8 @@ import {
   rollupAndDeleteMonth,
 } from "@/lib/db/privacy-retention";
 import { appendPrivacyAudit, heldRecordIds } from "@/lib/db/privacy-delete";
+import { anonymizeAllRegistrants, countUnanonymizedRegistrants } from "@/lib/db/race-registrants";
+import { race } from "@/lib/data/race";
 import { deleteSubmission, listSubmissions } from "@/lib/hunt-store";
 import { countGoingBefore, deleteGoingBefore } from "@/lib/stores/event-going-store";
 import { countVotesBefore, purgeVotesBefore } from "@/lib/stores/scarecrow-store";
@@ -239,6 +241,33 @@ export async function runRetention(opts: {
               ? `; ${result.photoFailures} photo(s) could not be deleted from storage`
               : ""
           }`,
+        });
+        break;
+      }
+
+      case "race_registrant": {
+        // Race-date-relative: nothing is due until the window after race day
+        // has passed; then every row still carrying a name is anonymized at
+        // once (the roster is one event, not a rolling log).
+        const due = new Date(`${race.date}T00:00:00-08:00`);
+        due.setDate(due.getDate() + (rule.windowDays ?? 0));
+        if (now < due) {
+          lines.push({
+            store: rule.store,
+            action: rule.action,
+            planned: 0,
+            note: `not due until ${due.toISOString().slice(0, 10)} (${rule.label})`,
+          });
+          break;
+        }
+        const planned = await countUnanonymizedRegistrants();
+        const applied = opts.apply ? await anonymizeAllRegistrants("system") : undefined;
+        lines.push({
+          store: rule.store,
+          action: rule.action,
+          planned,
+          ...(applied !== undefined ? { applied } : {}),
+          note: `${opts.apply ? "anonymized" : "would anonymize"} ${planned} runner row(s) — ${rule.label}`,
         });
         break;
       }

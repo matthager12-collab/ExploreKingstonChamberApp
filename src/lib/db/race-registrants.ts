@@ -290,6 +290,14 @@ export async function anonymizeRegistrantsByEmail(email: string, actor: string):
   return rows.length;
 }
 
+export async function countUnanonymizedRegistrants(): Promise<number> {
+  const rows = await getDb()
+    .select({ n: sql<number>`count(*)::int` })
+    .from(raceRegistrant)
+    .where(isNull(raceRegistrant.anonymizedAt));
+  return rows[0]?.n ?? 0;
+}
+
 /** Retention: null every runner's name/email/shirt note once the race is
  *  past its window. Keeps status, ticket type and check-in for counts. */
 export async function anonymizeAllRegistrants(actor: string): Promise<number> {
