@@ -4,6 +4,8 @@
 // timing belong to the timing company, so nothing here assigns them.
 
 export const race = {
+  /** Keys the race-day check-in link; change it for a new edition. */
+  id: "nadt-5k-2026",
   path: "/race",
   name: "“Not Afraid of the Dark 5K” Kingston Fun Run",
   shortName: "Not Afraid of the Dark 5K",
