@@ -84,12 +84,14 @@ const nextConfig: NextConfig = {
           //     MapLibre fetches raster tiles with fetch() and then paints
           //     them through an <img>/ImageBitmap. Vector pmtiles and glyphs
           //     remain same-origin from /api/map/tiles/* and /fonts/*.
-          //   - frame-src https://www.zeffy.com: the 5K registration form is
-          //     Zeffy's, embedded on /race (ADR-0008 amendment 1). One exact
-          //     origin; the frame is only created when a visitor presses
+          //   - frame-src 'self' https://www.zeffy.com: the 5K registration
+          //     form is Zeffy's, embedded on /race (ADR-0008 amendment 1). One
+          //     exact origin; the frame is only created when a visitor presses
           //     Register, so no Zeffy code loads on a plain page view. Frames
           //     Zeffy opens inside its own page (Stripe, Google) answer to
-          //     Zeffy's CSP, not this one.
+          //     Zeffy's CSP, not this one. 'self' is restated because
+          //     declaring frame-src replaces the default-src fallback, and
+          //     Admin → Site content frames the site's own pages as a preview.
           {
             key: "Content-Security-Policy",
             value: [
@@ -99,7 +101,7 @@ const nextConfig: NextConfig = {
               "img-src 'self' data: blob: https://images.wsdot.wa.gov https://services.arcgisonline.com",
               "connect-src 'self' https://services.arcgisonline.com",
               "worker-src 'self' blob:",
-              "frame-src https://www.zeffy.com",
+              "frame-src 'self' https://www.zeffy.com",
               "frame-ancestors 'self'",
               "object-src 'none'",
               "base-uri 'self'",

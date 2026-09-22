@@ -86,16 +86,19 @@ describe("next.config security headers", () => {
     expect(payment).toBe('payment=("https://www.zeffy.com")');
   });
 
-  it("allows frames from Zeffy and nowhere else", async () => {
+  it("allows frames from this origin and Zeffy, and nowhere else", async () => {
     // Without frame-src, frames fall back to default-src 'self' and the
-    // Zeffy embed renders blank. The carve-out is one exact origin — a
-    // wildcard, a scheme-only source or a second host fails here.
+    // Zeffy embed renders blank. Declaring frame-src REPLACES that fallback,
+    // so 'self' must be restated: Admin → Site content frames the site's own
+    // pages for its live preview (src/app/(admin)/admin/content/manager.tsx).
+    // One extra exact origin — a wildcard, a scheme-only source or a second
+    // host fails here.
     const rules = await loadRules();
     const csp = headerMap(rules.find((r) => r.source === "/(.*)")!).get(
       "Content-Security-Policy",
     )!;
     const frameSrc = csp.split(";").map((s) => s.trim()).find((s) => s.startsWith("frame-src"));
-    expect(frameSrc).toBe("frame-src https://www.zeffy.com");
+    expect(frameSrc).toBe("frame-src 'self' https://www.zeffy.com");
     expect(csp).not.toMatch(/child-src/);
   });
 
