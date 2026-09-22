@@ -29,6 +29,7 @@
     "restore:db": "NODE_OPTIONS=--conditions=react-server tsx scripts/restore-db.ts",
     "privacy:backfill": "NODE_OPTIONS=--conditions=react-server tsx scripts/privacy-backfill.ts",
     "privacy:retention": "NODE_OPTIONS=--conditions=react-server tsx scripts/privacy-retention.ts",
+    "purge:hunt-submissions": "NODE_OPTIONS=--conditions=react-server tsx scripts/purge-hunt-submissions.ts",
     "tiles:abbrevs": "tsx scripts/derive-street-abbrevs.ts"
   },
   "dependencies": {

@@ -39,7 +39,7 @@ import { getFeaturesForView } from "@/lib/stores/map-store";
 import { readMerged, writeOverlayRecord, type WriteMeta } from "@/lib/stores/json-store";
 // The MIME/extension tables and the 8 MB ceiling are hunt-store's, reused
 // rather than restated: one upload cap for the whole app is the point.
-import { MAX_PHOTO_BYTES, contentTypeForPath, imageExtension } from "@/lib/hunt-store";
+import { MAX_PHOTO_BYTES, contentTypeForPath, imageExtension } from "@/lib/image-limits";
 import { stripImageMetadata } from "@/lib/image-sanitize";
 import {
   countVotes,

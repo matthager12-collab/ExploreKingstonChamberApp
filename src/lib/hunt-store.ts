@@ -73,7 +73,8 @@ const DATA_ROOT = dataPath("hunts");
 const CUSTOM_STORE = "custom-hunts";
 const SUBMISSIONS_STORE = "hunt-submissions";
 
-export const MAX_PHOTO_BYTES = 8 * 1024 * 1024; // ~8 MB
+import { MAX_PHOTO_BYTES, contentTypeForPath, imageExtension, EXT_CONTENT_TYPES } from "@/lib/image-limits";
+export { MAX_PHOTO_BYTES, contentTypeForPath, imageExtension, EXT_CONTENT_TYPES };
 
 /** Cap on total bytes under .data/hunts/photos in filesystem mode (fs disk is
  *  shared by all app state — see /api/hunts/submit). */
@@ -117,36 +118,6 @@ export async function photoStorageBytes(): Promise<number> {
 /** Test-only: force the next photoStorageBytes() call to recompute. */
 export function invalidatePhotoStorageCache(): void {
   photoStorageCache = undefined;
-}
-
-const EXT_CONTENT_TYPES: Record<string, string> = {
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  png: "image/png",
-  webp: "image/webp",
-  heic: "image/heic",
-};
-
-const MIME_EXTS: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/jpg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-  "image/heic": "heic",
-  "image/heif": "heic",
-};
-
-/** jpeg/png/webp/heic only. Returns a safe file extension or null. */
-export function imageExtension(mimeType: string, fileName?: string): string | null {
-  const byMime = MIME_EXTS[mimeType.toLowerCase()];
-  if (byMime) return byMime;
-  const nameExt = fileName?.split(".").pop()?.toLowerCase() ?? "";
-  return EXT_CONTENT_TYPES[nameExt] ? (nameExt === "jpeg" ? "jpg" : nameExt) : null;
-}
-
-export function contentTypeForPath(p: string): string {
-  const ext = p.split(".").pop()?.toLowerCase() ?? "";
-  return EXT_CONTENT_TYPES[ext] ?? "application/octet-stream";
 }
 
 /** URL that streams a stored photo (see /api/hunts/photo). */
