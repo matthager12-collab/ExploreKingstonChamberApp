@@ -40,12 +40,6 @@ function importOpts(overrides: Partial<ImportOptions> = {}): ImportOptions {
 }
 
 /** The legacy id-less submission exactly as it appears in submissions.jsonl. */
-const LEGACY_SUBMISSION = {
-  ts: "2026-05-02T11:30:00.000Z",
-  huntId: "kingston-classic",
-  stopId: "stop-2",
-  photoPath: "photos/kingston-classic/stop-2/b.jpg",
-};
 
 describe("dry run (apply: false)", () => {
   let tdb: TestDb;
@@ -60,16 +54,9 @@ describe("dry run (apply: false)", () => {
 
   it("exits 2: the invalid restaurant and the corrupt submissions line are quarantined", () => {
     expect(result.exitCode).toBe(2);
-    expect(result.quarantined).toHaveLength(2);
+    expect(result.quarantined).toHaveLength(1);
     expect(result.quarantined).toContainEqual(
       expect.objectContaining({ store: "restaurants", id: "no-name-cafe" }),
-    );
-    expect(result.quarantined).toContainEqual(
-      expect.objectContaining({
-        store: "hunt-submissions",
-        id: "line-3",
-        where: "hunts/submissions.jsonl",
-      }),
     );
   });
 
@@ -80,16 +67,6 @@ describe("dry run (apply: false)", () => {
       "site-copy": { total: 1, new: 1, changed: 0, unchanged: 0, tombstones: 0, quarantined: 0 },
       "auth-users": { total: 1, new: 1, changed: 0, unchanged: 0, tombstones: 0, quarantined: 0 },
       "auth-invites": { total: 1, new: 1, changed: 0, unchanged: 0, tombstones: 0, quarantined: 0 },
-      "custom-hunts": { total: 1, new: 1, changed: 0, unchanged: 0, tombstones: 0, quarantined: 0 },
-      // 1 with id + 1 legacy synthetic-id + 1 corrupt line = 3
-      "hunt-submissions": {
-        total: 3,
-        new: 2,
-        changed: 0,
-        unchanged: 0,
-        tombstones: 0,
-        quarantined: 1,
-      },
     });
   });
 
@@ -128,7 +105,7 @@ describe("apply, then a second apply (idempotence)", () => {
 
   it("writes every valid record: 9 rows, exit 2 for the quarantines", () => {
     expect(first.exitCode).toBe(2);
-    expect(first.written).toBe(9); // 3 restaurants + site-copy + user + invite + hunt + 2 submissions
+    expect(first.written).toBe(6); // 3 restaurants + site-copy + user + invite + hunt + 2 submissions
   });
 
   it("lands the tombstone as deleted: true with its doc preserved", async () => {
@@ -142,14 +119,6 @@ describe("apply, then a second apply (idempotence)", () => {
     expect(row.doc).not.toHaveProperty("_deleted"); // tombstone lives in the column
   });
 
-  it("gives the legacy id-less submission the deterministic synthetic id", async () => {
-    const expected = submissionId(LEGACY_SUBMISSION);
-    const rows = await tdb.db.select().from(record).where(eq(record.store, "hunt-submissions"));
-    expect(rows.map((r) => r.id).sort()).toEqual([expected, "sub-1"].sort());
-    const legacy = rows.find((r) => r.id === expected);
-    expect(legacy?.doc).toMatchObject({ ...LEGACY_SUBMISSION, id: expected });
-  });
-
   it("keys the invite by its code with id === code (the code→id mirror)", async () => {
     const [row] = await tdb.db
       .select()
@@ -161,16 +130,13 @@ describe("apply, then a second apply (idempotence)", () => {
 
   it("parks the invalid record in quarantine and NOT in record", async () => {
     const qRows = await tdb.db.select().from(quarantine);
-    expect(qRows).toHaveLength(2);
+    expect(qRows).toHaveLength(1);
     const noName = qRows.find((q) => q.id === "no-name-cafe");
     expect(noName?.store).toBe("restaurants");
     expect(noName?.doc).toMatchObject({ id: "no-name-cafe" });
-    const corruptLine = qRows.find((q) => q.id === "line-3");
-    expect(corruptLine?.store).toBe("hunt-submissions");
-    expect(corruptLine?.doc).toMatchObject({ raw: '{"broken' });
 
     const recordRows = await tdb.db.select().from(record);
-    expect(recordRows).toHaveLength(9);
+    expect(recordRows).toHaveLength(6);
     expect(recordRows.some((r) => r.id === "no-name-cafe")).toBe(false);
   });
 
@@ -180,7 +146,7 @@ describe("apply, then a second apply (idempotence)", () => {
     // (writeRecord strips `_deleted` from the audited doc), and the restore
     // endpoint would replay it as an un-delete.
     const rows = await tdb.db.select().from(audit);
-    expect(rows).toHaveLength(9);
+    expect(rows).toHaveLength(6);
     const tombstones = rows.filter((r) => r.recordId === "closed-diner");
     expect(tombstones).toHaveLength(1);
     expect(tombstones[0].action).toBe("delete");
@@ -197,13 +163,6 @@ describe("apply, then a second apply (idempotence)", () => {
       survey_response: { source: 2, target: 0, corrupt: 0, appended: true },
       ferry_observation: { source: 3, target: 0, corrupt: 0, appended: true },
     });
-    expect(first.quarantined).toContainEqual(
-      expect.objectContaining({
-        store: "hunt-submissions",
-        id: "line-3",
-        where: "hunts/submissions.jsonl",
-      }),
-    );
   });
 
   it("second apply is a no-op: 0 writes, no new audit rows, everything unchanged", () => {

@@ -21,8 +21,8 @@ beforeAll(async () => {
   // A nested text file (inlined utf8) and a nested binary file (base64).
   await mkdir(path.join(root, "stores"), { recursive: true });
   await writeFile(path.join(root, "stores", "foo.json"), '{"hi":"there"}');
-  await mkdir(path.join(root, "hunts", "photos"), { recursive: true });
-  await writeFile(path.join(root, "hunts", "photos", "pic.bin"), binBytes);
+  await mkdir(path.join(root, "attachments"), { recursive: true });
+  await writeFile(path.join(root, "attachments", "pic.bin"), binBytes);
   // Things that MUST be excluded from the bundle.
   await mkdir(path.join(root, "backups"), { recursive: true });
   await writeFile(path.join(root, "backups", "old.tar"), "prior tarball");
@@ -62,7 +62,7 @@ describe("backup bundle streaming", () => {
     const bundle = JSON.parse(await streamToString({}));
     const paths: string[] = bundle.files.map((f: { path: string }) => f.path);
     expect(paths).toContain(path.join("stores", "foo.json"));
-    expect(paths).toContain(path.join("hunts", "photos", "pic.bin"));
+    expect(paths).toContain(path.join("attachments", "pic.bin"));
     expect(paths.some((p) => p.startsWith("backups"))).toBe(false);
     expect(paths.some((p) => p.startsWith("geoip"))).toBe(false);
     expect(paths.some((p) => p.includes(".health-probe"))).toBe(false);
@@ -72,7 +72,7 @@ describe("backup bundle streaming", () => {
     const files = await collectBundleFiles(root);
     const paths = files.map((f) => f.path);
     expect(paths.sort()).toEqual(
-      [path.join("hunts", "photos", "pic.bin"), path.join("stores", "foo.json")].sort(),
+      [path.join("attachments", "pic.bin"), path.join("stores", "foo.json")].sort(),
     );
     const pic = files.find((f) => f.path.endsWith("pic.bin"))!;
     expect(pic.encoding).toBe("base64");
@@ -90,7 +90,7 @@ describe("backup bundle streaming", () => {
         cwd: process.cwd(),
         stdio: "pipe",
       });
-      const restored = await readFile(path.join(target, "hunts", "photos", "pic.bin"));
+      const restored = await readFile(path.join(target, "attachments", "pic.bin"));
       expect(restored.equals(binBytes)).toBe(true);
       const restoredText = await readFile(path.join(target, "stores", "foo.json"), "utf8");
       expect(restoredText).toBe('{"hi":"there"}');

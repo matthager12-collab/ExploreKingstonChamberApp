@@ -239,7 +239,7 @@ describe("(e) trustedAutoPublish bypass — /api/portal/org saveEvent", () => {
 describe("(a)-(c) anonymous suggest intake — always pending, no bypass", () => {
   const SUGGESTION = {
     title: "Beach Bonfire Storytelling Night",
-    start: "2026-09-20T19:00",
+    start: "2030-09-20T19:00",
     venue: "Arness Park",
     description: "Stories by the fire.",
     eventContact: "Firelight Arts · info@firelight.test",

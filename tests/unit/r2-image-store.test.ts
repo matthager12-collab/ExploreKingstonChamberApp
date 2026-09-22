@@ -219,36 +219,7 @@ describe("upload paths write to R2 with metadata stripped (M-16-02)", () => {
     expect(again).toBe(tagged);
   });
 
-  it("hunt reference photo: public path, fs-relative value, stripped bytes", async () => {
-    const { saveReferencePhoto } = await import("@/lib/hunt-store");
-    const stored = await saveReferencePhoto(
-      "downtown-discovery",
-      "dd-ferry-overlook",
-      gps("gps.jpg"),
-      "jpg",
-    );
-    expect(stored).toBe("refs/downtown-discovery-dd-ferry-overlook.jpg");
-    expectNoBucketUrl(stored);
-    expectStoredClean(`hunts/${stored}`);
-  });
 
-  it("hunt submission: private path keeps the photos/ prefix the admin gate reads", async () => {
-    const { saveSubmission } = await import("@/lib/hunt-store");
-    const submission = await saveSubmission({
-      huntId: "downtown-discovery",
-      stopId: "dd-ferry-overlook",
-      photo: gps("gps.heic"),
-      ext: "heic",
-    });
-    // The "photos/" prefix is what /api/hunts/photo gates on. If R2 mode ever
-    // stored a URL here instead, the admin check would be bypassed entirely —
-    // which is exactly what the old public-blob mode did.
-    expect(submission.photoPath).toMatch(
-      /^photos\/downtown-discovery\/dd-ferry-overlook\/.+\.heic$/,
-    );
-    expectNoBucketUrl(submission.photoPath);
-    expectStoredClean(`hunts/${submission.photoPath}`);
-  });
 
   it("event attachment: flyer is stripped, and the PDF's document metadata is too", async () => {
     const { saveAttachment } = await import("@/lib/events/attachment-store");

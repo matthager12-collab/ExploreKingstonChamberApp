@@ -28,7 +28,7 @@ const languageLinks = [{ href: "/es", label: "Kingston en español", lang: "es" 
 const communityLinks = [
   { href: "/events", label: "Events calendar" },
   { href: "/give", label: "Volunteer & give back" },
-  { href: "/hunt", label: "Scavenger hunt" },
+
   { href: "/about", label: "About this site" },
 ];
 

@@ -138,14 +138,7 @@ export const RETENTION_POLICY: RetentionRule[] = [
     windowMonths: 12,
     action: "delete",
   },
-  {
-    store: "hunt-submissions",
-    description:
-      "Scavenger-hunt check-in photos and, when you allowed it, the precise check-in location you chose to send. Submission and photo are destroyed together; the audit trail keeps a coordinate-free record that a submission existed.",
-    label: "12 months",
-    windowMonths: 12,
-    action: "delete",
-  },
+
   {
     store: "scarecrow-votes",
     description:

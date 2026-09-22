@@ -73,7 +73,7 @@ function redactSecrets(value: unknown): unknown {
  *  stores cannot offer snapshot-restore (delisted in
  *  src/lib/audit/restore-registry.ts). */
 const SNAPSHOT_STRIP_KEYS: Record<string, ReadonlySet<string>> = {
-  "hunt-submissions": new Set(["lat", "lng", "distanceMeters", "photoPath"]),
+
 };
 
 function stripSnapshotKeys(

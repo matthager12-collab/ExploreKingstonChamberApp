@@ -145,11 +145,7 @@ export default function PrivacyPage() {
             consent any time by declining the next prompt or clearing your browser&rsquo;s site
             data; for analytics, nothing tied to you persists between sessions.
           </p>
-          <p className="mt-3 text-sm text-ink-soft">
-            The scavenger hunt is different: a check-in you submit is content you send to the hunt
-            organizers on purpose, so it is kept for 12 months (see the schedule above). To have a
-            submission removed sooner, use the delete form below.
-          </p>
+
         </Card>
       </Section>
 

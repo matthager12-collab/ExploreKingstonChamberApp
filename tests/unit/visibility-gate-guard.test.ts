@@ -99,7 +99,7 @@ describe("ISR pages use the cookie-free visibility gate", () => {
 // on "no such record" stays fully reachable while the section is hidden —
 // the list page 404s, sitemap.xml drops the URLs, and the pages keep serving
 // to anyone holding a link, a bookmark, or a search result. That is what
-// /itineraries/<slug> and /hunt/<slug> both did until 2026-08-19.
+// /itineraries/<slug> did until 2026-08-19.
 //
 // The rule is DERIVED from HIDEABLE_PAGES rather than a hand-kept list, so a
 // detail route added under a future hideable section is covered without

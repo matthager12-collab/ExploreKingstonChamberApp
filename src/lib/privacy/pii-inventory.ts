@@ -344,11 +344,7 @@ export const PII_STORES: PiiStore[] = [
   charities,
   volunteerSignups,
   worklistContacts,
-  noIdentifierStore(
-    "hunt-submissions",
-    "Scavenger-hunt photos + optional check-in location.",
-    "Hunt submissions carry no account identifier — they are looked up by the submission id/date the requester supplies, then deleted via the retention/fulfillment path (photo first, then the row).",
-  ),
+
   noIdentifierStore(
     "event_going",
     "\u201cI\u2019m going\u201d tallies: a count per event and self-reported ZIP.",

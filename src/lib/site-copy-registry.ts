@@ -411,27 +411,7 @@ export const COPY_BLOCKS = [
       "Two good causes on the same day split the same crowd — and the same wallets. Scan the dates below before you book yours.",
   },
 
-  // -------------------------------------------------------------- /hunt
-  {
-    key: "hunt.header.eyebrow",
-    page: "Scavenger Hunt",
-    label: "Header eyebrow",
-    fallback: "Get out and play",
-  },
-  {
-    key: "hunt.header.title",
-    page: "Scavenger Hunt",
-    label: "Page title",
-    fallback: "Kingston Scavenger Hunt",
-  },
-  {
-    key: "hunt.header.intro",
-    page: "Scavenger Hunt",
-    label: "Header intro",
-    multiline: true,
-    fallback:
-      "Free, self-guided, and built for your phone. Solve riddles around town and post a photo at each spot to check in. No app to download, no account to make — just heads up that posted photos go to the hunt organizers.",
-  },
+
 
   // ------------------------------------------------------------- /about
   {
@@ -632,32 +612,7 @@ export const COPY_BLOCKS = [
     fallback: "No thanks",
   },
   // Scavenger hunt (client)
-  {
-    key: "hunt.disclosure",
-    page: "Scavenger hunt (client)",
-    label: "Disclosure under the photo-post button",
-    multiline: true,
-    // E14 plain-language pass (NFR-04): was one 27-word sentence with a dangling
-    // "kept 12 months", on a screen where the reader decides what to send.
-    fallback:
-      "When you post, your photo goes to the hunt organizers so they can check you off. Your location goes with it only if you allow that. They keep both for 12 months. Do not include anything you would not want shared.",
-  },
-  {
-    key: "hunt.consent.declined",
-    page: "Scavenger hunt (client)",
-    label: "Shown after declining the location check-in",
-    multiline: true,
-    fallback:
-      "No problem — location stays off. Post the photo and we'll check you off on the honor system.",
-  },
-  {
-    key: "hunt.consent.body",
-    page: "Scavenger hunt (client)",
-    label: "Location-consent card text",
-    multiline: true,
-    fallback:
-      "Use your location to check you in at this stop? It's sent with your photo to the hunt organizers. You can skip it — you can still post the photo and finish the stop.",
-  },
+
   {
     key: "nearme.denied",
     page: "Near-me (client)",

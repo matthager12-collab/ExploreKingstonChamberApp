@@ -190,10 +190,7 @@ export function editorHref(store: string, recordId: string): string | null {
       return "/admin/listings";
     case "itineraries":
       return "/admin/itineraries";
-    case "custom-hunts":
-      return `/admin/hunts?hunt=${encodeURIComponent(recordId)}#editor`;
-    case "hunt-submissions":
-      return "/admin/hunts";
+
     case "site-copy":
     case "site-pages":
       return "/admin/content";

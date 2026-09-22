@@ -89,10 +89,9 @@ describe("geolocation is only read behind the consent gate", () => {
     expect(offenders, `ungated geolocation in: ${offenders.join(", ")}`).toEqual([]);
   });
 
-  it("the two known consent surfaces are actually gated (guard is not vacuous)", () => {
+  it("the known consent surface is actually gated (guard is not vacuous)", () => {
     // If this fails, the scan found nothing to check — which would make the
     // assertion above pass for the wrong reason.
     expect(gated).toContain("components/near-me.tsx");
-    expect(gated).toContain("components/hunt-player.tsx");
   });
 });

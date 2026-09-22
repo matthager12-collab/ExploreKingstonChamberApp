@@ -12,7 +12,7 @@
 
 import type { MetadataRoute } from "next";
 
-import { getAllHunts } from "@/lib/hunt-store";
+
 import { HIDEABLE_PAGES, UNLISTED_PAGES, getEffectiveHiddenPaths } from "@/lib/page-visibility";
 import { siteUrl } from "@/lib/site-url";
 import { getItineraries } from "@/lib/stores/itinerary-store";
@@ -71,16 +71,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
   }
 
-  if (visible("/hunt")) {
-    for (const hunt of await getAllHunts()) {
-      entries.push({
-        url: `${base}/hunt/${hunt.slug}`,
-        lastModified: new Date(),
-        changeFrequency: "monthly",
-        priority: 0.6,
-      });
-    }
-  }
+
 
   // /events has no per-event detail route (E12 shipped the calendar as a single
   // page), so there is nothing further to enumerate here. If detail pages are

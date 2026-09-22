@@ -93,7 +93,7 @@ describe("retention manifest shape", () => {
       "analytics-geo-pings",
       "analytics-events",
       "survey-responses",
-      "hunt-submissions",
+
       "audit",
       "ferry-observations",
     ]) {
@@ -126,7 +126,7 @@ describe("retention manifest shape", () => {
     expect(byStore["analytics-geo-pings"].windowDays).toBe(90);
     expect(byStore["analytics-events"].windowMonths).toBe(25);
     expect(byStore["survey-responses"].windowMonths).toBe(36);
-    expect(byStore["hunt-submissions"].windowMonths).toBe(12);
+
   });
 });
 

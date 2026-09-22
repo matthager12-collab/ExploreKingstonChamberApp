@@ -8,8 +8,8 @@
 // one. The worker must never grow a background-sync, periodic-sync, push or
 // client-messaging listener (each is a permission surface with no operational
 // story behind it), and it must never cache anything under /admin, /portal or
-// /api — shared devices are normal in a ferry town, and /api/hunts/photo serves
-// admin-only moderation photos.
+// /api — shared devices are normal in a ferry town, and caching /api would
+// leak restricted data or moderation photos.
 //
 // Every negative rule is API-shaped and anchored. A substring test cannot work:
 // `expect(src).not.toContain("sync")` fails on the word "async", which is why

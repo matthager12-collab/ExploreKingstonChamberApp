@@ -33,7 +33,7 @@ export const HIDEABLE_PAGES: { path: string; label: string }[] = [
   { path: "/webcams", label: "Webcams" },
   { path: "/map", label: "Town Map" },
   { path: "/give", label: "Give Back" },
-  { path: "/hunt", label: "Scavenger Hunt" },
+
   // Seasonal: the 2026 Scarecrow Crawl (17–31 October). Hideable so the
   // Chamber can take it down after the prize is awarded without a deploy.
   { path: "/scarecrow", label: "Scarecrow Crawl" },

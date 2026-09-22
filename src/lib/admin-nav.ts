@@ -99,15 +99,7 @@ export const ADMIN_NAV: readonly AdminNavEntry[] = [
     capability: "manage-site",
     section: "experiences",
   },
-  {
-    id: "hunts",
-    href: "/admin/hunts",
-    title: "Scavenger hunts",
-    navLabel: "Hunts",
-    blurb: "Build hunts, reference photos, review submissions.",
-    capability: "manage-site",
-    section: "experiences",
-  },
+
   {
     id: "scarecrow",
     href: "/admin/scarecrow",

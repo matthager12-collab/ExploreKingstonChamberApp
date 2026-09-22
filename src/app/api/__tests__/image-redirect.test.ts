@@ -9,7 +9,7 @@ import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { isTrustedBlobUrl } from "@/lib/blob-store";
 import { GET as mapImageGet } from "@/app/api/map/image/route";
-import { GET as huntsPhotoGet } from "@/app/api/hunts/photo/route";
+
 
 // Matches the abc123 store id in RW_TOKEN below.
 const TRUSTED = "https://abc123.public.blob.vercel-storage.com/map/images/x.jpg";
@@ -37,14 +37,7 @@ describe("redirect scoping on image routes", () => {
     expect((await mapImageGet(get("/api/map/image", OTHER_STORE))).status).toBe(404);
   });
 
-  it("hunts/photo redirects only our own blob host", async () => {
-    vi.stubEnv("BLOB_READ_WRITE_TOKEN", RW_TOKEN);
-    expect((await huntsPhotoGet(get("/api/hunts/photo", EVIL))).status).toBe(404);
-    const trusted = await huntsPhotoGet(get("/api/hunts/photo", TRUSTED));
-    expect(trusted.status).toBe(302);
-    expect(trusted.headers.get("location")).toBe(TRUSTED);
-    expect((await huntsPhotoGet(get("/api/hunts/photo", SUBSTRING_TRICK))).status).toBe(404);
-  });
+
 
   it("isTrustedBlobUrl accepts exactly the configured store's hostname", () => {
     vi.stubEnv("BLOB_READ_WRITE_TOKEN", RW_TOKEN);

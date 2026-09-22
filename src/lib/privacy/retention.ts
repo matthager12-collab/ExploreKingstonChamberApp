@@ -22,8 +22,8 @@ import {
   expiredGeoPingMonths,
   rollupAndDeleteMonth,
 } from "@/lib/db/privacy-retention";
-import { appendPrivacyAudit, heldRecordIds } from "@/lib/db/privacy-delete";
-import { deleteSubmission, listSubmissions } from "@/lib/hunt-store";
+import { appendPrivacyAudit } from "@/lib/db/privacy-delete";
+
 import { countGoingBefore, deleteGoingBefore } from "@/lib/stores/event-going-store";
 import { countVotesBefore, purgeVotesBefore } from "@/lib/stores/scarecrow-store";
 
@@ -167,60 +167,6 @@ export async function runRetention(opts: {
         break;
       }
 
-      case "hunt-submissions": {
-        const cutoff = cutoffFor(rule, now).toISOString();
-        const expired = (await listSubmissions()).filter(
-          (s) => s.ts < cutoff && typeof s.id === "string",
-        );
-        const ids = expired.map((s) => s.id as string);
-        const held = await heldRecordIds("hunt-submissions", ids);
-        const deletable = ids.filter((id) => !held.has(id));
-        if (!opts.apply) {
-          lines.push({
-            store: rule.store,
-            action: rule.action,
-            planned: deletable.length,
-            heldSkipped: held.size,
-            note: `would delete ${deletable.length} submission(s) + photo(s) past ${rule.label}${held.size > 0 ? `; ${held.size} under legal hold (skipped, logged)` : ""}`,
-          });
-          break;
-        }
-        let applied = 0;
-        const failures: string[] = [];
-        // A hold set mid-run (after the snapshot) surfaces as deleteSubmission
-        // returning "legal-hold" — collect those to reconcile too.
-        const midRunHolds: string[] = [];
-        for (const id of deletable) {
-          try {
-            const result = await deleteSubmission(id);
-            if (result === "deleted") applied++;
-            else if (result === "legal-hold") midRunHolds.push(id);
-          } catch {
-            failures.push(id); // photo delete failed → row kept, retry next run
-          }
-        }
-        // The FR-A92 reconciliation: every hold-skip is logged, not silent —
-        // both the up-front snapshot AND any hold that appeared mid-run.
-        const allHeld = [...held, ...midRunHolds];
-        for (const id of allHeld) {
-          await appendPrivacyAudit({
-            actor: "system",
-            action: "retention-hold-skip",
-            store: "hunt-submissions",
-            recordId: id,
-            detail: { reason: "legal hold overrides retention deletion" },
-          });
-        }
-        lines.push({
-          store: rule.store,
-          action: rule.action,
-          planned: deletable.length,
-          applied,
-          heldSkipped: allHeld.length,
-          note: `deleted ${applied} submission(s) + photo(s)${failures.length > 0 ? `; ${failures.length} photo-delete failure(s), rows kept for retry` : ""}${allHeld.length > 0 ? `; ${allHeld.length} legal-hold skip(s) logged` : ""}`,
-        });
-        break;
-      }
 
       case "scarecrow-votes": {
         const cutoff = cutoffFor(rule, now).toISOString();

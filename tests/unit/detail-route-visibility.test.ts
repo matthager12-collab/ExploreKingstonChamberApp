@@ -28,7 +28,7 @@
 // exercised rather than restated.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Hunt, Itinerary } from "@/lib/types";
+import type { Itinerary } from "@/lib/types";
 
 const NOT_FOUND = "NEXT_NOT_FOUND";
 
@@ -59,41 +59,12 @@ const ITINERARY: Itinerary = {
   stops: [{ time: "10:00", title: "Coffee", description: "Start here." }],
 };
 
-const HUNT: Hunt = {
-  id: "h-1",
-  slug: "downtown-loop",
-  title: "Downtown loop",
-  description: "A short walk.",
-  difficulty: "easy",
-  durationMinutes: 45,
-  stops: [
-    {
-      id: "s-1",
-      title: "The dock",
-      clue: "Where the boat lands.",
-      hint: "Look for water.",
-      lat: 47.797,
-      lng: -122.496,
-      radiusMeters: 40,
-      photoPrompt: "Photograph the dock.",
-      funFact: "It is old.",
-    },
-  ],
-};
-
 // Spies, not plain stubs: "was the detail record ever read" is the assertion
 // that pins the gate above the store read.
 const getItinerary = vi.fn(async (slug: string) =>
   slug === ITINERARY.slug ? ITINERARY : undefined,
 );
-const getHunt = vi.fn(async (slug: string) => (slug === HUNT.slug ? HUNT : undefined));
-
 vi.mock("@/lib/stores/itinerary-store", () => ({ getItinerary: (s: string) => getItinerary(s) }));
-
-vi.mock("@/lib/hunt-store", () => ({
-  getHunt: (s: string) => getHunt(s),
-  photoUrl: (p: string) => `/api/hunts/photo?p=${p}`,
-}));
 
 /** The store rows Admin → Site content writes when a section is hidden. */
 function hide(...paths: string[]) {
@@ -107,13 +78,6 @@ const SECTIONS = [
     slug: ITINERARY.slug,
     store: getItinerary,
     load: () => import("@/app/(site)/itineraries/[slug]/page"),
-  },
-  {
-    label: "/hunt",
-    section: "/hunt",
-    slug: HUNT.slug,
-    store: getHunt,
-    load: () => import("@/app/(site)/hunt/[slug]/page"),
   },
 ] as const;
 
