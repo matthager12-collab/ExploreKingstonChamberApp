@@ -75,15 +75,19 @@ describe("next.config security headers", () => {
     expect(pp).toContain("microphone=()");
   });
 
-  it("delegates the Payment Request API to Zeffy's frame only, never to this origin or anyone else", async () => {
+  it("delegates the Payment Request API to this origin and Zeffy's frame, and nowhere else", async () => {
     // The 5K registration embeds Zeffy's ticket form on /race (ADR-0008
     // amendment 1). Apple Pay and Google Pay inside that frame need the
-    // payment feature delegated to it; every other origin — this app's own
-    // included — stays denied.
+    // payment feature. A document can only delegate a feature it holds
+    // itself, so `self` is REQUIRED: measured in Chrome on 2026-09-22,
+    // payment=("https://www.zeffy.com") without self left the Zeffy frame
+    // with payment disabled and Google Pay logging 17 policy violations;
+    // payment=(self "https://www.zeffy.com") gave none. The app has no
+    // payment code, so holding the permission on this origin is inert.
     const rules = await loadRules();
     const pp = headerMap(rules.find((r) => r.source === "/(.*)")!).get("Permissions-Policy")!;
     const payment = pp.split(",").map((s) => s.trim()).find((s) => s.startsWith("payment="));
-    expect(payment).toBe('payment=("https://www.zeffy.com")');
+    expect(payment).toBe('payment=(self "https://www.zeffy.com")');
   });
 
   it("allows frames from this origin and Zeffy, and nowhere else", async () => {

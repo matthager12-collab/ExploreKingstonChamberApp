@@ -47,13 +47,16 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           // geolocation MUST stay `self`: the side-switcher, near-me sort, and
           // hunt check-ins all call navigator.geolocation.
-          // payment is delegated to Zeffy's origin ONLY, so Apple Pay and
+          // payment is allowed for this origin and Zeffy's, so Apple Pay and
           // Google Pay work inside the 5K registration frame on /race
-          // (ADR-0008 amendment 1; the frame carries allow="payment"). This
-          // origin itself stays denied — the app takes no payments.
+          // (ADR-0008 amendment 1; the frame carries allow="payment").
+          // `self` is required, not decorative: a page can only delegate a
+          // feature it holds itself. Measured 2026-09-22 — without self the
+          // Zeffy frame had payment disabled and Google Pay failed. The app
+          // has no payment code, so holding it here is inert.
           {
             key: "Permissions-Policy",
-            value: 'geolocation=(self), camera=(), microphone=(), payment=("https://www.zeffy.com")',
+            value: 'geolocation=(self), camera=(), microphone=(), payment=(self "https://www.zeffy.com")',
           },
           // ENFORCED as of the post-launch hardening pass (2026-08-19). The
           // directive set ran as Content-Security-Policy-Report-Only from
