@@ -38,6 +38,7 @@ import {
   scrubRecordDocFields,
 } from "@/lib/db/privacy-delete";
 import { listWorklistItems } from "@/lib/db/worklist";
+import { anonymizeRegistrantsByEmail, findRegistrantsByEmail } from "@/lib/db/race-registrants";
 
 export interface PiiExport {
   store: string;
@@ -338,11 +339,53 @@ const feedbackResponses: PiiStore = {
   },
 };
 
+// 5K race registrants synced from Zeffy — name, email, ticket type and the
+// t-shirt answer, nothing else from the form (the sync drops every other
+// custom answer before it reaches the database).
+const raceRegistrants: PiiStore = {
+  store: "race_registrant",
+  description:
+    "5K race registrations synced from Zeffy: name, email, ticket type, t-shirt answer, " +
+    "check-in time. Anonymized 45 days after the race; the row stays for counts. Zeffy " +
+    "keeps the payment record and anything else the form asked.",
+  hasEmailIdentifier: true,
+  async findByIdentifier(email) {
+    return findRegistrantsByEmail(email);
+  },
+  async exportRecords(email) {
+    const rows = await findRegistrantsByEmail(email);
+    return {
+      store: "race_registrant",
+      records: rows.map((r) => ({
+        id: r.id,
+        firstName: r.firstName,
+        lastName: r.lastName,
+        email: r.email,
+        rateTitle: r.rateTitle,
+        shirtNote: r.shirtNote,
+        status: r.status,
+        checkedInAt: r.checkedInAt,
+        registeredAt: r.registeredAt,
+      })),
+      note: "The payment itself lives with Zeffy, the Chamber's ticketing provider.",
+    };
+  },
+  async deleteOrAnonymize(email, actor) {
+    const affected = await anonymizeRegistrantsByEmail(email, actor);
+    return {
+      store: "race_registrant",
+      affected,
+      note: "Anonymized (name, email and t-shirt answer removed; the ticket count is preserved).",
+    };
+  },
+};
+
 export const PII_STORES: PiiStore[] = [
   users,
   invites,
   charities,
   volunteerSignups,
+  raceRegistrants,
   worklistContacts,
   noIdentifierStore(
     "hunt-submissions",

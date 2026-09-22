@@ -73,6 +73,7 @@ export type RetentionAction =
   | "delete" // hard-delete past the window (records: physical delete, not tombstone)
   | "redact-at-resolution" // PII scrubbed when the owning item resolves (no time window)
   | "self-pruning" // store prunes itself; documented here, owned elsewhere
+  | "anonymize" // personal columns nulled past the window; the row stays for counts
   | "never-purge"; // excluded from every purge, forever
 
 export interface RetentionRule {
@@ -181,6 +182,16 @@ export const RETENTION_POLICY: RetentionRule[] = [
     // scripts/privacy-retention.ts's created-at arithmetic cannot model.
     action: "self-pruning",
     ownedElsewhere: true,
+  },
+  {
+    store: "race_registrant",
+    description:
+      "5K race registrations synced from Zeffy, the Chamber's ticketing provider: your name, email, ticket type and t-shirt answer, plus when you were checked in on race day. Name, email and t-shirt answer are removed 45 days after the race; an anonymous row stays so the Chamber can count runners.",
+    label: "45 days after race day, then anonymized",
+    windowDays: 45,
+    // Race-date-relative, executed by the generic purge job: the executor
+    // reads the race date from src/lib/data/race.ts.
+    action: "anonymize",
   },
   {
     store: "audit",
