@@ -16,6 +16,7 @@ The race sells tickets on Zeffy. The app shows the race page (`/race`), keeps a 
 **In the app:**
 
 - The race copy, dates, prices and the two question titles live in `src/lib/data/race.ts`. The question titles must match the **start** of the Zeffy question text (case-insensitive). An unmatched question is simply dropped.
+- **Register now** on `/race` loads Zeffy's form on the page, from `registrationEmbedUrl` in `race.ts`. It must point at the same campaign as `registrationUrl`, on `https://www.zeffy.com`. Nothing from Zeffy loads until a visitor presses the button (ADR-0008 amendment 1).
 - Admin → Site content → unhide **5K Fun Run** (`/race`). It ships dark.
 - `/admin/events` → add the race with its link set to `/race`, so it appears on the calendar.
 - Point the Chamber's short link (short.io) at `https://explore-kingston.onrender.com/race`. Printed material should carry the short link, not the Zeffy URL, so it can be re-pointed.
@@ -63,3 +64,4 @@ Until the flip, production relies on Sync now — which is fine.
 | Every multi-ticket order shows "guest" rows | Per-attendee details are off on the campaign (§1 step 1) |
 | Shirt column empty | The question title in `race.ts` no longer matches the Zeffy question |
 | Volunteers see "That link doesn't work" | Expired, revoked, or replaced by a newer mint — send the current link |
+| Register now shows an empty box | `registrationEmbedUrl` is not on `https://www.zeffy.com`, or points at the wrong campaign. The page falls back to the zeffy.com link if the address is not Zeffy's at all |
