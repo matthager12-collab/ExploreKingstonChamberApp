@@ -73,7 +73,30 @@ describe("next.config security headers", () => {
     expect(pp).toContain("geolocation=(self)");
     expect(pp).toContain("camera=()");
     expect(pp).toContain("microphone=()");
-    expect(pp).toContain("payment=()");
+  });
+
+  it("delegates the Payment Request API to Zeffy's frame only, never to this origin or anyone else", async () => {
+    // The 5K registration embeds Zeffy's ticket form on /race (ADR-0008
+    // amendment 1). Apple Pay and Google Pay inside that frame need the
+    // payment feature delegated to it; every other origin — this app's own
+    // included — stays denied.
+    const rules = await loadRules();
+    const pp = headerMap(rules.find((r) => r.source === "/(.*)")!).get("Permissions-Policy")!;
+    const payment = pp.split(",").map((s) => s.trim()).find((s) => s.startsWith("payment="));
+    expect(payment).toBe('payment=("https://www.zeffy.com")');
+  });
+
+  it("allows frames from Zeffy and nowhere else", async () => {
+    // Without frame-src, frames fall back to default-src 'self' and the
+    // Zeffy embed renders blank. The carve-out is one exact origin — a
+    // wildcard, a scheme-only source or a second host fails here.
+    const rules = await loadRules();
+    const csp = headerMap(rules.find((r) => r.source === "/(.*)")!).get(
+      "Content-Security-Policy",
+    )!;
+    const frameSrc = csp.split(";").map((s) => s.trim()).find((s) => s.startsWith("frame-src"));
+    expect(frameSrc).toBe("frame-src https://www.zeffy.com");
+    expect(csp).not.toMatch(/child-src/);
   });
 
   it("ships CSP ENFORCED with the documented carve-outs, never demoted to Report-Only", async () => {

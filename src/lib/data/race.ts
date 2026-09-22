@@ -21,6 +21,11 @@ export const race = {
   /** The Zeffy ticketing campaign. The only place a runner pays. */
   registrationUrl:
     "https://www.zeffy.com/en-US/ticketing/not-afraid-of-the-dark-5k-kingston-fun-run",
+  /** The same campaign's embeddable form, loaded on /race only when a visitor
+   *  presses Register. Must stay on www.zeffy.com — the page refuses to frame
+   *  anything else, and the CSP would block it anyway. */
+  registrationEmbedUrl:
+    "https://www.zeffy.com/en-US/embed/ticketing/not-afraid-of-the-dark-5k-kingston-fun-run",
   rates: [
     { title: "Early Bird Runner Registration", price: "$30", note: "Through October 9" },
     { title: "Standard 5K Runner Entry", price: "$36", note: "From October 10" },
