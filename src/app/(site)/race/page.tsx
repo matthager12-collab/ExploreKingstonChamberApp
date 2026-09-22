@@ -44,7 +44,7 @@ export default async function RacePage() {
             ))}
           </ul>
           <div className="mt-5">
-            <RaceRegistration embedUrl={race.registrationEmbedUrl} linkUrl={register} />
+            <RaceRegistration linkUrl={register} />
           </div>
           <p className="mt-4 text-sm text-ink">
             Registration is handled by Zeffy, a free ticketing platform for nonprofits, so every
