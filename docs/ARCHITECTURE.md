@@ -8,14 +8,14 @@ runbook in [OPERATIONS.md](OPERATIONS.md); data provenance in
 
 Explore Kingston is the companion app to explorekingstonwa.com — a single
 Next.js 16 deployable that surfaces ferry, dining, lodging, events, parking,
-give-back, and scavenger-hunt content for visitors to Kingston, WA, plus
+and give-back content for visitors to Kingston, WA, plus
 invite-only portals for businesses / nonprofits and an admin CMS for the
 Chamber. The headline architectural fact in this version is the **Postgres
 substrate (E05)**: all structured data lives in Render Postgres (`record` +
 append tables), every write goes through one audited, zod-validated choke
 point (`src/lib/db/records.ts`), and `DATABASE_URL` is required at runtime —
 `/api/health` 503s without it. The `DATA_DIR` disk remains only for images and
-hunt photos (until E15); nothing above the store layer knows any of this.
+feature images (until E15); nothing above the store layer knows any of this.
 
 ---
 
@@ -34,7 +34,7 @@ hunt photos (until E15); nothing above the store layer knows any of this.
                                  │                  │
               ┌──────────────────┘                  └────────────────────┐
               ▼ RENDER POSTGRES (required, E05)      DATA_DIR disk (/data on Render) ▼
-     record + audit + quarantine tables          images only: hunt photos + map
+     record + audit + quarantine tables          images only: map features +
        analytics_event · survey_response ·        images (until E15), plus the
        ferry_observation (append logs)            health disk-probe + backup walk
        (schema.ts → db/migrations, applied      (Vercel Blob / Upstash Redis are
@@ -52,7 +52,7 @@ hold every piece of structured data, with schema DDL generated from
 `src/lib/db/schema.ts` into `db/migrations/` and applied at boot. The seeds in
 git remain the merge baseline. The old "no `DATABASE_URL` = filesystem mode"
 dual-backend seam is gone: the DB is a hard runtime dependency, and the mounted
-`DATA_DIR` disk keeps only images/hunt photos (until E15). No queue or auth
+`DATA_DIR` disk keeps only images (until E15). No queue or auth
 SaaS is required.
 
 ---
@@ -110,15 +110,15 @@ SaaS is required.
 
 ```
 routes (src/app/**)             pages: RSC by default; revalidate=60 for store-backed
-                                content; force-dynamic for portals/admin/hunts
+                                content; force-dynamic for portals/admin
    │        │
    │        └── API routes (src/app/api/**, 40): auth, portal writes, feeds,
-   │            ferry status/plan/observe/accuracy/reminder, map, hunts, survey,
+   │            ferry status/plan/observe/accuracy/reminder, map, survey,
    │            track, admin CMS, health — thin, validating, store/adapter-calling
    ▼
 client islands (src/components/**)   only where interactivity demands it:
                                      tracker, open-badge, near-me, town-map,
-                                     hunt-player, ferry board + forecast planner,
+                                     ferry board + forecast planner,
                                      side switcher, webcam-grid, survey, nav,
                                      portal + admin editors, EditableText
    ▼
@@ -143,8 +143,8 @@ declarations in `src/app/**/page.tsx`):
 | Class | Strategy | Routes (examples) |
 |-------|----------|-------------------|
 | Store-backed content | `revalidate = 60` (ISR) | `/`, `/eat`, `/events`, `/give`, `/parking`, `/stay`, `/webcams`, `/about`, `/itineraries`, `/ferry`, `/ferry/plan`, `/map` |
-| Auth-dependent / always-fresh | `force-dynamic` | all `/portal/*`, all `/admin/*`, `/hunt`, `/hunt/[slug]`, `/itineraries/[slug]` |
-| Route handlers | uncached by default | auth, portal writes, ferry, hunts, track, admin, map |
+| Auth-dependent / always-fresh | `force-dynamic` | all `/portal/*`, all `/admin/*`, `/itineraries/[slug]` |
+| Route handlers | uncached by default | auth, portal writes, ferry, track, admin, map |
 | Feeds | cached + CORS-open | `/api/feeds/events` (JSON + `?format=ics`), `/api/feeds/business/[id]` (`s-maxage`, `Access-Control-Allow-Origin: *`) |
 
 Note `/itineraries/[slug]` is `force-dynamic` (not ISR) — the list page
@@ -158,7 +158,7 @@ Note `/itineraries/[slug]` is `force-dynamic` (not ISR) — the list page
 Single content model in `src/lib/types.ts`: `Sailing`, `TerminalStatus`,
 `Webcam`, `DayHours`/`WeeklyHours`, `Restaurant` (structured `weeklyHours`,
 `hoursVerified`, `hidden?`), `EventItem` (`ownerId`, `charityId`), `Itinerary`/
-`ItineraryStop`, `Charity`, `VolunteerNeed`, `Hunt`/`HuntStop`, `Lodging`,
+`ItineraryStop`, `Charity`, `VolunteerNeed`, `Lodging`,
 `SurveyResponse`, plus enums (`FerryRoute`, `Direction`, `EventCategory`). The
 **map CMS** has its own model in `src/lib/map/types.ts`: `MapView`, `MapFeature`,
 `FeatureKind`, `BuiltInSource`, `ParkingMeta`. Parking zones are `MapZone`
@@ -209,7 +209,7 @@ limiting:
 
 | Seam file | Detector | Disk host (Render) | Serverless (Vercel) |
 |-----------|----------|--------------------|---------------------|
-| `data-dir.ts` | `DATA_DIR` set → that path, else `.data/` | images/hunt photos under the volume (until E15), plus the health disk-probe + backup walk | (DATA_DIR unset on Vercel) |
+| `data-dir.ts` | `DATA_DIR` set → that path, else `.data/` | images under the volume (until E15), plus the health disk-probe + backup walk | (DATA_DIR unset on Vercel) |
 | `blob-store.ts` | `hasBlob()` = `BLOB_READ_WRITE_TOKEN` set | image bytes under DATA_DIR, served by app image routes | Vercel Blob public CDN URL |
 | `rate-limit.ts` | `hasUpstash()` = `UPSTASH_REDIS_REST_URL` set | in-process `Map` sliding window (correct for one instance) | Upstash Redis shared sliding window (correct across lambdas) |
 
@@ -361,7 +361,7 @@ over the `site-store`:
   tracks the code fallback; overrides live in the `site-copy` overlay.
 - *Page visibility.* `page-visibility.tsx` holds the single source of truth for
   hideable paths (`HIDEABLE_PAGES`). Public pages call
-  `await assertPageVisible("/hunt")` at the top of their server component:
+  `await assertPageVisible("/scarecrow")` at the top of their server component:
   hidden + visitor → `notFound()` (clean 404); hidden + admin → renders with a
   `<HiddenPageBanner/>` so the Chamber can prep content before launch.
   Home, portal, admin, and api routes are deliberately not hideable. Backed by
@@ -396,7 +396,7 @@ general-purpose map system on `map-store` + `src/lib/map/`:
 | 5 | WSDOT native REST over GTFS/GTFS-RT | Instant free key, richer data (drive-up space, wait notes, boarding-pass hours), no protobuf | OneBusAway GTFS-RT (key wait, less data) |
 | 6 | Structured `WeeklyHours` + client-computed open-now badges | Static/ISR pages can never show stale open/closed state; DST-safe via Intl | Server-computed badges (stale in cache); Google Places hours (billing + caching ToS) |
 | 7 | Two-source verification with dated stamps + visible disputes for operational facts | Wrong hours/parking data does real-world harm; trust is the product | Trust-the-first-source; scraping aggregators |
-| 8 | Hunt photos upload with GPS verify; image bytes on the blob seam | Owner requirement: auto check-off "when a pic is posted at that spot" | On-device only (no admin visibility); image-content ML matching (cost — roadmap) |
+| 8 | Hunt photos upload with GPS verify; image bytes on the blob seam (the hunt was removed 2026-09-22; the blob seam stayed) | Owner requirement: auto check-off "when a pic is posted at that spot" | On-device only (no admin visibility); image-content ML matching (cost — roadmap) |
 | 9 | Analytics: first-party append log + opt-in coarse GPS; survey separate | LTAC needs aggregates, not surveillance; zero third-party leakage | GA4 (ad-tech baggage, consent complexity); paid analytics |
 | 10 | Rebrand via token remap only | One-file restyle; provable contrast decisions; repeatable | Per-page restyling (drift, unreviewable) |
 | 11 | Street geometry baked to static JSON by script | Runtime has zero Overpass dependency; regeneration is explicit and rare | Live Overpass queries (rate limits, latency, fragility) |
@@ -438,7 +438,7 @@ Environment variables (authoritative — `.env.production.example`, `render.yaml
 | `WSDOT_API_KEY` | optional | live ferry data; absent → bundled fallback schedule |
 | `NEXT_PUBLIC_SITE_URL` | **required in production**, **build-time** | absolute origin for share-card/canonical URLs (`layout.tsx` `metadataBase`); inlined at `npm run build`, not read at runtime |
 | `SETUP_TOKEN` | optional (first-run bootstrap only) | gates `POST /api/auth/setup` fail-closed; never consulted once an admin exists |
-| `DATA_DIR` | disk hosts | persistent volume path (e.g. `/data`) — images/hunt photos only since E05; **unset on Vercel** |
+| `DATA_DIR` | disk hosts | persistent volume path (e.g. `/data`) — images only since E05; **unset on Vercel** |
 | `DATABASE_URL` | **yes (E05)** | Render Postgres internal URL, Blueprint-managed via `fromDatabase` (no `-pooler`, no `sslmode` — docs/DEPLOY.md §2) — the structured-data home; `/api/health` 503s without it |
 | `BLOB_READ_WRITE_TOKEN` | Phase 2 | Vercel Blob for uploaded images |
 | `UPSTASH_REDIS_REST_URL` / `_TOKEN` | Phase 2 | shared rate limiter |

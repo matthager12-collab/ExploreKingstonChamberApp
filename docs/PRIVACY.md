@@ -21,7 +21,6 @@ implements `findByIdentifier` / `exportRecords` / `deleteOrAnonymize`; the
 | `invites` | email | Optional invitee email + note | until redeemed/expired | Postgres `invites` |
 | `charities` | `contactEmail` | Optional public contact email on a listing | until scrubbed | `record` store `charities` |
 | `worklist_item` | payload `contact`, `suggest.contact` | Follow-up contact on OPEN items: privacy/accuracy requests, event suggestions, scarecrow registrations (`suggest` also carries the submitter's name) | scrubbed at resolution; never written to audit snapshots | Postgres `worklist_item` |
-| `hunt-submissions` | *(no identifier)* | Photo + optional precise check-in location | 12 months | `record` + fs/blob photos |
 | `scarecrow_vote` | *(none — anonymous)* | Scarecrow Crawl vote + optional visitor photo (metadata stripped; never shown on the page; reposted on Chamber social only when the visitor left the permission box ticked, which is recorded on the row) | 12 months | Postgres `scarecrow_vote` + R2/fs photos |
 | `survey_response` | *(none — anonymous)* | LTAC survey answers | 36 months | Postgres `survey_response` |
 | `feedback_response` | `email` *(optional, unverified)* | Page feedback: 1–5 star rating, free-text comment, source path, optional name + email | 12 months | Postgres `feedback_response` |
@@ -79,7 +78,7 @@ agent, no screen size, no fingerprint. It travels in the same anonymous
 envelope every other analytics row uses and adds no field that could single
 anyone out, which is why it is **not** gated behind the geo-consent card
 (`src/lib/privacy/consent.ts` — that card governs *location*, purposes
-`analytics` and `hunt`). Asking a visitor to consent to a number that is not
+`analytics`). Asking a visitor to consent to a number that is not
 about them would misdescribe what they were agreeing to. Values are validated
 and bounded at the ingest boundary, never trusted from the client; the closed
 shape is pinned by the table-driven suite in
@@ -134,7 +133,7 @@ person's actual record ids. E16 membership records and E30 applications inherit
 this table rather than re-inventing it.
 
 **Records in scope for retention, legal hold, and public-records intake
-(`kind: "records"`)** include: analytics/survey/hunt data per §1; the audit
+(`kind: "records"`)** include: analytics/survey data per §1; the audit
 trail; and — added per the roll-off — **membership applications** (the E30
 join-form intake) and **membership status/level changes** (the E16 native
 store's append-only lifecycle events). Per ADR-0004 the audit trail is the
@@ -148,10 +147,12 @@ carries the roster's history.
   auth snapshots) as operational/records evidence; a consumer delete is
   fulfilled everywhere else, and `record.updated_by` references are re-keyed to
   the opaque user id (D-11).
-- Hunt-submission audit snapshots are **coordinate-free by write-time redaction**
-  (lat/lng/photoPath stripped), so the 12-month destruction promise holds — but
-  audit rows written **before E11** (before 2026-07, notice version `2026-07`)
-  may still contain submission coordinates under this same records floor.
+- Hunt submissions are gone: the scavenger hunt was removed on 2026-09-22 and
+  its store with it. Their audit snapshots were **coordinate-free by write-time
+  redaction** (lat/lng/photoPath stripped) — but audit rows written **before
+  E11** (before 2026-07, notice version `2026-07`) may still contain submission
+  coordinates under this same records floor, and the audit table is never
+  purged. Removing the feature did not remove those rows.
 
 ## 5. Member-data posture (ADR-0004)
 

@@ -9,7 +9,7 @@ the companion to [explorekingstonwa.com](https://explorekingstonwa.com).
 (https://explore-kingston.onrender.com) — Next.js 16 in a Docker/standalone
 image; since E05 all structured data lives in **Render Postgres**
 (`DATABASE_URL` required — health fails closed without it) and the persistent
-disk holds images/hunt photos. A serverless Phase 2 (Vercel + Vercel Blob +
+disk holds images. A serverless Phase 2 (Vercel + Vercel Blob +
 Upstash) is built and ready but not yet in use.
 
 These docs are written to survive a from-scratch rebuild: they state not just

@@ -26,7 +26,7 @@ Phase-2 Vercel path, DNS, pre-launch checklist),
    `users`/`orgs`/`invites` tables since E06, everything else in `record` +
    the append tables; writes go through the audited choke point
    `src/lib/db/records.ts`). The `DATA_DIR` directory
-   (resolved by `src/lib/data-dir.ts`) holds hunt photos and map
+   (resolved by `src/lib/data-dir.ts`) holds map
    images (until E15). Code, seed content, brand assets, and the generated
    parking overlay are all reproducible from git + `npm install`. Back up
    **both** Render Postgres (backups + PITR) and `DATA_DIR`.
@@ -122,7 +122,8 @@ on Render; they belong only to a Vercel deployment (§7, `.env.production.exampl
 structured store shown as a `.json`/`.jsonl` entry lives in Postgres
 (`record` rows keyed `(store, id)`; `analytics_event` / `survey_response` /
 `ferry_observation` append tables). What's still live on disk: `map/images/`,
-`hunts/refs/`, `hunts/photos/`, `events/` (until the E15 disk cutover). The
+`events/`, and — until the purge below runs — `hunts/refs/` and
+`hunts/photos/` (the E15 disk cutover). The
 tree is kept as the map of the on-disk layout — pre-E05 disks still carry the
 legacy files, and the store names below are the `record.store` keys.
 
@@ -136,23 +137,43 @@ migration window the disk stays authoritative and R2 is proven as the fallback
 before it becomes the only copy.
 
 **The bucket is private and the app proxies every read** through
-`/api/hunts/photo`, `/api/map/image` and `/api/events/attachment`. Nothing is
+`/api/map/image` and `/api/events/attachment`. Nothing is
 served from `r2.dev`, and there is no R2 custom domain — that would require
 moving the DNS zone to Cloudflare, which is rejected (Chamber DNS and *email*
 and email are served from the same VPS as its WordPress site). Proxying is
-also a privacy upgrade: hunt player submissions
-used to be stored as public URLs that bypassed the admin gate entirely, and are
-now genuinely admin-only on every read.
+also a privacy upgrade: some uploads used to be stored as public URLs that
+bypassed the admin gate entirely, and are now genuinely admin-only on every
+read. (The case that proved it was the scavenger hunt's player submissions.
+The hunt was removed on 2026-09-22 and `/api/hunts/photo` went with it; its
+stored bytes have NOT been deleted — see "Purging the hunt" below.)
 
 **R2 keys mirror the disk layout exactly**, which is what makes the migration a
 pure byte copy with zero record rewrites:
 
 | On disk under `DATA_DIR` | R2 object key | Stored on the record |
 |---|---|---|
-| `hunts/refs/<hunt>-<stop>.<ext>` | `hunts/refs/<hunt>-<stop>.<ext>` | `refs/<hunt>-<stop>.<ext>` |
-| `hunts/photos/<hunt>/<stop>/<f>` | `hunts/photos/<hunt>/<stop>/<f>` | `photos/<hunt>/<stop>/<f>` |
+| `hunts/refs/<hunt>-<stop>.<ext>` † | `hunts/refs/<hunt>-<stop>.<ext>` | `refs/<hunt>-<stop>.<ext>` |
+| `hunts/photos/<hunt>/<stop>/<f>` † | `hunts/photos/<hunt>/<stop>/<f>` | `photos/<hunt>/<stop>/<f>` |
 | `map/images/<sha1>.<ext>` | `map/images/<sha1>.<ext>` | `<sha1>.<ext>` |
 | `events/<eventId>/<file>` | `events/<eventId>/<file>` | `<eventId>/<file>` |
+
+† The scavenger hunt was removed on 2026-09-22. These keys are listed because
+the bytes are still there; nothing reads them any more, and nothing deletes
+them until the purge runs.
+
+### Purging the hunt (one-off, after the removal deploys)
+
+The hunt's retention rule went with its code, so any submission still stored
+has no sweep and no fulfilment path. One script destroys them — photo first,
+then the row, legal holds respected, rows kept if their photo will not go:
+
+```
+npm run purge:hunt-submissions              # dry run, deletes nothing
+npm run purge:hunt-submissions -- --apply   # execute
+```
+
+Run the dry run against production first and read the counts. As of
+2026-09-22 it had not been run.
 
 `R2_IMAGES_*` is deliberately a different prefix from the `R2_*` GitHub Actions
 secrets used by the off-site backup job: those point at the separate encrypted
@@ -215,8 +236,8 @@ deliberately and each exited 1.
 
 Every uploaded image has **all** EXIF/XMP/IPTC metadata removed before it
 reaches any storage backend. This is a child-safety floor, not a nicety: a
-phone photo carries the coordinates of where it was taken, hunt players are
-often kids, and approved event flyers are public.
+phone photo carries the coordinates of where it was taken, the people
+uploading are often kids, and approved event flyers are public.
 
 Stripping happens in `src/lib/image-sanitize.ts`, called at the four save choke
 points (`saveReferencePhoto`, `saveSubmission`, `saveFeatureImage`,
@@ -266,10 +287,10 @@ DATA_DIR/
   stores/boarding-pass-override.json  admin daily SR-104 pass override
   stores/ferry-observations.jsonl     logged sailing snapshots (forecast input)
   map/images/                admin-uploaded map-feature images
-  hunts/custom-hunts.json    admin-built/edited hunts (override seed by id)
-  hunts/refs/                per-stop reference photos (<huntId>-<stopId>.<ext>)
-  hunts/photos/<huntId>/<stopId>/   player photo submissions
-  hunts/submissions.jsonl    one JSON line per hunt submission (GPS verdicts)
+  hunts/                     LEFTOVERS. The scavenger hunt was removed
+                             2026-09-22; custom-hunts.json, refs/, photos/
+                             and submissions.jsonl may still be on disk until
+                             the purge above runs. Nothing reads them.
   analytics/events.jsonl     pageviews / outbound clicks / opt-in geo pings
   ltac-responses.jsonl       anonymous LTAC visitor-survey responses
 ```
@@ -295,8 +316,6 @@ first so a write doesn't race the delete.
 | Ferry facts | `stores/ferry-info.json` | Reverts to `src/lib/data/ferry-info.ts` (payment/boarding-pass/cash-tips/sources) |
 | Ferry prediction flag | `stores/ferry-prediction.json` | Reverts to default **OFF** (public sees nothing; admins still preview) |
 | Boarding-pass override | `stores/boarding-pass-override.json` | Reverts to the season/hours estimate |
-| Admin-built hunts | `hunts/custom-hunts.json` (+ `hunts/refs/`) | Hunts revert to `src/lib/data/hunts.ts` seeds |
-| Hunt submissions | `hunts/submissions.jsonl` and `hunts/photos/` | Empty submission review queue |
 | Analytics | `analytics/events.jsonl` | Dashboard counts return to zero |
 | LTAC survey | `ltac-responses.jsonl` | **Export first if an LTAC/JLARC period is open** — this is grant evidence |
 
@@ -355,7 +374,7 @@ nameservers** — that would break Chamber email. Deferred until launch; the
 
 Since E05 the backup surface is split: **Render Postgres holds structured
 data** (its own backups/PITR are the recovery path for records) and
-**`DATA_DIR`** (`/data` on Render) holds images/hunt photos. The bundle
+**`DATA_DIR`** (`/data` on Render) holds images. The bundle
 layers below still walk the whole `DATA_DIR`. There are **three backup
 layers**, deliberately independent:
 
@@ -583,7 +602,6 @@ which redirects to `/portal/setup`. Editors write records into Postgres
 | `/admin/import/qwick` | No-terminal Qwick listings import (E17): paste/upload a saved export, preview, apply as invisible drafts — see "Import the Qwick listings" below |
 | `/admin/worklist` | The one review queue (E08): member submissions, visitor reports, re-verify checks — see "Worklist & moderation" below |
 | `/admin/itineraries` | Build/edit itineraries |
-| `/admin/hunts` | Build/edit scavenger hunts; review player submissions |
 | `/admin/map` | Parking-zone **polygon editor** (MapZone, Geoman) |
 | `/admin/maps` | General map builder — named public views + drawable markers/lines/trails/areas + built-in data layers (output at `/map`) |
 | `/admin/audit` | **Change history** for everything (E09): who changed what, when, field-by-field — filterable, CSV-exportable, and the home of **restore** — see "History & restore" below |
@@ -616,7 +634,7 @@ reports merge into the open item):
 
 | Type | What it is | Actions |
 |---|---|---|
-| Moderation | A member's new record, proposed edit, or removal request; also scavenger-hunt photos | **Approve** (publishes / executes), **Reject** (needs a note — tell the submitter why), **Take down** |
+| Moderation | A member's new record, proposed edit, or removal request | **Approve** (publishes / executes), **Reject** (needs a note — tell the submitter why), **Take down** |
 | Reports | A visitor tapped "Report an issue" on /eat or /events | **Fixed it** after correcting the record, or Dismiss |
 | Re-verify | A record passed its verify-by window (see intervals below) | **Still accurate** (stamps it verified), or Archive |
 | Sync conflicts | Arrives with E16 (AMS sync) — shape ready, no producer yet | Resolve/Dismiss |

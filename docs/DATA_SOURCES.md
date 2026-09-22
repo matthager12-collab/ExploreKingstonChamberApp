@@ -27,7 +27,7 @@ disagreed, the verified correction is what appears here.
 | Maps / directions (deep links) | `mapSearchUrl()` / `mapDirectionsUrl()` in `src/components/ui.tsx` | — | **wired** (free Google Maps deep links, no key) |
 | Leaflet basemap tiles | `src/components/{ferry-vessel-map,sr104-traffic-map,feature-map}.tsx`, Leaflet + OSM | — | **wired** (OSM raster tiles) |
 | Parking (lots + street overlay) | `src/lib/data/parking.ts` (`MapZone`), `public/geo/street-parking.json` | Port/WSDOT/Diamond facts + OSM/Census-generated overlay | **seeded** (generator = OSM + Census CDP) |
-| Events, restaurants, lodging, charity, hunts, itineraries | feature stores in `src/lib/stores/*` over `src/lib/data/*` | hand-curated content per feature | **seeded** (admin-editable via CMS) |
+| Events, restaurants, lodging, charity, itineraries | feature stores in `src/lib/stores/*` over `src/lib/data/*` | hand-curated content per feature | **seeded** (admin-editable via CMS) |
 | LTAC visitor survey | `src/lib/stores/survey-store.ts`, `/api/survey` | — | **wired** (file- **or** DB-backed; see persistence seam) |
 
 Status legend: **wired** = fetched/computed live at runtime · **seeded** = verified data
@@ -602,7 +602,7 @@ Authoritative source: `.env.production.example`, `render.yaml`, `fly.toml`. See
 | `DATABASE_URL` | **required (all deploys, E05)** | Render Postgres — `record` + append tables (`analytics_event`/`survey_response`/`ferry_observation`); the only home for structured data | Internal URL, Blueprint-managed via `fromDatabase` — never typed, no `-pooler` host, no `sslmode` param (docs/DEPLOY.md §2). `/api/health` 503s without it, so a deploy missing it fails closed |
 | `BLOB_READ_WRITE_TOKEN` | prod-only (Vercel) | Vercel Blob for uploaded images | `hasBlob()` auto-detects |
 | `UPSTASH_REDIS_REST_URL` / `_TOKEN` | prod-only (Vercel) | Shared rate limiter (`rate-limit.ts`) | Needed on serverless; else in-process Map |
-| `DATA_DIR` | disk hosts | Persistent-disk root (`/data` on Render) — since E05 holds only images/hunt photos (until E15) | **NOT set on Vercel** — Blob takes over images |
+| `DATA_DIR` | disk hosts | Persistent-disk root (`/data` on Render) — since E05 holds only images (until E15) | **NOT set on Vercel** — Blob takes over images |
 
 The self-collected ferry-observation schedulers use repo-level GitHub config, not app env:
 `FERRY_OBSERVE_URL` (Actions variable, defaults to the Render host) points the observe/accuracy

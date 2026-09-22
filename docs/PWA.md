@@ -81,9 +81,11 @@ allowlisting it would cache a 404), `/webcams` and `/map` (useless offline and
 heavy enough to blow the shell budget; the maps' offline story is the
 precached basemap slice — row 7 and §6 — not a cached `/map` document).
 
-Branch 3 must precede 4–7 because `/api/hunts/photo` serves **admin-only
-moderation photos** with an image destination, and `/api/map/image` and
-`/api/events/attachment` are the same shape. A "cache all same-origin images"
+Branch 3 must precede 4–7 because `/api/map/image` and
+`/api/events/attachment` serve **private images** with an image destination.
+(The original case was `/api/hunts/photo` and its admin-only moderation
+photos; the scavenger hunt was removed on 2026-09-22 and the ordering rule
+outlived it.) A "cache all same-origin images"
 rule running first would put the moderation queue into a cache on a shared
 device — normal in a ferry town. The same-file exact-equality carve-out for
 `/api/ferry/status` exists because `/api/ferry/observe` and
@@ -97,10 +99,10 @@ default loader, so the wire request for the logo is really
 `/_next/image?url=%2Fbrand%2Flogo-…png&w=1920&q=75`: pathname `/_next/image`,
 which matches neither `STATIC_PREFIXES` entry. But that same pathname also
 sails straight past branch 3's deny check, because the optimizer carries its
-real target in the **query string** — `/_next/image?url=%2Fapi%2Fhunts%2Fphoto%2F123`
+real target in the **query string** — `/_next/image?url=%2Fapi%2Fmap%2Fimage%2F123`
 has nothing under `/api` in its pathname at all. So `isBrandImage()` decodes
 the `url` parameter itself and cache-firsts **only** our own `/brand/` files
-(with a `".."` test, because `/brand/../api/hunts/photo/123` does start with
+(with a `".."` test, because `/brand/../api/map/image/123` does start with
 `/brand/`). Everything else the optimizer serves — including any future
 `<Image>` someone drops onto a moderation screen — falls through untouched.
 **Do not fold this into `STATIC_PREFIXES`.**
@@ -422,7 +424,7 @@ single tunnel.
 
 **The entry shape carries `body: string` + `contentType: "application/json"`.
 It cannot carry multipart.** The most obvious next consumer,
-`POST /api/hunts/submit`, takes **multipart `FormData`** (a photo), so it does
+`POST /api/scarecrow/vote`, takes **multipart `FormData`** (a photo), so it does
 **not** fit this outbox as written. Queuing a photo needs a contract extension
 — a `Blob`-carrying variant of `OutboxEntry`, a size bound on what is worth
 holding on a phone, and a decision about whether a queued photo should count

@@ -66,7 +66,7 @@ Tax (LTAC) grant applications that fund the town's tourism work.
 - **Coordinator Chris** — runs a nonprofit's events; needs volunteers and
   needs to not schedule against the fireworks.
 - **Chamber Director** — administers everything (copy, pages, ferry facts,
-  maps, listings, itineraries, hunts, accounts); files the LTAC application
+  maps, listings, itineraries, accounts); files the LTAC application
   each October; is not a programmer.
 
 ## 2. Scope
@@ -289,17 +289,9 @@ ferry fact (FR-7.4). Parking is one view of the general map CMS (FR-17).
 - FR-9.2 **Deconfliction calendar**: all upcoming events in one date-grouped
   view with busy-date flags, so organizations don't book against each other.
 
-### FR-10 Scavenger hunts
+### FR-10 Scavenger hunts (removed)
 
-- FR-10.1 Self-guided hunts: sequential stops with clue → optional GPS check-in
-  ("assist, not gate") → photo submission; progress survives reloads
-  (localStorage); offline never bricks a hunt.
-- FR-10.2 Photo check-off: the player's photo uploads with GPS coordinates; the
-  server verifies distance against the stop radius → "verified" badge, else
-  honor-system. Player copy is honest that photos go to organizers.
-- FR-10.3 Admin hunt builder (`/admin/hunts`): create/edit hunts and stops,
-  attach a **reference photo** per stop ("what you're looking for," shown to
-  players), review submissions beside the reference with verified badges.
+The scavenger hunt feature was removed on 2026-09-22.
 
 ### FR-11 Business portal
 
@@ -324,7 +316,7 @@ ferry fact (FR-7.4). Parking is one view of the general map CMS (FR-17).
 - FR-13.1 First-run bootstrap creates the admin account; the setup page then
   disappears forever. Admins mint invite codes bound to role + specific
   listings/orgs, with copy-paste onboarding text.
-- FR-13.2 Admin sees/edits everything: all portals, accounts and invites, hunts,
+- FR-13.2 Admin sees/edits everything: all portals, accounts and invites,
   itineraries, listings, the content CMS, the map CMS and parking editor,
   structured ferry facts, the ferry-prediction switch, and visitor insights.
 - FR-13.3 All `/admin` routes are role-gated at the request boundary by
@@ -462,9 +454,9 @@ both have free tiers.
 
 Every external dependency must have a defined degraded mode that keeps the page
 useful and honestly labeled (fallback ferry schedule, "camera offline", missing
-forecast, failed overlay fetch, offline hunt completion, forecast falls back to
-pure heuristic when observations are sparse). Upstream outages must never
-produce a blank or broken page.
+forecast, failed overlay fetch, forecast falls back to pure heuristic when
+observations are sparse). Upstream outages must never produce a blank or broken
+page.
 
 ### NFR-4 Data honesty (a product requirement, not a style choice)
 
@@ -535,9 +527,10 @@ presence, and nothing above the stores knows which backend is active.
   checked-in `db/migrations/`, applied at boot; every write goes through the
   audited zod choke point (`src/lib/db/records.ts`). Seeds in git remain the
   merge baseline.
-- **Disk (`DATA_DIR`, default `.data/`):** images/hunt photos only (until
-  E15); Vercel Blob takes them when `BLOB_READ_WRITE_TOKEN` is set; Upstash
-  Redis for serverless rate limiting.
+- **Disk (`DATA_DIR`, default `.data/`):** images only (until E15; hunt
+  photos were also stored here until the feature was removed on 2026-09-22);
+  Vercel Blob takes them when `BLOB_READ_WRITE_TOKEN` is set; Upstash Redis
+  for serverless rate limiting.
 - A **health probe** (`/api/health`) reports `{ ok, db, storage, time }` and
   returns 503 until Postgres answers; since E15 it does not touch the disk.
   **This now fails closed** — with the disk removed the previous release keeps
@@ -575,7 +568,7 @@ it learns from.
 | `WSDOT_API_KEY` | no | Live ferry data; absent → labeled fallback schedule |
 | `NEXT_PUBLIC_SITE_URL` | **yes** in production | Absolute base URL for feeds/canonical links; **build-time** (inlined into the client bundle at build) |
 | `SETUP_TOKEN` | no | Gates first-run admin bootstrap fail-closed; unused once an admin exists |
-| `DATA_DIR` | disk hosts | Persistent volume path (e.g. `/data`) — images/hunt photos since E05 |
+| `DATA_DIR` | disk hosts | Persistent volume path (e.g. `/data`) — images since E05 (hunt photos removed 2026-09-22) |
 | `FERRY_OBSERVE_TOKEN` | no | Locks `/api/ferry/observe` when an off-site scheduler calls it |
 | `DATABASE_URL` | **yes** (E05) | Render Postgres (internal URL via `fromDatabase`) — the structured-data home; health 503s without it |
 | `BLOB_READ_WRITE_TOKEN` | Phase 2 | Vercel Blob for uploaded images |

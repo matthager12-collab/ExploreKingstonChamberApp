@@ -20,7 +20,7 @@ DNS facts), [SYNDICATION.md](SYNDICATION.md) (outbound feeds / any future email)
 
 ## 1. The persistence seam (why there are two phases)
 
-The app writes all of its mutable state — accounts, portal edits, hunts +
+The app writes all of its mutable state — accounts, portal edits,
 photos, analytics, survey responses, ferry observations, CMS copy/visibility,
 map views/features — outside the code tree. Since E05, **structured data has
 exactly one home: Postgres** — Render Postgres `explore-kingston-db` since
@@ -59,8 +59,7 @@ different `DATA_DIR`.
 |---|---|---|
 | auth users, orgs + invites | dedicated `users` / `orgs` / `invites` tables (E06 — no longer `record` rows under `store='auth-users'`) | — |
 | portal overlays (restaurants, events, charities, needs, lodging, webcams, parking zones, itineraries, ferry-info, boarding-pass, ferry-prediction, site copy/pages, map views/features) | `record` rows keyed `(store, id)`, `deleted` column carries `_deleted` tombstones | — |
-| custom hunts + submissions | `record` (`custom-hunts`, `hunt-submissions`) | — |
-| hunt reference/player photos, map-feature images, event attachments | **private Cloudflare R2** since E15 (`R2_IMAGES_*`); the app proxies reads | **Vercel Blob** (public URL stored on the record) |
+| map-feature images, event attachments | **private Cloudflare R2** since E15 (`R2_IMAGES_*`); the app proxies reads | **Vercel Blob** (public URL stored on the record) |
 | analytics events | `analytics_event` append table | — |
 | LTAC survey responses | `survey_response` append table | — |
 | ferry observations (busyness forecast learning log) | `ferry_observation` append table | — |
@@ -418,7 +417,7 @@ unset. This section is the one-time stand-up.
      `ferry_observation`) are **run-once**: skipped if the target already has
      rows; `--force-append` overrides (which would double them).
    - **Images are not moved** — the importer does no Blob uploads or path
-     rewriting; hunt photos and map images need a separate copy step onto Blob
+     rewriting; map images need a separate copy step onto Blob
      when leaving a disk host.
 
    (`npm run db:migrate` is drizzle-kit's **schema** migrator — step 5 — not
@@ -492,7 +491,7 @@ it backs up is not a backup:
 **Since E05 the backup surface is split: Postgres holds structured data** —
 Render Postgres since 2026-09-02, with Render's daily logical backups and
 point-in-time recovery (Neon's PITR/branching before that) — **and `DATA_DIR`
-holds images/hunt photos** — everything else
+holds images** — everything else
 (code, seed content, brand assets, generated parking overlay) rebuilds from
 git + `npm install`. The JSON-bundle route and `backup-data.sh` still walk the
 whole `DATA_DIR`. `.data/` is gitignored on purpose (photos; pre-E05 disks
