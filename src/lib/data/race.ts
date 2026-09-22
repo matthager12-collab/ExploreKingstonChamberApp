@@ -33,7 +33,6 @@ export const race = {
   intro:
     "Bust out your Halloween costume one more time and outrun the dark. The 5K starts at 3 PM, so there is plenty of time to finish and start celebrating at the After Dark Party at Mike Wallace Park by sunset (about 4:45 PM after the November 1 time change).",
   party: [
-    "Prizes at the finish-line party for top finishers in each age group and for the best costumes.",
     "Local businesses and nonprofits with booths, plus a “Light up the Night” beer garden raising money for the 4th of July fireworks.",
   ],
   fundsNote:
