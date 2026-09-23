@@ -4,9 +4,12 @@
 // PII: audit rows carry registrant IDS only — never a name or email.
 // Name/email are written once, on insert (the sync fetches a Zeffy contact
 // only for a ticket it has not seen); an upsert on an existing row never
-// touches them, so an anonymized row can never be re-filled by a later sync.
+// touches them. The shirt answer IS refreshed on every sync — except on an
+// anonymized row, where it stays null. Before 2026-09-22 it was refreshed
+// there too, and since the retention sweep skips rows already marked
+// anonymized, an erased answer came back for good.
 
-import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 
 import { getDb } from "./client";
 import { importRun } from "./import-schema";
@@ -45,9 +48,10 @@ async function auditRows(
   ids: string[],
   actor: string,
   after?: Record<string, unknown>,
+  db: Pick<ReturnType<typeof getDb>, "insert"> = getDb(),
 ): Promise<void> {
   if (ids.length === 0) return;
-  await getDb()
+  await db
     .insert(audit)
     .values(
       ids.map((id) => ({
@@ -90,7 +94,7 @@ export async function upsertRegistrants(
       set: {
         contactId: sql`coalesce(${raceRegistrant.contactId}, excluded.contact_id)`,
         rateTitle: sql`excluded.rate_title`,
-        shirtNote: sql`excluded.shirt_note`,
+        shirtNote: sql`case when ${raceRegistrant.anonymizedAt} is null then excluded.shirt_note else null end`,
         waiverSigned: sql`excluded.waiver_signed`,
         status: sql`excluded.status`,
         needsReviewReason: sql`excluded.needs_review_reason`,
@@ -115,6 +119,34 @@ export async function cancelRegistrantsForPayment(paymentId: string, actor: stri
     .returning({ id: raceRegistrant.id });
   await auditRows("status-change", rows.map((r) => r.id), actor, { status: "cancelled" });
   return rows.length;
+}
+
+/** Takes rows that were never registrations — add-on items (the shirt) the
+ *  sync once mistook for runners — off the roster. Physical delete, audited
+ *  by id in the same transaction. An anonymized row is cancelled instead:
+ *  deleting it would also delete the mark that keeps it erased. Returns how
+ *  many left the roster. */
+export async function removeAddOnRows(
+  items: { paymentId: string; itemId: string }[],
+  actor: string,
+): Promise<number> {
+  if (items.length === 0) return 0;
+  const reason = "add-on, not a runner";
+  const match = or(...items.map((i) => and(eq(raceRegistrant.paymentId, i.paymentId), eq(raceRegistrant.itemId, i.itemId))));
+  return getDb().transaction(async (tx) => {
+    const deleted = await tx
+      .delete(raceRegistrant)
+      .where(and(isNull(raceRegistrant.anonymizedAt), match))
+      .returning({ id: raceRegistrant.id });
+    await auditRows("delete", deleted.map((r) => r.id), actor, { reason }, tx);
+    const cancelled = await tx
+      .update(raceRegistrant)
+      .set({ status: "cancelled", updatedAt: sql`now()` })
+      .where(and(isNotNull(raceRegistrant.anonymizedAt), eq(raceRegistrant.status, "active"), match))
+      .returning({ id: raceRegistrant.id });
+    await auditRows("status-change", cancelled.map((r) => r.id), actor, { status: "cancelled", reason }, tx);
+    return deleted.length + cancelled.length;
+  });
 }
 
 /** Everything the admin roster shows. The ONLY read that returns emails. */

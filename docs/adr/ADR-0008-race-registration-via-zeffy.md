@@ -45,6 +45,16 @@ Mat chose to keep registrants on the Chamber's page instead of sending them to z
 
 **Rejected:** Zeffy's pop-up button, which loads Zeffy's script into the Chamber's page — third-party code running in this origin, reachable to the DOM and cookies. An auto-loading frame, which would run Zeffy's trackers for every visitor to `/race`, including the ones who never register.
 
+## Amendment 2 — three sync defects fixed (2026-09-22)
+
+Found by the outside review of the close-out and by reading Zeffy's API spec; each reproduced before it was fixed.
+
+- **An erased shirt answer came back.** Anonymization nulled it, the next sync wrote it back, and the row stayed marked anonymized, so the retention sweep never touched it again. The upsert now leaves the shirt answer null on an anonymized row.
+- **A question that merely started with the shirt question's words was kept.** The match is now on the whole question text, and `race.ts` carries the live wording. Case, spacing and curly quotes are ignored; nothing else.
+- **The $15 shirt became a runner.** Zeffy reports add-ons as ordinary `ticket` items — its only item types are donation, ticket and additional donation — and marks them only on the campaign's price list (`is_add_on`). The sync now reads that list once per run, counts add-ons on their order instead ("Order: 2 × ExploreKingston exclusive t-shirt", beside the sizing answer, Mat's choice), and deletes any add-on rows an earlier sync stored, with an ids-only audit row.
+
+Decision 3's "the mapped t-shirt answer" now also carries the order's add-on count. No schema change.
+
 ## Amendment 3 — privacy notice 2026-10 (2026-09-22)
 
 The public privacy page's short version said "no third-party analytics or ad tech" without exception. After a visitor presses Register now, Zeffy's cookies, analytics and session recording run inside the embedded form, so the page now names that exception and a new "Registering for the 5K" section says what loads when, and links Zeffy's own privacy policy. `PRIVACY_NOTICE_VERSION` is bumped to `2026-10` on Mat's decision, following the Chamber's precedent of bumping for a new outside party; the side effect is that visitors who allowed location are asked again.

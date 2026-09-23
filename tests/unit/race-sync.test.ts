@@ -8,7 +8,7 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { raceRegistrant } from "@/lib/db/race-schema";
-import { listRegistrants } from "@/lib/db/race-registrants";
+import { anonymizeAllRegistrants, listCheckinRoster, listRegistrants, upsertRegistrants } from "@/lib/db/race-registrants";
 import { audit } from "@/lib/db/schema";
 import { __resetRaceSyncForTests, mapAnswers, runRaceSync } from "@/lib/race/sync";
 import type { ZeffyClient, ZeffyContact, ZeffyPayment } from "@/lib/race/zeffy-client";
@@ -54,9 +54,23 @@ function ticket(id: string, contactId: string | null, questions: ZeffyPayment["i
   return { id, type: "ticket", rate_id: "r1", rate_title: "Early Bird Runner Registration", contact_id: contactId, questions };
 }
 
+/** The campaign's price list. Only r-shirt is an add-on (the $15 shirt). */
+const RATES = [
+  { id: "r1", title: "Early Bird Runner Registration", is_add_on: false },
+  { id: "r-shirt", title: "ExploreKingston exclusive t-shirt", is_add_on: true },
+];
+
+function shirt(id: string) {
+  return { id, type: "ticket", rate_id: "r-shirt", rate_title: "ExploreKingston exclusive t-shirt", contact_id: null, questions: [] };
+}
+
 function fakeClient(payments: ZeffyPayment[], contacts: Record<string, ZeffyContact>, deleted = new Set<string>()) {
-  const calls = { contacts: 0, lists: 0 };
+  const calls = { contacts: 0, lists: 0, rates: 0 };
   const client: ZeffyClient = {
+    async getCampaignRates() {
+      calls.rates++;
+      return RATES;
+    },
     async listSucceededPayments() {
       calls.lists++;
       return payments.filter((p) => !deleted.has(p.id) && p.status === "succeeded");
@@ -215,5 +229,179 @@ describe("runRaceSync", () => {
     clock += 31_000;
     expect((await runRaceSync("webhook", { client, config: CONFIG, questions: QUESTIONS, now })).ok).toBe(true);
     expect(calls.lists).toBe(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Three defects fixed 2026-09-22 after the close-out review. Each case below
+// failed against the code as merged in PR #227.
+// ---------------------------------------------------------------------------
+
+describe("mapAnswers matches the whole question, not its opening words", () => {
+  const LIVE =
+    "If adding ExploreKingston t-shirt(s), note desired sizing otherwise you'll be given first-come/first-served choice of remaining options";
+
+  it("ignores a question that merely starts with the configured one", () => {
+    // The old prefix match stored this answer — an emergency contact — in the
+    // shirt column, where the volunteer check-in screen shows it.
+    const mapped = mapAnswers(
+      [{ question: `${LIVE}, and who is your emergency contact?`, type: "text", answer: `${CANARY_NAME} ${CANARY_PHONE}` }],
+      { shirt: LIVE, waiver: null },
+    );
+    expect(mapped.shirtNote).toBeNull();
+  });
+
+  it("still matches the live wording across case, spacing and curly quotes", () => {
+    const asZeffySendsIt = "if adding  ExploreKingston t-shirt(s), note desired sizing otherwise you’ll be given first-come/first-served choice of remaining options ";
+    expect(mapAnswers([{ question: asZeffySendsIt, type: "text", answer: "M and L" }], { shirt: LIVE, waiver: null }).shirtNote).toBe(
+      "M and L",
+    );
+  });
+});
+
+describe("an erased runner stays erased", () => {
+  it("a sync after anonymization does not write the shirt answer back", async () => {
+    await tdb.db.delete(raceRegistrant);
+    const payments = [payment("p-anon", [ticket("i-anon", "c-ann")])];
+    const { client } = fakeClient(payments, CONTACTS);
+    await runRaceSync("manual", { client, config: CONFIG, questions: QUESTIONS });
+    expect((await listRegistrants())[0].shirtNote).toBe("L");
+
+    await anonymizeAllRegistrants("vitest");
+    __resetRaceSyncForTests();
+    await runRaceSync("manual", { client, config: CONFIG, questions: QUESTIONS });
+
+    const [row] = await listRegistrants();
+    expect(row.anonymizedAt).not.toBeNull();
+    expect(row.firstName).toBeNull();
+    expect(row.email).toBeNull();
+    // The retention sweep skips rows already marked anonymized, so anything
+    // written back here would stay forever.
+    expect(row.shirtNote).toBeNull();
+  });
+});
+
+describe("add-ons are not runners", () => {
+  it("a shirt bought with a ticket is counted on the order, not registered as a second runner", async () => {
+    await tdb.db.delete(raceRegistrant);
+    const payments = [payment("p-shirts", [ticket("i-runner", "c-ann"), shirt("i-shirt-1"), shirt("i-shirt-2")])];
+    const { client, calls } = fakeClient(payments, CONTACTS);
+    const result = await runRaceSync("manual", { client, config: CONFIG, questions: QUESTIONS });
+    expect(result.ok && result.stats.tickets).toBe(1);
+    expect(calls.rates).toBe(1);
+
+    const rows = await listRegistrants();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].firstName).toBe("Ann");
+    expect(rows[0].rateTitle).toBe("Early Bird Runner Registration");
+    expect(rows[0].needsReviewReason).toBeNull();
+    // "Order:" because a family order copies this to every runner on it — it
+    // is the order's total, not each runner's.
+    expect(rows[0].shirtNote).toBe("Order: 2 × ExploreKingston exclusive t-shirt · L");
+  });
+
+  it("removes shirt rows an earlier sync wrongly added as runners, and audits it by id only", async () => {
+    await tdb.db.delete(raceRegistrant);
+    // What the sync as merged in PR #227 wrote for a runner + shirt order.
+    await upsertRegistrants(
+      [
+        {
+          paymentId: "p-old", itemId: "i-old-runner", contactId: "c-bob", firstName: "Bob", lastName: "Runner",
+          email: "bob@example.test", rateTitle: "Early Bird Runner Registration", shirtNote: "L", waiverSigned: null,
+          status: "active", needsReviewReason: null, registeredAt: new Date(1_789_600_000 * 1000),
+        },
+        {
+          paymentId: "p-old", itemId: "i-old-shirt", contactId: null, firstName: "Buyer", lastName: "Person",
+          email: "buyer@example.test", rateTitle: "ExploreKingston exclusive t-shirt", shirtNote: "L", waiverSigned: null,
+          status: "active", needsReviewReason: "no-contact-id", registeredAt: new Date(1_789_600_000 * 1000),
+        },
+      ],
+      "vitest",
+    );
+    const phantomId = (await listRegistrants()).find((r) => r.itemId === "i-old-shirt")!.id;
+
+    const payments = [payment("p-old", [ticket("i-old-runner", "c-bob"), shirt("i-old-shirt")])];
+    const { client } = fakeClient(payments, CONTACTS);
+    const result = await runRaceSync("manual", { client, config: CONFIG, questions: QUESTIONS });
+
+    const rows = await listRegistrants();
+    expect(rows.map((r) => r.itemId)).toEqual(["i-old-runner"]);
+    expect(result.ok && result.stats.removed).toBe(1);
+    const removal = (await tdb.db.select().from(audit).where(eq(audit.recordId, phantomId))).find(
+      (a) => a.action === "delete",
+    );
+    expect(removal).toBeDefined();
+    expect(JSON.stringify(removal!.after)).not.toMatch(/Buyer|example\.test/);
+  });
+
+  it("leaves an erased shirt row in place, so its details cannot come back", async () => {
+    // Outside review, 2026-09-22: deleting an anonymized row also deletes the
+    // mark that keeps it erased. A later sync that misread the shirt would
+    // then insert it afresh, buyer's name and all.
+    await tdb.db.delete(raceRegistrant);
+    await upsertRegistrants(
+      [
+        {
+          paymentId: "p-old", itemId: "i-old-shirt", contactId: null, firstName: "Buyer", lastName: "Person",
+          email: "buyer@example.test", rateTitle: "ExploreKingston exclusive t-shirt", shirtNote: "L", waiverSigned: null,
+          status: "active", needsReviewReason: "no-contact-id", registeredAt: new Date(1_789_600_000 * 1000),
+        },
+      ],
+      "vitest",
+    );
+    await anonymizeAllRegistrants("vitest");
+
+    const { client } = fakeClient([payment("p-old", [shirt("i-old-shirt")])], CONTACTS);
+    const result = await runRaceSync("manual", { client, config: CONFIG, questions: QUESTIONS });
+
+    // Kept, but off the roster: a "delete my data" request can erase a row
+    // before race day, and volunteers must not see a nameless shirt runner.
+    expect(result.ok && result.stats.removed).toBe(1);
+    const kept = (await listRegistrants()).find((r) => r.itemId === "i-old-shirt");
+    expect(kept?.anonymizedAt).not.toBeNull();
+    expect(kept?.firstName).toBeNull();
+    expect(kept?.status).toBe("cancelled");
+    expect(await listCheckinRoster()).toHaveLength(0);
+  });
+
+  it("deletes only the named add-on row, whatever its ids look like", async () => {
+    // Security negative: Zeffy's ids reach a DELETE. Quote-and-OR shaped ids
+    // must stay data, and a runner on the same payment must survive.
+    await tdb.db.delete(raceRegistrant);
+    const pay = "p-x' or '1'='1";
+    const base = {
+      contactId: null, firstName: "Buyer", lastName: "Person", email: "buyer@example.test", shirtNote: null,
+      waiverSigned: null, status: "active" as const, needsReviewReason: null, registeredAt: new Date(1_789_600_000 * 1000),
+    };
+    await upsertRegistrants(
+      [
+        { ...base, paymentId: pay, itemId: "i-run'); delete from race_registrant; --", rateTitle: "Early Bird Runner Registration" },
+        { ...base, paymentId: pay, itemId: "i-shirt' or 1=1 --", rateTitle: "ExploreKingston exclusive t-shirt" },
+        { ...base, paymentId: "p-other", itemId: "i-other", rateTitle: "Early Bird Runner Registration" },
+      ],
+      "vitest",
+    );
+    const { client } = fakeClient(
+      [payment(pay, [ticket("i-run'); delete from race_registrant; --", null), shirt("i-shirt' or 1=1 --")])],
+      CONTACTS,
+    );
+    const result = await runRaceSync("manual", { client, config: CONFIG, questions: QUESTIONS });
+
+    expect(result.ok && result.stats.removed).toBe(1);
+    expect((await listRegistrants()).map((r) => r.itemId).sort()).toEqual(
+      ["i-other", "i-run'); delete from race_registrant; --"].sort(),
+    );
+  });
+
+  it("stops before writing anything when Zeffy sends no price list", async () => {
+    // Without the rates nothing marks the shirt as an add-on, so every shirt
+    // would be stored as a runner again. Every campaign with tickets has rates.
+    await tdb.db.delete(raceRegistrant);
+    const payments = [payment("p-shirts", [ticket("i-runner", "c-ann"), shirt("i-shirt-1")])];
+    const { client } = fakeClient(payments, CONTACTS);
+    client.getCampaignRates = async () => [];
+
+    await expect(runRaceSync("manual", { client, config: CONFIG, questions: QUESTIONS })).rejects.toThrow(/price list/);
+    expect(await listRegistrants()).toHaveLength(0);
   });
 });
