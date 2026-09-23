@@ -236,10 +236,20 @@ describe("(e) trustedAutoPublish bypass — /api/portal/org saveEvent", () => {
   });
 });
 
+/** A date `days` from the real clock, as YYYY-MM-DD. The public feed only
+ *  returns events that have not ended, so a hardcoded date expires: this
+ *  suite's suggestion was "2026-09-20" and (c) started failing on 2026-09-21,
+ *  while (b)'s feed check — "the pending suggestion is NOT in the feed" — kept
+ *  passing for the wrong reason, because the date filter hid it either way. */
+function daysFromNow(days: number): string {
+  return new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+}
+
 describe("(a)-(c) anonymous suggest intake — always pending, no bypass", () => {
   const SUGGESTION = {
     title: "Beach Bonfire Storytelling Night",
-    start: "2026-09-20T19:00",
+    // Always a month ahead, so (b) and (c) test moderation, not the calendar.
+    start: `${daysFromNow(30)}T19:00`,
     venue: "Arness Park",
     description: "Stories by the fire.",
     eventContact: "Firelight Arts · info@firelight.test",
