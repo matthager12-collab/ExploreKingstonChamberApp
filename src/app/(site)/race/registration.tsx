@@ -12,11 +12,14 @@
 // on its own, so the frame and the zeffy.com link cannot drift onto two
 // different campaigns.
 //
-// No sandbox attribute: Zeffy's checkout runs Stripe, 3-D Secure and wallet
-// sheets inside the frame, and a sandbox that broke one of them would only
-// show up on a real purchase. Browsers already stop a cross-origin frame from
-// navigating this page unless the visitor clicks inside it first.
+// No sandbox attribute: Zeffy's checkout runs Stripe and 3-D Secure inside the
+// frame, and a sandbox that broke either would only show up on a real
+// purchase. Browsers already stop a cross-origin frame from navigating this
+// page unless the visitor clicks inside it first. No allow="payment" either:
+// Zeffy shows no Apple Pay or Google Pay on embedded forms, so the site keeps
+// payment=() in its headers.
 
+import Link from "next/link";
 import { useRef, useState } from "react";
 
 import { OutboundLink } from "@/components/tracker";
@@ -73,7 +76,10 @@ export function RaceRegistration({ linkUrl }: { linkUrl?: string }) {
       )}
       <p className="mt-2 text-sm text-ink">
         The form is Zeffy&apos;s and opens on this page. Zeffy runs its own cookies, analytics and
-        session recording. This site runs none.
+        session recording. This site runs none.{" "}
+        <Link href="/privacy#race-registration" className="underline">
+          How the privacy notice covers it
+        </Link>
       </p>
       <p className="mt-1 text-sm">
         <OutboundLink href={linkUrl} className="font-medium text-tide-deep underline">
@@ -91,7 +97,6 @@ export function RaceRegistration({ linkUrl }: { linkUrl?: string }) {
             ref={frameRef}
             src={embedUrl}
             title="Register for the 5K on Zeffy"
-            allow="payment"
             // Focus moves in once, when the form has actually arrived, so a
             // keyboard or screen-reader user is not dropped on a blank box.
             onLoad={() => {

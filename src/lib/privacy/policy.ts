@@ -26,7 +26,7 @@
  * E16/R3 membership-records tense flip relies on exactly that behavior.
  * Format: "YYYY-MM" of the notice revision.
  */
-export const PRIVACY_NOTICE_VERSION = "2026-09";
+export const PRIVACY_NOTICE_VERSION = "2026-10";
 
 export interface PrivacyNoticeChange {
   version: string;
@@ -36,6 +36,12 @@ export interface PrivacyNoticeChange {
 
 /** Rendered on /privacy; newest first. */
 export const PRIVACY_NOTICE_CHANGELOG: PrivacyNoticeChange[] = [
+  {
+    version: "2026-10",
+    date: "2026-09-22",
+    summary:
+      "The 5K race page can now show the registration form of Zeffy, the Chamber's ticketing provider, inside the page. Nothing from Zeffy loads until you press Register now; once you do, Zeffy's own cookies, analytics and session recording run inside that form, and what you type there goes to Zeffy under its own privacy policy. The short version's \"no third-party analytics\" now names that one exception. Bumped rather than edited quietly because an outside party's code can now run on a page of this site.",
+  },
   {
     version: "2026-09",
     date: "2026-08-23",

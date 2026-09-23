@@ -16,7 +16,7 @@ import PrivacyPage from "@/app/(site)/privacy/page";
 // markup, same assertions, plus the new slice-4 ones below.
 import { AccessibilityStatement } from "@/app/(site)/accessibility/statement";
 import { SiteFooter } from "@/components/site-footer";
-import { PRIVACY_NOTICE_VERSION, RETENTION_POLICY } from "@/lib/privacy/policy";
+import { PRIVACY_NOTICE_CHANGELOG, PRIVACY_NOTICE_VERSION, RETENTION_POLICY } from "@/lib/privacy/policy";
 
 describe("privacy page", () => {
   const html = renderToStaticMarkup(createElement(PrivacyPage));
@@ -67,6 +67,25 @@ describe("privacy page", () => {
     expect(html.toLowerCase()).toContain("scavenger hunt");
     expect(html).toContain("precise");
     expect(html).toContain("12 months");
+  });
+
+  it("does NOT overclaim: Zeffy's trackers inside the 5K registration form are disclosed", () => {
+    // /race embeds Zeffy's registration form once a visitor presses Register
+    // now, and Zeffy's page runs its own cookies, analytics and session
+    // recording. The short version's "no third-party analytics or ad tech"
+    // must carry that exception, and the page must say what Zeffy runs and
+    // that nothing loads before the button (ADR-0008 amendment 1).
+    const text = html.replace(/<[^>]+>/g, " ").replace(/&rsquo;/g, "’").replace(/\s+/g, " ");
+    expect(text).toMatch(/no third-party analytics or ad tech[^.]*except/i);
+    expect(text).toContain("Zeffy");
+    expect(text).toMatch(/session recording/i);
+    expect(text).toMatch(/nothing from Zeffy loads until you press/i);
+  });
+
+  it("the newest changelog entry is the current version and names the change", () => {
+    expect(PRIVACY_NOTICE_CHANGELOG[0].version).toBe(PRIVACY_NOTICE_VERSION);
+    expect(PRIVACY_NOTICE_VERSION).toBe("2026-10");
+    expect(PRIVACY_NOTICE_CHANGELOG[0].summary).toContain("Zeffy");
   });
 });
 

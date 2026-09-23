@@ -55,6 +55,14 @@ Anyone can type anyone else's. Fulfilment is admin-operated and a person
 reviews matches before acting, which is the only reason an unverified key is
 acceptable here — **never automate deletion off it** (DEC-005).
 
+**A third party runs inside /race after a click (notice 2026-10).** The 5K
+registration form is Zeffy's, embedded on `/race` and created only when a
+visitor presses Register now. Zeffy's page then runs its own cookies,
+analytics and session recording; what the visitor types goes to Zeffy under
+its privacy policy. The app keeps only the `race_registrant` fields above.
+The public notice names this as the one exception to "no third-party
+analytics" (ADR-0008 amendments 1 and 3).
+
 **A third party now sees comment text.** The rudeness guardrail sends the
 comment — and only the comment, never the name or the address — to Anthropic's
 API for classification and, where the wording is abusive, a neutral rewrite.
