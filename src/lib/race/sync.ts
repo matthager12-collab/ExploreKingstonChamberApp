@@ -14,9 +14,9 @@
 import { race } from "@/lib/data/race";
 import {
   cancelRegistrantsForPayment,
-  deleteRegistrantsForItems,
   listExistingRegistrants,
   recordRaceSyncRun,
+  removeAddOnRows,
   upsertRegistrants,
   type ExistingRegistrant,
   type RegistrantInput,
@@ -286,11 +286,12 @@ async function doSync(
     addOnRateIds,
   );
 
-  // Add-on rows the sync stored as runners before 2026-09-22: delete them.
+  // Add-on rows the sync stored as runners before 2026-09-22: take them off
+  // the roster.
   // ponytail: only rows whose payment Zeffy still lists are found this way;
   // a phantom on a payment since deleted in Zeffy is cancelled below instead.
   const stored = new Set(existing.map((r) => `${r.paymentId}:${r.itemId}`));
-  const removed = await deleteRegistrantsForItems(
+  const removed = await removeAddOnRows(
     addOnItems.filter((i) => stored.has(`${i.paymentId}:${i.itemId}`)),
     SYNC_ACTOR,
   );

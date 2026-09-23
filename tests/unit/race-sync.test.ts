@@ -8,7 +8,7 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { raceRegistrant } from "@/lib/db/race-schema";
-import { anonymizeAllRegistrants, listRegistrants, upsertRegistrants } from "@/lib/db/race-registrants";
+import { anonymizeAllRegistrants, listCheckinRoster, listRegistrants, upsertRegistrants } from "@/lib/db/race-registrants";
 import { audit } from "@/lib/db/schema";
 import { __resetRaceSyncForTests, mapAnswers, runRaceSync } from "@/lib/race/sync";
 import type { ZeffyClient, ZeffyContact, ZeffyPayment } from "@/lib/race/zeffy-client";
@@ -354,10 +354,14 @@ describe("add-ons are not runners", () => {
     const { client } = fakeClient([payment("p-old", [shirt("i-old-shirt")])], CONTACTS);
     const result = await runRaceSync("manual", { client, config: CONFIG, questions: QUESTIONS });
 
-    expect(result.ok && result.stats.removed).toBe(0);
+    // Kept, but off the roster: a "delete my data" request can erase a row
+    // before race day, and volunteers must not see a nameless shirt runner.
+    expect(result.ok && result.stats.removed).toBe(1);
     const kept = (await listRegistrants()).find((r) => r.itemId === "i-old-shirt");
     expect(kept?.anonymizedAt).not.toBeNull();
     expect(kept?.firstName).toBeNull();
+    expect(kept?.status).toBe("cancelled");
+    expect(await listCheckinRoster()).toHaveLength(0);
   });
 
   it("deletes only the named add-on row, whatever its ids look like", async () => {

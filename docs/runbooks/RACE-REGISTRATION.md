@@ -63,7 +63,7 @@ Until the flip, production relies on Sync now — which is fine.
 | Webhook deliveries fail with 503 | `ZEFFY_WEBHOOK_SECRET` is not set on that service |
 | Every multi-ticket order shows "guest" rows | Per-attendee details are off on the campaign (§1 step 1) |
 | Shirt column empty | The question title in `race.ts` no longer matches the Zeffy question word for word — copy the new wording in |
-| A shirt shows up as a runner | The shirt rate is not marked as an add-on in Zeffy. Mark it as one; the next sync removes the stray row. A row already anonymized stays, on purpose |
+| A shirt shows up as a runner | The shirt rate is not marked as an add-on in Zeffy. Mark it as one; the next sync removes the stray row. A row already anonymized is cancelled instead of deleted, so it stays erased |
 | "Sync now" fails every time, and the log says "Zeffy sent no price list" | Zeffy's campaign answer came back without its rates. The sync stops rather than store every shirt as a runner. Nothing was written; check the campaign id, then Zeffy's API notes |
 | Volunteers see "That link doesn't work" | Expired, revoked, or replaced by a newer mint — send the current link |
 | Register now shows an empty box | `registrationUrl` in `race.ts` is not the campaign's ticketing link on `https://www.zeffy.com`. If it is not a Zeffy ticketing link at all, the page shows a plain link instead of the button |

@@ -121,28 +121,31 @@ export async function cancelRegistrantsForPayment(paymentId: string, actor: stri
   return rows.length;
 }
 
-/** Removes rows that were never registrations — add-on items (the shirt)
- *  that the sync once mistook for runners. Physical delete; the audit row
- *  carries the id only, and lands in the same transaction. An anonymized row
- *  is left alone: deleting it would also delete the mark that keeps it
- *  erased. Returns how many went. */
-export async function deleteRegistrantsForItems(
+/** Takes rows that were never registrations — add-on items (the shirt) the
+ *  sync once mistook for runners — off the roster. Physical delete, audited
+ *  by id in the same transaction. An anonymized row is cancelled instead:
+ *  deleting it would also delete the mark that keeps it erased. Returns how
+ *  many left the roster. */
+export async function removeAddOnRows(
   items: { paymentId: string; itemId: string }[],
   actor: string,
 ): Promise<number> {
   if (items.length === 0) return 0;
+  const reason = "add-on, not a runner";
+  const match = or(...items.map((i) => and(eq(raceRegistrant.paymentId, i.paymentId), eq(raceRegistrant.itemId, i.itemId))));
   return getDb().transaction(async (tx) => {
-    const rows = await tx
+    const deleted = await tx
       .delete(raceRegistrant)
-      .where(
-        and(
-          isNull(raceRegistrant.anonymizedAt),
-          or(...items.map((i) => and(eq(raceRegistrant.paymentId, i.paymentId), eq(raceRegistrant.itemId, i.itemId)))),
-        ),
-      )
+      .where(and(isNull(raceRegistrant.anonymizedAt), match))
       .returning({ id: raceRegistrant.id });
-    await auditRows("delete", rows.map((r) => r.id), actor, { reason: "add-on, not a runner" }, tx);
-    return rows.length;
+    await auditRows("delete", deleted.map((r) => r.id), actor, { reason }, tx);
+    const cancelled = await tx
+      .update(raceRegistrant)
+      .set({ status: "cancelled", updatedAt: sql`now()` })
+      .where(and(isNotNull(raceRegistrant.anonymizedAt), eq(raceRegistrant.status, "active"), match))
+      .returning({ id: raceRegistrant.id });
+    await auditRows("status-change", cancelled.map((r) => r.id), actor, { status: "cancelled", reason }, tx);
+    return deleted.length + cancelled.length;
   });
 }
 
