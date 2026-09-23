@@ -27,7 +27,11 @@ export default function PrivacyPage() {
       <Section title="The short version">
         <Card>
           <ul className="space-y-2 text-sm text-ink-soft">
-            <li>No accounts, no tracking cookies, no third-party analytics or ad tech.</li>
+            <li>
+              No accounts, no tracking cookies, no third-party analytics or ad tech &mdash; except
+              inside the 5K registration form, which is Zeffy&rsquo;s and only loads if you ask for
+              it (<a href="#race-registration" className="underline">see below</a>).
+            </li>
             <li>
               We never collect consumer health data. For <strong>visitor analytics</strong>, when
               you use the &ldquo;what&rsquo;s open near me&rdquo; feature we store only the
@@ -174,7 +178,8 @@ export default function PrivacyPage() {
             rewritten in neutral language and <em>only the rewrite is saved</em> — your original
             wording never reaches our database. Your name and email are <strong>never</strong> sent
             to that service; only the comment text is. Nothing else you do on this site is sent
-            anywhere like this.
+            anywhere like this. The one outside form on the site, the 5K registration, is
+            Zeffy&rsquo;s own and is described next.
           </p>
           <p className="mt-3 text-sm text-ink-soft">
             One gap we can&rsquo;t close by design, so we will be plain about it instead:{" "}
@@ -206,6 +211,37 @@ export default function PrivacyPage() {
               the only way we can locate your entry.
             </li>
           </ul>
+        </Card>
+      </Section>
+
+      <Section title="Registering for the 5K" id="race-registration">
+        <Card>
+          <p className="text-sm text-ink-soft">
+            The Chamber&rsquo;s 5K takes registration and payment through <strong>Zeffy</strong>, a
+            free ticketing platform for nonprofits. The race page can show Zeffy&rsquo;s form, but{" "}
+            <strong>nothing from Zeffy loads until you press Register now</strong>. Reading the page
+            sends Zeffy nothing.
+          </p>
+          <p className="mt-3 text-sm text-ink-soft">
+            Once you press it, the form is Zeffy&rsquo;s, running inside our page.{" "}
+            <strong>Zeffy sets its own cookies and runs its own analytics and session recording</strong>{" "}
+            there. Everything you type into it, your card included, goes to Zeffy, not to us, under{" "}
+            <a
+              href="https://support.zeffy.com/data-privacy-policy-5tndw"
+              className="underline"
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              Zeffy&rsquo;s privacy policy
+            </a>
+            . The same is true if you open the form on zeffy.com instead.
+          </p>
+          <p className="mt-3 text-sm text-ink-soft">
+            From Zeffy, this site keeps only what the race needs: each runner&rsquo;s name and
+            email, their ticket type, and the order&rsquo;s t-shirt sizing and shirt count. Any other
+            answer on Zeffy&rsquo;s form is dropped before it reaches our database. We keep the rest
+            as the table above says, and anonymize it 45 days after race day.
+          </p>
         </Card>
       </Section>
 

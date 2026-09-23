@@ -30,6 +30,8 @@ describe("RaceRegistration", () => {
     // The escape hatch stays: some phones handle a full page better than a frame.
     expect(screen.getByRole("link", { name: /zeffy\.com/i })).toHaveAttribute("href", LINK);
     expect(screen.getByText(/session recording/i)).toBeInTheDocument();
+    // The notice points at the full explanation on the privacy page.
+    expect(screen.getByRole("link", { name: /privacy/i })).toHaveAttribute("href", "/privacy#race-registration");
   });
 
   it("loads Zeffy's form in place when the button is pressed", () => {
@@ -41,9 +43,8 @@ describe("RaceRegistration", () => {
     expect(frame).toHaveAttribute("src", EMBED);
     // A frame needs an accessible name; screen readers announce it.
     expect(frame!.getAttribute("title")).toMatch(/register/i);
-    // Apple Pay / Google Pay inside the frame. Pairs with the
-    // Permissions-Policy delegation in next.config.ts.
-    expect(frame).toHaveAttribute("allow", "payment");
+    // No payment delegation: Zeffy shows no wallets on embedded forms.
+    expect(frame).not.toHaveAttribute("allow");
     expect(screen.queryByRole("button", { name: /register/i })).toBeNull();
   });
 

@@ -12,10 +12,9 @@ const EXPECTED: Array<[name: string, value: string]> = [
   ["x-content-type-options", "nosniff"],
   ["x-frame-options", "SAMEORIGIN"],
   ["referrer-policy", "strict-origin-when-cross-origin"],
-  // payment delegated to Zeffy's registration frame on /race; `self` is
-  // required to delegate at all (ADR-0008 amendment 1, unit half in
-  // tests/unit/security-headers.test.ts).
-  ["permissions-policy", 'geolocation=(self), camera=(), microphone=(), payment=(self "https://www.zeffy.com")'],
+  // payment stays off: Zeffy shows no wallets on embedded forms, so the
+  // brief delegation to its frame was reverted (ADR-0008 amendment 1).
+  ["permissions-policy", "geolocation=(self), camera=(), microphone=(), payment=()"],
 ];
 
 describe("security headers on served responses", () => {
