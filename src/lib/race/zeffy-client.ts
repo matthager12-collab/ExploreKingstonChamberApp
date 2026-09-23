@@ -67,6 +67,21 @@ const contactSchema = z.object({
 });
 export type ZeffyContact = z.infer<typeof contactSchema>;
 
+const rateSchema = z.object({
+  id: z.string(),
+  title: z.string().nullable().optional(),
+  /** "Add-ons can only be purchased alongside at least one regular ticket"
+   *  — the race's $15 shirt. Missing means not an add-on. */
+  is_add_on: z.boolean().nullable().optional(),
+});
+export type ZeffyRate = z.infer<typeof rateSchema>;
+
+/** GET /campaigns/{id}. Rates are only included on the single-campaign read. */
+const campaignSchema = z.object({
+  id: z.string(),
+  rates: z.array(rateSchema).nullable().optional(),
+});
+
 export interface ZeffyConfig {
   apiKey: string;
   campaignId: string;
@@ -96,6 +111,9 @@ export interface ZeffyClient {
   /** Null on 404 — Zeffy's "this payment was deleted". */
   getPayment(id: string): Promise<ZeffyPayment | null>;
   getContact(id: string): Promise<ZeffyContact | null>;
+  /** The campaign's price list. Payments report add-ons (the shirt) as
+   *  ordinary `ticket` items; only the rate says which ones they are. */
+  getCampaignRates(campaignId: string): Promise<ZeffyRate[]>;
 }
 
 type FetchLike = typeof fetch;
@@ -154,6 +172,11 @@ export function createZeffyClient(
     async getContact(id) {
       const raw = await get(`/contacts/${encodeURIComponent(id)}`);
       return raw === null ? null : contactSchema.parse(raw);
+    },
+    async getCampaignRates(campaignId) {
+      const raw = await get(`/campaigns/${encodeURIComponent(campaignId)}`);
+      if (raw === null) throw new ZeffyApiError(`Zeffy /campaigns answered 404`, 404);
+      return campaignSchema.parse(raw).rates ?? [];
     },
   };
 }

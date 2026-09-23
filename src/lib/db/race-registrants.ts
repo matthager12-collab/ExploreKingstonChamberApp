@@ -4,9 +4,12 @@
 // PII: audit rows carry registrant IDS only — never a name or email.
 // Name/email are written once, on insert (the sync fetches a Zeffy contact
 // only for a ticket it has not seen); an upsert on an existing row never
-// touches them, so an anonymized row can never be re-filled by a later sync.
+// touches them. The shirt answer IS refreshed on every sync — except on an
+// anonymized row, where it stays null. Before 2026-09-22 it was refreshed
+// there too, and since the retention sweep skips rows already marked
+// anonymized, an erased answer came back for good.
 
-import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 
 import { getDb } from "./client";
 import { importRun } from "./import-schema";
@@ -90,7 +93,7 @@ export async function upsertRegistrants(
       set: {
         contactId: sql`coalesce(${raceRegistrant.contactId}, excluded.contact_id)`,
         rateTitle: sql`excluded.rate_title`,
-        shirtNote: sql`excluded.shirt_note`,
+        shirtNote: sql`case when ${raceRegistrant.anonymizedAt} is null then excluded.shirt_note else null end`,
         waiverSigned: sql`excluded.waiver_signed`,
         status: sql`excluded.status`,
         needsReviewReason: sql`excluded.needs_review_reason`,
@@ -114,6 +117,22 @@ export async function cancelRegistrantsForPayment(paymentId: string, actor: stri
     .where(and(eq(raceRegistrant.paymentId, paymentId), eq(raceRegistrant.status, "active")))
     .returning({ id: raceRegistrant.id });
   await auditRows("status-change", rows.map((r) => r.id), actor, { status: "cancelled" });
+  return rows.length;
+}
+
+/** Removes rows that were never registrations — add-on items (the shirt)
+ *  that the sync once mistook for runners. Physical delete; the audit row
+ *  carries the id only. Returns how many went. */
+export async function deleteRegistrantsForItems(
+  items: { paymentId: string; itemId: string }[],
+  actor: string,
+): Promise<number> {
+  if (items.length === 0) return 0;
+  const rows = await getDb()
+    .delete(raceRegistrant)
+    .where(or(...items.map((i) => and(eq(raceRegistrant.paymentId, i.paymentId), eq(raceRegistrant.itemId, i.itemId)))))
+    .returning({ id: raceRegistrant.id });
+  await auditRows("delete", rows.map((r) => r.id), actor, { reason: "add-on, not a runner" });
   return rows.length;
 }
 
