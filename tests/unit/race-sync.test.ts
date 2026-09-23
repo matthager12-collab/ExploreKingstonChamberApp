@@ -360,6 +360,35 @@ describe("add-ons are not runners", () => {
     expect(kept?.firstName).toBeNull();
   });
 
+  it("deletes only the named add-on row, whatever its ids look like", async () => {
+    // Security negative: Zeffy's ids reach a DELETE. Quote-and-OR shaped ids
+    // must stay data, and a runner on the same payment must survive.
+    await tdb.db.delete(raceRegistrant);
+    const pay = "p-x' or '1'='1";
+    const base = {
+      contactId: null, firstName: "Buyer", lastName: "Person", email: "buyer@example.test", shirtNote: null,
+      waiverSigned: null, status: "active" as const, needsReviewReason: null, registeredAt: new Date(1_789_600_000 * 1000),
+    };
+    await upsertRegistrants(
+      [
+        { ...base, paymentId: pay, itemId: "i-run'); delete from race_registrant; --", rateTitle: "Early Bird Runner Registration" },
+        { ...base, paymentId: pay, itemId: "i-shirt' or 1=1 --", rateTitle: "ExploreKingston exclusive t-shirt" },
+        { ...base, paymentId: "p-other", itemId: "i-other", rateTitle: "Early Bird Runner Registration" },
+      ],
+      "vitest",
+    );
+    const { client } = fakeClient(
+      [payment(pay, [ticket("i-run'); delete from race_registrant; --", null), shirt("i-shirt' or 1=1 --")])],
+      CONTACTS,
+    );
+    const result = await runRaceSync("manual", { client, config: CONFIG, questions: QUESTIONS });
+
+    expect(result.ok && result.stats.removed).toBe(1);
+    expect((await listRegistrants()).map((r) => r.itemId).sort()).toEqual(
+      ["i-other", "i-run'); delete from race_registrant; --"].sort(),
+    );
+  });
+
   it("stops before writing anything when Zeffy sends no price list", async () => {
     // Without the rates nothing marks the shirt as an add-on, so every shirt
     // would be stored as a runner again. Every campaign with tickets has rates.
