@@ -333,4 +333,42 @@ describe("add-ons are not runners", () => {
     expect(removal).toBeDefined();
     expect(JSON.stringify(removal!.after)).not.toMatch(/Buyer|example\.test/);
   });
+
+  it("leaves an erased shirt row in place, so its details cannot come back", async () => {
+    // Outside review, 2026-09-22: deleting an anonymized row also deletes the
+    // mark that keeps it erased. A later sync that misread the shirt would
+    // then insert it afresh, buyer's name and all.
+    await tdb.db.delete(raceRegistrant);
+    await upsertRegistrants(
+      [
+        {
+          paymentId: "p-old", itemId: "i-old-shirt", contactId: null, firstName: "Buyer", lastName: "Person",
+          email: "buyer@example.test", rateTitle: "ExploreKingston exclusive t-shirt", shirtNote: "L", waiverSigned: null,
+          status: "active", needsReviewReason: "no-contact-id", registeredAt: new Date(1_789_600_000 * 1000),
+        },
+      ],
+      "vitest",
+    );
+    await anonymizeAllRegistrants("vitest");
+
+    const { client } = fakeClient([payment("p-old", [shirt("i-old-shirt")])], CONTACTS);
+    const result = await runRaceSync("manual", { client, config: CONFIG, questions: QUESTIONS });
+
+    expect(result.ok && result.stats.removed).toBe(0);
+    const kept = (await listRegistrants()).find((r) => r.itemId === "i-old-shirt");
+    expect(kept?.anonymizedAt).not.toBeNull();
+    expect(kept?.firstName).toBeNull();
+  });
+
+  it("stops before writing anything when Zeffy sends no price list", async () => {
+    // Without the rates nothing marks the shirt as an add-on, so every shirt
+    // would be stored as a runner again. Every campaign with tickets has rates.
+    await tdb.db.delete(raceRegistrant);
+    const payments = [payment("p-shirts", [ticket("i-runner", "c-ann"), shirt("i-shirt-1")])];
+    const { client } = fakeClient(payments, CONTACTS);
+    client.getCampaignRates = async () => [];
+
+    await expect(runRaceSync("manual", { client, config: CONFIG, questions: QUESTIONS })).rejects.toThrow(/price list/);
+    expect(await listRegistrants()).toHaveLength(0);
+  });
 });

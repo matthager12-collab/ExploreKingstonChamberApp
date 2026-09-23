@@ -269,6 +269,12 @@ async function doSync(
 
   const payments = await client.listSucceededPayments(config.campaignId);
   const rates = await client.getCampaignRates(config.campaignId);
+  // Fail closed: with no price list nothing marks the shirt as an add-on, and
+  // every shirt would be stored as a runner. A campaign with tickets always
+  // has rates, so none back means Zeffy's answer changed shape.
+  // ponytail: an item whose rate is missing from the list still counts as a
+  // runner. An archived ticket rate must not block race-day syncs.
+  if (rates.length === 0) throw new Error("Zeffy sent no price list for the campaign; nothing written.");
   const addOnRateIds = new Set(rates.filter((r) => r.is_add_on === true).map((r) => r.id));
   const existing = await listExistingRegistrants();
   const { inputs, contactsFetched, addOnItems } = await planRegistrants(

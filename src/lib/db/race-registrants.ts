@@ -48,9 +48,10 @@ async function auditRows(
   ids: string[],
   actor: string,
   after?: Record<string, unknown>,
+  db: Pick<ReturnType<typeof getDb>, "insert"> = getDb(),
 ): Promise<void> {
   if (ids.length === 0) return;
-  await getDb()
+  await db
     .insert(audit)
     .values(
       ids.map((id) => ({
@@ -122,18 +123,27 @@ export async function cancelRegistrantsForPayment(paymentId: string, actor: stri
 
 /** Removes rows that were never registrations — add-on items (the shirt)
  *  that the sync once mistook for runners. Physical delete; the audit row
- *  carries the id only. Returns how many went. */
+ *  carries the id only, and lands in the same transaction. An anonymized row
+ *  is left alone: deleting it would also delete the mark that keeps it
+ *  erased. Returns how many went. */
 export async function deleteRegistrantsForItems(
   items: { paymentId: string; itemId: string }[],
   actor: string,
 ): Promise<number> {
   if (items.length === 0) return 0;
-  const rows = await getDb()
-    .delete(raceRegistrant)
-    .where(or(...items.map((i) => and(eq(raceRegistrant.paymentId, i.paymentId), eq(raceRegistrant.itemId, i.itemId)))))
-    .returning({ id: raceRegistrant.id });
-  await auditRows("delete", rows.map((r) => r.id), actor, { reason: "add-on, not a runner" });
-  return rows.length;
+  return getDb().transaction(async (tx) => {
+    const rows = await tx
+      .delete(raceRegistrant)
+      .where(
+        and(
+          isNull(raceRegistrant.anonymizedAt),
+          or(...items.map((i) => and(eq(raceRegistrant.paymentId, i.paymentId), eq(raceRegistrant.itemId, i.itemId)))),
+        ),
+      )
+      .returning({ id: raceRegistrant.id });
+    await auditRows("delete", rows.map((r) => r.id), actor, { reason: "add-on, not a runner" }, tx);
+    return rows.length;
+  });
 }
 
 /** Everything the admin roster shows. The ONLY read that returns emails. */
