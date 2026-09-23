@@ -6,7 +6,7 @@ The race sells tickets on Zeffy. The app shows the race page (`/race`), keeps a 
 
 **In Zeffy (organisation owner):**
 
-1. Ticketing campaign → settings: **ask each attendee for name and email** (otherwise a family order lands as one buyer and three "guest" rows flagged for review). Make the t-shirt question a **per-ticket single-select** (free text cannot be tallied). Add a **waiver checkbox** per ticket if the Chamber wants waivers on file.
+1. Ticketing campaign → settings: **ask each attendee for name and email** (otherwise a family order lands as one buyer and three "guest" rows flagged for review). As set up for 2026, shirts are a **$15 add-on** on the campaign and sizing is **one free-text question per order**. The roster shows each order's shirts as "Order: 2 × ExploreKingston exclusive t-shirt · M and L" on every runner of that order; add-ons are never listed as runners. Add a **waiver checkbox** per ticket if the Chamber wants waivers on file.
 2. Settings → Integrations → **API**: generate a key. It can write as well as read — treat it like a password.
 3. Settings → Integrations → **Webhook**: set the URL (staging first, see §4; production is `https://explore-kingston.onrender.com/api/webhooks/zeffy`), subscribe the `payment.*` events, copy the signing secret (`whsec_…`).
 4. Note the campaign id (Campaigns → the campaign → the UUID in the URL, or `GET /api/v1/campaigns` with the key).
@@ -15,7 +15,7 @@ The race sells tickets on Zeffy. The app shows the race page (`/race`), keeps a 
 
 **In the app:**
 
-- The race copy, dates, prices and the two question titles live in `src/lib/data/race.ts`. The question titles must match the **start** of the Zeffy question text (case-insensitive). An unmatched question is simply dropped.
+- The race copy, dates, prices and the two question titles live in `src/lib/data/race.ts`. The question titles must match the **whole** Zeffy question text — case, spacing and curly quotes are ignored, nothing else. An unmatched question is simply dropped, so if the Chamber rewords the shirt question in Zeffy, paste the new wording into `race.ts` the same day.
 - **Register now** on `/race` loads Zeffy's form on the page. Its address is worked out from `registrationUrl` in `race.ts`, so paste the campaign's own ticketing link there and nothing else. Nothing from Zeffy loads until a visitor presses the button (ADR-0008 amendment 1).
 - Admin → Site content → unhide **5K Fun Run** (`/race`). It ships dark.
 - `/admin/events` → add the race with its link set to `/race`, so it appears on the calendar.
@@ -62,6 +62,8 @@ Until the flip, production relies on Sync now — which is fine.
 | Webhook deliveries fail in Zeffy's log with 400 | The signing secret on Render does not match Zeffy's current one (it was regenerated) |
 | Webhook deliveries fail with 503 | `ZEFFY_WEBHOOK_SECRET` is not set on that service |
 | Every multi-ticket order shows "guest" rows | Per-attendee details are off on the campaign (§1 step 1) |
-| Shirt column empty | The question title in `race.ts` no longer matches the Zeffy question |
+| Shirt column empty | The question title in `race.ts` no longer matches the Zeffy question word for word — copy the new wording in |
+| A shirt shows up as a runner | The shirt rate is not marked as an add-on in Zeffy. Mark it as one; the next sync removes the stray row. A row already anonymized is cancelled instead of deleted, so it stays erased |
+| "Sync now" fails every time, and the log says "Zeffy sent no price list" | Zeffy's campaign answer came back without its rates. The sync stops rather than store every shirt as a runner. Nothing was written; check the campaign id, then Zeffy's API notes |
 | Volunteers see "That link doesn't work" | Expired, revoked, or replaced by a newer mint — send the current link |
 | Register now shows an empty box | `registrationUrl` in `race.ts` is not the campaign's ticketing link on `https://www.zeffy.com`. If it is not a Zeffy ticketing link at all, the page shows a plain link instead of the button |

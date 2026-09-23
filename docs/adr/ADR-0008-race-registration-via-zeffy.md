@@ -43,3 +43,13 @@ Mat chose to keep registrants on the Chamber's page instead of sending them to z
 - An outside review (Codex, 2026-09-22) raised the campaign drift, the `blob:` case, the notice vanishing after the click and the phone layout; all four are fixed as above. It also noted that Apple Pay and Google Pay inside the frame are only proven by a real purchase.
 
 **Rejected:** Zeffy's pop-up button, which loads Zeffy's script into the Chamber's page — third-party code running in this origin, reachable to the DOM and cookies. An auto-loading frame, which would run Zeffy's trackers for every visitor to `/race`, including the ones who never register.
+
+## Amendment 2 — three sync defects fixed (2026-09-22)
+
+Found by the outside review of the close-out and by reading Zeffy's API spec; each reproduced before it was fixed.
+
+- **An erased shirt answer came back.** Anonymization nulled it, the next sync wrote it back, and the row stayed marked anonymized, so the retention sweep never touched it again. The upsert now leaves the shirt answer null on an anonymized row.
+- **A question that merely started with the shirt question's words was kept.** The match is now on the whole question text, and `race.ts` carries the live wording. Case, spacing and curly quotes are ignored; nothing else.
+- **The $15 shirt became a runner.** Zeffy reports add-ons as ordinary `ticket` items — its only item types are donation, ticket and additional donation — and marks them only on the campaign's price list (`is_add_on`). The sync now reads that list once per run, counts add-ons on their order instead ("Order: 2 × ExploreKingston exclusive t-shirt", beside the sizing answer, Mat's choice), and deletes any add-on rows an earlier sync stored, with an ids-only audit row.
+
+Decision 3's "the mapped t-shirt answer" now also carries the order's add-on count. No schema change.

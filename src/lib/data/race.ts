@@ -40,12 +40,19 @@ export const race = {
   fundsNote:
     "Registration and sponsorship fees support the free community events the Chamber organizes throughout the year.",
   /**
-   * Zeffy custom questions the roster keeps, matched by the start of the
-   * question text (case-insensitive, trimmed). Every other answer is dropped
-   * before it reaches the database. `null` = the form does not ask.
+   * Zeffy custom questions the roster keeps, matched by the WHOLE question
+   * text — case, spacing and curly quotes ignored, nothing else. If the
+   * Chamber rewords the question in Zeffy, paste the new wording here or the
+   * Shirt column goes empty. Every other answer is dropped before it reaches
+   * the database. `null` = the form does not ask.
+   *
+   * The shirt itself is a $15 add-on on the campaign; the roster shows how
+   * many an order bought ("Order: 2 × …") beside this sizing answer.
    */
   questions: {
-    shirt: "If adding ExploreKingston t-shirt(s)",
+    // Copied from the live form, 2026-09-22. One free-text answer per order.
+    shirt:
+      "If adding ExploreKingston t-shirt(s), note desired sizing otherwise you'll be given first-come/first-served choice of remaining options: small (S), medium (M), large (L), extra large (XL), extra extra large (2XL)",
     waiver: null as string | null,
   },
   /** Days after the race date before runner names and emails are anonymized. */

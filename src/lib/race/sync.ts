@@ -16,6 +16,7 @@ import {
   cancelRegistrantsForPayment,
   listExistingRegistrants,
   recordRaceSyncRun,
+  removeAddOnRows,
   upsertRegistrants,
   type ExistingRegistrant,
   type RegistrantInput,
@@ -44,10 +45,20 @@ export interface MappedAnswers {
   waiverSigned: boolean | null;
 }
 
-const norm = (s: string) => s.trim().toLowerCase();
+/** Case, runs of whitespace and curly quotes are ignored; nothing else. */
+const norm = (s: string) =>
+  s
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
 
-/** Pure: pick the two answers the roster keeps, by question-title prefix.
- *  Everything else in `answers` is ignored and never leaves this function. */
+/** Pure: pick the two answers the roster keeps, by their WHOLE question
+ *  text. Everything else in `answers` is ignored and never leaves this
+ *  function. Until 2026-09-22 this matched by prefix, so a question that
+ *  merely began with the shirt question's words — "…, and who is your
+ *  emergency contact?" — landed in the shirt column that volunteers see. */
 export function mapAnswers(
   answers: ZeffyQuestionAnswer[] | null | undefined,
   questions: QuestionMap,
@@ -56,9 +67,9 @@ export function mapAnswers(
   let waiverSigned: boolean | null = null;
   for (const a of answers ?? []) {
     const q = norm(a.question);
-    if (questions.shirt && q.startsWith(norm(questions.shirt))) {
+    if (questions.shirt && q === norm(questions.shirt)) {
       shirtNote = answerText(a.answer);
-    } else if (questions.waiver && q.startsWith(norm(questions.waiver))) {
+    } else if (questions.waiver && q === norm(questions.waiver)) {
       waiverSigned = answerBool(a.answer);
     }
   }
@@ -86,6 +97,24 @@ export interface RaceSyncStats extends Record<string, number> {
   cancelled: number;
   needsReview: number;
   contactsFetched: number;
+  /** Add-on items (shirts) seen — counted on their order, never runners. */
+  addOns: number;
+  /** Add-on rows an earlier sync had wrongly stored as runners, now deleted. */
+  removed: number;
+}
+
+/** "Order: 2 × ExploreKingston exclusive t-shirt" — the order's add-ons.
+ *  Prefixed "Order:" because a family order copies it to every runner on
+ *  it; it is the order's total, not each runner's. */
+function addOnSummary(items: ZeffyPayment["items"], addOnRateIds: ReadonlySet<string>): string | null {
+  const counts = new Map<string, number>();
+  for (const item of items) {
+    if (item.type !== "ticket" || !item.rate_id || !addOnRateIds.has(item.rate_id)) continue;
+    const title = item.rate_title?.trim() || "Add-on";
+    counts.set(title, (counts.get(title) ?? 0) + 1);
+  }
+  if (counts.size === 0) return null;
+  return `Order: ${[...counts].map(([title, n]) => `${n} × ${title}`).join(", ")}`;
 }
 
 export type RaceSyncResult =
@@ -109,28 +138,42 @@ export async function planRegistrants(
   campaignId: string,
   client: Pick<ZeffyClient, "getContact">,
   questions: QuestionMap,
-): Promise<{ inputs: RegistrantInput[]; contactsFetched: number }> {
+  /** Rates Zeffy marks is_add_on (the shirt). Their items arrive typed
+   *  "ticket" like any runner's; they are counted on the order instead. */
+  addOnRateIds: ReadonlySet<string> = new Set(),
+): Promise<{
+  inputs: RegistrantInput[];
+  contactsFetched: number;
+  addOnItems: { paymentId: string; itemId: string }[];
+}> {
   const known = new Map(existing.map((r) => [`${r.paymentId}:${r.itemId}`, r]));
   const contactCache = new Map<string, Awaited<ReturnType<ZeffyClient["getContact"]>>>();
   let contactsFetched = 0;
   const inputs: RegistrantInput[] = [];
+  const addOnItems: { paymentId: string; itemId: string }[] = [];
 
   for (const payment of payments) {
     if (payment.campaign_id !== campaignId) continue;
     const buyerAnswers = mapAnswers(payment.buyer_questions, questions);
+    const orderAddOns = addOnSummary(payment.items, addOnRateIds);
     const status = payment.refund_status === "full" ? "cancelled" : "active";
     const paymentReview = payment.refund_status === "partial" ? "partial-refund" : null;
     let guestIndex = 0;
 
     for (const item of payment.items) {
       if (item.type !== "ticket") continue;
+      if (item.rate_id && addOnRateIds.has(item.rate_id)) {
+        addOnItems.push({ paymentId: payment.id, itemId: item.id });
+        continue;
+      }
       const key = `${payment.id}:${item.id}`;
       const itemAnswers = mapAnswers(item.questions, questions);
+      const sizing = itemAnswers.shirtNote ?? buyerAnswers.shirtNote;
       const base = {
         paymentId: payment.id,
         itemId: item.id,
         rateTitle: item.rate_title?.trim() || "Ticket",
-        shirtNote: itemAnswers.shirtNote ?? buyerAnswers.shirtNote,
+        shirtNote: [orderAddOns, sizing].filter(Boolean).join(" · ") || null,
         waiverSigned: itemAnswers.waiverSigned ?? buyerAnswers.waiverSigned,
         status: status as RegistrantInput["status"],
         registeredAt: new Date(payment.created * 1000),
@@ -182,7 +225,7 @@ export async function planRegistrants(
       });
     }
   }
-  return { inputs, contactsFetched };
+  return { inputs, contactsFetched, addOnItems };
 }
 
 let inFlight: Promise<RaceSyncResult> | null = null;
@@ -225,13 +268,32 @@ async function doSync(
   const questions = deps.questions ?? race.questions;
 
   const payments = await client.listSucceededPayments(config.campaignId);
+  const rates = await client.getCampaignRates(config.campaignId);
+  // Fail closed: with no price list nothing marks the shirt as an add-on, and
+  // every shirt would be stored as a runner. A campaign with tickets always
+  // has rates, so none back means Zeffy's answer changed shape.
+  // ponytail: an item whose rate is missing from the list still counts as a
+  // runner. An archived ticket rate must not block race-day syncs.
+  if (rates.length === 0) throw new Error("Zeffy sent no price list for the campaign; nothing written.");
+  const addOnRateIds = new Set(rates.filter((r) => r.is_add_on === true).map((r) => r.id));
   const existing = await listExistingRegistrants();
-  const { inputs, contactsFetched } = await planRegistrants(
+  const { inputs, contactsFetched, addOnItems } = await planRegistrants(
     payments,
     existing,
     config.campaignId,
     client,
     questions,
+    addOnRateIds,
+  );
+
+  // Add-on rows the sync stored as runners before 2026-09-22: take them off
+  // the roster.
+  // ponytail: only rows whose payment Zeffy still lists are found this way;
+  // a phantom on a payment since deleted in Zeffy is cancelled below instead.
+  const stored = new Set(existing.map((r) => `${r.paymentId}:${r.itemId}`));
+  const removed = await removeAddOnRows(
+    addOnItems.filter((i) => stored.has(`${i.paymentId}:${i.itemId}`)),
+    SYNC_ACTOR,
   );
 
   // Payments the store knows that Zeffy no longer lists as succeeded: ask
@@ -264,6 +326,8 @@ async function doSync(
     cancelled,
     needsReview: inputs.filter((i) => i.needsReviewReason && i.status === "active").length,
     contactsFetched,
+    addOns: addOnItems.length,
+    removed,
   };
   const runId = await recordRaceSyncRun({
     runBy: deps.runBy ?? trigger,
