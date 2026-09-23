@@ -47,9 +47,16 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           // geolocation MUST stay `self`: the side-switcher, near-me sort, and
           // hunt check-ins all call navigator.geolocation.
+          // payment is allowed for this origin and Zeffy's, so Apple Pay and
+          // Google Pay work inside the 5K registration frame on /race
+          // (ADR-0008 amendment 1; the frame carries allow="payment").
+          // `self` is required, not decorative: a page can only delegate a
+          // feature it holds itself. Measured 2026-09-22 — without self the
+          // Zeffy frame had payment disabled and Google Pay failed. The app
+          // has no payment code, so holding it here is inert.
           {
             key: "Permissions-Policy",
-            value: "geolocation=(self), camera=(), microphone=(), payment=()",
+            value: 'geolocation=(self), camera=(), microphone=(), payment=(self "https://www.zeffy.com")',
           },
           // ENFORCED as of the post-launch hardening pass (2026-08-19). The
           // directive set ran as Content-Security-Policy-Report-Only from
@@ -80,6 +87,14 @@ const nextConfig: NextConfig = {
           //     MapLibre fetches raster tiles with fetch() and then paints
           //     them through an <img>/ImageBitmap. Vector pmtiles and glyphs
           //     remain same-origin from /api/map/tiles/* and /fonts/*.
+          //   - frame-src 'self' https://www.zeffy.com: the 5K registration
+          //     form is Zeffy's, embedded on /race (ADR-0008 amendment 1). One
+          //     exact origin; the frame is only created when a visitor presses
+          //     Register, so no Zeffy code loads on a plain page view. Frames
+          //     Zeffy opens inside its own page (Stripe, Google) answer to
+          //     Zeffy's CSP, not this one. 'self' is restated because
+          //     declaring frame-src replaces the default-src fallback, and
+          //     Admin → Site content frames the site's own pages as a preview.
           {
             key: "Content-Security-Policy",
             value: [
@@ -89,6 +104,7 @@ const nextConfig: NextConfig = {
               "img-src 'self' data: blob: https://images.wsdot.wa.gov https://services.arcgisonline.com",
               "connect-src 'self' https://services.arcgisonline.com",
               "worker-src 'self' blob:",
+              "frame-src 'self' https://www.zeffy.com",
               "frame-ancestors 'self'",
               "object-src 'none'",
               "base-uri 'self'",

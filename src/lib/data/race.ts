@@ -18,7 +18,9 @@ export const race = {
   partyVenue: "Mike Wallace Park",
   organizer: "Greater Kingston Community Chamber of Commerce",
   organizerEmail: "director@kingstonchamber.com",
-  /** The Zeffy ticketing campaign. The only place a runner pays. */
+  /** The Zeffy ticketing campaign. The only place a runner pays. /race embeds
+   *  this campaign's form from it, so paste the campaign's own ticketing link
+   *  (https://www.zeffy.com/…/ticketing/…); anything else shows as a plain link. */
   registrationUrl:
     "https://www.zeffy.com/en-US/ticketing/not-afraid-of-the-dark-5k-kingston-fun-run",
   rates: [

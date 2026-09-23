@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { OutboundLink } from "@/components/tracker";
 import {
   Callout,
   Card,
@@ -12,6 +11,8 @@ import {
 import { race } from "@/lib/data/race";
 import { assertPageVisible, HiddenPageBanner } from "@/lib/page-visibility";
 import { safeExternalHref } from "@/lib/safe-href";
+
+import { RaceRegistration } from "./registration";
 
 export const metadata: Metadata = {
   title: race.shortName,
@@ -43,16 +44,7 @@ export default async function RacePage() {
             ))}
           </ul>
           <div className="mt-5">
-            {register ? (
-              <OutboundLink
-                href={register}
-                className="inline-flex items-center justify-center rounded-full bg-sound px-6 py-3 text-base font-semibold text-white hover:bg-sound-deep"
-              >
-                Register on Zeffy
-              </OutboundLink>
-            ) : (
-              <p className="font-semibold text-sound-deep">Registration opens soon.</p>
-            )}
+            <RaceRegistration linkUrl={register} />
           </div>
           <p className="mt-4 text-sm text-ink">
             Registration is handled by Zeffy, a free ticketing platform for nonprofits, so every

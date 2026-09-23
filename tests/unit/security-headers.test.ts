@@ -73,7 +73,37 @@ describe("next.config security headers", () => {
     expect(pp).toContain("geolocation=(self)");
     expect(pp).toContain("camera=()");
     expect(pp).toContain("microphone=()");
-    expect(pp).toContain("payment=()");
+  });
+
+  it("delegates the Payment Request API to this origin and Zeffy's frame, and nowhere else", async () => {
+    // The 5K registration embeds Zeffy's ticket form on /race (ADR-0008
+    // amendment 1). Apple Pay and Google Pay inside that frame need the
+    // payment feature. A document can only delegate a feature it holds
+    // itself, so `self` is REQUIRED: measured in Chrome on 2026-09-22,
+    // payment=("https://www.zeffy.com") without self left the Zeffy frame
+    // with payment disabled and Google Pay logging 17 policy violations;
+    // payment=(self "https://www.zeffy.com") gave none. The app has no
+    // payment code, so holding the permission on this origin is inert.
+    const rules = await loadRules();
+    const pp = headerMap(rules.find((r) => r.source === "/(.*)")!).get("Permissions-Policy")!;
+    const payment = pp.split(",").map((s) => s.trim()).find((s) => s.startsWith("payment="));
+    expect(payment).toBe('payment=(self "https://www.zeffy.com")');
+  });
+
+  it("allows frames from this origin and Zeffy, and nowhere else", async () => {
+    // Without frame-src, frames fall back to default-src 'self' and the
+    // Zeffy embed renders blank. Declaring frame-src REPLACES that fallback,
+    // so 'self' must be restated: Admin → Site content frames the site's own
+    // pages for its live preview (src/app/(admin)/admin/content/manager.tsx).
+    // One extra exact origin — a wildcard, a scheme-only source or a second
+    // host fails here.
+    const rules = await loadRules();
+    const csp = headerMap(rules.find((r) => r.source === "/(.*)")!).get(
+      "Content-Security-Policy",
+    )!;
+    const frameSrc = csp.split(";").map((s) => s.trim()).find((s) => s.startsWith("frame-src"));
+    expect(frameSrc).toBe("frame-src 'self' https://www.zeffy.com");
+    expect(csp).not.toMatch(/child-src/);
   });
 
   it("ships CSP ENFORCED with the documented carve-outs, never demoted to Report-Only", async () => {
