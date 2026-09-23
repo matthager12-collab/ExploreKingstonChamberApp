@@ -12,7 +12,10 @@ const EXPECTED: Array<[name: string, value: string]> = [
   ["x-content-type-options", "nosniff"],
   ["x-frame-options", "SAMEORIGIN"],
   ["referrer-policy", "strict-origin-when-cross-origin"],
-  ["permissions-policy", "geolocation=(self), camera=(), microphone=(), payment=()"],
+  // payment delegated to Zeffy's registration frame on /race; `self` is
+  // required to delegate at all (ADR-0008 amendment 1, unit half in
+  // tests/unit/security-headers.test.ts).
+  ["permissions-policy", 'geolocation=(self), camera=(), microphone=(), payment=(self "https://www.zeffy.com")'],
 ];
 
 describe("security headers on served responses", () => {
@@ -24,6 +27,9 @@ describe("security headers on served responses", () => {
     }
     const csp = res.headers.get("content-security-policy");
     expect(csp, "enforced CSP header missing").toContain("default-src 'self'");
+    // The built artifact must actually ship the Zeffy frame carve-out, with
+    // 'self' kept for the admin content preview.
+    expect(csp).toContain("frame-src 'self' https://www.zeffy.com");
     // Enforced since the 2026-08-19 hardening pass — the Report-Only header
     // must be GONE, not doubled up (two policies would report confusingly).
     expect(res.headers.get("content-security-policy-report-only")).toBeNull();
