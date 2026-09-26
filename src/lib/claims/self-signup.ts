@@ -91,7 +91,9 @@ export const CODE_TTL_MINUTES = 15;
 export const MAX_CODE_ATTEMPTS = 5;
 
 const invalidCode = () =>
-  new AuthError("That code is invalid or has expired — please start again.");
+  new AuthError(
+    "That code is invalid or has expired. Check the six digits and try again. If it still fails, choose Cancel and start over for a new code.",
+  );
 
 const alreadyClaimed = () =>
   new OwnershipConflictError(
