@@ -126,6 +126,26 @@ describe("<ClaimSignup/> focus management", () => {
     await waitFor(() => expect(done).toHaveFocus());
   });
 
+  it("a wrong code marks the code field invalid, ties the error to it, and keeps the digits", async () => {
+    const user = userEvent.setup();
+    const settle = deferredFetch();
+    render(<ClaimSignup store="restaurants" id="the-cafe" />);
+    await openAndFill(user);
+    await user.click(screen.getByRole("button", { name: SUBMIT }));
+    settle(jsonResponse(200, { ok: true, mode: "code-sent", signupId: "abc", emailSent: true }));
+
+    const codeField = await screen.findByLabelText(CODE);
+    const settleVerify = deferredFetch();
+    await user.type(codeField, "111111");
+    await user.click(screen.getByRole("button", { name: VERIFY }));
+    settleVerify(jsonResponse(400, { error: "That code is invalid or has expired." }));
+
+    const alert = await screen.findByRole("alert");
+    expect(codeField).toHaveAttribute("aria-invalid", "true");
+    expect(codeField.getAttribute("aria-describedby")).toBe(alert.id);
+    expect(codeField).toHaveValue("111111");
+  });
+
   it("switching to the fallback request form lands on its first field", async () => {
     const user = userEvent.setup();
     render(<ClaimSignup store="restaurants" id="the-cafe" />);

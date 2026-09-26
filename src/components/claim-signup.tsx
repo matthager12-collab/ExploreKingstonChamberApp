@@ -84,6 +84,7 @@ export function ClaimSignup({
   const passwordId = useId();
   const passwordHintId = useId();
   const codeId = useId();
+  const errorId = useId();
   const reqNameId = useId();
   const reqContactId = useId();
   const reqContactHintId = useId();
@@ -255,7 +256,7 @@ export function ClaimSignup({
   }
 
   const errorRegion = error && (
-    <p className="text-xs font-medium text-coral-deep" role="alert">
+    <p id={errorId} className="text-xs font-medium text-coral-deep" role="alert">
       {error}
     </p>
   );
@@ -449,6 +450,8 @@ export function ClaimSignup({
               pattern="[0-9]{6}"
               maxLength={6}
               autoComplete="one-time-code"
+              aria-invalid={error ? true : undefined}
+              aria-describedby={error ? errorId : undefined}
               className={inputCls}
             />
           </label>

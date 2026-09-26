@@ -258,6 +258,23 @@ describe("verifyClaimSignup — guess resistance", () => {
     expect(await tdb.db.select().from(users)).toHaveLength(0);
   });
 
+  it("one wrong guess says try again, and a retry with the right code still works", async () => {
+    await seedDraft();
+    await seedRosterEmail(START.email);
+    const { signupId } = await startClaimSignup(START);
+    const code = lastEmailedCode();
+    const wrong = code === "000000" ? "000001" : "000000";
+    const refusal = await verifyClaimSignup({ signupId, code: wrong }).then(
+      () => null,
+      (e: Error) => e.message,
+    );
+    expect(refusal).toMatch(/invalid or has expired/i);
+    expect(refusal).toMatch(/try again/i);
+    expect(refusal).not.toMatch(/please start again/i);
+    const ok = await verifyClaimSignup({ signupId, code });
+    expect(ok.approved).toBe(true);
+  });
+
   it("refuses an email that already has an account, AFTER the code proves the mailbox", async () => {
     await seedDraft();
     await seedRosterEmail(START.email);
