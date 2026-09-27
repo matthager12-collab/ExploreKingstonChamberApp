@@ -97,10 +97,12 @@ describe("<ClaimSignup/> focus management", () => {
     await openAndFill(user);
 
     await user.click(screen.getByRole("button", { name: SUBMIT }));
-    settle(jsonResponse(429, { error: "too many requests, please try again later" }));
+    // A 429 now gets its own wait-time message (claim-signup-fixes.test.tsx);
+    // any other refusal still passes the server's words through.
+    settle(jsonResponse(409, { error: "That listing is already claimed." }));
 
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("too many requests, please try again later");
+    expect(alert).toHaveTextContent("That listing is already claimed.");
     expect(screen.getByLabelText(NAME)).not.toHaveFocus();
     expect(screen.getByRole("button", { name: SUBMIT })).toHaveFocus();
   });

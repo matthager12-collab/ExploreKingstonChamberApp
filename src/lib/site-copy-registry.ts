@@ -1675,6 +1675,24 @@ export const COPY_BLOCKS = [
       "Create a free account to claim this listing. If your email matches what the Chamber has on file for this business, you're approved instantly — otherwise the Chamber takes a quick look first.",
   },
   {
+    key: "claimSignup.form.name.error",
+    page: "Claim signup",
+    label: "Name validation error",
+    fallback: "Enter your name.",
+  },
+  {
+    key: "claimSignup.form.email.error",
+    page: "Claim signup",
+    label: "Email validation error",
+    fallback: "Enter the email the Chamber has on file.",
+  },
+  {
+    key: "claimSignup.form.password.error",
+    page: "Claim signup",
+    label: "Password validation error",
+    fallback: "Use at least 8 characters.",
+  },
+  {
     key: "claimSignup.form.email.label",
     page: "Claim signup",
     label: "Email field label",
@@ -1717,6 +1735,42 @@ export const COPY_BLOCKS = [
     multiline: true,
     fallback:
       "We've emailed you a 6-digit code — enter it below within 15 minutes to finish. Nothing is created until the code checks out.",
+  },
+  {
+    key: "claimSignup.code.sentTo",
+    page: "Claim signup",
+    label: "Code step email confirmation",
+    fallback: "We sent a code to {email}.",
+  },
+  {
+    key: "claimSignup.code.resend",
+    page: "Claim signup",
+    label: "Resend code button",
+    fallback: "Send a new code",
+  },
+  {
+    key: "claimSignup.code.resendSuccess",
+    page: "Claim signup",
+    label: "Resend code success message",
+    fallback: "New code sent.",
+  },
+  {
+    key: "claimSignup.code.differentEmail",
+    page: "Claim signup",
+    label: "Return to email form button",
+    fallback: "Use a different email",
+  },
+  {
+    key: "claimSignup.error.rateLimitRetry",
+    page: "Claim signup",
+    label: "Rate limit message with retry time",
+    fallback: "Too many code requests. Try again in {minutes} minutes, or call the Chamber at {phone}.",
+  },
+  {
+    key: "claimSignup.error.rateLimitLater",
+    page: "Claim signup",
+    label: "Rate limit message without retry time",
+    fallback: "Too many code requests. Try again later, or call the Chamber at {phone}.",
   },
   {
     key: "claimSignup.code.devHint",
