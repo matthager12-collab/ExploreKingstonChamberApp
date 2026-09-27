@@ -96,6 +96,57 @@ describe("<ClaimSignup/> fixes", () => {
     expect(password.getAttribute("aria-describedby")?.split(" ")).toHaveLength(2);
   });
 
+  it("says try again later when the rate limit gives no wait time", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(jsonResponse(429, { error: "too many requests, please try again later" }))));
+    render(<ClaimSignup store="restaurants" id="the-cafe" />);
+    await openAndFill(user);
+    await user.click(screen.getByRole("button", { name: SUBMIT }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Try again later, or call the Chamber at 360-860-2239.");
+    expect(alert).not.toHaveTextContent("minutes");
+  });
+
+  it("verifies against the newest signup after a resend, and clears the old digits", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(200, { ok: true, mode: "code-sent", signupId: "first", emailSent: true }))
+      .mockResolvedValueOnce(jsonResponse(200, { ok: true, mode: "code-sent", signupId: "second", emailSent: true }))
+      .mockResolvedValueOnce(jsonResponse(200, { ok: true, approved: true, role: "member-business" }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ClaimSignup store="restaurants" id="the-cafe" />);
+    await openAndFill(user);
+    await user.click(screen.getByRole("button", { name: SUBMIT }));
+    const codeField = await screen.findByLabelText(CODE);
+    await user.type(codeField, "123");
+    await user.click(screen.getByRole("button", { name: "Send a new code" }));
+    await screen.findByText("New code sent.");
+    expect(codeField).toHaveValue("");
+    await user.type(codeField, "654321");
+    await user.click(screen.getByRole("button", { name: "Verify & finish" }));
+    await screen.findByRole("status");
+    const verifyCall = fetchMock.mock.calls.find(([url]) => url === "/api/claim/verify");
+    expect(JSON.parse(verifyCall![1].body as string)).toEqual({ signupId: "second", code: "654321" });
+  });
+
+  it("marks an empty name and a bad email inline, with one alert, and posts nothing", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ClaimSignup store="restaurants" id="the-cafe" />);
+    await user.click(screen.getByRole("button", { name: DISCLOSURE }));
+    await user.type(screen.getByLabelText(EMAIL), "not-an-email");
+    await user.type(screen.getByLabelText(PASSWORD), "s3cure-enough");
+    await user.click(screen.getByRole("button", { name: SUBMIT }));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByText("Enter your name.")).toBeInTheDocument();
+    expect(screen.getByText("Enter the email the Chamber has on file.")).toBeInTheDocument();
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(screen.getByLabelText(NAME)).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText(EMAIL)).toHaveAttribute("aria-invalid", "true");
+  });
+
   it("uses text-sm labels", async () => {
     const user = userEvent.setup();
     render(<ClaimSignup store="restaurants" id="the-cafe" />);

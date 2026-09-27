@@ -190,8 +190,8 @@ export function ClaimSignup({
   function rateLimitMessage(retryAfter: string | null) {
     const seconds = Number(retryAfter);
     return Number.isFinite(seconds) && seconds > 0
-      ? rateLimitRetry.replace("{minutes}", String(Math.max(1, Math.ceil(seconds / 60)))).replace("{phone}", phone)
-      : rateLimitLater.replace("{phone}", phone);
+      ? rateLimitRetry.replace("{minutes}", () => String(Math.max(1, Math.ceil(seconds / 60)))).replace("{phone}", () => phone)
+      : rateLimitLater.replace("{phone}", () => phone);
   }
 
   function finish(kind: DoneKind) {
@@ -201,6 +201,7 @@ export function ClaimSignup({
 
   async function submitSignup(e: FormEvent) {
     e.preventDefault();
+    setError(null);
     if (!signedIn) {
       const nextErrors: Partial<Record<"name" | "email" | "password", string>> = {};
       if (!name.trim()) nextErrors.name = nameError;
@@ -247,8 +248,13 @@ export function ClaimSignup({
         setError(status === 429 ? rateLimitMessage(retryAfter) : data.error ?? genericError);
         return;
       }
+      if (data.mode === "signed-in") {
+        finish(data.approved ? "signed-in-approved" : "signed-in-pending");
+        return;
+      }
       setSignupId(typeof data.signupId === "string" ? data.signupId : "");
       setEmailSent(data.emailSent !== false);
+      setCode("");
       setResendStatus(resendSuccess);
     } catch {
       setError(genericError);
@@ -517,7 +523,7 @@ export function ClaimSignup({
 
       {open && step === "code" && (
         <form id={formId} onSubmit={submitCode} className="mt-3 space-y-2 rounded-lg border border-sand bg-white/60 p-3">
-          <p className="text-sm text-ink-soft">{codeSentTo.replace("{email}", email)}</p>
+          <p className="text-sm text-ink-soft">{codeSentTo.replace("{email}", () => email)}</p>
           <p className="text-sm text-ink-soft">{codeIntro}</p>
           {!emailSent && <p className={hintCls}>{codeDevHint}</p>}
           <label htmlFor={codeId} className="block text-sm font-medium text-ink">
