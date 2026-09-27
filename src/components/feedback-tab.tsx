@@ -197,8 +197,7 @@ export function FeedbackTab() {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="dialog"
-        className="fixed top-1/2 right-0 z-40 -translate-y-1/2 rounded-l-lg bg-sound-deep px-2 py-4 text-sm font-semibold text-white shadow-lg hover:bg-sound focus-visible:ring-2 focus-visible:ring-seaglass print:hidden"
-        style={{ writingMode: "vertical-rl" }}
+        className="fixed right-3 bottom-24 z-40 min-h-11 rounded-full bg-sound-deep px-4 py-2 text-sm font-semibold text-white shadow-lg hover:bg-sound focus-visible:ring-2 focus-visible:ring-seaglass [writing-mode:horizontal-tb] sm:top-1/2 sm:right-0 sm:bottom-auto sm:min-h-0 sm:-translate-y-1/2 sm:rounded-l-lg sm:rounded-r-none sm:px-2 sm:py-4 sm:[writing-mode:vertical-rl] print:hidden"
       >
         {tabLabel}
       </button>

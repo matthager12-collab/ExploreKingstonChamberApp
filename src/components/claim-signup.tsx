@@ -35,17 +35,18 @@ type DoneKind =
 
 const inputCls =
   "mt-1 block w-full rounded-lg border border-sand bg-white px-2 py-1.5 text-sm";
-const hintCls = "text-xs font-normal text-ink-soft";
+const hintCls = "text-sm font-normal text-ink-soft";
 const primaryBtn =
-  "rounded-full bg-sound px-4 py-1.5 text-xs font-semibold text-white hover:bg-sound-deep disabled:opacity-50";
+  "rounded-full bg-sound px-4 py-1.5 text-sm font-semibold text-white hover:bg-sound-deep disabled:opacity-50";
 const quietBtn =
-  "rounded-full border border-sand bg-white px-4 py-1.5 text-xs font-medium text-ink hover:border-tide";
+  "rounded-full border border-sand bg-white px-4 py-1.5 text-sm font-medium text-ink hover:border-tide";
 
 export function ClaimSignup({
   store,
   id,
   subject,
   signedIn = false,
+  prominent = false,
 }: {
   /** Claimable content store: "restaurants" | "lodging" | "charities" | "directory". */
   store: string;
@@ -57,6 +58,8 @@ export function ClaimSignup({
   /** Pass true ONLY from pages that actually read the session (dynamic
    *  pages). Renders the one-button request variant. */
   signedIn?: boolean;
+  /** Use the primary call-to-action style on the dedicated claim page. */
+  prominent?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"signup" | "request">("signup");
@@ -76,13 +79,20 @@ export function ClaimSignup({
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<"name" | "email" | "password", string>>>({});
+  const [resendStatus, setResendStatus] = useState<string | null>(null);
+  // Set by "Use a different email"; read once when the form step returns.
+  const returnToEmailRef = useRef(false);
 
   const formId = useId();
   const nameId = useId();
   const emailId = useId();
   const emailHintId = useId();
+  const nameErrorId = useId();
+  const emailErrorId = useId();
   const passwordId = useId();
   const passwordHintId = useId();
+  const passwordErrorId = useId();
   const codeId = useId();
   const errorId = useId();
   const reqNameId = useId();
@@ -90,6 +100,7 @@ export function ClaimSignup({
   const reqContactHintId = useId();
   const reqMessageId = useId();
   const firstFieldRef = useRef<HTMLInputElement>(null);
+  const emailFieldRef = useRef<HTMLInputElement>(null);
   const codeRef = useRef<HTMLInputElement>(null);
   const doneRef = useRef<HTMLParagraphElement>(null);
 
@@ -107,6 +118,16 @@ export function ClaimSignup({
   const codeLabel = useCopy("claimSignup.code.label");
   const codeSubmit = useCopy("claimSignup.code.submit");
   const codeVerifying = useCopy("claimSignup.code.verifying");
+  const codeSentTo = useCopy("claimSignup.code.sentTo");
+  const resendLabel = useCopy("claimSignup.code.resend");
+  const resendSuccess = useCopy("claimSignup.code.resendSuccess");
+  const differentEmail = useCopy("claimSignup.code.differentEmail");
+  const rateLimitRetry = useCopy("claimSignup.error.rateLimitRetry");
+  const rateLimitLater = useCopy("claimSignup.error.rateLimitLater");
+  const nameError = useCopy("claimSignup.form.name.error");
+  const emailError = useCopy("claimSignup.form.email.error");
+  const passwordError = useCopy("claimSignup.form.password.error");
+  const phone = useCopy("contact.phone.number");
   const successApproved = useCopy("claimSignup.success.approved");
   const successPending = useCopy("claimSignup.success.pending");
   const portalCta = useCopy("claimSignup.success.portalCta");
@@ -139,6 +160,20 @@ export function ClaimSignup({
     if (step === "code") codeRef.current?.focus();
     if (step === "done") doneRef.current?.focus();
   }, [step]);
+  useEffect(() => {
+    if (returnToEmailRef.current && step === "form") {
+      returnToEmailRef.current = false;
+      emailFieldRef.current?.focus();
+    }
+  }, [step]);
+
+  function clearFieldError(field: "name" | "email" | "password") {
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }
 
   async function post(url: string, body: Record<string, unknown>) {
     const res = await fetch(url, {
@@ -149,7 +184,14 @@ export function ClaimSignup({
     const data = (await res.json().catch(() => ({}))) as Record<string, unknown> & {
       error?: string;
     };
-    return { ok: res.ok, data };
+    return { ok: res.ok, status: res.status, retryAfter: res.headers.get("Retry-After"), data };
+  }
+
+  function rateLimitMessage(retryAfter: string | null) {
+    const seconds = Number(retryAfter);
+    return Number.isFinite(seconds) && seconds > 0
+      ? rateLimitRetry.replace("{minutes}", String(Math.max(1, Math.ceil(seconds / 60)))).replace("{phone}", phone)
+      : rateLimitLater.replace("{phone}", phone);
   }
 
   function finish(kind: DoneKind) {
@@ -159,15 +201,26 @@ export function ClaimSignup({
 
   async function submitSignup(e: FormEvent) {
     e.preventDefault();
+    if (!signedIn) {
+      const nextErrors: Partial<Record<"name" | "email" | "password", string>> = {};
+      if (!name.trim()) nextErrors.name = nameError;
+      if (!email.includes("@") || !email.slice(email.indexOf("@") + 1).includes(".")) nextErrors.email = emailError;
+      if (password.length < 8) nextErrors.password = passwordError;
+      if (Object.keys(nextErrors).length) {
+        setFieldErrors(nextErrors);
+        return;
+      }
+    }
     setBusy(true);
     setError(null);
+    setResendStatus(null);
     try {
       const body = signedIn
         ? { store, id }
         : { store, id, name, email, password };
-      const { ok, data } = await post("/api/claim/signup", body);
+      const { ok, status, retryAfter, data } = await post("/api/claim/signup", body);
       if (!ok) {
-        setError(data.error ?? genericError);
+        setError(status === 429 ? rateLimitMessage(retryAfter) : data.error ?? genericError);
         return;
       }
       if (data.mode === "signed-in") {
@@ -177,6 +230,26 @@ export function ClaimSignup({
       setSignupId(typeof data.signupId === "string" ? data.signupId : "");
       setEmailSent(data.emailSent !== false);
       setStep("code");
+    } catch {
+      setError(genericError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resendCode() {
+    setBusy(true);
+    setError(null);
+    setResendStatus(null);
+    try {
+      const { ok, status, retryAfter, data } = await post("/api/claim/signup", { store, id, name, email, password });
+      if (!ok) {
+        setError(status === 429 ? rateLimitMessage(retryAfter) : data.error ?? genericError);
+        return;
+      }
+      setSignupId(typeof data.signupId === "string" ? data.signupId : "");
+      setEmailSent(data.emailSent !== false);
+      setResendStatus(resendSuccess);
     } catch {
       setError(genericError);
     } finally {
@@ -240,13 +313,13 @@ export function ClaimSignup({
     const showPortal = doneKind !== "requested";
     return (
       <div className="mt-2 space-y-2">
-        <p ref={doneRef} tabIndex={-1} role="status" className="text-xs font-medium text-fern">
+        <p ref={doneRef} tabIndex={-1} role="status" className="text-sm font-medium text-fern">
           {text}
         </p>
         {showPortal && (
           <Link
             href="/portal/business"
-            className="inline-block rounded-full bg-sound px-4 py-1.5 text-xs font-semibold text-white hover:bg-sound-deep"
+            className="inline-block rounded-full bg-sound px-4 py-1.5 text-sm font-semibold text-white hover:bg-sound-deep"
           >
             {portalCta}
           </Link>
@@ -256,7 +329,7 @@ export function ClaimSignup({
   }
 
   const errorRegion = error && (
-    <p id={errorId} className="text-xs font-medium text-coral-deep" role="alert">
+    <p id={errorId} className="text-sm font-medium text-coral-deep" role="alert">
       {error}
     </p>
   );
@@ -269,14 +342,14 @@ export function ClaimSignup({
         aria-expanded={open}
         aria-controls={open ? formId : undefined}
         aria-label={subject ? `${disclosureLabel} — ${subject}` : undefined}
-        className="text-xs font-medium text-ink-soft underline underline-offset-2 hover:text-ink"
+        className={prominent ? primaryBtn : "text-sm font-medium text-ink-soft underline underline-offset-2 hover:text-ink"}
       >
         {disclosureLabel}
       </button>
 
       {open && step === "form" && signedIn && (
         <form id={formId} onSubmit={submitSignup} className="mt-3 space-y-2 rounded-lg border border-sand bg-white/60 p-3">
-          <p className="text-xs text-ink-soft">{signedInIntro}</p>
+          <p className="text-sm text-ink-soft">{signedInIntro}</p>
           {errorRegion}
           <div className="flex gap-2">
             <button type="submit" disabled={busy} className={primaryBtn}>
@@ -290,60 +363,68 @@ export function ClaimSignup({
       )}
 
       {open && step === "form" && !signedIn && mode === "signup" && (
-        <form id={formId} onSubmit={submitSignup} className="mt-3 space-y-2 rounded-lg border border-sand bg-white/60 p-3">
-          <p className="text-xs text-ink-soft">{intro}</p>
-          <label htmlFor={nameId} className="block text-xs font-medium text-ink">
+        <form id={formId} noValidate onSubmit={submitSignup} className="mt-3 space-y-2 rounded-lg border border-sand bg-white/60 p-3">
+          <p className="text-sm text-ink-soft">{intro}</p>
+          <label htmlFor={nameId} className="block text-sm font-medium text-ink">
             {nameLabel}
             <input
               ref={firstFieldRef}
               id={nameId}
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => { setName(e.target.value); clearFieldError("name"); }}
               required
               maxLength={200}
               autoComplete="name"
+              aria-invalid={fieldErrors.name ? true : undefined}
+              aria-describedby={fieldErrors.name ? nameErrorId : undefined}
               className={inputCls}
             />
           </label>
-          <label htmlFor={emailId} className="block text-xs font-medium text-ink">
+          {fieldErrors.name && <p id={nameErrorId} className="text-sm font-medium text-coral-deep" role="alert">{fieldErrors.name}</p>}
+          <label htmlFor={emailId} className="block text-sm font-medium text-ink">
             {emailLabel}
             <input
+              ref={emailFieldRef}
               id={emailId}
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => { setEmail(e.target.value); clearFieldError("email"); }}
               required
               maxLength={200}
               autoComplete="email"
-              aria-describedby={emailHintId}
+              aria-invalid={fieldErrors.email ? true : undefined}
+              aria-describedby={[emailHintId, fieldErrors.email ? emailErrorId : undefined].filter(Boolean).join(" ")}
               className={inputCls}
             />
           </label>
           <p id={emailHintId} className={hintCls}>
             {emailHint}
           </p>
-          <label htmlFor={passwordId} className="block text-xs font-medium text-ink">
+          {fieldErrors.email && <p id={emailErrorId} className="text-sm font-medium text-coral-deep" role={fieldErrors.name ? undefined : "alert"}>{fieldErrors.email}</p>}
+          <label htmlFor={passwordId} className="block text-sm font-medium text-ink">
             {passwordLabel}
             <input
               id={passwordId}
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => { setPassword(e.target.value); clearFieldError("password"); }}
               required
               minLength={8}
               autoComplete="new-password"
-              aria-describedby={passwordHintId}
+              aria-invalid={fieldErrors.password ? true : undefined}
+              aria-describedby={[passwordHintId, fieldErrors.password ? passwordErrorId : undefined].filter(Boolean).join(" ")}
               className={inputCls}
             />
           </label>
           <p id={passwordHintId} className={hintCls}>
             {passwordHint}
           </p>
+          {fieldErrors.password && <p id={passwordErrorId} className="text-sm font-medium text-coral-deep" role={fieldErrors.name || fieldErrors.email ? undefined : "alert"}>{fieldErrors.password}</p>}
           {errorRegion}
           <div className="flex gap-2">
             <button
               type="submit"
-              disabled={busy || !name.trim() || !email.trim() || password.length < 8}
+              disabled={busy}
               className={primaryBtn}
             >
               {busy ? sendingLabel : submitLabel}
@@ -358,7 +439,7 @@ export function ClaimSignup({
               setMode("request");
               setError(null);
             }}
-            className="block text-xs font-medium text-ink-soft underline underline-offset-2 hover:text-ink"
+            className="block text-sm font-medium text-ink-soft underline underline-offset-2 hover:text-ink"
           >
             {fallbackToggle}
           </button>
@@ -367,8 +448,8 @@ export function ClaimSignup({
 
       {open && step === "form" && !signedIn && mode === "request" && (
         <form id={formId} onSubmit={submitRequest} className="mt-3 space-y-2 rounded-lg border border-sand bg-white/60 p-3">
-          <p className="text-xs text-ink-soft">{reqIntro}</p>
-          <label htmlFor={reqNameId} className="block text-xs font-medium text-ink">
+          <p className="text-sm text-ink-soft">{reqIntro}</p>
+          <label htmlFor={reqNameId} className="block text-sm font-medium text-ink">
             {nameLabel}
             <input
               ref={firstFieldRef}
@@ -381,7 +462,7 @@ export function ClaimSignup({
               className={inputCls}
             />
           </label>
-          <label htmlFor={reqContactId} className="block text-xs font-medium text-ink">
+          <label htmlFor={reqContactId} className="block text-sm font-medium text-ink">
             {reqContactLabel}
             <input
               id={reqContactId}
@@ -397,7 +478,7 @@ export function ClaimSignup({
           <p id={reqContactHintId} className={hintCls}>
             {reqContactHint}
           </p>
-          <label htmlFor={reqMessageId} className="block text-xs font-medium text-ink">
+          <label htmlFor={reqMessageId} className="block text-sm font-medium text-ink">
             {reqMessageLabel} <span className="font-normal text-ink-soft">{optionalMark}</span>
             <textarea
               id={reqMessageId}
@@ -427,7 +508,7 @@ export function ClaimSignup({
               setMode("signup");
               setError(null);
             }}
-            className="block text-xs font-medium text-ink-soft underline underline-offset-2 hover:text-ink"
+            className="block text-sm font-medium text-ink-soft underline underline-offset-2 hover:text-ink"
           >
             {fallbackBack}
           </button>
@@ -436,9 +517,10 @@ export function ClaimSignup({
 
       {open && step === "code" && (
         <form id={formId} onSubmit={submitCode} className="mt-3 space-y-2 rounded-lg border border-sand bg-white/60 p-3">
-          <p className="text-xs text-ink-soft">{codeIntro}</p>
+          <p className="text-sm text-ink-soft">{codeSentTo.replace("{email}", email)}</p>
+          <p className="text-sm text-ink-soft">{codeIntro}</p>
           {!emailSent && <p className={hintCls}>{codeDevHint}</p>}
-          <label htmlFor={codeId} className="block text-xs font-medium text-ink">
+          <label htmlFor={codeId} className="block text-sm font-medium text-ink">
             {codeLabel}
             <input
               ref={codeRef}
@@ -456,6 +538,7 @@ export function ClaimSignup({
             />
           </label>
           {errorRegion}
+          {resendStatus && <p className="text-sm font-medium text-fern" role="status">{resendStatus}</p>}
           <div className="flex gap-2">
             <button type="submit" disabled={busy || code.length !== 6} className={primaryBtn}>
               {busy ? codeVerifying : codeSubmit}
@@ -464,6 +547,12 @@ export function ClaimSignup({
               {cancelLabel}
             </button>
           </div>
+          <button type="button" disabled={busy} onClick={resendCode} className="block text-sm font-medium text-ink-soft underline underline-offset-2 hover:text-ink">
+            {resendLabel}
+          </button>
+          <button type="button" disabled={busy} onClick={() => { setStep("form"); setCode(""); setError(null); setResendStatus(null); returnToEmailRef.current = true; }} className="block text-sm font-medium text-ink-soft underline underline-offset-2 hover:text-ink">
+            {differentEmail}
+          </button>
         </form>
       )}
     </div>

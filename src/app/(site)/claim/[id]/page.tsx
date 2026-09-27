@@ -60,6 +60,7 @@ export default async function ClaimDetailPage({
               id={business.id}
               subject={business.name}
               signedIn={Boolean(user)}
+              prominent
             />
           </div>
         )}
