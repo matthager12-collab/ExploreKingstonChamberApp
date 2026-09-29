@@ -60,6 +60,9 @@ interface EventDraft {
   repeat: RepeatValue;
 }
 
+type PasteState = { open: boolean; text: string; busy: boolean; error: string };
+const PASTE_CLOSED: PasteState = { open: false, text: "", busy: false, error: "" };
+
 export function EventsForm({
   initial,
   initialEvents,
@@ -72,9 +75,7 @@ export function EventsForm({
   // Paste-a-post: the member brings the text from Facebook or Instagram and we
   // pre-fill the form from it. `hint` rides along into the draft — what we read
   // back is a starting point to correct, never an answer to trust.
-  const [paste, setPaste] = useState<{ open: boolean; text: string; busy: boolean; error: string }>(
-    { open: false, text: "", busy: false, error: "" },
-  );
+  const [paste, setPaste] = useState<PasteState>(PASTE_CLOSED);
   const [hint, setHint] = useState("");
   // Focus follows the member: into the box when the paste panel opens, onto the
   // title when a read post fills the form. Not for a blank or edited event, so
@@ -127,8 +128,11 @@ export function EventsForm({
     };
   }
 
-  function cancelRead() {
+  /** Close the panel and drop any read still in flight, so a late reply neither
+   *  fills a form the member has moved on from nor leaves the panel stuck busy. */
+  function closePaste() {
     readTicket.current += 1;
+    setPaste(PASTE_CLOSED);
   }
 
   async function readPost() {
@@ -154,7 +158,7 @@ export function EventsForm({
           : notes,
       );
       setFromPaste(true);
-      setPaste({ open: false, text: "", busy: false, error: "" });
+      setPaste(PASTE_CLOSED);
     } catch (err) {
       if (ticket !== readTicket.current) return;
       setPaste((p) => ({ ...p, busy: false, error: (err as Error).message }));
@@ -162,7 +166,7 @@ export function EventsForm({
   }
 
   function editEvent(ev: EventItem) {
-    cancelRead();
+    closePaste();
     setHint("");
     setFromPaste(false);
     setDraft({
@@ -415,7 +419,13 @@ export function EventsForm({
             label="The post"
             autoFocus
             value={paste.text}
-            onChange={(e) => setPaste((p) => ({ ...p, text: e.target.value, error: "" }))}
+            onChange={(e) => {
+              // A read in flight is about text that no longer exists: drop it,
+              // and stop showing the panel as busy.
+              readTicket.current += 1;
+              const text = e.target.value;
+              setPaste((p) => ({ ...p, text, error: "", busy: false }));
+            }}
             rows={6}
             error={paste.error || undefined}
           />
@@ -433,13 +443,14 @@ export function EventsForm({
               variant="ghost"
               type="button"
               onClick={() => {
-                cancelRead();
+                // The pasted words go into the description, not away. The save
+                // route keeps 2,000 characters, so no more than that is carried,
+                // counted in whole characters so an emoji is never cut in half.
+                const carried = Array.from(paste.text.trim()).slice(0, 2000).join("");
+                closePaste();
                 setHint("");
                 setFromPaste(true);
-                // The pasted words go into the description, not away. The save
-                // route keeps 2,000 characters, so no more than that is carried.
-                setDraft({ ...blankDraft(), description: paste.text.trim().slice(0, 2000) });
-                setPaste({ open: false, text: "", busy: false, error: "" });
+                setDraft({ ...blankDraft(), description: carried });
               }}
             >
               Fill it in by hand
@@ -447,10 +458,7 @@ export function EventsForm({
             <Button
               variant="ghost"
               type="button"
-              onClick={() => {
-                cancelRead();
-                setPaste({ open: false, text: "", busy: false, error: "" });
-              }}
+              onClick={closePaste}
             >
               Cancel
             </Button>
@@ -461,7 +469,7 @@ export function EventsForm({
           <Button
             type="button"
             onClick={() => {
-              cancelRead();
+              closePaste();
               setHint("");
               setFromPaste(false);
               setDraft(blankDraft());

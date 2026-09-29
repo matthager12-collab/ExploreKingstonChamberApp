@@ -12,9 +12,18 @@ import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
 
 import { EventsForm } from "@/app/(portal)/portal/business/[id]/events-form";
-import type { Restaurant } from "@/lib/types";
+import type { EventItem, Restaurant } from "@/lib/types";
 
 const LISTING = { id: "test-cafe", name: "Test Cafe" } as unknown as Restaurant;
+
+const OLD = {
+  id: "e1",
+  title: "Old event",
+  start: "2026-10-01T10:00:00-07:00",
+  venue: "Hall",
+  description: "",
+  category: "community",
+} as unknown as EventItem;
 
 const CRAB = {
   title: "Kingston Crab Feed",
@@ -131,5 +140,65 @@ describe("paste panel", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("doesn't look like an event post");
     await user.type(screen.getByLabelText("The post"), " more");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  // Editing the box during a read means the reply is about text that is gone.
+  it("drops a reply that arrives after the member has edited the text", async () => {
+    let release!: (r: Response) => void;
+    extract = () => new Promise<Response>((r) => (release = r));
+    const user = await openPanel();
+    await user.type(screen.getByLabelText("The post"), "post A");
+    await user.click(screen.getByRole("button", { name: "Read it" }));
+    await user.type(screen.getByLabelText("The post"), " and more");
+    release(reply(200, { draft: CRAB }));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(screen.queryByLabelText("Title")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("The post")).toHaveValue("post A and more");
+    expect(screen.getByRole("button", { name: "Read it" })).toBeEnabled();
+  });
+
+  // Start a read, press Edit on a saved event, cancel the edit: the panel used
+  // to come back stuck on Reading.
+  it("closes the panel when the member starts editing a saved event", async () => {
+    let release!: (r: Response) => void;
+    extract = () => new Promise<Response>((r) => (release = r));
+    const user = userEvent.setup();
+    render(<EventsForm initial={LISTING} initialEvents={[OLD]} />);
+    await user.click(screen.getByRole("button", { name: "Paste from Facebook or Instagram" }));
+    await user.type(screen.getByLabelText("The post"), "post A");
+    await user.click(screen.getByRole("button", { name: "Read it" }));
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    release(reply(200, { draft: CRAB }));
+    await new Promise((r) => setTimeout(r, 30));
+    await user.click(screen.getByRole("button", { name: "Cancel" })); // cancels the edit
+    expect(screen.queryByLabelText("The post")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reading…" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Paste from Facebook or Instagram" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "+ Add an event" })).toBeInTheDocument();
+  });
+
+  // The older Cancel test also clicks Add, which protects the draft on its own.
+  // Here nothing else does: only Cancel's own invalidation keeps the form shut.
+  it("Cancel alone keeps a late reply from opening the form after the panel is reopened", async () => {
+    let release!: (r: Response) => void;
+    extract = () => new Promise<Response>((r) => (release = r));
+    const user = await openPanel();
+    await user.type(screen.getByLabelText("The post"), "post A");
+    await user.click(screen.getByRole("button", { name: "Read it" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(screen.getByRole("button", { name: "Paste from Facebook or Instagram" }));
+    release(reply(200, { draft: CRAB }));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(screen.queryByLabelText("Title")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("The post")).toHaveValue("");
+  });
+
+  it("carries the pasted words by whole characters, never through an emoji", async () => {
+    await openPanel();
+    fireEvent.change(screen.getByLabelText("The post"), { target: { value: "x".repeat(1999) + "😀" + "tail" } });
+    fireEvent.click(screen.getByRole("button", { name: "Fill it in by hand" }));
+    const value = (screen.getByLabelText("Description") as HTMLTextAreaElement).value;
+    expect(Array.from(value)).toHaveLength(2000);
+    expect(value.endsWith("😀")).toBe(true);
   });
 });

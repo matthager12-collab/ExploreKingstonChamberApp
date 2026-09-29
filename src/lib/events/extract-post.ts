@@ -150,6 +150,30 @@ function validLocalDateTime(value: string): boolean {
 }
 
 /**
+ * Characters that change what a member reads without being visible: zero-width
+ * space, word joiner, the byte-order mark, and the direction overrides and
+ * isolates. Zero-width joiner and non-joiner stay, because emoji sequences and
+ * some scripts need them.
+ */
+const INVISIBLE = /[\u200B\u2060\uFEFF\u202A-\u202E\u2066-\u2069]/g;
+
+/**
+ * Clean, trim and cut to `max` WHOLE characters. Counting UTF-16 units, as
+ * slice() does, can cut an emoji in half and leave a broken character.
+ */
+function tidy(value: string, max: number): string {
+  return Array.from(value.replace(INVISIBLE, "").trim())
+    .slice(0, max)
+    .join("")
+    .trim();
+}
+
+/** A real host name: dotted labels ending in a letter. Refuses ".", "a..b" and
+ *  IP addresses, none of which is a ticket page. The URL parser has already
+ *  turned an international name into its ASCII form. */
+const HOST = /^([a-z0-9-]+\.)+[a-z][a-z0-9-]*$/i;
+
+/**
  * A link a member could click: http or https, a real host, no spaces, a sane
  * length. The route drops a non-http(s) url without comment, and a `javascript:`
  * string must never reach an href, so neither reaches the form. A bare "https://"
@@ -161,7 +185,10 @@ function safeLink(value: string): string {
   try {
     const parsed = new URL(link);
     if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return "";
-    if (!parsed.hostname.includes(".")) return "";
+    // A name and password in a link make it point somewhere other than where it
+    // reads: https://tickets.example:pass@evil.example/ goes to evil.example.
+    if (parsed.username || parsed.password) return "";
+    if (!HOST.test(parsed.hostname)) return "";
   } catch {
     return "";
   }
@@ -169,7 +196,13 @@ function safeLink(value: string): string {
 }
 
 /** Anything the model returns is a suggestion; these are the house rules. */
-function clampDraft(raw: z.infer<typeof extractionSchema>): ExtractedDraft {
+function clampDraft(raw: z.infer<typeof extractionSchema>): ExtractedDraft | null {
+  // Checked on the FINAL title, after cleaning and cutting. Checked before, a
+  // visible letter behind 200 hidden characters passed the check and was lost in
+  // the cut, leaving a title nobody can see.
+  const title = tidy(raw.title, 200);
+  if (!/[\p{L}\p{N}]/u.test(title)) return null;
+
   const start = validLocalDateTime(raw.start) ? raw.start : "";
   // An end with no start means nothing, and would leave the form showing one.
   const end = start && validLocalDateTime(raw.end) && raw.end > start ? raw.end : "";
@@ -182,17 +215,19 @@ function clampDraft(raw: z.infer<typeof extractionSchema>): ExtractedDraft {
   const unsure = !inRange || raw.confidence < CONFIDENCE_FLOOR || !start;
 
   return {
-    title: raw.title.trim().slice(0, 200),
+    title,
     start,
     end,
-    venue: raw.venue.trim().slice(0, 200),
-    description: raw.description.trim().slice(0, 2000),
-    category: raw.category,
+    venue: tidy(raw.venue, 200),
+    description: tidy(raw.description, 2000),
+    // The SDK's parser keeps this in the list; the fake replies in tests skip
+    // the parser, so it is checked here as well.
+    category: (CATEGORIES as readonly string[]).includes(raw.category) ? raw.category : "community",
     url,
     unsure,
     // The note is the model's own words. It reaches the member only inside the
     // app's "check this" warning, and never from a reading that broke its range.
-    notes: unsure && inRange ? raw.notes.trim().slice(0, 300) : "",
+    notes: unsure && inRange ? tidy(raw.notes, 300) : "",
   };
 }
 
@@ -251,7 +286,6 @@ export async function extractEventFromPost(
   });
 
   const parsed = response.parsed_output;
-  // A title of one zero-width space survives trim() and is no event.
-  if (!parsed || !/[\p{L}\p{N}]/u.test(parsed.title)) return null;
+  if (!parsed) return null;
   return clampDraft(parsed);
 }

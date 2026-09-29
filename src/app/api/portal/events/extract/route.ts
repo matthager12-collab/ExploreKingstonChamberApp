@@ -43,15 +43,21 @@ async function readCapped(request: NextRequest, max: number): Promise<string | n
   if (!reader) return "";
   const chunks: Uint8Array[] = [];
   let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > max) {
-      await reader.cancel();
-      return null;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > max) {
+        await reader.cancel().catch(() => {});
+        return null;
+      }
+      chunks.push(value);
     }
-    chunks.push(value);
+  } catch {
+    // The upload broke part way. What arrived is not a whole request, so it is
+    // treated as an empty one and the JSON check below answers 400.
+    return "";
   }
   return new TextDecoder().decode(Buffer.concat(chunks));
 }
@@ -62,8 +68,10 @@ export async function POST(request: NextRequest) {
 
   const raw = await readCapped(request, MAX_BODY_BYTES);
   if (raw === null) {
+    // Not the "longer than N characters" sentence: this fires on bytes, and a
+    // short post with a huge unused field is not too long.
     return NextResponse.json(
-      { error: `That's longer than ${MAX_POST_CHARS} characters — paste just the post.` },
+      { error: "That's too much to read at once — paste just the post." },
       { status: 413 },
     );
   }

@@ -255,4 +255,84 @@ describe("extractEventFromPost", () => {
     expect(sent.max_tokens).toBe(1024);
     expect(sent.output_config?.format?.type).toBe("json_schema");
   });
+
+  // Second outside review, 2026-09-28. A name and password in a link make it
+  // point somewhere other than where it reads: the link below goes to evil.example.
+  it("drops a link with a name and password in it", async () => {
+    const draft = await extractEventFromPost(
+      "x",
+      deps({ ...GOOD, url: "https://tickets.example:pass@evil.example/event" }),
+    );
+    expect(draft?.url).toBe("");
+  });
+
+  // A dot is not a host. "https://./" has one and no name; an IP address is not
+  // a ticket page either.
+  it("drops a link whose host is not a real name", async () => {
+    for (const bad of [
+      "https://./",
+      "https://[2001:db8::1]/",
+      "https://10.0.0.10/x",
+      "https://a..b/x",
+      "https://example.-/x",
+    ]) {
+      const draft = await extractEventFromPost("x", deps({ ...GOOD, url: bad }));
+      expect(draft?.url, bad).toBe("");
+    }
+  });
+
+  it("keeps a link with a port, a query and an international host, as written", async () => {
+    for (const ok of ["https://example.org:8443/x?y=1", "https://例え.jp/x", "http://Sub.Example.co.uk/x"]) {
+      const draft = await extractEventFromPost("x", deps({ ...GOOD, url: ok }));
+      expect(draft?.url, ok).toBe(ok);
+    }
+  });
+
+  // The title is checked after it is cleaned and cut. Checked before, a letter
+  // beyond the cut passed the check and was then lost, leaving a junk title.
+  it("checks the title after the cut", async () => {
+    expect(await extractEventFromPost("x", deps({ ...GOOD, title: "-".repeat(200) + "A" }))).toBeNull();
+    // Hidden characters are removed before the cut, so what is left is what counts.
+    const draft = await extractEventFromPost("x", deps({ ...GOOD, title: "\u200b".repeat(200) + "A" }));
+    expect(draft?.title).toBe("A");
+    expect(await extractEventFromPost("x", deps({ ...GOOD, title: "\u200b".repeat(300) }))).toBeNull();
+  });
+
+  it("strips zero-width and direction-changing characters from what a member reads", async () => {
+    const draft = await extractEventFromPost(
+      "x",
+      deps({ ...GOOD, title: "‮Crab​ Feed", venue: "⁦Hall⁩", description: "a﻿b" }),
+    );
+    expect(draft?.title).toBe("Crab Feed");
+    expect(draft?.venue).toBe("Hall");
+    expect(draft?.description).toBe("ab");
+  });
+
+  it("cuts by whole characters, never through an emoji", async () => {
+    const draft = await extractEventFromPost("x", deps({ ...GOOD, title: "a".repeat(199) + "😀😀" }));
+    const title = draft?.title ?? "";
+    expect(Array.from(title)).toHaveLength(200);
+    expect(title.endsWith("😀")).toBe(true);
+    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(title)).toBe(false);
+  });
+
+  it("falls back to community for a category outside the list", async () => {
+    const draft = await extractEventFromPost("x", deps({ ...GOOD, category: "weird" }));
+    expect(draft?.category).toBe("community");
+  });
+
+  // The API is not given a hard enum: the SDK folds it into the field's
+  // description. What keeps the category in the list is the parser the SDK runs
+  // on every reply, which throws on anything else (the route then says it could
+  // not read the post). A fake reply skips that parser, so this calls it.
+  it("rejects a category outside the seven, through the parser the SDK runs on every reply", async () => {
+    const { client, parse } = fakeClient(GOOD);
+    await extractEventFromPost("Crab feed", { client, today: "2026-09-28" });
+    const sent = (parse.mock.calls as unknown as unknown[][])[0]![0] as {
+      output_config: { format: { parse: (text: string) => unknown } };
+    };
+    const reply = (category: string) => JSON.stringify({ ...GOOD, category });
+    expect(() => sent.output_config.format.parse(reply("music"))).not.toThrow();
+    expect(() => sent.output_config.format.parse(reply("weird"))).toThrow();
+  });
 });

@@ -245,4 +245,67 @@ describe("POST /api/portal/events/extract", () => {
     await post(BASE);
     expect(mockCan).toHaveBeenCalledWith(expect.objectContaining({ email: "t@t.t" }), "edit-record", "owner-1");
   });
+
+  // A dropped upload (the stream errors part way) used to throw out of the route.
+  it("answers 400, not a crash, when the upload breaks part way", async () => {
+    let sent = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (!sent) {
+          sent = true;
+          controller.enqueue(new TextEncoder().encode('{"ownerId":"owner-1",'));
+          return;
+        }
+        controller.error(new Error("connection reset"));
+      },
+    });
+    const res = await POST(
+      new NextRequest("http://localhost/api/portal/events/extract", {
+        method: "POST",
+        body,
+        headers: { "content-type": "application/json" },
+        duplex: "half",
+      } as RequestInit),
+    );
+    expect(res.status).toBe(400);
+    expect(mockExtract).not.toHaveBeenCalled();
+  });
+
+  // The cap has to bite while the bytes arrive. A body that never ends must be
+  // refused after a few chunks; reading it whole and measuring after would hang.
+  it("stops reading a body that never ends", async () => {
+    let pulls = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1;
+        controller.enqueue(new Uint8Array(10_000));
+      },
+    });
+    const res = await POST(
+      new NextRequest("http://localhost/api/portal/events/extract", {
+        method: "POST",
+        body,
+        headers: { "content-type": "application/json" },
+        duplex: "half",
+      } as RequestInit),
+    );
+    expect(res.status).toBe(413);
+    expect(pulls).toBeLessThan(10);
+  });
+
+  // A short post with a huge unused field is not "longer than 8000 characters".
+  it("uses a different sentence for a too-big request than for a too-long post", async () => {
+    const big = await (await post({ ...BASE, padding: "x".repeat(200_000) })).json();
+    expect(big.error).toContain("too much");
+    expect(big.error).not.toContain("8000");
+    const long = await (await post({ ...BASE, text: "x".repeat(MAX_POST_CHARS + 1) })).json();
+    expect(long.error).toContain("8000");
+  });
+
+  // The other listing test uses the same constant the code is given, so it would
+  // pass if the code hard-wired that constant. A different id closes that.
+  it("checks the member against whichever listing the request names", async () => {
+    await post({ ...BASE, ownerId: "listing-xyz" });
+    expect(mockCan).toHaveBeenCalledWith(expect.objectContaining({ email: "t@t.t" }), "edit-record", "listing-xyz");
+  });
 });
