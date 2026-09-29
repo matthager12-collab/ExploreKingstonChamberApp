@@ -399,10 +399,8 @@ export function EventsForm({
             value={paste.text}
             onChange={(e) => setPaste((p) => ({ ...p, text: e.target.value }))}
             rows={6}
+            error={paste.error || undefined}
           />
-          {paste.error && (
-            <p className="mt-2 text-sm font-semibold text-ink">{paste.error}</p>
-          )}
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <Button
               type="button"
