@@ -265,7 +265,7 @@ describe("POST /api/portal/events/extract", () => {
         body,
         headers: { "content-type": "application/json" },
         duplex: "half",
-      } as RequestInit),
+      } as unknown as ConstructorParameters<typeof NextRequest>[1]),
     );
     expect(res.status).toBe(400);
     expect(mockExtract).not.toHaveBeenCalled();
@@ -287,7 +287,7 @@ describe("POST /api/portal/events/extract", () => {
         body,
         headers: { "content-type": "application/json" },
         duplex: "half",
-      } as RequestInit),
+      } as unknown as ConstructorParameters<typeof NextRequest>[1]),
     );
     expect(res.status).toBe(413);
     expect(pulls).toBeLessThan(10);
