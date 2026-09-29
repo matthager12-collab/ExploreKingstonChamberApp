@@ -50,6 +50,12 @@ export const MAX_POST_CHARS = 8_000;
 /** Cheapest current model; this is field extraction, not judgement. */
 const MODEL = "claude-haiku-4-5";
 
+/** Wall clock per attempt. The member is waiting on a button, so this is a
+ *  user-experience budget: the SDK default is ten minutes, which would leave
+ *  the form hanging. One retry, not the default two, for the same reason. The
+ *  feedback guardrail (src/lib/feedback-moderation.ts) makes the same choice. */
+const TIMEOUT_MS = 20_000;
+
 /**
  * Confidence floor. Below this the draft is returned but flagged `unsure`, and
  * the form says so rather than presenting a guess as a reading.
@@ -159,6 +165,13 @@ function clampDraft(raw: z.infer<typeof extractionSchema>): ExtractedDraft {
   };
 }
 
+/** False when no key is configured. The route says so plainly instead of
+ *  letting the SDK fail on its first request. Same posture as the feedback
+ *  guardrail, where an unset key is a quiet no-op rather than an error. */
+export function extractionConfigured(): boolean {
+  return Boolean(process.env.ANTHROPIC_API_KEY);
+}
+
 export interface ExtractDeps {
   client?: Pick<Anthropic["messages"], "parse">;
   /** Pacific "today" as YYYY-MM-DD — injected so tests aren't time-dependent. */
@@ -179,7 +192,8 @@ export async function extractEventFromPost(
   const post = text.trim();
   if (!post || post.length > MAX_POST_CHARS) return null;
 
-  const messages = deps.client ?? new Anthropic().messages;
+  const messages =
+    deps.client ?? new Anthropic({ maxRetries: 1, timeout: TIMEOUT_MS }).messages;
   const today =
     deps.today ??
     new Intl.DateTimeFormat("en-CA", {

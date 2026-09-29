@@ -9,7 +9,7 @@
 // with the sibling POST and its moderation floor.
 
 import { NextRequest } from "next/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { POST } from "@/app/api/portal/events/extract/route";
 import { can, getSessionUser } from "@/lib/auth";
@@ -66,8 +66,13 @@ function post(body: unknown) {
 
 const BASE = { ownerId: "owner-1", text: "Crab feed Oct 3 at the community center!" };
 
+afterEach(() => {
+  delete process.env.ANTHROPIC_API_KEY;
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
+  process.env.ANTHROPIC_API_KEY = "test-credential-placeholder";
   mockCan.mockReturnValue(true);
   mockLimit.mockResolvedValue({ ok: true, retryAfterSeconds: 0 });
 });
@@ -144,12 +149,12 @@ describe("POST /api/portal/events/extract", () => {
   it("does not leak upstream error detail to the caller", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     mockExtract.mockRejectedValueOnce(
-      new Error("401 unauthorized: x-api-key sk-ant-SECRETCANARY request_id req_123"),
+      new Error("401 unauthorized: x-api-key CANARY-7f3a91 request_id req_123"),
     );
     const res = await post(BASE);
     expect(res.status).toBe(502);
     const text = JSON.stringify(await res.json());
-    expect(text).not.toContain("SECRETCANARY");
+    expect(text).not.toContain("CANARY-7f3a91");
     expect(text).not.toContain("req_123");
     expect(consoleError).toHaveBeenCalled();
     consoleError.mockRestore();
@@ -158,5 +163,18 @@ describe("POST /api/portal/events/extract", () => {
   it("says so plainly when the post holds no event", async () => {
     mockExtract.mockResolvedValueOnce(null);
     expect((await post(BASE)).status).toBe(422);
+  });
+
+  // Same posture as the feedback guardrail: no key is "not switched on", said
+  // plainly, not a crash. It is checked after auth, so a signed-out caller gets
+  // the 401 and learns nothing about configuration.
+  it("says it isn't switched on when no key is set, without calling the model", async () => {
+    delete process.env.ANTHROPIC_API_KEY;
+    const res = await post(BASE);
+    expect(res.status).toBe(503);
+    expect(mockExtract).not.toHaveBeenCalled();
+
+    mockAuth.mockResolvedValueOnce(null);
+    expect((await post(BASE)).status).toBe(401);
   });
 });

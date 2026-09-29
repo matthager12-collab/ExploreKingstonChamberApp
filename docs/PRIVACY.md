@@ -71,6 +71,15 @@ wording is **never written to the database** (DEC-003). The call is stateless,
 carries no tools and no history, and fails open: if it is unavailable the
 comment stores exactly as written (DEC-006).
 
+**A third party also sees pasted post text.** The business portal's "Paste from
+Facebook or Instagram" button sends the text a member pastes to Anthropic's API,
+which reads it into a draft event. Only that text goes: never the member's name,
+email or account. The call is stateless, carries no tools and no history, and
+nothing it returns is stored. The result fills a form the member checks and
+submits like any other event, so it goes through the normal moderation floor. It
+uses the same key as the feedback guardrail. Whether the published notice needs
+its own sentence for member-pasted text is Mat's call.
+
 **The published notice states all of this** (notice version `2026-09`, its
 "Feedback you send us" section). Four of the original five promises are
 structural and enforced in code — never published, admin-read only, deleted at

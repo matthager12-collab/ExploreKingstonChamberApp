@@ -12,7 +12,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { can, getSessionUser } from "@/lib/auth";
-import { extractEventFromPost, MAX_POST_CHARS } from "@/lib/events/extract-post";
+import {
+  extractEventFromPost,
+  extractionConfigured,
+  MAX_POST_CHARS,
+} from "@/lib/events/extract-post";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 /** Per-member cap. Generous for pasting a few posts in a sitting, low enough
@@ -37,6 +41,15 @@ export async function POST(request: NextRequest) {
   if (!ownerId) return NextResponse.json({ error: "ownerId required" }, { status: 400 });
   if (!can(user, "edit-record", ownerId)) {
     return NextResponse.json({ error: "You don't manage that listing" }, { status: 403 });
+  }
+
+  // After the auth checks on purpose: whether the feature is configured is not
+  // something an anonymous caller gets to learn.
+  if (!extractionConfigured()) {
+    return NextResponse.json(
+      { error: "Reading posts isn't switched on yet — fill the form in by hand." },
+      { status: 503 },
+    );
   }
 
   const text = typeof body.text === "string" ? body.text : "";
