@@ -76,6 +76,10 @@ export function EventsForm({
     { open: false, text: "", busy: false, error: "" },
   );
   const [hint, setHint] = useState("");
+  // Focus follows the member: into the box when the paste panel opens, onto the
+  // title when a read post fills the form. Not for a blank or edited event, so
+  // the existing flows behave as they did.
+  const [fromPaste, setFromPaste] = useState(false);
   // Fetched deconfliction results, remembered with the date they answer for —
   // the visible list is derived, so a date change instantly clears stale hits.
   const [dayCheck, setDayCheck] = useState<{ date: string; events: EventItem[] }>({
@@ -139,6 +143,7 @@ export function EventsForm({
           ? `Check this one before you save${notes ? ` — ${notes}` : ", especially the date."}`
           : notes,
       );
+      setFromPaste(true);
       setPaste({ open: false, text: "", busy: false, error: "" });
     } catch (err) {
       setPaste((p) => ({ ...p, busy: false, error: (err as Error).message }));
@@ -147,6 +152,7 @@ export function EventsForm({
 
   function editEvent(ev: EventItem) {
     setHint("");
+    setFromPaste(false);
     setDraft({
       id: ev.id,
       title: ev.title,
@@ -276,7 +282,13 @@ export function EventsForm({
           <form onSubmit={saveDraft} className="mt-4 flex flex-col gap-5">
             {hint && <Callout title="Read from your post">{hint}</Callout>}
 
-            <TextField label="Title" value={draft.title} onChange={setE("title")} required />
+            <TextField
+              label="Title"
+              value={draft.title}
+              onChange={setE("title")}
+              required
+              autoFocus={fromPaste}
+            />
 
             <div className="grid gap-5 sm:grid-cols-2">
               <TextField
@@ -383,6 +395,7 @@ export function EventsForm({
           </p>
           <TextAreaField
             label="The post"
+            autoFocus
             value={paste.text}
             onChange={(e) => setPaste((p) => ({ ...p, text: e.target.value }))}
             rows={6}
@@ -394,6 +407,7 @@ export function EventsForm({
             <Button
               type="button"
               pending={paste.busy}
+              pendingLabel="Reading…"
               disabled={!paste.text.trim()}
               onClick={() => void readPost()}
             >
@@ -414,6 +428,7 @@ export function EventsForm({
             type="button"
             onClick={() => {
               setHint("");
+              setFromPaste(false);
               setDraft(blankDraft());
             }}
           >
