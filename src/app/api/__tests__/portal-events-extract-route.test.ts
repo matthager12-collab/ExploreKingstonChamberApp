@@ -271,13 +271,19 @@ describe("POST /api/portal/events/extract", () => {
     expect(mockExtract).not.toHaveBeenCalled();
   });
 
-  // The cap has to bite while the bytes arrive. A body that never ends must be
-  // refused after a few chunks; reading it whole and measuring after would hang.
-  it("stops reading a body that never ends", async () => {
+  // The cap has to bite while the bytes arrive. This body is two megabytes long.
+  // With the cap the route stops after a few chunks and answers 413. Without it
+  // the route would read all of it and answer 400 (it is not JSON), so both the
+  // status and the number of chunks pulled give the difference away.
+  it("stops reading a very long body after a few chunks", async () => {
     let pulls = 0;
     const body = new ReadableStream<Uint8Array>({
       pull(controller) {
         pulls += 1;
+        if (pulls > 200) {
+          controller.close();
+          return;
+        }
         controller.enqueue(new Uint8Array(10_000));
       },
     });

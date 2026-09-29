@@ -170,6 +170,8 @@ describe("paste panel", () => {
     await user.click(screen.getByRole("button", { name: "Edit" }));
     release(reply(200, { draft: CRAB }));
     await new Promise((r) => setTimeout(r, 30));
+    // The late reply must not fill the form over the event being edited.
+    expect(screen.getByLabelText("Title")).toHaveValue("Old event");
     await user.click(screen.getByRole("button", { name: "Cancel" })); // cancels the edit
     expect(screen.queryByLabelText("The post")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reading…" })).not.toBeInTheDocument();
