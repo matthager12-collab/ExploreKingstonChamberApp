@@ -8,7 +8,7 @@
 // fetch and the pending-removal behaviour, where a member's delete of a live
 // event keeps the row visible so the portal doesn't pretend it has gone.
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { EventCategory, EventItem, Restaurant } from "@/lib/types";
 import { Badge, Callout } from "@/components/ui";
 import { RepeatField, type RepeatValue } from "@/components/repeat-field";
@@ -80,6 +80,10 @@ export function EventsForm({
   // title when a read post fills the form. Not for a blank or edited event, so
   // the existing flows behave as they did.
   const [fromPaste, setFromPaste] = useState(false);
+  // Which read is current. Cancel, or starting a draft of their own, moves it on,
+  // so a reply that lands late is dropped instead of filling the form over what
+  // the member has since typed.
+  const readTicket = useRef(0);
   // Fetched deconfliction results, remembered with the date they answer for —
   // the visible list is derived, so a date change instantly clears stale hits.
   const [dayCheck, setDayCheck] = useState<{ date: string; events: EventItem[] }>({
@@ -123,7 +127,12 @@ export function EventsForm({
     };
   }
 
+  function cancelRead() {
+    readTicket.current += 1;
+  }
+
   async function readPost() {
+    const ticket = ++readTicket.current;
     setPaste((p) => ({ ...p, busy: true, error: "" }));
     try {
       const res = await fetch("/api/portal/events/extract", {
@@ -135,6 +144,7 @@ export function EventsForm({
         error?: string;
         draft?: Omit<EventDraft, "repeat"> & { unsure: boolean; notes: string };
       };
+      if (ticket !== readTicket.current) return;
       if (!res.ok || !data.draft) throw new Error(data.error ?? "Couldn't read that one.");
       const { unsure, notes, ...fields } = data.draft;
       setDraft({ ...fields, venue: fields.venue || initial.name, repeat: {} });
@@ -146,11 +156,13 @@ export function EventsForm({
       setFromPaste(true);
       setPaste({ open: false, text: "", busy: false, error: "" });
     } catch (err) {
+      if (ticket !== readTicket.current) return;
       setPaste((p) => ({ ...p, busy: false, error: (err as Error).message }));
     }
   }
 
   function editEvent(ev: EventItem) {
+    cancelRead();
     setHint("");
     setFromPaste(false);
     setDraft({
@@ -280,7 +292,13 @@ export function EventsForm({
             {draft.id ? "Edit event" : "New event"}
           </p>
           <form onSubmit={saveDraft} className="mt-4 flex flex-col gap-5">
-            {hint && <Callout title="Read from your post">{hint}</Callout>}
+            {hint && (
+              // An alert, because it appears after a button press and a member
+              // on a screen reader has to hear it before they save.
+              <div role="alert">
+                <Callout title="Read from your post">{hint}</Callout>
+              </div>
+            )}
 
             <TextField
               label="Title"
@@ -397,7 +415,7 @@ export function EventsForm({
             label="The post"
             autoFocus
             value={paste.text}
-            onChange={(e) => setPaste((p) => ({ ...p, text: e.target.value }))}
+            onChange={(e) => setPaste((p) => ({ ...p, text: e.target.value, error: "" }))}
             rows={6}
             error={paste.error || undefined}
           />
@@ -414,7 +432,25 @@ export function EventsForm({
             <Button
               variant="ghost"
               type="button"
-              onClick={() => setPaste({ open: false, text: "", busy: false, error: "" })}
+              onClick={() => {
+                cancelRead();
+                setHint("");
+                setFromPaste(true);
+                // The pasted words go into the description, not away. The save
+                // route keeps 2,000 characters, so no more than that is carried.
+                setDraft({ ...blankDraft(), description: paste.text.trim().slice(0, 2000) });
+                setPaste({ open: false, text: "", busy: false, error: "" });
+              }}
+            >
+              Fill it in by hand
+            </Button>
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={() => {
+                cancelRead();
+                setPaste({ open: false, text: "", busy: false, error: "" });
+              }}
             >
               Cancel
             </Button>
@@ -425,6 +461,7 @@ export function EventsForm({
           <Button
             type="button"
             onClick={() => {
+              cancelRead();
               setHint("");
               setFromPaste(false);
               setDraft(blankDraft());

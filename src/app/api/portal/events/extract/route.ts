@@ -26,16 +26,59 @@ import { checkRateLimit } from "@/lib/rate-limit";
 const LIMIT = 12;
 const WINDOW_MS = 10 * 60_000;
 
+/** Room for the 8,000-character post at four bytes a character, plus the JSON
+ *  around it. Anything bigger is not a post. */
+const MAX_BODY_BYTES = 40_000;
+
+/**
+ * Read the body up to a cap; null means it went over. Content-Length can lie or
+ * be missing (chunked), so the bytes are counted as they arrive, and reading
+ * stops the moment the cap is passed. Before this the body was read whole, so a
+ * signed-in caller could send huge bodies without spending any quota.
+ */
+async function readCapped(request: NextRequest, max: number): Promise<string | null> {
+  const declared = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > max) return null;
+  const reader = request.body?.getReader();
+  if (!reader) return "";
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > max) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  return new TextDecoder().decode(Buffer.concat(chunks));
+}
+
 export async function POST(request: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Sign in first" }, { status: 401 });
 
-  let body: Record<string, unknown>;
+  const raw = await readCapped(request, MAX_BODY_BYTES);
+  if (raw === null) {
+    return NextResponse.json(
+      { error: `That's longer than ${MAX_POST_CHARS} characters — paste just the post.` },
+      { status: 413 },
+    );
+  }
+  let parsed: unknown;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    parsed = JSON.parse(raw);
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
+  // JSON allows null, a list, a number and a string at the top level; none of
+  // them has an ownerId to read.
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
+  const body = parsed as Record<string, unknown>;
 
   const ownerId = typeof body.ownerId === "string" ? body.ownerId : "";
   if (!ownerId) return NextResponse.json({ error: "ownerId required" }, { status: 400 });
@@ -66,8 +109,13 @@ export async function POST(request: NextRequest) {
     windowMs: WINDOW_MS,
   });
   if (!limit.ok) {
+    const minutes = Math.max(1, Math.ceil(limit.retryAfterSeconds / 60));
     return NextResponse.json(
-      { error: "That's a lot of posts at once — try again in a few minutes." },
+      {
+        error: `That's a lot of posts at once — try again in about ${minutes} ${
+          minutes === 1 ? "minute" : "minutes"
+        }.`,
+      },
       { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } },
     );
   }
@@ -76,9 +124,15 @@ export async function POST(request: NextRequest) {
   try {
     draft = await extractEventFromPost(text);
   } catch (err) {
-    // Upstream detail (which can carry request ids and key fragments) stays in
-    // the server log; the member gets a sentence and their form.
-    console.error("event extract failed", err);
+    // Name, status and request id only. The whole error carries the upstream
+    // body, which can echo what was sent, and this route is sent people's posts.
+    // The member gets a sentence and their form.
+    const e = err as { name?: unknown; status?: unknown; requestID?: unknown } | null;
+    console.error("event extract failed", {
+      name: typeof e?.name === "string" ? e.name : "Error",
+      status: typeof e?.status === "number" ? e.status : undefined,
+      requestId: typeof e?.requestID === "string" ? e.requestID : undefined,
+    });
     return NextResponse.json(
       { error: "Couldn't read that one — fill the form in by hand." },
       { status: 502 },

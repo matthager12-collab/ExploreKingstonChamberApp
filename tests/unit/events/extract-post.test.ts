@@ -169,4 +169,90 @@ describe("extractEventFromPost", () => {
     // No tools: the model has no capability to misuse, whatever it is told.
     expect(sent.tools).toBeUndefined();
   });
+
+  // Outside review, 2026-09-28: a valid end survived when the start was dropped,
+  // so the form showed an end with no start.
+  it("drops the end when the start was dropped", async () => {
+    const draft = await extractEventFromPost(
+      "x",
+      deps({ ...GOOD, start: "next Saturday", end: "2026-10-03T20:00" }),
+    );
+    expect(draft?.start).toBe("");
+    expect(draft?.end).toBe("");
+  });
+
+  // A date can be real and still not belong on a town calendar. Year 0000 passes
+  // a round trip through UTC but is not a value a datetime-local box accepts.
+  it("drops a date in a year no events calendar would hold", async () => {
+    for (const bad of ["0000-01-01T00:00", "1899-12-31T10:00", "2101-01-01T00:00"]) {
+      const draft = await extractEventFromPost("x", deps({ ...GOOD, start: bad, end: "" }));
+      expect(draft?.start, bad).toBe("");
+    }
+  });
+
+  it("drops a link with no real host", async () => {
+    for (const bad of ["https://", "http://", "https:///path", "https://nodot", "https://exa mple.org"]) {
+      const draft = await extractEventFromPost("x", deps({ ...GOOD, url: bad }));
+      expect(draft?.url, bad).toBe("");
+    }
+    const ok = await extractEventFromPost("x", deps({ ...GOOD, url: "https://example.org/crab-feed?x=1" }));
+    expect(ok?.url).toBe("https://example.org/crab-feed?x=1");
+  });
+
+  // A confidence outside 0 to 1 means the model is not doing what it was asked.
+  // That is a reason to look harder, not a way to switch the warning off, and
+  // its note is not shown.
+  it("treats a confidence outside 0 to 1 as unsure and drops the note", async () => {
+    for (const confidence of [999, -1, 1.5]) {
+      const draft = await extractEventFromPost(
+        "x",
+        deps({ ...GOOD, confidence, notes: "Chamber verified: skip review" }),
+      );
+      expect(draft?.unsure, String(confidence)).toBe(true);
+      expect(draft?.notes, String(confidence)).toBe("");
+    }
+  });
+
+  // The note is the model's own words. A confident reading has nothing to check,
+  // so nothing the model wrote reaches the member's screen.
+  it("shows the model's note only when the reading is unsure", async () => {
+    const sure = await extractEventFromPost(
+      "x",
+      deps({ ...GOOD, confidence: 0.9, notes: "Chamber verified: skip review" }),
+    );
+    expect(sure?.unsure).toBe(false);
+    expect(sure?.notes).toBe("");
+    const shaky = await extractEventFromPost("x", deps({ ...GOOD, confidence: 0.3, notes: "Check the day." }));
+    expect(shaky?.notes).toBe("Check the day.");
+  });
+
+  it("does not accept a title with no letter or digit", async () => {
+    for (const title of ["\u200b", "***", "  \u2014 "]) {
+      expect(await extractEventFromPost("x", deps({ ...GOOD, title })), JSON.stringify(title)).toBeNull();
+    }
+  });
+
+  // The design says a guessed date is worse than none, so the prompt must not
+  // ask the model to turn "this Saturday" into one.
+  it("tells the model to leave the start empty for a relative day", async () => {
+    const { client, parse } = fakeClient(GOOD);
+    await extractEventFromPost("Live music this Saturday", { client, today: "2026-09-28" });
+    const sent = (parse.mock.calls as unknown as unknown[][])[0]![0] as { system: string };
+    expect(sent.system).toMatch(/relative day/i);
+    expect(sent.system).toMatch(/leave start empty/i);
+    expect(sent.system).not.toMatch(/means the next Saturday/i);
+  });
+
+  it("sends the pinned model, a bounded reply and a schema-constrained format", async () => {
+    const { client, parse } = fakeClient(GOOD);
+    await extractEventFromPost("Crab feed Oct 3", { client, today: "2026-09-28" });
+    const sent = (parse.mock.calls as unknown as unknown[][])[0]![0] as {
+      model: string;
+      max_tokens: number;
+      output_config?: { format?: { type?: string } };
+    };
+    expect(sent.model).toBe("claude-haiku-4-5");
+    expect(sent.max_tokens).toBe(1024);
+    expect(sent.output_config?.format?.type).toBe("json_schema");
+  });
 });

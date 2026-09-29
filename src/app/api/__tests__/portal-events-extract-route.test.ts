@@ -8,6 +8,8 @@
 // itself the design — the LLM sits on a read path, and creating the event stays
 // with the sibling POST and its moderation floor.
 
+import util from "node:util";
+
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -176,5 +178,71 @@ describe("POST /api/portal/events/extract", () => {
 
     mockAuth.mockResolvedValueOnce(null);
     expect((await post(BASE)).status).toBe(401);
+  });
+
+  // Outside review, 2026-09-28: the whole exception was logged. The SDK's errors
+  // carry the upstream body, and an upstream 400 can echo what it was sent, so a
+  // pasted post could end up in the logs. Name, status and request id are enough
+  // to trace a failure.
+  it("logs only the error's name, status and request id", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockExtract.mockRejectedValueOnce(
+      Object.assign(new Error("400 the upstream echoed CANARY-LOG-9921 from the post"), {
+        name: "BadRequestError",
+        status: 400,
+        requestID: "req_abc",
+      }),
+    );
+    expect((await post(BASE)).status).toBe(502);
+    const logged = util.inspect(consoleError.mock.calls, { depth: 6 });
+    expect(logged).not.toContain("CANARY-LOG-9921");
+    expect(logged).not.toContain("the upstream echoed");
+    expect(logged).toContain("BadRequestError");
+    expect(logged).toContain("400");
+    expect(logged).toContain("req_abc");
+    consoleError.mockRestore();
+  });
+
+  // The body used to be read whole before anything else was checked, so a
+  // signed-in caller could send very large bodies without spending any quota.
+  it("refuses an oversized request body before the extractor or the limiter", async () => {
+    const res = await post({ ...BASE, padding: "x".repeat(200_000) });
+    expect(res.status).toBe(413);
+    expect(mockExtract).not.toHaveBeenCalled();
+    expect(mockLimit).not.toHaveBeenCalled();
+  });
+
+  it("answers 400, not a crash, when the body is not an object", async () => {
+    for (const raw of ["null", "[]", "42", '"text"']) {
+      const res = await POST(
+        new NextRequest("http://localhost/api/portal/events/extract", {
+          method: "POST",
+          body: raw,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+      expect(res.status, raw).toBe(400);
+    }
+    expect(mockExtract).not.toHaveBeenCalled();
+  });
+
+  it("says how long to wait, rounded up to whole minutes", async () => {
+    mockLimit.mockResolvedValueOnce({ ok: false, retryAfterSeconds: 90 });
+    expect((await (await post(BASE)).json()).error).toContain("about 2 minutes");
+    mockLimit.mockResolvedValueOnce({ ok: false, retryAfterSeconds: 20 });
+    expect((await (await post(BASE)).json()).error).toContain("about 1 minute");
+  });
+
+  // The limiter and the listing check are mocked above, so these assert the
+  // ARGUMENTS: a limit raised to 1,200 or a check against the wrong listing
+  // would otherwise pass.
+  it("holds every member to 12 pastes in 10 minutes, keyed on the account", async () => {
+    await post(BASE);
+    expect(mockLimit).toHaveBeenCalledWith("event-extract:t@t.t", { limit: 12, windowMs: 600_000 });
+  });
+
+  it("checks the member against the listing named in the request", async () => {
+    await post(BASE);
+    expect(mockCan).toHaveBeenCalledWith(expect.objectContaining({ email: "t@t.t" }), "edit-record", "owner-1");
   });
 });
