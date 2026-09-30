@@ -2484,7 +2484,7 @@ export function MapBuilder({
 }
 
 const ME_CSS = `
-.me-pin { position: relative; width: 28px; height: 28px; cursor: pointer; }
+.me-pin { width: 28px; height: 28px; cursor: pointer; }
 .me-pin--selected { width: 34px; height: 34px; }
 .me-dot {
   display: flex;
