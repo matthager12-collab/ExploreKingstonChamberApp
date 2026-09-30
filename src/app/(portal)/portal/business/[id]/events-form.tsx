@@ -8,7 +8,7 @@
 // fetch and the pending-removal behaviour, where a member's delete of a live
 // event keeps the row visible so the portal doesn't pretend it has gone.
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { EventCategory, EventItem, Restaurant } from "@/lib/types";
 import { Badge, Callout } from "@/components/ui";
 import { RepeatField, type RepeatValue } from "@/components/repeat-field";
@@ -60,6 +60,9 @@ interface EventDraft {
   repeat: RepeatValue;
 }
 
+type PasteState = { open: boolean; text: string; busy: boolean; error: string };
+const PASTE_CLOSED: PasteState = { open: false, text: "", busy: false, error: "" };
+
 export function EventsForm({
   initial,
   initialEvents,
@@ -69,6 +72,19 @@ export function EventsForm({
 }) {
   const [events, setEvents] = useState<EventItem[]>(initialEvents);
   const [draft, setDraft] = useState<EventDraft | null>(null);
+  // Paste-a-post: the member brings the text from Facebook or Instagram and we
+  // pre-fill the form from it. `hint` rides along into the draft — what we read
+  // back is a starting point to correct, never an answer to trust.
+  const [paste, setPaste] = useState<PasteState>(PASTE_CLOSED);
+  const [hint, setHint] = useState("");
+  // Focus follows the member: into the box when the paste panel opens, onto the
+  // title when a read post fills the form. Not for a blank or edited event, so
+  // the existing flows behave as they did.
+  const [fromPaste, setFromPaste] = useState(false);
+  // Which read is current. Cancel, or starting a draft of their own, moves it on,
+  // so a reply that lands late is dropped instead of filling the form over what
+  // the member has since typed.
+  const readTicket = useRef(0);
   // Fetched deconfliction results, remembered with the date they answer for —
   // the visible list is derived, so a date change instantly clears stale hits.
   const [dayCheck, setDayCheck] = useState<{ date: string; events: EventItem[] }>({
@@ -112,7 +128,47 @@ export function EventsForm({
     };
   }
 
+  /** Close the panel and drop any read still in flight, so a late reply neither
+   *  fills a form the member has moved on from nor leaves the panel stuck busy. */
+  function closePaste() {
+    readTicket.current += 1;
+    setPaste(PASTE_CLOSED);
+  }
+
+  async function readPost() {
+    const ticket = ++readTicket.current;
+    setPaste((p) => ({ ...p, busy: true, error: "" }));
+    try {
+      const res = await fetch("/api/portal/events/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: paste.text, ownerId: initial.id }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        draft?: Omit<EventDraft, "repeat"> & { unsure: boolean; notes: string };
+      };
+      if (ticket !== readTicket.current) return;
+      if (!res.ok || !data.draft) throw new Error(data.error ?? "Couldn't read that one.");
+      const { unsure, notes, ...fields } = data.draft;
+      setDraft({ ...fields, venue: fields.venue || initial.name, repeat: {} });
+      setHint(
+        unsure
+          ? `Check this one before you save${notes ? ` — ${notes}` : ", especially the date."}`
+          : notes,
+      );
+      setFromPaste(true);
+      setPaste(PASTE_CLOSED);
+    } catch (err) {
+      if (ticket !== readTicket.current) return;
+      setPaste((p) => ({ ...p, busy: false, error: (err as Error).message }));
+    }
+  }
+
   function editEvent(ev: EventItem) {
+    closePaste();
+    setHint("");
+    setFromPaste(false);
     setDraft({
       id: ev.id,
       title: ev.title,
@@ -240,7 +296,21 @@ export function EventsForm({
             {draft.id ? "Edit event" : "New event"}
           </p>
           <form onSubmit={saveDraft} className="mt-4 flex flex-col gap-5">
-            <TextField label="Title" value={draft.title} onChange={setE("title")} required />
+            {hint && (
+              // An alert, because it appears after a button press and a member
+              // on a screen reader has to hear it before they save.
+              <div role="alert">
+                <Callout title="Read from your post">{hint}</Callout>
+              </div>
+            )}
+
+            <TextField
+              label="Title"
+              value={draft.title}
+              onChange={setE("title")}
+              required
+              autoFocus={fromPaste}
+            />
 
             <div className="grid gap-5 sm:grid-cols-2">
               <TextField
@@ -322,17 +392,97 @@ export function EventsForm({
               <Button type="submit" pending={eventSave.busy}>
                 {draft.id ? "Save changes" : "Add event"}
               </Button>
-              <Button variant="ghost" type="button" onClick={() => setDraft(null)}>
+              <Button
+                variant="ghost"
+                type="button"
+                onClick={() => {
+                  setDraft(null);
+                  setHint("");
+                }}
+              >
                 Cancel
               </Button>
               <SaveMessage message={eventSave.message} />
             </div>
           </form>
         </div>
+      ) : paste.open ? (
+        <div className="rounded-xl border border-border bg-surface-sunken p-4">
+          <p className="font-display text-lg font-semibold text-primary-deep">
+            Paste your post
+          </p>
+          <p className="mt-1 text-sm text-ink-soft">
+            Copy the text of a Facebook or Instagram post — or an email, or a flyer — and
+            we&apos;ll fill the form in. You get to check it before anything is saved.
+          </p>
+          <TextAreaField
+            label="The post"
+            autoFocus
+            value={paste.text}
+            onChange={(e) => {
+              // A read in flight is about text that no longer exists: drop it,
+              // and stop showing the panel as busy.
+              readTicket.current += 1;
+              const text = e.target.value;
+              setPaste((p) => ({ ...p, text, error: "", busy: false }));
+            }}
+            rows={6}
+            error={paste.error || undefined}
+          />
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              pending={paste.busy}
+              pendingLabel="Reading…"
+              disabled={!paste.text.trim()}
+              onClick={() => void readPost()}
+            >
+              Read it
+            </Button>
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={() => {
+                // The pasted words go into the description, not away. The save
+                // route keeps 2,000 characters, so no more than that is carried,
+                // counted in whole characters so an emoji is never cut in half.
+                const carried = Array.from(paste.text.trim()).slice(0, 2000).join("");
+                closePaste();
+                setHint("");
+                setFromPaste(true);
+                setDraft({ ...blankDraft(), description: carried });
+              }}
+            >
+              Fill it in by hand
+            </Button>
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={closePaste}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
       ) : (
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" onClick={() => setDraft(blankDraft())}>
+          <Button
+            type="button"
+            onClick={() => {
+              closePaste();
+              setHint("");
+              setFromPaste(false);
+              setDraft(blankDraft());
+            }}
+          >
             + Add an event
+          </Button>
+          <Button
+            variant="ghost"
+            type="button"
+            onClick={() => setPaste({ open: true, text: "", busy: false, error: "" })}
+          >
+            Paste from Facebook or Instagram
           </Button>
           <SaveMessage message={eventSave.message} />
         </div>
