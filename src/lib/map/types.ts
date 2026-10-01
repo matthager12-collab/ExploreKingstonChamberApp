@@ -198,6 +198,9 @@ export const MARKER_CATEGORIES = [
   { key: "park", label: "Park", emoji: "🌲", color: "#4a7c59" },
   { key: "art", label: "Art / mural", emoji: "🎨", color: "#d96b4f" },
   { key: "event", label: "Event", emoji: "🎉", color: "#d96b4f" },
+  // Scarecrow Crawl pins. No scarecrow emoji exists; the pumpkin reads as the
+  // autumn trail. #c2410c is 5.18:1 on white (1.4.11 wants 3:1).
+  { key: "scarecrow", label: "Scarecrow", emoji: "🎃", color: "#c2410c" },
   { key: "shipwreck", label: "Landmark", emoji: "📍", color: "#16405e" },
   { key: "info", label: "Info", emoji: "ℹ️", color: "#2a7f8a" },
   { key: "star", label: "Highlight", emoji: "⭐", color: "#c99a2e" },
@@ -224,7 +227,7 @@ export function markerCategory(key: string | undefined) {
 export const CATEGORY_LABEL_RANK: Record<string, number> = {
   star: 85, viewpoint: 82, beach: 80, trailhead: 78, park: 76,
   shipwreck: 72, // the "Landmark" 📍 pin's category key is `shipwreck`, not `landmark`
-  lodging: 60, event: 58, art: 55, info: 50,
+  lodging: 60, event: 58, scarecrow: 58, art: 55, info: 50,
   food: 50, coffee: 50, drink: 50, shop: 48,
   // Just under `shop`: on the shopping map the two are drawn from the same
   // dense downtown block, and when two chips collide the retail name is the
