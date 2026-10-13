@@ -13,6 +13,7 @@
 
 import type { Sailing, TerminalStatus } from "./types";
 import { fallbackSailings } from "./data/ferry-fallback";
+import { isBoardingPassSeason } from "./boarding-pass-season";
 
 const API_KEY = process.env.WSDOT_API_KEY;
 
@@ -351,7 +352,7 @@ export interface BoardingPassStatus {
 /**
  * Estimate whether Kingston's SR-104 vehicle boarding-pass system is in effect
  * right now: peak hours 8 a.m.–8 p.m. Pacific, on any weekend year-round or any
- * day during the summer season (≈ mid-May to mid-October) or the big holiday
+ * day from Mother's Day through Indigenous Peoples' Day or the big holiday
  * weeks. This is an ESTIMATE for routing/UX — the flashing advisory sign at
  * Barber Cutoff Rd is always the authority (and the admin-editable "machine
  * down" note covers current exceptions). A same-day admin override
@@ -361,6 +362,7 @@ export function getBoardingPassStatus(now: Date = new Date()): BoardingPassStatu
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: PACIFIC,
     weekday: "short",
+    year: "numeric",
     month: "numeric",
     day: "numeric",
     hour: "numeric",
@@ -368,6 +370,7 @@ export function getBoardingPassStatus(now: Date = new Date()): BoardingPassStatu
   }).formatToParts(now);
   const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
   const weekday = get("weekday");
+  const year = Number(get("year"));
   const month = Number(get("month"));
   const day = Number(get("day"));
   const hour = Number(get("hour"));
@@ -382,10 +385,7 @@ export function getBoardingPassStatus(now: Date = new Date()): BoardingPassStatu
   }
 
   const isWeekend = weekday === "Sat" || weekday === "Sun";
-  // Season ≈ 2nd Sun of May → Indigenous Peoples' Day (mid-Oct). Approximate by
-  // May 10–Oct 13 so a driver is warned across the whole busy stretch.
-  const inSeason =
-    (month === 5 && day >= 10) || (month > 5 && month < 10) || (month === 10 && day <= 13);
+  const inSeason = isBoardingPassSeason(year, month, day);
   // Holiday weeks: late Nov (Thanksgiving) and late Dec–early Jan.
   const holidayWeek =
     (month === 11 && day >= 22 && day <= 30) ||

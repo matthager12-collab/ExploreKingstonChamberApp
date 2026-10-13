@@ -204,15 +204,15 @@ describe("BOARDING-PASS PARITY (the #1 drift trap)", () => {
   // forecastAt().boardingPassActive is a hand-maintained mirror of
   // getBoardingPassStatus().active. They live in two different files
   // (ferry-forecast.ts boardingPassExpected vs wsf.ts getBoardingPassStatus)
-  // and MUST agree. Probe every calendar day of 2026 at Pacific hours that
+  // and MUST agree. Probe every calendar day of 2026–2028 at Pacific hours that
   // straddle the peak-hours edges {7 (before), 8 (start), 13 (mid), 19 (last),
-  // 20 (after)} — ~1825 paired assertions, all in-memory.
-  it("agrees for every day of 2026 at hours {7,8,13,19,20}", () => {
+  // 20 (after)} — 5480 paired assertions, all in-memory.
+  it("agrees for every day of 2026–2028 at hours {7,8,13,19,20}", () => {
     const hours = [7, 8, 13, 19, 20];
     let compared = 0;
     let disagreements = 0;
     const start = new Date(Date.UTC(2026, 0, 1));
-    const end = new Date(Date.UTC(2026, 11, 31));
+    const end = new Date(Date.UTC(2028, 11, 31));
     for (
       let d = new Date(start);
       d.getTime() <= end.getTime();
@@ -238,8 +238,8 @@ describe("BOARDING-PASS PARITY (the #1 drift trap)", () => {
       }
     }
     expect(disagreements).toBe(0);
-    // Sanity: we really did run the ~365*5 comparisons, not zero.
-    expect(compared).toBe(365 * 5);
+    // Sanity: we really did run every comparison, including leap year 2028.
+    expect(compared).toBe((365 + 365 + 366) * 5);
   });
 });
 
