@@ -365,7 +365,7 @@ a parking-garage ticket) to hold their place. Facts in `BOARDING_PASS`:
 **How the app derives the live verdict** (two layers, both in code):
 
 1. `getBoardingPassStatus(now)` in `wsf.ts` — a **pure estimate** from season + hours (peak
-   8–20; weekend, in-season ≈ May 10–Oct 13, or holiday week). `source: "estimate"`. Mirrored
+   8–20; weekend, Mother's Day through Indigenous Peoples' Day, or holiday week). `source: "estimate"`. Mirrored
    by `boardingPassExpected()` in `ferry-forecast.ts` (kept in sync by hand so the model stays
    client-safe).
 2. `getEffectiveBoardingPass()` (`boarding-pass-store.ts`) — an **admin daily override**
@@ -374,6 +374,11 @@ a parking-garage ticket) to hold their place. Facts in `BOARDING_PASS`:
    (no timer, no DST math). `source: "override"` when applied.
 
 The estimate is UX/routing only — the flashing sign at Barber Cutoff is always the authority.
+The seasonal boundaries are shared by both estimates in `boarding-pass-season.ts` and
+calculated for each year: Mother's Day is May's second Sunday; Indigenous Peoples' Day
+is October's second Monday. WSDOT's [October 13, 2026 bulletin](https://wsdot.com/ferries/schedule/bulletin.aspx)
+states that daily operation ended that day, with weekends and holiday weeks continuing
+until May 2027. The calendar-boundary tests cover 2026–2028.
 The `/ferry` "get in the ferry line" nav routes drivers to the SR-104 staging point via a
 forced turnaround (`src/lib/ferry-line.ts`), never a mid-highway U-turn.
 

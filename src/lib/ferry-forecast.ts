@@ -28,6 +28,7 @@
 // it's ever collected.
 
 import type { Direction } from "./types";
+import { isBoardingPassSeason } from "./boarding-pass-season";
 
 // "from-kingston" = departing Kingston toward Edmonds (eastbound, Seattle side).
 // "to-kingston"   = departing Edmonds toward Kingston (westbound, peninsula).
@@ -302,13 +303,12 @@ function holiday(p: DateParts): Holiday | null {
  * Whether the SR-104 vehicle boarding-pass system is expected to be running at
  * this date/hour. Mirrors getBoardingPassStatus() in wsf.ts (kept in sync by
  * hand so this module stays pure/client-safe): peak hours 8 a.m.–8 p.m., on any
- * weekend, in season (≈ May 10 – Oct 13), or a major holiday week.
+ * weekend, from Mother's Day through Indigenous Peoples' Day, or a major holiday week.
  */
 function boardingPassExpected(p: DateParts, hour: number): boolean {
   if (hour < 8 || hour >= 20) return false;
   const isWeekend = p.dow === 0 || p.dow === 6;
-  const doy = p.month * 100 + p.day;
-  const inSeason = doy >= 510 && doy <= 1013;
+  const inSeason = isBoardingPassSeason(p.year, p.month, p.day);
   const holidayWeek =
     (p.month === 11 && p.day >= 22 && p.day <= 30) ||
     (p.month === 12 && p.day >= 22) ||
