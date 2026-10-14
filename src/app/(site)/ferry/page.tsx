@@ -34,6 +34,8 @@ import {
 import { FerryBoard } from "./ferry-board";
 import { FerryVesselMap } from "@/components/ferry-vessel-map";
 import { FerryLineInfo } from "@/components/ferry-line-info";
+import { BoardingPassStatusCard } from "@/components/boarding-pass-status";
+import { getEffectiveBoardingPass } from "@/lib/stores/boarding-pass-store";
 import { Sr104TrafficMap } from "@/components/sr104-traffic-map";
 import { getSide } from "@/lib/side-server";
 import { SideSwitcher } from "@/components/side-switcher";
@@ -86,7 +88,7 @@ export default async function FerryPage() {
   // has no data dependency on the other reads (its sole consumer is
   // <FerryVesselMap initial={vessels}/>), and awaiting it serially after this
   // block added a measured ~70-90ms to every dynamic /ferry render.
-  const [carFerry, kingston, edmonds, alerts, copy, ferryInfo, side, empirical, prediction, cams, hiddenPaths, vessels] =
+  const [carFerry, kingston, edmonds, alerts, copy, ferryInfo, side, empirical, prediction, cams, hiddenPaths, vessels, boardingPass] =
     await Promise.all([
       getTodaysSailings(),
       getTerminalStatus("kingston"),
@@ -100,6 +102,7 @@ export default async function FerryPage() {
       getWebcams(),
       getEffectiveHiddenPaths(),
       getVesselLocations(),
+      getEffectiveBoardingPass().catch(() => null),
     ]);
   const fastFerry = getFastFerrySailings();
   // The walk-on round trip is quoted mid-sentence further down, not just in the
@@ -125,18 +128,22 @@ export default async function FerryPage() {
           eyebrow={copyText(copy, "ferry.header.edmonds.eyebrow")}
           title={copyText(copy, "ferry.header.edmonds.title")}
           intro={copyText(copy, "ferry.header.edmonds.intro")}
-        />
+        >
+          <div className="pt-4"><SideSwitcher side={side} tone="light" /></div>
+          <BoardingPassStatusCard key={serverNow} initial={boardingPass} checkedAt={serverNow} side={side} waitEstimate={kingston.waitEstimate}
+            navigation={{ pass: copyText(copy, "ferryLine.navButtonPass"), terminal: copyText(copy, "ferryLine.navButton") }} />
+        </PageHeader>
       ) : (
         <PageHeader
           eyebrow={copyText(copy, "ferry.header.eyebrow")}
           title={copyText(copy, "ferry.header.title")}
           intro={copyText(copy, "ferry.header.intro")}
-        />
+        >
+          <div className="pt-4"><SideSwitcher side={side} tone="light" /></div>
+          <BoardingPassStatusCard key={serverNow} initial={boardingPass} checkedAt={serverNow} side={side} waitEstimate={kingston.waitEstimate}
+            navigation={{ pass: copyText(copy, "ferryLine.navButtonPass"), terminal: copyText(copy, "ferryLine.navButton") }} />
+        </PageHeader>
       )}
-
-      <div className="mx-auto max-w-5xl px-4 pt-4">
-        <SideSwitcher side={side} tone="light" />
-      </div>
 
       {alerts.length > 0 && (
         <div className="mx-auto max-w-5xl px-4 pb-2">
@@ -158,7 +165,7 @@ export default async function FerryPage() {
       )}
 
       <div className="mx-auto max-w-5xl px-4 pt-2">
-        <FerryLineInfo side={side} />
+        <FerryLineInfo side={side} showNavigation={side !== "kingston"} />
       </div>
 
       {/* Only shown when the prediction feature is live for visitors. While it's

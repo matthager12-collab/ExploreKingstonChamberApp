@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Outfit, Satisfy } from "next/font/google";
+import { Inter, Outfit } from "next/font/google";
 import "./globals.css";
 import { ServiceWorkerClient } from "@/components/pwa";
 import { siteUrl } from "@/lib/site-url";
@@ -16,7 +16,7 @@ import { siteUrl } from "@/lib/site-url";
 // out of static rendering (docs/KIOSK.md §2).
 //
 // What is left, and why each piece cannot move down:
-//   - <html>/<body> and the three font CSS variables: only the root layout
+//   - <html>/<body> and the shared font CSS variables: only the root layout
 //     renders these elements at all, and both groups style against the vars.
 //   - globals.css: the design tokens, imported once.
 //   - viewport / metadata / metadataBase: the site-wide defaults. The kiosk
@@ -40,11 +40,6 @@ const outfit = Outfit({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-outfit",
-});
-const satisfy = Satisfy({
-  subsets: ["latin"],
-  weight: "400",
-  variable: "--font-satisfy",
 });
 
 // Set NEXT_PUBLIC_SITE_URL to the deployed origin so shared-link cards and the
@@ -111,7 +106,7 @@ export default function RootLayout({
       // never surfaced because the warning only fires for someone who actually
       // has easy-read turned on.
       suppressHydrationWarning
-      className={`${inter.variable} ${outfit.variable} ${satisfy.variable} h-full antialiased`}
+      className={`${inter.variable} ${outfit.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
         {/* E14 simple-mode bootstrap (vk/simple-mode). Runs before paint so the
