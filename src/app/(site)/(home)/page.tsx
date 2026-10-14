@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import { Satisfy } from "next/font/google";
 import Link from "next/link";
 import { getForecast } from "@/lib/weather";
 import { getTodaysTides } from "@/lib/tides";
@@ -18,6 +19,9 @@ import { getFerryPredictionEnabled } from "@/lib/stores/ferry-prediction-store";
 import { getPhotoContext } from "@/lib/stores/photo-store";
 import { resolvePhoto } from "@/lib/photo-resolve";
 import type { PhotoSlotKey } from "@/lib/photo-slots";
+
+// Only the home hero uses this font; other routes must not preload it.
+const satisfy = Satisfy({ subsets: ["latin"], weight: "400", variable: "--font-satisfy" });
 
 export const revalidate = 60;
 
@@ -99,7 +103,7 @@ export default async function Home() {
   return (
     <>
       {/* Hero — Coastal Elegance */}
-      <div className="relative isolate min-h-[90vh] overflow-hidden text-white flex flex-col justify-between pb-8">
+      <div className={`${satisfy.variable} relative isolate min-h-[90vh] overflow-hidden text-white flex flex-col justify-between pb-8`}>
         {/* home.hero is a DECORATIVE slot, so resolvePhoto always returns
             alt="" — the headline below already says what this page is. */}
         <Image
