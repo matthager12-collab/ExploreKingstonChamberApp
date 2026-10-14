@@ -24,9 +24,11 @@ const EDMONDS_TERMINAL = "Edmonds Ferry Terminal, Edmonds, WA";
 export async function FerryLineInfo({
   className = "",
   side = "kingston",
+  showNavigation = true,
 }: {
   className?: string;
   side?: WaterSide;
+  showNavigation?: boolean;
 }) {
   const copy = await getCopyOverrides();
 
@@ -53,7 +55,7 @@ export async function FerryLineInfo({
             </p>
           </div>
 
-          <div className="flex shrink-0 flex-col items-stretch gap-1.5">
+          {showNavigation && <div className="flex shrink-0 flex-col items-stretch gap-1.5">
             <a
               href={mapDirectionsUrl(EDMONDS_TERMINAL, "driving")}
               target="_blank"
@@ -62,7 +64,7 @@ export async function FerryLineInfo({
             >
               {copyText(copy, "ferryLine.edmonds.navButton")}
             </a>
-          </div>
+          </div>}
         </div>
       </div>
     );
@@ -98,7 +100,7 @@ export async function FerryLineInfo({
           </p>
         </div>
 
-        <div className="flex shrink-0 flex-col items-stretch gap-1.5">
+        {showNavigation && <div className="flex shrink-0 flex-col items-stretch gap-1.5">
           <a
             href={navHref}
             target="_blank"
@@ -122,7 +124,7 @@ export async function FerryLineInfo({
           >
             {copyText(copy, "ferryLine.mapLink")}
           </Link>
-        </div>
+        </div>}
       </div>
     </div>
   );
