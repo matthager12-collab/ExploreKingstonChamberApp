@@ -21,7 +21,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
-import "maplibre-gl/dist/maplibre-gl.css";
 import type { VesselPosition } from "@/lib/wsf";
 import { mapStyle } from "@/lib/map/basemap";
 import { basemapArchiveUrl, loadMapLibre } from "@/lib/map/maplibre";
