@@ -3,6 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, waitFor } from "@testing-library/react";
 import { FeatureMap } from "@/components/feature-map";
 import type { ResolvedMapView } from "@/lib/map/types";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
+const mapStyles = document.createElement("style");
+mapStyles.textContent = readFileSync(path.join(process.cwd(), "node_modules/maplibre-gl/dist/maplibre-gl.css"), "utf8");
 
 const state = vi.hoisted(() => ({
   clicks: new Map<string, (event: unknown) => void>(),
@@ -17,10 +22,14 @@ vi.mock("@/lib/map/maplibre", () => {
     html = "";
     element = document.createElement("div");
     listeners = new Map<string, () => void>();
-    constructor() { state.popups.push(this); }
+    constructor(options?: { className?: string }) {
+      this.element.className = `maplibregl-popup ${options?.className ?? ""}`;
+      state.popups.push(this);
+    }
     setHTML(html: string) {
       this.html = html;
-      this.element.innerHTML = `<div class="maplibregl-popup-content">${html}<button>Close</button></div>`;
+      this.element.innerHTML = `<div class="maplibregl-popup-content">${html}<button class="maplibregl-popup-close-button">Close</button></div>`;
+      this.element.querySelector("button")!.onclick = this.close;
       this.element.getBoundingClientRect = () => ({ left: -67, right: 173, top: 424, bottom: 759 } as DOMRect);
       return this;
     }
@@ -28,8 +37,8 @@ vi.mock("@/lib/map/maplibre", () => {
     setMaxWidth(width: string) { this.element.style.maxWidth = width; return this; }
     getElement() { return this.element; }
     on(event: string, callback: () => void) { this.listeners.set(event, callback); return this; }
-    open = () => { this.listeners.get("open")?.(); };
-    close = () => { this.listeners.get("close")?.(); };
+    open = () => { state.container?.append(this.element); this.listeners.get("open")?.(); };
+    close = () => { this.element.remove(); this.listeners.get("close")?.(); };
     addTo() { this.open(); return this; }
   }
   class Marker {
@@ -99,6 +108,7 @@ const VIEW: ResolvedMapView = {
 };
 
 beforeEach(() => {
+  document.head.append(mapStyles);
   state.clicks.clear(); state.popups.length = 0; state.panBy.mockClear(); state.resize.clear();
   vi.stubGlobal("IntersectionObserver", class {
     constructor(callback: IntersectionObserverCallback) {
@@ -109,7 +119,7 @@ beforeEach(() => {
   vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
   vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); mapStyles.remove(); vi.unstubAllGlobals(); });
 
 async function draw() {
   render(<FeatureMap resolved={VIEW} />);
@@ -122,7 +132,7 @@ describe("public map popups", () => {
     state.popups[0].open();
     const popup = state.popups[0].element;
     const body = popup.querySelector<HTMLElement>(".fm-popup-body");
-    expect(body?.style.maxHeight).toBe("300px");
+    expect(body?.style.maxHeight).toBe("260px");
     expect(body?.style.overflowY).toBe("auto");
     expect(body?.tabIndex).toBe(0);
     expect(popup.style.maxWidth).toBe("240px");
@@ -132,13 +142,37 @@ describe("public map popups", () => {
     expect(popup.querySelector("button")).not.toBeNull();
   });
 
+  it("places a 44px Close target above map controls and outside the scrolling text", async () => {
+    await draw();
+    state.popups[0].open();
+    const popup = state.popups[0].element;
+    const controls = document.createElement("div");
+    controls.className = "maplibregl-ctrl-top-right";
+    state.container!.append(controls);
+    const close = popup.querySelector<HTMLButtonElement>(".maplibregl-popup-close-button")!;
+    expect(Number(getComputedStyle(popup).zIndex)).toBeGreaterThan(Number(getComputedStyle(controls).zIndex));
+    expect(getComputedStyle(close).width).toBe("44px");
+    expect(getComputedStyle(close).height).toBe("44px");
+    expect(getComputedStyle(close).top).toBe("0px");
+    expect(getComputedStyle(close).right).toBe("0px");
+    expect(getComputedStyle(popup.querySelector(".maplibregl-popup-content")!).paddingTop).toBe("44px");
+    expect(close.closest(".fm-popup-body")).toBeNull();
+    close.click();
+    expect(popup.isConnected).toBe(false);
+  });
+
   it("re-fits on map resize and removes the listener when closed", async () => {
     await draw();
     state.popups[0].open();
     expect(state.resize.size).toBe(1);
     Object.defineProperty(state.container, "clientHeight", { configurable: true, value: 300 });
     for (const resize of state.resize) resize();
-    expect(state.popups[0].element.querySelector<HTMLElement>(".fm-popup-body")?.style.maxHeight).toBe("200px");
+    expect(state.popups[0].element.querySelector<HTMLElement>(".fm-popup-body")?.style.maxHeight).toBe("160px");
+    Object.defineProperty(state.container, "clientHeight", { configurable: true, value: 320 });
+    const image = document.createElement("img");
+    state.popups[0].element.querySelector(".fm-popup-body")!.append(image);
+    image.dispatchEvent(new Event("load"));
+    expect(state.popups[0].element.querySelector<HTMLElement>(".fm-popup-body")?.style.maxHeight).toBe("180px");
     state.popups[0].close();
     expect(state.resize.size).toBe(0);
   });

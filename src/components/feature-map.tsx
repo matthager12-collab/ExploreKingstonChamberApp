@@ -1798,6 +1798,9 @@ function BasemapSwitch({
 }
 
 const PIN_CSS = `
+.fm-popup { z-index: 3; } /* MapLibre's control corners are z-index 2. */
+.fm-popup .maplibregl-popup-content { padding-top: 44px; }
+.fm-popup .maplibregl-popup-close-button { width: 44px; height: 44px; font-size: 24px; }
 .feature-pin { background: transparent; border: none; }
 .fm-pr-pin {
   display: inline-block;

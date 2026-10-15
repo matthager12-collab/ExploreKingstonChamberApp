@@ -7,7 +7,7 @@ export function mapPopup(
   html: string,
   offset: [number, number] = [0, 0],
 ): Popup {
-  const popup = new maplibre.Popup({ anchor: "bottom", offset, maxWidth: "240px" })
+  const popup = new maplibre.Popup({ anchor: "bottom", offset, maxWidth: "240px", className: "fm-popup" })
     .setHTML(`<div class="fm-popup-body" tabindex="0" role="region" aria-label="Map details">${html}</div>`);
   let openElement: HTMLElement | undefined;
 
@@ -15,8 +15,8 @@ export function mapPopup(
     const element = popup.getElement();
     const body = element.querySelector<HTMLElement>(".fm-popup-body")!;
     const container = map.getContainer();
-    // Reserve the marker offset, popup padding/tip and map gutters.
-    body.style.maxHeight = `${Math.max(1, container.clientHeight - 100)}px`;
+    // Reserve the Close header, marker offset, padding/tip and map gutters.
+    body.style.maxHeight = `${Math.max(1, container.clientHeight - 140)}px`;
     body.style.overflowY = "auto";
     body.style.overflowWrap = "anywhere";
     popup.setMaxWidth(`${Math.max(1, Math.min(240, container.clientWidth - 24))}px`);
