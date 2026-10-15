@@ -194,8 +194,11 @@ export const MARKER_CATEGORIES = [
   { key: "bin", label: "Trash / recycling", emoji: "🗑️", color: "#6b7683" },
   { key: "viewpoint", label: "Viewpoint", emoji: "📸", color: "#1e96c0" },
   { key: "beach", label: "Beach", emoji: "🏖️", color: "#e8a13a" },
+  { key: "kayak", label: "Kayak / paddlecraft", emoji: "🛶", color: "#16758f" },
   { key: "trailhead", label: "Trailhead", emoji: "🥾", color: "#4a7c59" },
+  { key: "bicycle", label: "Bike / bicycle-friendly trail", emoji: "🚲", color: "#4a7c59" },
   { key: "park", label: "Park", emoji: "🌲", color: "#4a7c59" },
+  { key: "playground", label: "Playground", emoji: "🛝", color: "#a85c28" },
   { key: "art", label: "Art / mural", emoji: "🎨", color: "#d96b4f" },
   { key: "event", label: "Event", emoji: "🎉", color: "#d96b4f" },
   // Scarecrow Crawl pins. No scarecrow emoji exists; the pumpkin reads as the
@@ -226,6 +229,7 @@ export function markerCategory(key: string | undefined) {
 /** Category → base label rank (0..100). Higher = shows earlier + wins collisions. */
 export const CATEGORY_LABEL_RANK: Record<string, number> = {
   star: 85, viewpoint: 82, beach: 80, trailhead: 78, park: 76,
+  kayak: 78, bicycle: 78, playground: 76,
   shipwreck: 72, // the "Landmark" 📍 pin's category key is `shipwreck`, not `landmark`
   lodging: 60, event: 58, scarecrow: 58, art: 55, info: 50,
   food: 50, coffee: 50, drink: 50, shop: 48,
