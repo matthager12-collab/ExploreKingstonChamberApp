@@ -38,6 +38,7 @@ import { applyBasemapMode, mapStyle, type BasemapMode } from "@/lib/map/basemap"
 import type { ParkingPhoto } from "@/lib/map/parking-photos";
 import { basemapArchiveUrl, loadMapLibre } from "@/lib/map/maplibre";
 import { fixMarkerA11y } from "@/lib/map/marker-a11y";
+import { mapPopup } from "@/lib/map/popup";
 import { MapTouchLockOverlay, useMapTouchLock } from "@/components/map-touch-lock";
 import { curbOffsetSigns } from "@/lib/map/curb";
 import { bayPivot, transformRing } from "@/lib/map/bay-transform";
@@ -995,7 +996,7 @@ export function FeatureMap({
       };
 
       const markerPopup = (html: string) =>
-        new maplibregl.Popup({ offset: [0, -34], maxWidth: "240px" }).setHTML(html);
+        mapPopup(maplibregl, map, html, [0, -34]);
 
       // ---- custom features ----
       for (const f of view.features) {
@@ -1125,7 +1126,7 @@ export function FeatureMap({
             .setLngLat(toLngLat(z.center))
             // Smaller offset than markerPopup(): the badge is center-anchored,
             // not a 34px teardrop.
-            .setPopup(new maplibregl.Popup({ offset: [0, -18], maxWidth: "240px" }).setHTML(popup))
+            .setPopup(mapPopup(maplibregl, map, popup, [0, -18]))
             .addTo(map);
           fixMarkerA11y(prMarker, z.name);
           pts.push(toLngLat(z.center));
@@ -1385,12 +1386,16 @@ export function FeatureMap({
             // layer's handler fires for the same click — without this guard a
             // single tap would stack popups.
             const oe = e.originalEvent as MouseEvent & { _fmPopupDone?: boolean };
-            if (oe._fmPopupDone) return;
+            // DOM marker clicks also hit the geometry underneath them.
+            if (
+              oe._fmPopupDone ||
+              (oe.target instanceof Element && oe.target.closest(".maplibregl-marker, .maplibregl-popup"))
+            ) return;
             const f = e.features?.[0] as { properties?: { popup?: string } } | undefined;
             const html = f?.properties?.popup;
             if (html) {
               oe._fmPopupDone = true;
-              new maplibregl.Popup({ maxWidth: "240px" }).setLngLat(e.lngLat).setHTML(html).addTo(map);
+              mapPopup(maplibregl, map, html).setLngLat(e.lngLat).addTo(map);
             }
           });
           map.on("mouseenter", layerId, () => (map.getCanvas().style.cursor = "pointer"));
@@ -1793,6 +1798,9 @@ function BasemapSwitch({
 }
 
 const PIN_CSS = `
+.fm-popup { z-index: 3; } /* MapLibre's control corners are z-index 2. */
+.fm-popup .maplibregl-popup-content { padding-top: 44px; }
+.fm-popup .maplibregl-popup-close-button { width: 44px; height: 44px; font-size: 24px; }
 .feature-pin { background: transparent; border: none; }
 .fm-pr-pin {
   display: inline-block;
