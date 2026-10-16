@@ -12,8 +12,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 // Votes are Postgres-only — run over PGlite.
 import { createTestDb, type TestDb } from "../../../../tests/setup/pglite-db";
 import { dataPath } from "@/lib/data-dir";
-import { CRAWL_VIEW_ID } from "@/lib/data/scarecrows";
-import { saveMapFeature } from "@/lib/stores/map-store";
+import { CRAWL_END, CRAWL_START, CRAWL_VIEW_ID } from "@/lib/data/scarecrows";
+import { deleteMapFeature, saveMapFeature } from "@/lib/stores/map-store";
 import {
   MAX_PHOTO_BYTES,
   clearAllVotes,
@@ -110,6 +110,47 @@ describe("POST /api/scarecrow/vote", () => {
     expect((await getVoteCounts())[ID]).toBeGreaterThan(0);
   });
 
+  it.each([
+    ["one millisecond before opening", Date.parse(CRAWL_START) - 1, 403],
+    ["at opening", Date.parse(CRAWL_START), 200],
+    ["one millisecond before closing", Date.parse(CRAWL_END) - 1, 200],
+    ["at the inclusive closing instant", Date.parse(CRAWL_END), 200],
+    ["one millisecond after closing", Date.parse(CRAWL_END) + 1, 403],
+  ] as const)("enforces the server window %s without persisting rejected votes", async (_label, instant, expected) => {
+    await setVotingOverride("auto");
+    vi.setSystemTime(new Date(instant));
+    const before = (await getVoteCounts())[ID] ?? 0;
+    const res = await votePost("203.0.113.50");
+    expect(res.status).toBe(expected);
+    expect((await getVoteCounts())[ID] ?? 0).toBe(before + (expected === 200 ? 1 : 0));
+  });
+
+  it("keeps duplicate suppression on the device rather than inventing a server voter identity", async () => {
+    const before = (await getVoteCounts())[ID] ?? 0;
+    expect((await votePost("203.0.113.60")).status).toBe(200);
+    expect((await votePost("203.0.113.60")).status).toBe(200);
+    expect((await getVoteCounts())[ID]).toBe(before + 2);
+    const [row] = await listVotes(1);
+    expect(Object.keys(row).sort()).toEqual(["createdAt", "id", "photoPath", "photoSocialOk", "scarecrowId"]);
+  });
+
+  it("returns a useful storage failure without a false successful vote, then permits retry", async () => {
+    const before = (await getVoteCounts())[ID] ?? 0;
+    const insert = vi.spyOn(tdb.db, "insert").mockImplementationOnce(() => { throw new Error("synthetic vote storage failure"); });
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const failed = await votePost("203.0.113.61");
+      expect(failed.status).toBe(500);
+      expect(await failed.json()).toEqual({ ok: false, error: "could not record your vote" });
+      expect((await getVoteCounts())[ID] ?? 0).toBe(before);
+    } finally {
+      insert.mockRestore();
+      log.mockRestore();
+    }
+    expect((await votePost("203.0.113.61")).status).toBe(200);
+    expect((await getVoteCounts())[ID]).toBe(before + 1);
+  });
+
   it("stores a photo with the vote", async () => {
     const before = (await listVotesWithPhotos()).length;
     const res = await votePost("203.0.113.11", {
@@ -166,6 +207,26 @@ describe("POST /api/scarecrow/vote", () => {
     });
     const res = await votePost("203.0.113.20", { scarecrowId: "some-other-pin" });
     expect(res.status).toBe(400);
+  });
+
+  it("rechecks the live entry list after removal and excludes pending entries", async () => {
+    const feature = {
+      id: "removed-crawl-pin",
+      kind: "marker" as const,
+      title: "Synthetic removable entry",
+      views: [CRAWL_VIEW_ID],
+      point: [47.799, -122.497] as [number, number],
+    };
+    await saveMapFeature(feature);
+    expect((await votePost("203.0.113.70", { scarecrowId: feature.id })).status).toBe(200);
+    const before = (await getVoteCounts())[feature.id];
+    await deleteMapFeature(feature.id);
+    expect((await votePost("203.0.113.70", { scarecrowId: feature.id })).status).toBe(400);
+    expect((await getVoteCounts())[feature.id]).toBe(before);
+
+    await saveMapFeature({ ...feature, id: "pending-crawl-pin" }, { status: "pending" });
+    expect((await votePost("203.0.113.71", { scarecrowId: "pending-crawl-pin" })).status).toBe(400);
+    expect((await getVoteCounts())["pending-crawl-pin"]).toBeUndefined();
   });
 
   it("refuses a vote before the crawl opens, and after it closes (403)", async () => {

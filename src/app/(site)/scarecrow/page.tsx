@@ -118,8 +118,8 @@ export default async function ScarecrowPage() {
 
           <Section title="Where the scarecrows are">
             <p className="mb-4 text-ink">
-              Tap a pin for the business hosting it. Everything on this map is within a walk of
-              downtown Kingston.
+              Tap a pin for the hosting location. Check each entry’s location and plan how you’ll
+              travel between stops.
             </p>
             <FeatureMap resolved={mapView} height="460px" />
           </Section>
