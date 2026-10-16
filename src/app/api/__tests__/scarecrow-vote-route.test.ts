@@ -13,7 +13,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { createTestDb, type TestDb } from "../../../../tests/setup/pglite-db";
 import { dataPath } from "@/lib/data-dir";
 import { CRAWL_END, CRAWL_START, CRAWL_VIEW_ID } from "@/lib/data/scarecrows";
-import { saveMapFeature } from "@/lib/stores/map-store";
+import { deleteMapFeature, saveMapFeature } from "@/lib/stores/map-store";
 import {
   MAX_PHOTO_BYTES,
   clearAllVotes,
@@ -207,6 +207,26 @@ describe("POST /api/scarecrow/vote", () => {
     });
     const res = await votePost("203.0.113.20", { scarecrowId: "some-other-pin" });
     expect(res.status).toBe(400);
+  });
+
+  it("rechecks the live entry list after removal and excludes pending entries", async () => {
+    const feature = {
+      id: "removed-crawl-pin",
+      kind: "marker" as const,
+      title: "Synthetic removable entry",
+      views: [CRAWL_VIEW_ID],
+      point: [47.799, -122.497] as [number, number],
+    };
+    await saveMapFeature(feature);
+    expect((await votePost("203.0.113.70", { scarecrowId: feature.id })).status).toBe(200);
+    const before = (await getVoteCounts())[feature.id];
+    await deleteMapFeature(feature.id);
+    expect((await votePost("203.0.113.70", { scarecrowId: feature.id })).status).toBe(400);
+    expect((await getVoteCounts())[feature.id]).toBe(before);
+
+    await saveMapFeature({ ...feature, id: "pending-crawl-pin" }, { status: "pending" });
+    expect((await votePost("203.0.113.71", { scarecrowId: "pending-crawl-pin" })).status).toBe(400);
+    expect((await getVoteCounts())["pending-crawl-pin"]).toBeUndefined();
   });
 
   it("refuses a vote before the crawl opens, and after it closes (403)", async () => {
