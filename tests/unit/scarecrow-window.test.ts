@@ -26,6 +26,19 @@ const marker = (id: string, title: string, extra: Partial<MapFeature> = {}): Map
 });
 
 describe("crawlPhase", () => {
+  it("uses the advertised Pacific boundaries even on a UTC server", () => {
+    expect(new Date(CRAWL_START).toISOString()).toBe("2026-10-17T07:00:00.000Z");
+    expect(new Date(CRAWL_END).toISOString()).toBe("2026-11-01T00:00:00.000Z");
+    const zone = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", timeZoneName: "short" });
+    for (const boundary of [CRAWL_START, CRAWL_END]) {
+      expect(zone.formatToParts(new Date(boundary)).find((p) => p.type === "timeZoneName")?.value).toBe("PDT");
+    }
+    expect(crawlPhase(new Date(Date.parse(CRAWL_START) - 1))).toBe("before");
+    expect(crawlPhase(new Date(Date.parse(CRAWL_START) + 1))).toBe("open");
+    expect(crawlPhase(new Date(Date.parse(CRAWL_END) - 1))).toBe("open");
+    expect(crawlPhase(new Date(Date.parse(CRAWL_END) + 1))).toBe("closed");
+  });
+
   it("is closed before the start and after the end, open in between", () => {
     expect(crawlPhase(new Date("2026-10-16T23:59:59-07:00"))).toBe("before");
     expect(crawlPhase(new Date(CRAWL_START))).toBe("open");
