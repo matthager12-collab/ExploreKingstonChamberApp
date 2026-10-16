@@ -15,6 +15,8 @@ const categories = [
   ["kayak", "Kayak / paddlecraft", "🛶"],
   ["bicycle", "Bike / bicycle-friendly trail", "🚲"],
   ["playground", "Playground", "🛝"],
+  ["boat", "Boat / marina", "⛵"],
+  ["golf", "Golf", "⛳"],
 ] as const;
 
 let tdb: TestDb;
