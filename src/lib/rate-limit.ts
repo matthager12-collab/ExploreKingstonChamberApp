@@ -24,7 +24,7 @@ import { Ratelimit, type Duration } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 
 /** Recent attempt timestamps (ms) per key. Pruned lazily on each check. */
-const hits = new Map<string, number[]>();
+const hits = new Map<string, { times: number[]; windowMs: number }>();
 
 /** Default: 8 attempts per rolling 60s window. */
 const DEFAULT_LIMIT = 8;
@@ -36,12 +36,12 @@ const DEFAULT_WINDOW_MS = 60_000;
 let lastSweep = 0;
 const SWEEP_INTERVAL_MS = 5 * 60_000;
 
-function sweep(now: number, windowMs: number): void {
+function sweep(now: number): void {
   if (now - lastSweep < SWEEP_INTERVAL_MS) return;
   lastSweep = now;
-  const horizon = now - windowMs;
-  for (const [key, times] of hits) {
-    if (times.length === 0 || times[times.length - 1] <= horizon) {
+  for (const [key, { times, windowMs }] of hits) {
+    // Each bucket keeps its own window; a login must not clear a longer cap.
+    if (times.length === 0 || times[times.length - 1] <= now - windowMs) {
       hits.delete(key);
     }
   }
@@ -111,17 +111,17 @@ function checkInMemory(
   const now = Date.now();
   const windowStart = now - windowMs;
 
-  sweep(now, windowMs);
+  sweep(now);
 
   // Prune this key's attempts down to those still inside the window.
-  const previous = hits.get(key);
+  const previous = hits.get(key)?.times;
   const recent = previous ? previous.filter((t) => t > windowStart) : [];
 
   if (recent.length >= limit) {
     // Rejected: don't record this attempt (so a flood can't push the retry
     // time forward forever). Retry is possible once the oldest attempt ages
     // out of the window.
-    hits.set(key, recent);
+    hits.set(key, { times: recent, windowMs });
     const oldest = recent[0];
     const retryAfterMs = oldest + windowMs - now;
     return {
@@ -131,7 +131,7 @@ function checkInMemory(
   }
 
   recent.push(now);
-  hits.set(key, recent);
+  hits.set(key, { times: recent, windowMs });
   return { ok: true, retryAfterSeconds: 0 };
 }
 
