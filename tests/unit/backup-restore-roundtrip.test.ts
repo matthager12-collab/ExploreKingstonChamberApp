@@ -188,6 +188,7 @@ describe("backup/restore roundtrip", () => {
       "orgs",
       "quarantine",
       "records",
+      "research_request",
       "survey_response",
       "users",
     ]);

@@ -46,6 +46,7 @@ export const config = {
     "/portal/business/:path*",
     "/portal/nonprofit/:path*",
     "/portal/syndicate/:path*",
+    "/portal/assistant/:path*",
     "/api/admin/:path*",
     "/api/portal/:path*",
   ],
