@@ -77,8 +77,8 @@ which reads it into a draft event. Only that text goes: never the member's name,
 email or account. The call is stateless, carries no tools and no history, and
 nothing it returns is stored. The result fills a form the member checks and
 submits like any other event, so it goes through the normal moderation floor. It
-uses the same key as the feedback guardrail. Whether the published notice needs
-its own sentence for member-pasted text is Mat's call.
+uses the same key as the feedback guardrail. The paste panel discloses the
+Anthropic transfer before the member presses "Read it".
 
 **The published notice states all of this** (notice version `2026-09`, its
 "Feedback you send us" section). Four of the original five promises are

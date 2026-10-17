@@ -414,6 +414,7 @@ export function EventsForm({
           <p className="mt-1 text-sm text-ink-soft">
             Copy the text of a Facebook or Instagram post — or an email, or a flyer — and
             we&apos;ll fill the form in. You get to check it before anything is saved.
+            Only the pasted text is sent to Anthropic.
           </p>
           <TextAreaField
             label="The post"
