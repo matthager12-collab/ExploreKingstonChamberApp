@@ -61,12 +61,21 @@ afterEach(() => {
 
 async function openPanel() {
   const user = userEvent.setup();
-  render(<EventsForm initial={LISTING} initialEvents={[]} />);
+  render(<EventsForm initial={LISTING} initialEvents={[]} postExtractionEnabled />);
   await user.click(screen.getByRole("button", { name: "Paste from Facebook or Instagram" }));
   return user;
 }
 
 describe("paste panel", () => {
+  it("explains unavailable extraction before a click and keeps manual entry working", async () => {
+    const user = userEvent.setup();
+    render(<EventsForm initial={LISTING} initialEvents={[]} postExtractionEnabled={false} />);
+    expect(screen.getByRole("button", { name: "Paste from Facebook or Instagram" })).toBeDisabled();
+    expect(screen.getByText(/Reading posts isn't switched on yet/)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "+ Add an event" }));
+    expect(screen.getByLabelText("Title")).toBeVisible();
+    expect(fetch).not.toHaveBeenCalled();
+  });
   it("puts focus in the box when it opens, and on the title when a post fills the form", async () => {
     const user = await openPanel();
     expect(screen.getByLabelText("The post")).toHaveFocus();
@@ -163,7 +172,7 @@ describe("paste panel", () => {
     let release!: (r: Response) => void;
     extract = () => new Promise<Response>((r) => (release = r));
     const user = userEvent.setup();
-    render(<EventsForm initial={LISTING} initialEvents={[OLD]} />);
+    render(<EventsForm initial={LISTING} initialEvents={[OLD]} postExtractionEnabled />);
     await user.click(screen.getByRole("button", { name: "Paste from Facebook or Instagram" }));
     await user.type(screen.getByLabelText("The post"), "post A");
     await user.click(screen.getByRole("button", { name: "Read it" }));

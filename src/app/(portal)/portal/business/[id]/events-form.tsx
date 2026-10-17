@@ -66,9 +66,11 @@ const PASTE_CLOSED: PasteState = { open: false, text: "", busy: false, error: ""
 export function EventsForm({
   initial,
   initialEvents,
+  postExtractionEnabled,
 }: {
   initial: Restaurant;
   initialEvents: EventItem[];
+  postExtractionEnabled: boolean;
 }) {
   const [events, setEvents] = useState<EventItem[]>(initialEvents);
   const [draft, setDraft] = useState<EventDraft | null>(null);
@@ -481,10 +483,14 @@ export function EventsForm({
           <Button
             variant="ghost"
             type="button"
+            disabled={!postExtractionEnabled}
             onClick={() => setPaste({ open: true, text: "", busy: false, error: "" })}
           >
             Paste from Facebook or Instagram
           </Button>
+          {!postExtractionEnabled && (
+            <p className="text-sm text-ink-soft">Reading posts isn&apos;t switched on yet. You can still add an event by hand.</p>
+          )}
           <SaveMessage message={eventSave.message} />
         </div>
       )}
