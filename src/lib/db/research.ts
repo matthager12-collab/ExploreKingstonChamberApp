@@ -1,5 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import { and, asc, desc, eq, lt, or, sql } from "drizzle-orm";
 import { getDb } from "./client";
 import { researchRequest, record, audit, type ResearchRow } from "./schema";
@@ -73,6 +74,12 @@ export async function createResearch(input: unknown, actor: string) {
   return publicRequest(existing);
 }
 export async function claimResearch(context: ResearchContext) {
+  return claimNextResearch(context);
+}
+export async function claimPostExtraction(id: string) {
+  return claimNextResearch(null, z.string().uuid().parse(id));
+}
+async function claimNextResearch(context: ResearchContext | null, extractionJobId?: string) {
   return getDb().transaction(async (tx) => {
     const now = new Date();
     // Expiration is enforced on reads and worker sweeps, including completed
@@ -84,6 +91,7 @@ export async function claimResearch(context: ResearchContext) {
           payload = jsonb_set(jsonb_set(payload, '{prompt}', '""'::jsonb),
                     '{extraction}', (payload->'extraction') - 'draft') - 'error'
       WHERE payload->'extraction' IS NOT NULL
+        AND ${extractionJobId ? sql`id = ${extractionJobId}` : sql`true`}
         AND payload->'extraction'->>'expiresAt' <= ${now.toISOString()}
         AND (state <> 'cancelled' OR payload->>'prompt' <> '')
     `);
@@ -91,12 +99,15 @@ export async function claimResearch(context: ResearchContext) {
       .select()
       .from(researchRequest)
       .where(
-        or(
+        and(or(
           eq(researchRequest.state, "queued"),
           and(
             eq(researchRequest.state, "researching"),
             lt(researchRequest.leaseUntil, now),
           ),
+        ),
+          extractionJobId ? eq(researchRequest.id, extractionJobId) : undefined,
+          extractionJobId ? sql`jsonb_typeof(${researchRequest.payload}->'extraction') = 'object'` : undefined,
         ),
       )
       .orderBy(asc(researchRequest.createdAt))
@@ -127,8 +138,8 @@ export async function claimResearch(context: ResearchContext) {
         payload: {
           ...row.payload,
           baseline: row.payload.extraction ? undefined : Object.fromEntries([
-            ...context.maps.map((r) => [`map:${r.id}`, documentOnly(r)]),
-            ...context.events.map((r) => [`event:${r.id}`, documentOnly(r)]),
+            ...context!.maps.map((r) => [`map:${r.id}`, documentOnly(r)]),
+            ...context!.events.map((r) => [`event:${r.id}`, documentOnly(r)]),
           ]),
         },
         leaseToken: randomUUID(),
@@ -146,8 +157,9 @@ export async function finishResearch(
   id: string,
   lease: string,
   result: unknown,
-  context: ResearchContext,
+  context: ResearchContext | null,
   failure = false,
+  extractionOnly = false,
 ) {
   void context; // Completion uses the snapshot captured when the worker claimed the job.
   return getDb().transaction(async (tx) => {
@@ -166,6 +178,8 @@ export async function finishResearch(
       throw new ResearchConflict(
         "This research attempt has expired. Its results were not applied.",
       );
+    if (extractionOnly && !row.payload.extraction)
+      throw new ResearchConflict("This is not an extraction request.");
     if (row.payload.extraction) {
       const extraction = row.payload.extraction;
       if (Date.parse(extraction.expiresAt) <= Date.now())
@@ -228,6 +242,10 @@ export async function finishResearch(
       .returning();
     return publicRequest(saved);
   });
+}
+
+export async function finishPostExtraction(id: string, lease: string, result: unknown, failure = false) {
+  return finishResearch(id, lease, result, null, failure, true);
 }
 
 export async function reviewResearch(

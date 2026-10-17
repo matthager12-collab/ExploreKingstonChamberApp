@@ -17,6 +17,19 @@ event saving and its existing moderation rules remain the publication boundary.
 
 `node scripts/chamber-research-worker.mjs --once` claims at most one job. Without
 `--once`, the existing worker polls every 15 seconds and runs one job at a time.
+For the importer smoke test, use **only**
+`node scripts/chamber-research-worker.mjs --once --extraction-job <UUID>`.
+The UUID must identify the approved synthetic extraction request. Dedicated
+`claim-extraction`, `complete-extraction` and `fail-extraction` operations never
+select admin research or another job. Missing, busy, expired, completed or
+non-extraction targets fail without a shared-queue fallback. Older servers reject
+these distinct actions before claiming anything. The server does not load admin
+map/event context for these operations; its claim response contains only the
+selected post, job ID/lease and current date/timezone. The worker also verifies
+the exact ID, extraction type and lease before invoking Claude. The generic
+worker commands above remain available for separately authorized research use;
+they are not the importer smoke-test command.
+
 Its portal connection uses `CHAMBER_PORTAL_URL` and the existing
 `CHAMBER_RESEARCH_TOKEN` machine credential over HTTPS (HTTP only on loopback).
 The machine credential never enters the model subprocess. Extraction also

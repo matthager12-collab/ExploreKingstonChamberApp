@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb, type TestDb } from "../setup/pglite-db";
 import { researchRequest, record } from "@/lib/db/schema";
-import { claimResearch, finishResearch, listResearch, reviewResearch, createResearch } from "@/lib/db/research";
+import { claimResearch, finishResearch, claimPostExtraction, finishPostExtraction, listResearch, reviewResearch, createResearch } from "@/lib/db/research";
 import { submitPostExtraction, readPostExtraction } from "@/lib/research/event-extraction-queue";
 import { serializeDb, restoreDb } from "@/lib/db/export";
 import { deleteResearchByEmail } from "@/lib/db/research-privacy";
@@ -117,5 +117,63 @@ describe("submitter-scoped CLI extraction queue", () => {
       expect(await deleteResearchByEmail(user.email)).toBe(1);
       expect(await claimResearch(context)).toBeNull();
     } finally { await restored.close(); __setDbForTests(tdb.db); }
+  });
+});
+
+describe("exact extraction job smoke selection", () => {
+  it("selects only the named extraction while older research and other extraction jobs wait", async () => {
+    const research = await createResearch({ id: randomUUID(), prompt: "ADMIN PRIVATE request" }, "admin@example.test");
+    const otherJob = await submitPostExtraction(input(), other);
+    const target = await submitPostExtraction(input(), user);
+    const claimed = await claimPostExtraction(target.id);
+    expect(claimed?.id).toBe(target.id);
+    expect(claimed?.payload.baseline).toBeUndefined();
+    for (const id of [research.id, otherJob.id]) {
+      const [row] = await tdb.db.select().from(researchRequest).where(eq(researchRequest.id, id));
+      expect(row.state).toBe("queued");
+      expect(row.attempts).toBe(0);
+      expect(row.leaseToken).toBeNull();
+    }
+    await finishPostExtraction(target.id, claimed!.leaseToken!, good);
+    expect((await readPostExtraction(target.id, user)).state).toBe("review");
+    expect(await tdb.db.select().from(record)).toHaveLength(0);
+  });
+  it("never falls back for missing, research, busy or completed target IDs", async () => {
+    const research = await createResearch({ id: randomUUID(), prompt: "Admin research stays private" }, "admin");
+    const otherJob = await submitPostExtraction(input(), other);
+    expect(await claimPostExtraction(randomUUID())).toBeNull();
+    expect(await claimPostExtraction(research.id)).toBeNull();
+    await expect(claimPostExtraction("not-a-uuid")).rejects.toThrow();
+    const target = await submitPostExtraction(input(), user);
+    const claimed = await claimPostExtraction(target.id);
+    expect(await claimPostExtraction(target.id)).toBeNull();
+    await finishPostExtraction(target.id, claimed!.leaseToken!, good);
+    expect(await claimPostExtraction(target.id)).toBeNull();
+    expect((await readPostExtraction(otherJob.id, other)).state).toBe("queued");
+    const [admin] = await tdb.db.select().from(researchRequest).where(eq(researchRequest.id, research.id));
+    expect(admin.state).toBe("queued");
+    expect(admin.leaseToken).toBeNull();
+  });
+  it("scrubs only the expired named job and never selects another job", async () => {
+    const jobs = [await submitPostExtraction(input(), other), await submitPostExtraction(input(), user)];
+    for (const job of jobs) {
+      const [row] = await tdb.db.select().from(researchRequest).where(eq(researchRequest.id, job.id));
+      await tdb.db.update(researchRequest).set({ payload: { ...row.payload, extraction: { ...row.payload.extraction!, expiresAt: new Date(0).toISOString() } } }).where(eq(researchRequest.id, row.id));
+    }
+    expect(await claimPostExtraction(jobs[1].id)).toBeNull();
+    const rows = await tdb.db.select().from(researchRequest);
+    expect(rows.find(r => r.id === jobs[0].id)?.state).toBe("queued");
+    expect(rows.find(r => r.id === jobs[0].id)?.payload.prompt).not.toBe("");
+    expect(rows.find(r => r.id === jobs[1].id)?.state).toBe("cancelled");
+    expect(rows.find(r => r.id === jobs[1].id)?.payload.prompt).toBe("");
+  });
+  it("the targeted completion endpoint cannot complete or fail an admin research lease", async () => {
+    const research = await createResearch({ id: randomUUID(), prompt: "Admin research" }, "admin");
+    const claimed = await claimResearch(context);
+    for (const failure of [true, false])
+      await expect(finishPostExtraction(research.id, claimed!.leaseToken!, good, failure)).rejects.toThrow("not an extraction");
+    const [row] = await tdb.db.select().from(researchRequest).where(eq(researchRequest.id, research.id));
+    expect(row.state).toBe("researching");
+    expect(row.leaseToken).toBe(claimed!.leaseToken);
   });
 });

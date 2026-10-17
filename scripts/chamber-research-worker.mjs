@@ -228,7 +228,31 @@ export async function researchWithCli(job, context) {
     await rm(cwd, { recursive: true, force: true });
   }
 }
-export async function runWorker({ once = false } = {}) {
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function validateSelector(once, extractionJobId) {
+  if (extractionJobId !== undefined &&
+      (once !== true || typeof extractionJobId !== "string" || !UUID.test(extractionJobId))) {
+    throw new Error("Use --extraction-job with one UUID and --once");
+  }
+}
+export function parseWorkerArgs(args) {
+  let once = false;
+  let extractionJobId;
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--once" && !once) once = true;
+    else if (args[i] === "--extraction-job" && extractionJobId === undefined) {
+      extractionJobId = args[++i];
+      if (typeof extractionJobId !== "string" || !UUID.test(extractionJobId))
+        throw new Error("Use --extraction-job with one UUID and --once");
+    } else throw new Error("Unknown or duplicate worker argument");
+  }
+  validateSelector(once, extractionJobId);
+  return { once, ...(extractionJobId === undefined ? {} : { extractionJobId }) };
+}
+/** @param {{ once?: boolean, extractionJobId?: string }} [options] */
+export async function runWorker({ once = false, extractionJobId } = {}) {
+  // Validate before reading configuration, requesting work, or invoking a CLI.
+  validateSelector(once, extractionJobId);
   const base = new URL(
     process.env.CHAMBER_PORTAL_URL || "https://app.explorekingstonwa.com",
   );
@@ -261,6 +285,29 @@ export async function runWorker({ once = false } = {}) {
       throw new Error(`Portal returned HTTP ${response.status}`);
     return response.json();
   };
+  if (extractionJobId !== undefined) {
+    // Distinct actions fail closed against older servers. Never fall back to a
+    // shared claim, even when the target is absent, busy, or unsupported.
+    const response = await call({ action: "claim-extraction", id: extractionJobId });
+    const job = response?.job;
+    if (!job || job.id !== extractionJobId || !isExtractionJob(job) ||
+        typeof job.leaseToken !== "string" || !UUID.test(job.leaseToken)) {
+      throw new Error("Selected extraction request is unavailable");
+    }
+    const context = response.context;
+    if (!context || typeof context.now !== "string")
+      throw new Error("Selected extraction context is unavailable");
+    try {
+      const result = await researchWithCli(job, { now: context.now, timezone: context.timezone });
+      await call({ action: "complete-extraction", id: extractionJobId,
+        leaseToken: job.leaseToken, result });
+    } catch {
+      await call({ action: "fail-extraction", id: extractionJobId,
+        leaseToken: job.leaseToken }).catch(() => {});
+      throw new Error("Selected extraction did not complete");
+    }
+    return;
+  }
   let stopping = false;
   const stop = () => {
     stopping = true;
@@ -311,7 +358,7 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
-  runWorker({ once: process.argv.includes("--once") }).catch((error) => {
+  Promise.resolve().then(() => runWorker(parseWorkerArgs(process.argv.slice(2)))).catch((error) => {
     console.error(error.message);
     process.exitCode = 1;
   });

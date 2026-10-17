@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   reviewResearch: vi.fn(),
   claimResearch: vi.fn(),
   finishResearch: vi.fn(),
+  claimPostExtraction: vi.fn(),
+  finishPostExtraction: vi.fn(),
   researchContext: vi.fn(),
 }));
 vi.mock("@/lib/auth", () => ({
@@ -83,5 +85,51 @@ describe("research route authorization", () => {
     );
     expect(response.status).toBe(400);
     expect(mocks.reviewResearch).not.toHaveBeenCalled();
+  });
+});
+
+const targetId = "bfe3cce5-a432-4d1c-9a36-03cd5cc6fc05";
+function targeted(body: unknown) {
+  process.env.CHAMBER_RESEARCH_TOKEN = "a".repeat(40);
+  return worker(new Request("https://app.example/api/assistant-worker", {
+    method: "POST", headers: { authorization: `Bearer ${process.env.CHAMBER_RESEARCH_TOKEN}`, "content-type": "application/json" },
+    body: JSON.stringify(body),
+  }));
+}
+describe("targeted extraction worker operations", () => {
+  it("returns only exact-job text/lease and clock without reading admin context", async () => {
+    mocks.researchContext.mockRejectedValue(new Error("Must not load private admin context"));
+    mocks.claimPostExtraction.mockResolvedValue({ id: targetId, leaseToken: targetId,
+      createdBy: "private@example.test", payload: { prompt: "Invented post", extraction: { requesterId: "secret-person", ownerId: "private-listing" }, baseline: { secret: "private map" } } });
+    const response = await targeted({ action: "claim-extraction", id: targetId });
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.job).toEqual({ id: targetId, leaseToken: targetId, payload: { prompt: "Invented post", extraction: {} } });
+    expect(Object.keys(data.context).sort()).toEqual(["now", "timezone"]);
+    expect(mocks.claimPostExtraction).toHaveBeenCalledWith(targetId);
+    expect(mocks.researchContext).not.toHaveBeenCalled();
+    expect(mocks.claimResearch).not.toHaveBeenCalled();
+  });
+  it("does not fall back when the target is unavailable", async () => {
+    mocks.claimPostExtraction.mockResolvedValue(null);
+    const response = await targeted({ action: "claim-extraction", id: targetId });
+    expect((await response.json()).job).toBeNull();
+    expect(mocks.claimResearch).not.toHaveBeenCalled();
+    expect(mocks.researchContext).not.toHaveBeenCalled();
+  });
+  it.each([{ action: "claim-extraction" }, { action: "claim-extraction", id: "bad" }, { action: "claim-extraction", id: targetId, research: true }])("rejects malformed/extra targeted selection fields", async (body) => {
+    expect((await targeted(body)).status).toBe(400);
+    expect(mocks.claimPostExtraction).not.toHaveBeenCalled();
+    expect(mocks.claimResearch).not.toHaveBeenCalled();
+    expect(mocks.researchContext).not.toHaveBeenCalled();
+  });
+  it.each(["complete-extraction", "fail-extraction"])("uses only the typed extractor completion for %s", async (action) => {
+    mocks.finishPostExtraction.mockResolvedValue({ id: targetId, state: "review", revision: 3, createdBy: "private@example.test", payload: { prompt: "private" } });
+    const response = await targeted({ action, id: targetId, leaseToken: targetId, result: { title: "Draft" } });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ request: { id: targetId, state: "review", revision: 3 } });
+    expect(mocks.finishPostExtraction).toHaveBeenCalledWith(targetId, targetId, { title: "Draft" }, action === "fail-extraction");
+    expect(mocks.finishResearch).not.toHaveBeenCalled();
+    expect(mocks.researchContext).not.toHaveBeenCalled();
   });
 });
