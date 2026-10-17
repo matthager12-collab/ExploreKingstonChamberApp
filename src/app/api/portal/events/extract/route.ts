@@ -68,7 +68,10 @@ export async function POST(request: NextRequest) {
 
   // Cookie-authenticated metered calls accept only the same-origin JSON form.
   const origin = request.headers.get("origin");
-  if (origin && origin !== request.nextUrl.origin) {
+  // Next normalizes loopback URLs to localhost; retain the incoming host.
+  const protocol = request.headers.get("x-forwarded-proto") === "https" ? "https:" : request.nextUrl.protocol;
+  const requestOrigin = `${protocol}//${request.headers.get("host") ?? request.nextUrl.host}`;
+  if (origin && origin !== requestOrigin) {
     return NextResponse.json({ error: "Use the event form on this site." }, { status: 403 });
   }
   if (request.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() !== "application/json") {

@@ -80,6 +80,15 @@ beforeEach(() => {
 });
 
 describe("POST /api/portal/events/extract", () => {
+  it("accepts the actual request host when Next normalizes a loopback URL", async () => {
+    const res = await POST(new NextRequest("http://localhost:3114/api/portal/events/extract", {
+      method: "POST",
+      headers: { "content-type": "application/json", host: "127.0.0.1:3114", origin: "http://127.0.0.1:3114" },
+      body: JSON.stringify(BASE),
+    }));
+    expect(res.status).toBe(200);
+  });
+
   it("accepts the same-origin JSON form with a charset", async () => {
     const res = await POST(new NextRequest("https://app.explorekingstonwa.com/api/portal/events/extract", {
       method: "POST",
