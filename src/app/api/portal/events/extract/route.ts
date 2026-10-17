@@ -66,6 +66,15 @@ export async function POST(request: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Sign in first" }, { status: 401 });
 
+  // Cookie-authenticated metered calls accept only the same-origin JSON form.
+  const origin = request.headers.get("origin");
+  if (origin && origin !== request.nextUrl.origin) {
+    return NextResponse.json({ error: "Use the event form on this site." }, { status: 403 });
+  }
+  if (request.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() !== "application/json") {
+    return NextResponse.json({ error: "Send the post as JSON." }, { status: 415 });
+  }
+
   const raw = await readCapped(request, MAX_BODY_BYTES);
   if (raw === null) {
     // Not the "longer than N characters" sentence: this fires on bytes, and a

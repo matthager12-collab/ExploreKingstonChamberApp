@@ -27,6 +27,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 
 import type { EventCategory } from "@/lib/types";
+import { instantToWallTime, wallTimeToInstant } from "./tz";
 
 /** The 7-category model, mirrored from the portal form's own list. */
 const CATEGORIES = [
@@ -146,7 +147,11 @@ function validLocalDateTime(value: string): boolean {
   const year = Number(value.slice(0, 4));
   if (year < 2000 || year > 2100) return false;
   const parsed = new Date(`${value}:00Z`);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 16) === value;
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 16) !== value) return false;
+  // A calendar-valid time can still fall in Pacific's spring-forward gap.
+  const parts = [year, Number(value.slice(5, 7)), Number(value.slice(8, 10)), Number(value.slice(11, 13)), Number(value.slice(14, 16))] as const;
+  const wall = instantToWallTime("America/Los_Angeles", wallTimeToInstant("America/Los_Angeles", ...parts));
+  return [wall.y, wall.mo, wall.d, wall.h, wall.mi].every((part, i) => part === parts[i]);
 }
 
 /**

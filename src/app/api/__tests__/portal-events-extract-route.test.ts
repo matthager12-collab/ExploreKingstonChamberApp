@@ -80,6 +80,34 @@ beforeEach(() => {
 });
 
 describe("POST /api/portal/events/extract", () => {
+  it("accepts the same-origin JSON form with a charset", async () => {
+    const res = await POST(new NextRequest("https://app.explorekingstonwa.com/api/portal/events/extract", {
+      method: "POST",
+      headers: { "content-type": "application/json; charset=utf-8", origin: "https://app.explorekingstonwa.com" },
+      body: JSON.stringify(BASE),
+    }));
+    expect(res.status).toBe(200);
+  });
+
+  it("refuses a cross-origin cookie request before the metered call", async () => {
+    const res = await POST(new NextRequest("https://app.explorekingstonwa.com/api/portal/events/extract", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://unrelated.example" },
+      body: JSON.stringify(BASE),
+    }));
+    expect(res.status).toBe(403);
+    expect(mockExtract).not.toHaveBeenCalled();
+    expect(mockLimit).not.toHaveBeenCalled();
+  });
+
+  it("refuses a browser-simple text body even when it contains valid JSON", async () => {
+    const res = await POST(new NextRequest("http://localhost/api/portal/events/extract", {
+      method: "POST", headers: { "content-type": "text/plain" }, body: JSON.stringify(BASE),
+    }));
+    expect(res.status).toBe(415);
+    expect(mockExtract).not.toHaveBeenCalled();
+  });
+
   it("returns a draft for a member who manages the listing", async () => {
     const res = await post(BASE);
     expect(res.status).toBe(200);

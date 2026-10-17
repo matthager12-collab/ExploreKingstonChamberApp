@@ -41,6 +41,18 @@ const deps = (parsed: unknown): ExtractDeps => ({
 });
 
 describe("extractEventFromPost", () => {
+  it("drops Pacific spring-forward times that never occur, while preserving valid transition times", async () => {
+    for (const start of ["2027-03-14T02:00", "2027-03-14T02:30", "2027-03-14T02:59"]) {
+      const draft = await extractEventFromPost("x", deps({ ...GOOD, start, end: "" }));
+      expect(draft?.start, start).toBe("");
+      expect(draft?.unsure).toBe(true);
+    }
+    for (const start of ["2027-03-14T01:30", "2027-03-14T03:00", "2026-11-01T01:30"]) {
+      const draft = await extractEventFromPost("x", deps({ ...GOOD, start, end: "" }));
+      expect(draft?.start, start).toBe(start);
+    }
+  });
+
   it("returns the fields when the post is a clear, dated event", async () => {
     const draft = await extractEventFromPost("Crab feed Oct 3!", deps(GOOD));
     expect(draft).toMatchObject({
