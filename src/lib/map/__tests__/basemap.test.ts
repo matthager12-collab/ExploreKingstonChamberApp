@@ -1,4 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { featureFilter, validateStyleMin } from "@maplibre/maplibre-gl-style-spec";
+import { readFileSync } from "node:fs";
+import { VectorTile } from "@mapbox/vector-tile";
+import Pbf from "pbf";
+import { PMTiles } from "pmtiles";
 import {
   applyBasemapMode,
   mapStyle,
@@ -185,6 +190,55 @@ describe("mapStyle (self-hosted vector base)", () => {
   it("draws the recognizable base layers", () => {
     const ids = style.layers.map((l) => l.id);
     expect(ids).toEqual(expect.arrayContaining(["earth", "water", "roads", "buildings"]));
+  });
+
+  it("fills water polygons only and draws streams as lines", () => {
+    const water = style.layers.find((l) => l.id === "water")!;
+    const waterways = style.layers.find((l) => l.id === "waterways");
+    expect(water.type).toBe("fill");
+    expect(waterways?.type).toBe("line");
+    expect(VECTOR_SURFACE_LAYERS).toContain("waterways");
+    for (const [layer, accepted] of [[water, 3], [waterways!, 2]] as const) {
+      const matches = featureFilter("filter" in layer ? layer.filter : undefined).filter;
+      for (const type of [1, 2, 3] as const) {
+        expect(matches({ zoom: 15 }, { type, properties: {}, geometry: [] }), `${layer.id}: geometry ${type}`).toBe(type === accepted);
+      }
+    }
+    expect(validateStyleMin(style)).toEqual([]);
+  });
+
+  it("keeps the fixture's Whisper and Carpenter creeks out of fills while preserving lake, basin and ocean polygons", async () => {
+    const bytes = readFileSync("tests/fixtures/tiles/kingston.pmtiles");
+    const archive = new PMTiles({
+      getKey: () => "water-regression-fixture",
+      getBytes: async (offset, length) => ({ data: Uint8Array.from(bytes.subarray(offset, offset + length)).buffer }),
+    });
+    const water = style.layers.find((l) => l.id === "water")!;
+    const waterways = style.layers.find((l) => l.id === "waterways")!;
+    const fill = featureFilter("filter" in water ? water.filter : undefined).filter;
+    const line = featureFilter("filter" in waterways ? waterways.filter : undefined).filter;
+    const streams = new Set<string>();
+    const polygons = new Set<string>();
+    const polygonIds = new Set<number>();
+    for (const [z, x, y] of [[14, 2616, 5708], [14, 2617, 5708], [15, 5232, 11417], [15, 5234, 11417]]) {
+      const tile = await archive.getZxy(z, x, y);
+      expect(tile, `fixture tile ${z}/${x}/${y}`).toBeDefined();
+      const features = new VectorTile(new Pbf(new Uint8Array(tile!.data))).layers.water;
+      for (let i = 0; i < features.length; i++) {
+        const feature = features.feature(i);
+        const input = { type: feature.type as 1 | 2 | 3, properties: feature.properties, geometry: feature.loadGeometry() };
+        expect(fill({ zoom: z }, input), `fill ${feature.id}`).toBe(feature.type === 3);
+        expect(line({ zoom: z }, input), `line ${feature.id}`).toBe(feature.type === 2);
+        if (feature.type === 2 && feature.properties.name) streams.add(String(feature.properties.name));
+        if (feature.type === 3) {
+          polygons.add(String(feature.properties.kind));
+          polygonIds.add(Number(feature.id));
+        }
+      }
+    }
+    expect([...streams]).toEqual(expect.arrayContaining(["Whisper Creek", "Carpenter Creek"]));
+    expect([...polygons]).toEqual(expect.arrayContaining(["water", "basin", "ocean"]));
+    expect([...polygonIds]).toEqual(expect.arrayContaining([891750582, 14224401200]));
   });
 
   it("credits OSM (ODbL) and Protomaps on the vector source", () => {

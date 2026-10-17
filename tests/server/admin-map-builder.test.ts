@@ -24,6 +24,7 @@ const TRAIL_TITLE = "Waterfront boardwalk stroll";
 type Feature = {
   id: string;
   kind: string;
+  category?: string;
   title: string;
   views: string[];
   cost?: string;
@@ -334,6 +335,63 @@ describe("admin map builder (MapLibre + terra-draw)", () => {
           newId,
         );
       }
+    }
+  });
+
+  it.each([375, 1280])("edits outdoor icons, recovers a save error and renders them publicly at %ipx", async (width) => {
+    expect(tilesAvailable, "outdoor marker walk requires the committed tile fixture").toBe(true);
+    await page.setViewportSize({ width, height: 1200 });
+    const choices = [
+      ["kayak", "Kayak / paddlecraft", "🛶"],
+      ["bicycle", "Bike / bicycle-friendly trail", "🚲"],
+      ["playground", "Playground", "🛝"],
+    ] as const;
+    const ids: string[] = [];
+    try {
+      for (const [key, label, emoji] of choices) {
+        const id = `test-outdoor-${key}-${width}`;
+        const title = `Test ${key} ${width}`;
+        ids.push(id);
+        const created = await context.request.post(BASE_URL + "/api/admin/map-features", {
+          data: { id, title, kind: "marker", point: [47.798, -122.499], views: ["food-drink"], category: "info" },
+        });
+        expect(created.status()).toBe(200);
+        await openBuilder();
+        await page.getByRole("button", { name: /^Features \(/ }).press("Enter");
+        await page.getByRole("button", { name: title, exact: true }).press("Enter");
+        const picker = page.getByRole("combobox", { name: /^Icon category/ });
+        expect(await picker.getByRole("option", { name: `${emoji} ${label}`, exact: true }).count()).toBe(1);
+        await picker.selectOption(key);
+        expect(await picker.inputValue()).toBe(key);
+        expect(await page.locator(".me-pin--selected .me-dot").textContent()).toBe(emoji);
+        // A failed save must retain the chosen icon and title so retry is cheap.
+        await page.route("**/api/admin/map-features", (route) => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Test save failed. Try again." }) }), { times: 1 });
+        await page.getByRole("button", { name: "Save feature", exact: true }).press("Enter");
+        await page.getByText("Test save failed. Try again.").filter({ visible: true }).waitFor();
+        expect(await picker.inputValue()).toBe(key);
+        expect(await page.getByRole("textbox", { name: /^Title/ }).inputValue()).toBe(title);
+        if (process.env.MAP_WALK_EVIDENCE_DIR) {
+          await page.screenshot({ path: `${process.env.MAP_WALK_EVIDENCE_DIR}/${key}-${width}-editor-recovery.png`, fullPage: true });
+        }
+        await page.getByRole("button", { name: "Save feature", exact: true }).press("Enter");
+        await page.getByText("Saved — live on the public map", { exact: false }).filter({ visible: true }).waitFor();
+        expect((await getFeature(id))?.category).toBe(key);
+        await openBuilder();
+        await page.getByRole("button", { name: /^Features \(/ }).press("Enter");
+        await page.getByRole("button", { name: title, exact: true }).press("Enter");
+        expect(await page.getByRole("combobox", { name: /^Icon category/ }).inputValue()).toBe(key);
+        await page.goto(BASE_URL + "/map", { waitUntil: "load" });
+        const pin = page.getByRole("img", { name: title, exact: true });
+        await pin.waitFor();
+        expect(await pin.textContent()).toContain(emoji);
+        expect(await page.getByRole("list", { name: "Map legend" }).textContent()).toContain(label);
+        if (process.env.MAP_WALK_EVIDENCE_DIR) {
+          await page.screenshot({ path: `${process.env.MAP_WALK_EVIDENCE_DIR}/${key}-${width}.png`, fullPage: true });
+        }
+      }
+    } finally {
+      for (const id of ids) await context.request.delete(`${BASE_URL}/api/admin/map-features?id=${id}`);
+      await page.setViewportSize({ width: 1280, height: 1200 });
     }
   });
 

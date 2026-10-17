@@ -15,10 +15,12 @@ export function PageHeader({
   eyebrow,
   title,
   intro,
+  children,
 }: {
   eyebrow?: string;
   title: string;
   intro?: string;
+  children?: ReactNode;
 }) {
   return (
     <header className="mx-auto max-w-5xl px-4 pt-10 pb-6 sm:pt-14">
@@ -28,7 +30,8 @@ export function PageHeader({
         </p>
       )}
       <h1 className="text-4xl font-semibold text-sound-deep sm:text-5xl">{title}</h1>
-      {/* E14 contrast: muted gray (--color-ink-soft, #6b7683) measures 4.4993:1
+      {children}
+      {/* E14 contrast: muted gray (--color-ink-soft) measures 4.4993:1
           on the page fill (--color-shell) — under AA 1.4.3, and it fails on
           EVERY page because this is the shared page-intro primitive. It clears
           AA on a white card (4.62:1) but this paragraph sits on the page

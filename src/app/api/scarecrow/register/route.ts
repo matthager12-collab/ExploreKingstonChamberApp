@@ -181,7 +181,7 @@ export async function POST(request: NextRequest) {
     title,
     creator,
     notes,
-    category: "event",
+    category: "scarecrow",
     views: [CRAWL_VIEW_ID],
     point,
   };

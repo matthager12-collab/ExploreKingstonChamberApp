@@ -11,7 +11,11 @@ let registered = false;
 /** Load the MapLibre namespace with the pmtiles:// protocol registered once.
  *  maplibre-gl v4 has no default export — use the module namespace directly. */
 export async function loadMapLibre(): Promise<typeof import("maplibre-gl")> {
-  const maplibregl = await import("maplibre-gl");
+  // Below-fold maps must not make their stylesheet block the page’s first paint.
+  const [maplibregl] = await Promise.all([
+    import("maplibre-gl"),
+    import("maplibre-gl/dist/maplibre-gl.css"),
+  ]);
   if (!registered) {
     const { Protocol } = await import("pmtiles");
     maplibregl.addProtocol("pmtiles", new Protocol().tile);

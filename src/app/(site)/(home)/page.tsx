@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import { Satisfy } from "next/font/google";
 import Link from "next/link";
 import { getForecast } from "@/lib/weather";
 import { getTodaysTides } from "@/lib/tides";
@@ -17,7 +18,10 @@ import { getSide } from "@/lib/side-server";
 import { getFerryPredictionEnabled } from "@/lib/stores/ferry-prediction-store";
 import { getPhotoContext } from "@/lib/stores/photo-store";
 import { resolvePhoto } from "@/lib/photo-resolve";
-import type { PhotoSlotKey } from "@/lib/photo-slots";
+import { photoSlot, type PhotoSlotKey } from "@/lib/photo-slots";
+
+// Only the home hero uses this font; other routes must not preload it.
+const satisfy = Satisfy({ subsets: ["latin"], weight: "400", variable: "--font-satisfy" });
 
 export const revalidate = 60;
 
@@ -78,6 +82,8 @@ export default async function Home() {
   // preview uses — the editor and this page must never disagree about what a
   // slot renders. An untouched slot resolves to the /brand asset below.
   const photo = (key: PhotoSlotKey) => resolvePhoto(key, photos.overrides[key], photos.library);
+  const heroPhoto = photo("home.hero");
+  const cropDefaultHero = heroPhoto.src === photoSlot("home.hero").fallback;
   const fastFerry = ferry.fastFerry;
   // Admin-hidden pages drop out of the feature grid.
   const visibleFeatures = features.filter((f) => !hiddenPaths.includes(f.href));
@@ -99,25 +105,29 @@ export default async function Home() {
   return (
     <>
       {/* Hero — Coastal Elegance */}
-      <div className="relative isolate min-h-[90vh] overflow-hidden text-white flex flex-col justify-between pb-8">
+      <div className={`${satisfy.variable} relative isolate min-h-[90vh] overflow-hidden text-white flex flex-col justify-between pb-8`}>
         {/* home.hero is a DECORATIVE slot, so resolvePhoto always returns
             alt="" — the headline below already says what this page is. */}
-        <Image
-          src={photo("home.hero").src}
-          alt={photo("home.hero").alt}
-          fill
-          preload
-          // This is the LCP element on "/" (verified via the Lighthouse CI
-          // trace: selector main#main > div.relative > img.-z-20). `preload`
-          // alone emits the <link rel=preload as=image> with NO fetchpriority,
-          // which Chrome schedules as a LOW-priority fetch — behind every JS
-          // chunk on the connection pool. fetchPriority="high" rides the same
-          // preload link (ImagePreload forwards it) and bumps the hero ahead
-          // of non-critical requests, exactly the web.dev LCP guidance.
-          fetchPriority="high"
-          sizes="100vw"
-          className="-z-20 object-cover"
-        />
+        {/* Crop the default portrait above the boats and houses. Pairing a
+            150% frame with a 2/3 focal point keeps its lower third hidden. */}
+        <div className={`absolute inset-x-0 top-0 -z-20 ${cropDefaultHero ? "h-[150%]" : "h-full"}`}>
+          <Image
+            src={heroPhoto.src}
+            alt={heroPhoto.alt}
+            fill
+            preload
+            // This is the LCP element on "/" (verified via the Lighthouse CI
+            // trace, before the decorative crop wrapper was added). `preload`
+            // alone emits the <link rel=preload as=image> with NO fetchpriority,
+            // which Chrome schedules as a LOW-priority fetch — behind every JS
+            // chunk on the connection pool. fetchPriority="high" rides the same
+            // preload link (ImagePreload forwards it) and bumps the hero ahead
+            // of non-critical requests, exactly the web.dev LCP guidance.
+            fetchPriority="high"
+            sizes="100vw"
+            className={cropDefaultHero ? "object-cover object-[center_66.667%]" : "object-cover"}
+          />
+        </div>
         <div
           aria-hidden
           className="absolute inset-0 -z-10 bg-gradient-to-b from-sound-deep/90 via-sound/60 to-transparent"
@@ -157,7 +167,7 @@ export default async function Home() {
 
         {/* Floating Glassmorphic Ferry Status Widget */}
         <div className="mx-auto w-full max-w-5xl px-4 mt-12">
-          <div className="backdrop-blur-xl bg-white/10 border border-white/20 rounded-3xl p-6 shadow-[0_8px_32px_rgba(0,0,0,0.12)]">
+          <div className="backdrop-blur-xl bg-sound-deep/70 border border-white/20 rounded-3xl p-6 shadow-[0_8px_32px_rgba(0,0,0,0.12)]">
             <NextFerries initial={ferry} serverNow={serverNow} tone="dark" side={side} />
             <div className="mt-5 flex flex-wrap items-baseline gap-x-8 gap-y-2 border-t border-white/15 pt-4 text-sm">
               <div className="flex items-center gap-2">

@@ -1,0 +1,824 @@
+{
+  "status": "local_review_only_not_publication_approval",
+  "source_document": "https://docs.google.com/document/d/10FLohopPprwLt7oz6YIYfYd4ZHMeRsUZkznNfdlGIVg",
+  "drive_revision": "102",
+  "prior_revision": "4",
+  "counts": {
+    "Copy approved": 11,
+    "Request changes": 8,
+    "Hold": 4
+  },
+  "preserve": {
+    "village_green_point": [
+      47.799229,
+      -122.502704
+    ],
+    "published_PRs": [
+      240,
+      241
+    ],
+    "qr_url": "https://explorekingstonwa.com/pedal-paddle-the-ultimate-guide-to-biking-and-kayaking-in-kingston-wa/",
+    "view_name": "Trails & Walks",
+    "route_geometry": "unchanged"
+  },
+  "release_approved": false,
+  "entries": [
+    {
+      "number": 1,
+      "id": "brochure-foul-weather-bluff-preserve",
+      "name": "Foulweather Bluff Preserve",
+      "category": "park",
+      "document_decision": "Copy approved",
+      "proposed_copy": "Walk a wooded trail to brackish marsh and beach habitat at Foulweather Bluff Preserve.\n\nOpen year-round during daylight hours. Dogs are not allowed.",
+      "proposed_copy_approval": "copy_approved_as_displayed",
+      "feedback": [],
+      "follow_up": [
+        "Outside deployed basemap coverage; regional map preview/publication waits for reviewed wider coverage."
+      ],
+      "sources": [
+        "https://www.nature.org/en-us/get-involved/how-to-help/places-we-protect/foulweather-bluff/"
+      ],
+      "point": null,
+      "position_source": null,
+      "position_approval": "not_approved",
+      "publish": false
+    },
+    {
+      "number": 2,
+      "id": "brochure-norwegian-point",
+      "name": "Norwegian Point Park",
+      "category": "park",
+      "document_decision": "Copy approved",
+      "proposed_copy": "Take in waterfront views at Norwegian Point Park in Hansville, with a gazebo, parking, and undeveloped saltwater shoreline access.\n\nVisit during daylight hours and follow posted park rules.",
+      "proposed_copy_approval": "copy_approved_as_displayed",
+      "feedback": [],
+      "follow_up": [
+        "Outside deployed basemap coverage; regional map preview/publication waits for reviewed wider coverage."
+      ],
+      "sources": [
+        "https://www.kitsap.gov/parks/Pages/NorwegianPointPark.aspx",
+        "https://www.kitsap.gov/parks/Pages/FAQRules.aspx",
+        "https://utility.arcgis.com/usrsvcs/servers/7619eba2abc249c19098c7cebc490fae/rest/services/Public/Parks/MapServer/0?f=pjson"
+      ],
+      "point": null,
+      "position_source": null,
+      "position_approval": "not_approved",
+      "publish": false
+    },
+    {
+      "number": 3,
+      "id": "brochure-salsbury-park",
+      "name": "Salsbury Point Park",
+      "category": "park",
+      "document_decision": "Copy approved",
+      "proposed_copy": "Salsbury Point Park offers saltwater beach access, a playground, picnic areas, and a public boat launch.\n\nThe floating dock is normally installed in April and removed in October, depending on weather and tides. Restrooms close October 1–March 31. Fishing and crabbing from the floating pier are prohibited.",
+      "proposed_copy_approval": "copy_approved_as_displayed",
+      "feedback": [],
+      "follow_up": [
+        "Outside deployed basemap coverage; regional map preview/publication waits for reviewed wider coverage."
+      ],
+      "sources": [
+        "https://www.kitsap.gov/parks/Pages/SalsburyPointPark.aspx",
+        "https://www.kitsap.gov/parks/Pages/FAQRules.aspx",
+        "https://utility.arcgis.com/usrsvcs/servers/7619eba2abc249c19098c7cebc490fae/rest/services/Public/Parks/MapServer/0?f=pjson"
+      ],
+      "point": null,
+      "position_source": null,
+      "position_approval": "not_approved",
+      "publish": false
+    },
+    {
+      "number": 4,
+      "id": "brochure-north-gateway-trailhead",
+      "name": "North Gateway Trailhead",
+      "category": "bicycle",
+      "document_decision": "Request changes",
+      "proposed_copy": "North Gateway Trailhead provides access to the north end of Port Gamble Forest Heritage Park for hiking and to the mountain-bike ride park.\n\nUse designated trails and follow posted closures. Some ride-park trails may remain closed for rehabilitation; check current trail status before visiting.",
+      "proposed_copy_approval": "needs_review",
+      "feedback": [
+        {
+          "id": "AAACI3aemfg",
+          "text": "change to bicycle icon as this is main entry point for cycles"
+        }
+      ],
+      "follow_up": [
+        "Requested icon applied locally; document decision remains unchanged.",
+        "Outside deployed basemap coverage; regional map preview/publication waits for reviewed wider coverage."
+      ],
+      "sources": [
+        "https://services6.arcgis.com/qt3UCV9x5kB4CwRA/arcgis/rest/services/Site_Address_Points/FeatureServer/0/query?f=json&where=ADDR_LABEL+%3D+%27North+Gateway+Trailhead%27&outFields=ADDR_LABEL%2CSTREET_ADDR%2CCITY%2CZIP_CODE&outSR=4326&returnGeometry=true",
+        "https://www.kitsap.gov/parks",
+        "https://www.kitsap.gov/parks/Pages/PortGambleHeritagePark.aspx",
+        "https://www.kitsap.gov/parks/Pages/FAQRules.aspx",
+        "https://www.evergreenmtb.org/trails/port-gamble"
+      ],
+      "point": null,
+      "position_source": null,
+      "position_approval": "not_approved",
+      "publish": false
+    },
+    {
+      "number": 5,
+      "id": "brochure-bayview-trailhead",
+      "name": "Bayview Trailhead",
+      "category": "trailhead",
+      "document_decision": "Copy approved",
+      "proposed_copy": "Bayview Trailhead is a named entrance to Port Gamble Forest Heritage Park. The park has walking, bicycle, and equestrian trails.\n\nPermitted uses vary by trail. Follow trail signs and current closures.",
+      "proposed_copy_approval": "copy_approved_as_displayed",
+      "feedback": [],
+      "follow_up": [
+        "Outside deployed basemap coverage; regional map preview/publication waits for reviewed wider coverage."
+      ],
+      "sources": [
+        "https://services6.arcgis.com/qt3UCV9x5kB4CwRA/arcgis/rest/services/Site_Address_Points/FeatureServer/0/query?f=json&where=ADDR_LABEL+%3D+%27Bayview+Trailhead%27&outFields=ADDR_LABEL%2CSTREET_ADDR%2CCITY%2CZIP_CODE&outSR=4326&returnGeometry=true",
+        "https://utility.arcgis.com/usrsvcs/servers/7619eba2abc249c19098c7cebc490fae/rest/services/Public/Parks/MapServer/0",
+        "https://www.kitsap.gov/parks/Pages/PortGambleHeritagePark.aspx",
+        "https://www.kitsap.gov/parks/Pages/FAQRules.aspx",
+        "https://kitsap.gov/parks/Pages/TrailMaps.aspx",
+        "https://www.portgamble.com/media/haknitff/updated-trail-map-2023.pdf"
+      ],
+      "point": null,
+      "position_source": null,
+      "position_approval": "not_approved",
+      "publish": false
+    },
+    {
+      "number": 6,
+      "id": "brochure-kitsap-memorial-park",
+      "name": "Kitsap Memorial State Park",
+      "category": "park",
+      "document_decision": "Copy approved",
+      "proposed_copy": "Enjoy Hood Canal shoreline views, walking trails, and a playground at Kitsap Memorial State Park.\n\nOpen 8 a.m.–dusk year-round. A Discover Pass is required for day-use parking. Check current park alerts before visiting.",
+      "proposed_copy_approval": "copy_approved_as_displayed",
+      "feedback": [],
+      "follow_up": [
+        "Outside deployed basemap coverage; regional map preview/publication waits for reviewed wider coverage."
+      ],
+      "sources": [
+        "https://parks.wa.gov/find-parks/state-parks/kitsap-memorial-state-park",
+        "https://parks.wa.gov/find-activities/winter-schedule",
+        "https://utility.arcgis.com/usrsvcs/servers/7619eba2abc249c19098c7cebc490fae/rest/services/Public/Parks/MapServer/0?f=pjson"
+      ],
+      "point": null,
+      "position_source": null,
+      "position_approval": "not_approved",
+      "publish": false
+    },
+    {
+      "number": 7,
+      "id": "brochure-quiet-place-park",
+      "name": "A Quiet Place Park",
+      "category": "park",
+      "document_decision": "Copy approved",
+      "proposed_copy": "Walk the trails and enjoy viewpoints at A Quiet Place Park on Ohio Avenue NE. Parking is below the trail entrance.\n\nVisit during daylight hours and stay on designated trails.",
+      "proposed_copy_approval": "copy_approved_as_displayed",
+      "feedback": [],
+      "follow_up": [],
+      "sources": [
+        "https://kitsap.gov/parks/Pages/AQuietPlacePark.aspx",
+        "https://kitsap.gov/parks/Pages/FAQRules.aspx",
+        "https://utility.arcgis.com/usrsvcs/servers/7619eba2abc249c19098c7cebc490fae/rest/services/Public/Parks/MapServer/0",
+        "https://services6.arcgis.com/qt3UCV9x5kB4CwRA/arcgis/rest/services/Park_Locations/FeatureServer/0",
+        "https://www.kitsap.gov/parks"
+      ],
+      "point": null,
+      "position_source": null,
+      "position_approval": "not_approved",
+      "publish": false
+    },
+    {
+      "number": 8,
+      "id": "brochure-village-green-park-trails",
+      "name": "Village Green Park and Trails",
+      "category": "park",
+      "document_decision": "Request changes",
+      "proposed_copy": "Visit the park, playground, and wooded walking trails beside Village Green Community Center at 26159 Dulay Road NE.\n\nCheck district notices for outdoor access and trail-restoration updates.",
+      "proposed_copy_approval": "needs_review",
+      "feedback": [
+        {
+          "id": "AAACI3aemgw",
+          "text": "add 2nd entry for Village Green Playground which is location at front of building immediately off West Kingston Road"
+        }
+      ],
+      "follow_up": [
+        "Keep existing campus record and Mat coordinate. Create a distinct playground child only after its precise point is reviewed."
+      ],
+      "sources": [
+        "https://www.myvillagegreen.org/",
+        "https://www.myvillagegreen.org/village-green-woods-blog/",
+        "https://www.myvillagegreen.org/check-out-the-village-green-master-plan/",
+        "https://www.myvillagegreen.org/wp-content/uploads/2024/07/Village-Green-MPD-Master-Plan-as-submitted-3-1-2022.pdf",
+        "https://www.myvillagegreen.org/hours/"
+      ],
+      "point": null,
+      "position_source": null,
+      "position_approval": "not_approved",
+      "publish": false
+    },
+    {
+      "number": 9,
+      "id": "brochure-port-of-kingston",
+      "name": "Port of Kingston",
+      "category": "boat",
+      "document_decision": "Request changes",
+      "proposed_copy": "The Port of Kingston waterfront includes a marina and a public shore boat ramp. The kayak and canoe storage launch is on gated A Dock.\n\nA Dock storage access requires a lease and Port-issued key card. The public ramp can be unavailable at the lowest minus tides; parking fees and posted restrictions apply.",
+      "proposed_copy_approval": "needs_review",
+      "feedback": [
+        {
+          "id": "AAACI3aemh4",
+          "text": "change to boat icon"
+        }
+      ],
+      "follow_up": [
+        "Requested icon applied locally; document decision remains unchanged."
+      ],
+      "sources": [
+        "https://portofkingston.org/",
+        "https://portofkingston.org/wp-content/uploads/2024/10/12A.-Comprehensive-Scheme-of-Harbor-Improvements-2025-2030.pdf",
+        "https://portofkingston.org/kayak-canoe-storage/",
+        "https://portofkingston.org/port-of-kingston-parking/",
+        "https://portofkingston.org/whats-happening-at-the-port/",
+        "https://utility.arcgis.com/usrsvcs/servers/7619eba2abc249c19098c7cebc490fae/rest/services/Public/Parks/MapServer/0"
+      ],
+      "point": null,
+      "position_source": null,
+      "position_approval": "not_approved",
+      "publish": false
+    },
+    {
+      "number": 10,
+      "id": "brochure-north-kitsap-heritage-park",
+      "name": "North Kitsap Heritage Park",
+      "category": "park",
+      "document_decision": "Copy approved",
+      "proposed_copy": "Explore trails and old logging roads at North Kitsap Heritage Park. The main entrance is on the east side of Miller Bay Road, with limited parking.\n\nVisit during daylight hours and stay on designated trails.",
+      "proposed_copy_approval": "copy_approved_as_displayed",
+      "feedback": [],
+      "follow_up": [
+        "Outside deployed basemap coverage; regional map preview/publication waits for reviewed wider coverage."
+      ],
+      "sources": [
+        "https://kitsap.gov/parks/Pages/NorthKitsapHeritagePark.aspx",
+        "https://kitsap.gov/parks/Pages/FAQRules.aspx",
+        "https://utility.arcgis.com/usrsvcs/servers/7619eba2abc249c19098c7cebc490fae/rest/services/Public/Parks/MapServer/0",
+        "https://www.kitsap.gov/parks"
+      ],
+      "point": null,
+      "position_source": null,
+      "position_approval": "not_approved",
+      "publish": false
+    },
+    {
+      "number": 11,
+      "id": "brochure-arness-park",
+      "name": "Arness Roadside Park",
+      "category": "park",
+      "document_decision": "Request changes",
+      "proposed_copy": "Stop for saltwater shoreline views and a picnic at Arness Roadside Park on South Kingston Road.\n\nVisit during daylight hours and follow posted park rules.\n\nKayaks and stand-up paddleboards can also be launched here. Check current conditions and posted park rules before launching.",
+      "proposed_copy_approval": "needs_review",
+      "feedback": [
+        {
+          "id": "AAACI3aemiM",
+          "text": "Can also launch kayaks and stand-up-paddleboards from location."
+        }
+      ],
+      "follow_up": [
+        "Launch statement supplied by Jen in comment AAACI3aemiM. County page confirms beach access but does not independently confirm this launch claim. Existing point remains a general park point, not a launch location."
+      ],
+      "sources": [
+        "https://kitsap.gov/parks/Pages/ArnessPark.aspx",
+        "https://kitsap.gov/parks/Pages/FAQRules.aspx",
+        "https://services6.arcgis.com/qt3UCV9x5kB4CwRA/arcgis/rest/services/Park_Locations/FeatureServer/0",
+        "https://www.kitsap.gov/parks",
+        "https://kitsappeninsulawatertrails.com/route/appletree-cove/"
+      ],
+      "point": null,
+      "position_source": null,
+      "position_approval": "not_approved",
+      "publish": false
+    },
+    {
+      "number": 12,
+      "id": "kitsap-water-trail",
+      "name": "Kitsap Peninsula National Water Trails",
+      "category": null,
+      "document_decision": "Copy approved",
+      "proposed_copy": "Explore official maps, access-site information, and route resources from the Kitsap Peninsula National Water Trails program.\n\nCheck the rules and current conditions for each access site before visiting.",
+      "proposed_copy_approval": "copy_approved_as_displayed",
+      "feedback": [],
+      "follow_up": [
+        "Regional resource link only; no fabricated point. UI placement still pending."
+      ],
+      "sources": [
+        "https://kitsappeninsulawatertrails.com/",
+        "https://kitsappeninsulawatertrails.com/maps/",
+        "https://kitsappeninsulawatertrails.com/maps/routes/",
+        "https://kitsappeninsulawatertrails.com/resources/"
+      ],
+      "point": null,
+      "position_source": null,
+      "position_approval": "not_approved",
+      "publish": false
+    },
+    {
+      "number": 13,
+      "id": "brochure-point-no-point",
+      "name": "Point No Point Lighthouse & Park",
+      "category": "beach",
+      "document_decision": "Request changes",
+      "proposed_copy": "Point No Point Lighthouse & Park is a waterfront park in Hansville with a sandy beach, historic lighthouse, and restrooms.\n\nFollow posted signs and stay outside fenced restoration areas.",
+      "proposed_copy_approval": "needs_review",
+      "feedback": [
+        {
+          "id": "AAACI3aemig",
+          "text": "change to beach icon"
+        }
+      ],
+      "follow_up": [
+        "Requested icon applied locally; document decision remains unchanged.",
+        "Jen added restrooms. County dedicated page says reopened; earlier FAQ conflict and restroom availability remain flagged. Reuse existing point-no-point, do not duplicate or change its coordinate.",
+        "Rechecked October 16: county FAQ lists Point No Point/WDFW restroom winter closure October 1–March 31; confirm which facility Jen means before promising restroom availability.",
+        "Outside deployed basemap coverage; regional map preview/publication waits for reviewed wider coverage."
+      ],
+      "sources": [
+        "https://www.kitsap.gov/parks/pages/pointnopointpark.aspx",
+        "https://www.kitsap.gov/parks/Pages/FAQRules.aspx",
+        "https://content.govdelivery.com/accounts/WAKITSAP/bulletins/3ffa092",
+        "https://utility.arcgis.com/usrsvcs/servers/7619eba2abc249c19098c7cebc490fae/rest/services/Public/Parks/MapServer/0?f=pjson"
+      ],
+      "point": null,
+      "position_source": null,
+      "position_approval": "not_approved",
+      "publish": false
+    },
+    {
+      "number": 14,
+      "id": "brochure-buck-lake-park",
+      "name": "Buck Lake Park",
+      "category": "park",
+      "document_decision": "Copy approved",
+      "proposed_copy": "Buck Lake Park has a playground, picnic areas and access to the Hansville Greenway.\n\nRestrooms and fishing-pier parking close October 1–March 31; the general parking lot remains open.",
+      "proposed_copy_approval": "copy_approved_as_displayed",
+      "feedback": [],
+      "follow_up": [
+        "Approved visitor copy contains no disputed NE/NW address; preserve the address conflict for placement review.",
+        "Outside deployed basemap coverage; regional map preview/publication waits for reviewed wider coverage."
+      ],
+      "sources": [
+        "https://www.kitsap.gov/parks/Pages/BuckLakePark.aspx",
+        "https://www.kitsap.gov/parks/Pages/FindYourPark.aspx",
+        "https://www.kitsap.gov/parks/Pages/FAQRules.aspx",
+        "https://utility.arcgis.com/usrsvcs/servers/7619eba2abc249c19098c7cebc490fae/rest/services/Public/Parks/MapServer/0?f=pjson",
+        "https://www.kitsappublichealth.org/environment/water_advisories.php"
+      ],
+      "point": null,
+      "position_source": null,
+      "position_approval": "not_approved",
+      "publish": false
+    },
+    {
+      "number": 15,
+      "id": "brochure-port-gamble-playground",
+      "name": "Port Gamble Playground",
+      "category": "playground",
+      "document_decision": "Request changes",
+      "proposed_copy": "Public playground in the heart of Port Gamble, behind the main shopping stores.",
+      "proposed_copy_approval": "needs_review",
+      "feedback": [],
+      "follow_up": [
+        "Jen supplied town playground identity and behind-shops description. Exact location and manager confirmation remain pending; do not substitute a tribal playground.",
+        "Mat authorized rough preview placement. OSM playground area center [47.85464,-122.58561] is provisional; Mat will reposition it. Not a surveyed entrance."
+      ],
+      "sources": [
+        "https://www.portgamble.com/about/",
+        "https://www.portgamble.com/things-to-do/recreation-and-nature/",
+        "https://www.portgamble.com/about/contact-us/"
+      ],
+      "point": [
+        47.85464,
+        -122.58561
+      ],
+      "position_source": "https://www.openstreetmap.org/way/348723745",
+      "position_approval": "preview_only",
+      "publish": false
+    },
+    {
+      "number": 16,
+      "id": "brochure-port-gamble-heritage-forest",
+      "name": "Port Gamble Forest Heritage Park",
+      "category": "park",
+      "document_decision": "Copy approved",
+      "proposed_copy": "Port Gamble Forest Heritage Park has walking, bicycle and equestrian trails.\n\nPermitted uses vary by trail; follow posted signs and current closures.",
+      "proposed_copy_approval": "copy_approved_as_displayed",
+      "feedback": [
+        {
+          "id": "AAACI3aemjA",
+          "text": "this should be description for Stottlemeyer entrance"
+        }
+      ],
+      "follow_up": [
+        "Approved shared park description moves to the Stottlemeyer entrance per Jen. No generic park pin."
+      ],
+      "sources": [
+        "https://www.kitsap.gov/parks/Pages/PortGambleHeritagePark.aspx",
+        "https://services6.arcgis.com/qt3UCV9x5kB4CwRA/arcgis/rest/services/PW_Parks_view/FeatureServer/10",
+        "https://www.kitsap.gov/parks/Pages/FAQRules.aspx",
+        "https://kitsap.gov/parks/Pages/TrailMaps.aspx",
+        "https://www.portgamble.com/media/haknitff/updated-trail-map-2023.pdf"
+      ],
+      "point": null,
+      "position_source": null,
+      "position_approval": "not_approved",
+      "publish": false,
+      "merge_into": "brochure-stottlemeyer-trailhead"
+    },
+    {
+      "number": 17,
+      "id": "brochure-kingston-eglon-trail",
+      "name": "Kingston Eglon Trail",
+      "category": "trailhead",
+      "document_decision": "Copy approved",
+      "proposed_copy": "Explore Eglon Forest in the Kingston area. Check Kitsap County notices and posted signs for current access information.",
+      "proposed_copy_approval": "needs_review",
+      "feedback": [
+        {
+          "id": "AAACI3aemjE",
+          "text": "yes"
+        }
+      ],
+      "follow_up": [
+        "New prose is a fresh draft, not the Not ready text Jen marked Copy approved. County 2025 acquisition notice supports forest identity; its event meeting point is not used as a permanent entrance."
+      ],
+      "sources": [
+        "https://content.govdelivery.com/accounts/WAKITSAP/bulletins/3f1a9c5",
+        "https://www.kitsap.gov/parks/Pages/ParksByCategory.aspx",
+        "https://www.northkitsaptrailsassociation.org/post/kitsap-s-newest-park",
+        "https://kitsap.gov/parks/Pages/FAQRules.aspx",
+        "https://www.kitsap.gov/parks"
+      ],
+      "point": null,
+      "position_source": null,
+      "position_approval": "not_approved",
+      "publish": false
+    },
+    {
+      "number": 18,
+      "id": "brochure-stottlemeyer-trailhead",
+      "name": "Port Gamble Forest Heritage Park – Stottlemeyer Trailhead",
+      "category": "trailhead",
+      "document_decision": "Hold",
+      "proposed_copy": "Stottlemeyer Trailhead provides access to Port Gamble Forest Heritage Park.\n\nPort Gamble Forest Heritage Park has walking, bicycle and equestrian trails.\n\nPermitted uses vary by trail; follow posted signs and current closures.",
+      "proposed_copy_approval": "needs_review",
+      "feedback": [
+        {
+          "id": "AAACI3aemjI",
+          "text": "replaced this with earlier Port Gamble overview but should combine with that to make Port Gamble Forest Heritage Park- Stottlemeyer Trailhead and use the new location"
+        }
+      ],
+      "follow_up": [
+        "Merged overview from entry 16. New address reference [47.788350,-122.599808] differs from old parking by about 341 m. Mat selected it for preview; no production point is moved.",
+        "Mat confirmed [47.788350,-122.599808] for the local preview on October 16. This supersedes the preview selection question, without approving publication or changing source accuracy.",
+        "Outside deployed basemap coverage; regional map preview/publication waits for reviewed wider coverage."
+      ],
+      "sources": [
+        "https://services6.arcgis.com/qt3UCV9x5kB4CwRA/arcgis/rest/services/Site_Address_Points/FeatureServer/0/query?f=json&where=ADDR_LABEL+%3D+%27Stottlemeyer+Trailhead%27&outFields=ADDR_LABEL%2CSTREET_ADDR%2CCITY%2CZIP_CODE&outSR=4326&returnGeometry=true",
+        "https://content.govdelivery.com/accounts/WAKITSAP/bulletins/3a2ba55",
+        "https://utility.arcgis.com/usrsvcs/servers/7619eba2abc249c19098c7cebc490fae/rest/services/Public/Parks/MapServer/0",
+        "https://www.kitsap.gov/parks/Pages/PortGambleHeritagePark.aspx",
+        "https://www.kitsap.gov/parks/Pages/FAQRules.aspx"
+      ],
+      "point": [
+        47.78835,
+        -122.599808
+      ],
+      "position_source": "https://services6.arcgis.com/qt3UCV9x5kB4CwRA/arcgis/rest/services/Site_Address_Points/FeatureServer/0/query?f=json&where=ADDR_LABEL+%3D+%27Stottlemeyer+Trailhead%27&outFields=ADDR_LABEL%2CSTREET_ADDR%2CCITY%2CZIP_CODE&outSR=4326&returnGeometry=true",
+      "position_approval": "preview_only",
+      "publish": false
+    },
+    {
+      "number": 19,
+      "id": "brochure-saltair-beach-park",
+      "name": "Salt Air Beach / North Beach",
+      "category": "beach",
+      "document_decision": "Request changes",
+      "proposed_copy": "Salt Air Beach, also known as North Beach, lies immediately north of the Kingston ferry terminal accessible via stairs.",
+      "proposed_copy_approval": "needs_review",
+      "feedback": [],
+      "follow_up": [],
+      "sources": [
+        "https://portofkingston.org/wp-content/uploads/2024/10/12A.-Comprehensive-Scheme-of-Harbor-Improvements-2025-2030.pdf",
+        "https://utility.arcgis.com/usrsvcs/servers/7619eba2abc249c19098c7cebc490fae/rest/services/Public/Parks/MapServer/0",
+        "https://portofkingston.org/whats-happening-at-the-port/"
+      ],
+      "point": null,
+      "position_source": null,
+      "position_approval": "not_approved",
+      "publish": false
+    },
+    {
+      "number": 20,
+      "id": "brochure-white-horse-golf",
+      "name": "White Horse Golf Club",
+      "category": "golf",
+      "document_decision": "Request changes",
+      "proposed_copy": "White Horse Golf Club offers golf and practice facilities in Kingston.\n\nContact the club for tee times and current visiting information.",
+      "proposed_copy_approval": "needs_review",
+      "feedback": [
+        {
+          "id": "AAACI3aemjM",
+          "text": "replace with golf icon"
+        }
+      ],
+      "follow_up": [
+        "Requested icon applied locally; document decision remains unchanged."
+      ],
+      "sources": [
+        "https://www.whitehorsegolf.com/contact-us/",
+        "https://www.whitehorsegolf.com/course/rates/",
+        "https://www.whitehorsegolf.com/course/golf-etiquette/",
+        "https://utility.arcgis.com/usrsvcs/servers/7619eba2abc249c19098c7cebc490fae/rest/services/Public/Parks/MapServer/0?f=pjson"
+      ],
+      "point": null,
+      "position_source": null,
+      "position_approval": "not_approved",
+      "publish": false
+    },
+    {
+      "number": 21,
+      "id": "port-gamble-cycling",
+      "name": "Cycling at Port Gamble Forest Heritage Park",
+      "category": "bicycle",
+      "document_decision": "Hold",
+      "proposed_copy": "Port Gamble Forest Heritage Park has bicycle trails.\n\nCheck posted trail rules and current closure notices before riding.",
+      "proposed_copy_approval": "needs_review",
+      "feedback": [],
+      "follow_up": [
+        "Remains Hold; no separate cycling route or duplicate park pin. Entry 16 already supplies park-level cycling wording."
+      ],
+      "sources": [
+        "https://www.kitsap.gov/parks/Pages/PortGambleHeritagePark.aspx",
+        "https://kitsap.gov/parks/Pages/TrailMaps.aspx",
+        "https://www.portgamble.com/media/haknitff/updated-trail-map-2023.pdf",
+        "https://www.evergreenmtb.org/trails/port-gamble"
+      ],
+      "point": null,
+      "position_source": null,
+      "position_approval": "not_approved",
+      "publish": false
+    },
+    {
+      "number": 22,
+      "id": "hansville-road-route",
+      "name": "Road Cycling to Hansville",
+      "category": "bicycle",
+      "document_decision": "Hold",
+      "proposed_copy": null,
+      "proposed_copy_approval": "needs_review",
+      "feedback": [],
+      "follow_up": [
+        "Remains Hold; no invented road sequence or bicycle safety claims."
+      ],
+      "sources": [
+        "https://www.kitsap.gov/pw/Pages/Bike-and-Walk-.aspx",
+        "https://www.kitsap.gov/pw/Documents/Non-Motorized%20E%20-%20NM%20North.pdf",
+        "https://www.kitsap.gov/roads",
+        "https://wsdot.wa.gov/travel/bicycling-walking/bicycling-washington"
+      ],
+      "point": null,
+      "position_source": null,
+      "position_approval": "not_approved",
+      "publish": false
+    },
+    {
+      "number": 23,
+      "id": "apple-tree-cove-paddling",
+      "name": "Appletree Cove Paddling",
+      "category": "kayak",
+      "document_decision": "Hold",
+      "proposed_copy": null,
+      "proposed_copy_approval": "needs_review",
+      "feedback": [],
+      "follow_up": [
+        "Remains Hold; no inferred water route, chosen launch or ferry-crossing guidance."
+      ],
+      "sources": [
+        "https://kitsappeninsulawatertrails.com/route/appletree-cove/",
+        "https://kitsappeninsulawatertrails.com/resources/",
+        "https://portofkingston.org/kayak-canoe-storage/",
+        "https://portofkingston.org/wp-content/uploads/2024/10/12A.-Comprehensive-Scheme-of-Harbor-Improvements-2025-2030.pdf",
+        "https://kitsap.gov/parks/Pages/ArnessPark.aspx"
+      ],
+      "point": null,
+      "position_source": null,
+      "position_approval": "not_approved",
+      "publish": false
+    }
+  ],
+  "additional_entries": [
+    {
+      "id": "village-green-playground",
+      "order": 24,
+      "name": "Village Green Playground",
+      "parent_feature_id": "village-green",
+      "category": "playground",
+      "icon": "🛝",
+      "proposed_copy": "Village Green Playground is at the front of the community center, immediately off West Kingston Road.",
+      "source": {
+        "comment_id": "AAACI3aemgw",
+        "author": "Jen Skalbeck",
+        "date": "2026-10-16"
+      },
+      "point": [
+        47.79912,
+        -122.50316
+      ],
+      "geometry": null,
+      "publish": false,
+      "placement_approved": false,
+      "follow_up": [
+        "Mat authorized a rough preview point and will reposition it. Existing campus point is unchanged.",
+        "No age-range, accessibility, hours or surface claims inferred."
+      ],
+      "position_role": "approximate mapped playground-area center, not a surveyed entrance",
+      "position_source": "https://www.openstreetmap.org/way/172359177"
+    }
+  ],
+  "existing_feature_proposals": [
+    {
+      "operation": "update_proposal",
+      "feature_id": "mike-wallace-park",
+      "before": {
+        "id": "mike-wallace-park",
+        "kind": "marker",
+        "link": "https://www.google.com/maps/search/?api=1&query=Mike+Wallace+Park+Kingston+WA",
+        "notes": "Waterfront park right by the ferry — lawn, boardwalk, and the Sunday Kingston Public Market (May–Oct).\n\nThe Port of Kingston waterfront includes a marina and a public shore boat ramp. The kayak and canoe storage launch is on gated A Dock. A Dock storage access requires a lease and Port-issued key card. The public ramp can be unavailable at the lowest minus tides; parking fees and posted restrictions apply. Source: https://portofkingston.org/.",
+        "point": [
+          47.7961,
+          -122.4972
+        ],
+        "title": "Mike Wallace Park & Marina",
+        "views": [
+          "explore",
+          "trails"
+        ],
+        "category": "park"
+      },
+      "before_sha256": "99950d241dae05ec8a3175070c350f36914fa7f861cfca9a59f758943a71d8e8",
+      "feature": {
+        "id": "mike-wallace-park",
+        "kind": "marker",
+        "link": "https://www.google.com/maps/search/?api=1&query=Mike+Wallace+Park+Kingston+WA",
+        "notes": "Waterfront park right by the ferry — lawn, boardwalk, and the Sunday Kingston Public Market (May–Oct).\n\nThe Port of Kingston waterfront includes a marina and a public shore boat ramp. The kayak and canoe storage launch is on gated A Dock. A Dock storage access requires a lease and Port-issued key card. The public ramp can be unavailable at the lowest minus tides; parking fees and posted restrictions apply. Source: https://portofkingston.org/.",
+        "point": [
+          47.7961,
+          -122.4972
+        ],
+        "title": "Mike Wallace Park & Marina",
+        "views": [
+          "explore",
+          "trails"
+        ],
+        "category": "boat"
+      },
+      "publish": false,
+      "publication_approved": false
+    },
+    {
+      "operation": "update_proposal",
+      "feature_id": "arness-roadside-park",
+      "before": {
+        "id": "arness-roadside-park",
+        "kind": "marker",
+        "link": "https://kitsap.gov/parks/Pages/ArnessPark.aspx",
+        "notes": "Stop for saltwater shoreline views and a picnic at Arness Roadside Park on South Kingston Road. Visit during daylight hours and follow posted park rules. Map pin shows the county park location, not a confirmed entrance or launch point.",
+        "point": [
+          47.79411756250124,
+          -122.50580581590015
+        ],
+        "title": "Arness Roadside Park",
+        "views": [
+          "trails"
+        ],
+        "category": "park"
+      },
+      "before_sha256": "9e0e4c81fb1b13d0190e7ad8a72611f95853ea4d2aaeb1ec494262dbde4eaf83",
+      "feature": {
+        "id": "arness-roadside-park",
+        "kind": "marker",
+        "link": "https://kitsap.gov/parks/Pages/ArnessPark.aspx",
+        "notes": "Stop for saltwater shoreline views and a picnic at Arness Roadside Park on South Kingston Road.\n\nVisit during daylight hours and follow posted park rules.\n\nKayaks and stand-up paddleboards can also be launched here. Check current conditions and posted park rules before launching.\n\nMap pin shows the county park location, not an exact launch point.",
+        "point": [
+          47.79411756250124,
+          -122.50580581590015
+        ],
+        "title": "Arness Roadside Park",
+        "views": [
+          "trails"
+        ],
+        "category": "park"
+      },
+      "publish": false,
+      "publication_approved": false
+    },
+    {
+      "operation": "update_proposal",
+      "feature_id": "point-no-point",
+      "before": {
+        "id": "point-no-point",
+        "kind": "marker",
+        "title": "Point No Point Lighthouse",
+        "notes": "Puget Sound's oldest lighthouse — built 1879, first lit 1880 — with a wide driftwood beach and a county park ~20 min north. Docent tours of the tower run Sat & Sun noon–4, April–September.",
+        "category": "viewpoint",
+        "views": [
+          "explore"
+        ],
+        "point": [
+          47.9126,
+          -122.5266
+        ],
+        "link": "https://www.google.com/maps/search/?api=1&query=Point+No+Point+Lighthouse"
+      },
+      "before_sha256": "131e6d7b89c472c219e54da5a4ee099caa374ce1a9e14f0a1048ed14b933be62",
+      "feature": {
+        "id": "point-no-point",
+        "kind": "marker",
+        "title": "Point No Point Lighthouse & Park",
+        "notes": "Point No Point Lighthouse & Park is a waterfront park in Hansville with a sandy beach, historic lighthouse, and restrooms.\n\nFollow posted signs and stay outside fenced restoration areas.",
+        "category": "beach",
+        "views": [
+          "explore"
+        ],
+        "point": [
+          47.9126,
+          -122.5266
+        ],
+        "link": "https://www.kitsap.gov/parks/pages/pointnopointpark.aspx"
+      },
+      "publish": false,
+      "publication_approved": false
+    }
+  ],
+  "new_feature_proposals": [
+    {
+      "feature": {
+        "id": "village-green-playground",
+        "kind": "marker",
+        "title": "Village Green Playground",
+        "category": "playground",
+        "point": [
+          47.79912,
+          -122.50316
+        ],
+        "views": [
+          "trails"
+        ],
+        "notes": "Village Green Playground is at the front of the community center, immediately off West Kingston Road.\n\nApproximate playground point for Mat to reposition; not a surveyed entrance.",
+        "link": "https://www.myvillagegreen.org/"
+      },
+      "publish": false,
+      "publication_approved": false
+    },
+    {
+      "feature": {
+        "id": "port-gamble-playground",
+        "kind": "marker",
+        "title": "Port Gamble Playground",
+        "category": "playground",
+        "point": [
+          47.85464,
+          -122.58561
+        ],
+        "views": [
+          "trails"
+        ],
+        "notes": "Public playground in the heart of Port Gamble, behind the main shopping stores.\n\nApproximate playground point for Mat to reposition; not a surveyed entrance.",
+        "link": "https://www.portgamble.com/"
+      },
+      "publish": false,
+      "publication_approved": false
+    },
+    {
+      "feature": {
+        "id": "port-gamble-stottlemeyer-trailhead",
+        "kind": "marker",
+        "title": "Port Gamble Forest Heritage Park – Stottlemeyer Trailhead",
+        "category": "trailhead",
+        "point": [
+          47.78835,
+          -122.599808
+        ],
+        "views": [
+          "trails"
+        ],
+        "notes": "Stottlemeyer Trailhead provides access to Port Gamble Forest Heritage Park.\n\nPort Gamble Forest Heritage Park has walking, bicycle and equestrian trails.\n\nPermitted uses vary by trail; follow posted signs and current closures.\n\nPreview uses the county address reference selected by Mat; it does not establish an exact gate or trail alignment.",
+        "link": "https://www.kitsap.gov/parks/Pages/PortGambleHeritagePark.aspx"
+      },
+      "publish": false,
+      "publication_approved": false
+    }
+  ],
+  "preview_position_authority": {
+    "Stottlemeyer": "Mat: Yes, use that point in the preview",
+    "playgrounds": "Mat: give rough points and I'll move them once in"
+  }
+}

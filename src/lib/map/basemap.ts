@@ -142,6 +142,7 @@ export const VECTOR_SURFACE_LAYERS = [
   "landcover",
   "landuse",
   "water",
+  "waterways",
   "buildings",
   "roads",
 ] as const;
@@ -316,7 +317,22 @@ export function mapStyle(pmtilesUrl: string): StyleSpecification {
         filter: ["match", ["get", "kind"], ["park", "forest", "wood", "grass", "recreation_ground", "nature_reserve", "meadow", "cemetery", "pedestrian", "garden", "village_green", "farmland"], true, false],
         paint: { "fill-color": ["match", ["get", "kind"], "cemetery", PALETTE.cemetery, "pedestrian", PALETTE.pedestrian, PALETTE.greenspace], "fill-opacity": 0.7 },
       },
-      { id: "water", type: "fill", source: "kingston", "source-layer": "water", paint: { "fill-color": PALETTE.water } },
+      {
+        id: "water", type: "fill", source: "kingston", "source-layer": "water",
+        // Protomaps mixes polygons, stream lines and label points in water.
+        // Filling a stream closes its bends into a false lake.
+        filter: ["==", ["geometry-type"], "Polygon"],
+        paint: { "fill-color": PALETTE.water },
+      },
+      {
+        id: "waterways", type: "line", source: "kingston", "source-layer": "water",
+        filter: ["==", ["geometry-type"], "LineString"],
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": PALETTE.water,
+          "line-width": ["interpolate", ["linear"], ["zoom"], 12, 1, 16, 2],
+        },
+      },
       {
         id: "buildings", type: "fill", source: "kingston", "source-layer": "buildings", minzoom: 13,
         paint: { "fill-color": PALETTE.building, "fill-outline-color": PALETTE.buildingOutline, "fill-opacity": 1 },

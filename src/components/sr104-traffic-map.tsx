@@ -13,7 +13,6 @@
 
 import { useEffect, useRef } from "react";
 import type { Map as MapLibreMap } from "maplibre-gl";
-import "maplibre-gl/dist/maplibre-gl.css";
 import { FERRY_LINE_STAGING } from "@/lib/ferry-line";
 // E33: the holding-lane polyline + step locations moved to the pure geometry
 // lib so server pages (/line) can measure distances against the line without

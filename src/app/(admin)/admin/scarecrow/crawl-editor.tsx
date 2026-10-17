@@ -86,7 +86,7 @@ export function CrawlEditor({ scarecrows, viewId, defaultPoint }: CrawlEditorPro
           title: title.trim(),
           ...(creator.trim() ? { creator: creator.trim() } : {}),
           ...(notes.trim() ? { notes: notes.trim() } : {}),
-          category: "event",
+          category: "scarecrow",
           views: [viewId],
           point,
         }),

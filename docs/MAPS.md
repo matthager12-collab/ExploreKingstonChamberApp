@@ -61,7 +61,7 @@ it in the store — see [ARCHITECTURE.md](ARCHITECTURE.md) for the seam):
 | `id`, `kind: FeatureKind`, `title` | `FeatureKind = "marker" \| "line" \| "trail" \| "area"` |
 | `views: string[]` | one or more `MapView` ids this feature shows on (a feature can live on several views) |
 | geometry | exactly one, matching `kind`: `point` (marker), `path` (line/trail), `polygon` (area) |
-| `category?` | marker icon category — a key into `MARKER_CATEGORIES` (21 icons: food, coffee, drink, shop, lodging, parking, restroom, the E27 basics water/bench/picnic/shade/bin, viewpoint, beach, trailhead, park, art, event, shipwreck, info, star). Beware: the "Landmark" pin's **key** is `shipwreck`, not `landmark`. Default icon is `info` |
+| `category?` | marker icon category — a key into the shared `MARKER_CATEGORIES` registry used by the editor, pins and legend. Outdoor options include beach, viewpoint, trailhead, park, kayak/paddlecraft, boat/marina, bicycle, playground and golf. These categories describe sourced activities; they do not certify access or route safety. Beware: the "Landmark" pin's **key** is `shipwreck`, not `landmark`. Default icon is `info` |
 | `color?` | hex stroke/fill for line/trail/area, or a marker tint override |
 | `notes?`, `link?` | popup body + a "Directions / Open" link |
 | `cost?: CostValue` | E27's free-vs-paid signal (`free` / `paid` / `free-and-paid` / `donation`, `src/lib/cost.ts`) — rendered as the `<CostBadge>` on finder rows (e.g. `/map/restrooms`). Editable in the builder since E31 P7 (issue #80) |

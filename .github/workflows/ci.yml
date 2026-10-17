@@ -161,3 +161,14 @@ jobs:
           AUTH_SECRET: ci-lighthouse-secret-0123456789abcdef
           PORT: "3000"
         run: npx lhci autorun
+      # Keep the raw timings when a budget fails; console assertions alone
+      # cannot distinguish a page regression from the documented prefetch race.
+      - name: Retain Lighthouse reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-reports-${{ github.run_attempt }}
+          path: .lighthouseci/*.json
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 1
