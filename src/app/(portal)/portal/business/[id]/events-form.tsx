@@ -61,6 +61,7 @@ interface EventDraft {
 }
 
 type PasteState = { open: boolean; text: string; busy: boolean; error: string };
+type ManagedEvent = EventItem & { status?: string };
 const PASTE_CLOSED: PasteState = { open: false, text: "", busy: false, error: "" };
 
 export function EventsForm({
@@ -69,10 +70,10 @@ export function EventsForm({
   postExtractionEnabled,
 }: {
   initial: Restaurant;
-  initialEvents: EventItem[];
+  initialEvents: ManagedEvent[];
   postExtractionEnabled: boolean;
 }) {
-  const [events, setEvents] = useState<EventItem[]>(initialEvents);
+  const [events, setEvents] = useState<ManagedEvent[]>(initialEvents);
   const [draft, setDraft] = useState<EventDraft | null>(null);
   // Paste-a-post: the member brings the text from Facebook or Instagram and we
   // pre-fill the form from it. `hint` rides along into the draft — what we read
@@ -218,7 +219,7 @@ export function EventsForm({
         pending?: boolean;
       };
       if (!res.ok || !data.event) throw new Error(data.error ?? "Save failed");
-      const saved = data.event;
+      const saved: ManagedEvent = { ...data.event, status: data.pending ? "pending" : "live" };
       setEvents((prev) =>
         prev
           .filter((x) => x.id !== saved.id)
@@ -274,6 +275,7 @@ export function EventsForm({
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-semibold text-primary-deep">{ev.title}</p>
                   <Badge tone="teal">{ev.category}</Badge>
+                  {ev.status === "pending" && <Badge tone="sand">Awaiting review</Badge>}
                 </div>
                 <p className="mt-0.5 text-sm text-ink-soft">
                   {fmtEventDate(ev.start)} · {ev.venue}
@@ -437,7 +439,7 @@ export function EventsForm({
               type="button"
               pending={paste.busy}
               pendingLabel="Reading…"
-              disabled={!paste.text.trim()}
+              disabled={paste.busy || !paste.text.trim()}
               onClick={() => void readPost()}
             >
               Read it
@@ -446,10 +448,11 @@ export function EventsForm({
               variant="ghost"
               type="button"
               onClick={() => {
-                // The pasted words go into the description, not away. The save
-                // route keeps 2,000 characters, so no more than that is carried,
-                // counted in whole characters so an emoji is never cut in half.
-                const carried = Array.from(paste.text.trim()).slice(0, 2000).join("");
+                const carried = paste.text.trim();
+                if (carried.length > 2000) {
+                  setPaste((p) => ({ ...p, error: "Shorten the text to 2,000 characters before filling it in by hand. Your pasted text is still here." }));
+                  return;
+                }
                 closePaste();
                 setHint("");
                 setFromPaste(true);

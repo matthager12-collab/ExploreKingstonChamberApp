@@ -67,6 +67,12 @@ async function openPanel() {
 }
 
 describe("paste panel", () => {
+  it("keeps awaiting-review status visible when saved pending events are loaded", () => {
+    const pending = { ...OLD, status: "pending" };
+    render(<EventsForm initial={LISTING} initialEvents={[pending]} postExtractionEnabled />);
+    expect(screen.getByText("Awaiting review")).toBeVisible();
+  });
+
   it("explains unavailable extraction before a click and keeps manual entry working", async () => {
     const user = userEvent.setup();
     render(<EventsForm initial={LISTING} initialEvents={[]} postExtractionEnabled={false} />);
@@ -92,6 +98,7 @@ describe("paste panel", () => {
     await user.type(screen.getByLabelText("The post"), "Crab feed Saturday");
     await user.click(screen.getByRole("button", { name: "Read it" }));
     expect(screen.getByRole("button", { name: "Reading…" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reading…" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Saving…" })).not.toBeInTheDocument();
     release(reply(200, { draft: CRAB }));
   });
@@ -123,11 +130,13 @@ describe("paste panel", () => {
     expect(screen.getByLabelText("Description")).toHaveValue("Some post text");
   });
 
-  it("keeps at most 2,000 characters of the pasted words, the size the save route stores", async () => {
+  it("keeps an overlong paste intact and explains the manual description limit", async () => {
     await openPanel();
     fireEvent.change(screen.getByLabelText("The post"), { target: { value: "x".repeat(2500) } });
     fireEvent.click(screen.getByRole("button", { name: "Fill it in by hand" }));
-    expect((screen.getByLabelText("Description") as HTMLTextAreaElement).value).toHaveLength(2000);
+    expect(screen.getByLabelText("The post")).toHaveValue("x".repeat(2500));
+    expect(screen.getByRole("alert")).toHaveTextContent("2,000 characters");
+    expect(screen.queryByLabelText("Description")).not.toBeInTheDocument();
   });
 
   it("announces a shaky reading as an alert", async () => {
@@ -204,12 +213,12 @@ describe("paste panel", () => {
     expect(screen.getByLabelText("The post")).toHaveValue("");
   });
 
-  it("carries the pasted words by whole characters, never through an emoji", async () => {
+  it("carries a description at the limit without splitting its final emoji", async () => {
     await openPanel();
-    fireEvent.change(screen.getByLabelText("The post"), { target: { value: "x".repeat(1999) + "😀" + "tail" } });
+    fireEvent.change(screen.getByLabelText("The post"), { target: { value: "x".repeat(1998) + "😀" } });
     fireEvent.click(screen.getByRole("button", { name: "Fill it in by hand" }));
     const value = (screen.getByLabelText("Description") as HTMLTextAreaElement).value;
-    expect(Array.from(value)).toHaveLength(2000);
+    expect(value).toHaveLength(2000);
     expect(value.endsWith("😀")).toBe(true);
   });
 });
