@@ -31,6 +31,8 @@ import {
   analyticsEvent,
   audit,
   eventGoing,
+  researchRequest,
+  type ResearchRow,
   feedbackResponse,
   ferryObservation,
   invites,
@@ -82,7 +84,12 @@ export type QuarantineRow = {
 };
 
 export type AnalyticsEventRow = { ts: string; event: unknown };
-export type AreaRollupRow = { month: string; area: string; pings: number; sessions: number };
+export type AreaRollupRow = {
+  month: string;
+  area: string;
+  pings: number;
+  sessions: number;
+};
 export type LegalHoldBackupRow = {
   store: string;
   recordId: string;
@@ -157,7 +164,13 @@ export type InviteBackupRow = {
 
 /** The `db` section of a v2 backup bundle: the entire Postgres substrate.
  *  Deliberately version-agnostic — the wrapping bundle carries `version`. */
+export type ResearchBackupRow = Omit<
+  ResearchRow,
+  "createdAt" | "updatedAt" | "leaseUntil" | "leaseToken"
+> & { createdAt: string; updatedAt: string };
+
 export type DbSection = {
+  research_request?: ResearchBackupRow[];
   records: { [store: string]: RecordRow[] };
   audit: AuditRow[];
   quarantine: QuarantineRow[];
@@ -262,8 +275,19 @@ export async function serializeDb(): Promise<DbSection> {
   const orgRows = await db.select().from(orgs).orderBy(asc(orgs.id));
   const userRows = await db.select().from(users).orderBy(asc(users.id));
   const inviteRows = await db.select().from(invites).orderBy(asc(invites.code));
+  const researchRows = await db
+    .select()
+    .from(researchRequest)
+    .orderBy(asc(researchRequest.createdAt));
 
   return {
+    research_request: researchRows.map(
+      ({ leaseToken: _token, leaseUntil: _until, ...row }) => ({
+        ...row,
+        createdAt: toIso(row.createdAt),
+        updatedAt: toIso(row.updatedAt),
+      }),
+    ),
     records,
     audit: auditRows.map((a) => ({
       id: a.id,
@@ -284,8 +308,14 @@ export async function serializeDb(): Promise<DbSection> {
       quarantinedAt: toIso(q.quarantinedAt),
       resolvedAt: q.resolvedAt ? toIso(q.resolvedAt) : null,
     })),
-    analytics_event: analyticsRows.map((r) => ({ ts: toIso(r.ts), event: r.event })),
-    survey_response: surveyRows.map((r) => ({ ts: toIso(r.ts), response: r.response })),
+    analytics_event: analyticsRows.map((r) => ({
+      ts: toIso(r.ts),
+      event: r.event,
+    })),
+    survey_response: surveyRows.map((r) => ({
+      ts: toIso(r.ts),
+      response: r.response,
+    })),
     feedback_response: feedbackRows.map((r) => ({
       id: r.id,
       ts: toIso(r.ts),
@@ -454,7 +484,8 @@ export async function restoreDb(
           role: i.role as (typeof invites.$inferInsert)["role"],
           orgId: i.orgId,
           newOrgName: i.newOrgName,
-          newOrgKind: i.newOrgKind as (typeof invites.$inferInsert)["newOrgKind"],
+          newOrgKind:
+            i.newOrgKind as (typeof invites.$inferInsert)["newOrgKind"],
           linkedIds: i.linkedIds,
           email: i.email,
           note: i.note,
@@ -521,6 +552,21 @@ export async function restoreDb(
       );
     }
 
+    for (const batch of chunks(section.research_request ?? [])) {
+      await tx
+        .insert(researchRequest)
+        .values(
+          batch.map((r) => ({
+            ...r,
+            state: r.state === "researching" ? "queued" : r.state,
+            attempts: 0,
+            leaseToken: null,
+            leaseUntil: null,
+            createdAt: new Date(r.createdAt),
+            updatedAt: new Date(r.updatedAt),
+          })),
+        );
+    }
     for (const batch of chunks(section.analytics_event)) {
       await tx
         .insert(analyticsEvent)
@@ -529,7 +575,9 @@ export async function restoreDb(
     for (const batch of chunks(section.survey_response)) {
       await tx
         .insert(surveyResponse)
-        .values(batch.map((r) => ({ ts: new Date(r.ts), response: r.response })));
+        .values(
+          batch.map((r) => ({ ts: new Date(r.ts), response: r.response })),
+        );
     }
     for (const batch of chunks(goingRows)) {
       await tx.insert(eventGoing).values(
@@ -544,7 +592,13 @@ export async function restoreDb(
     for (const batch of chunks(feedbackRows)) {
       await tx
         .insert(feedbackResponse)
-        .values(batch.map((r) => ({ id: r.id, ts: new Date(r.ts), response: r.response })));
+        .values(
+          batch.map((r) => ({
+            id: r.id,
+            ts: new Date(r.ts),
+            response: r.response,
+          })),
+        );
     }
     // Restoring explicit ids leaves the bigserial sequence at 1, so the FIRST
     // feedback submitted after a restore collides with a restored row's primary

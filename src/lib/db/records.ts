@@ -14,7 +14,7 @@ import "server-only";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
-import { getDb } from "./client";
+import { getDb, type Db } from "./client";
 import {
   audit,
   quarantine,
@@ -148,11 +148,13 @@ export async function writeRecord<T extends WithId>(
   store: string,
   rec: OverlayRow<T>,
   meta?: WriteMeta,
+  /** Optional outer transaction for atomic reviewed publication. */
+  handle?: Db,
 ): Promise<void> {
   const { _deleted, ...doc } = rec as { _deleted?: boolean } & Record<string, unknown>;
   validateRecord(store, doc, { tombstone: Boolean(_deleted) });
 
-  const db = getDb();
+  const db = handle ?? getDb();
   const actor = meta?.actor ?? "system";
   const source = meta?.source ?? "admin";
   const status = meta?.status ?? "live";

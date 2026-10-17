@@ -134,6 +134,13 @@
       "when": 1789603338090,
       "tag": "0018_lonely_sunfire",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792198725325,
+      "tag": "0019_hot_inertia",
+      "breakpoints": true
     }
   ]
 }

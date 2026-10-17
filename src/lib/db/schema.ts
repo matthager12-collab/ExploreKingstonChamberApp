@@ -331,3 +331,6 @@ export const idempotencyKeys = pgTable("idempotency_keys", {
     .notNull()
     .defaultNow(),
 });
+
+// Chamber research requests and reviewable proposals; never public content.
+export * from "./research-schema";
