@@ -1,354 +1,102 @@
-// POST /api/portal/events/extract — the gate in front of a metered LLM call.
-//
-// The extractor's own tests (tests/unit/events/extract-post.test.ts) cover what
-// happens to a hostile or wrong model response. These cover who is allowed to
-// spend money here at all, and what the route refuses before it calls out.
-//
-// No store, so no PGlite: this route reads nothing and writes nothing. That is
-// itself the design — the LLM sits on a read path, and creating the event stays
-// with the sibling POST and its moderation floor.
-
-import util from "node:util";
-
+import { randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-import { POST } from "@/app/api/portal/events/extract/route";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { GET, POST, PATCH } from "@/app/api/portal/events/extract/route";
 import { can, getSessionUser } from "@/lib/auth";
-import { extractEventFromPost, MAX_POST_CHARS } from "@/lib/events/extract-post";
 import { checkRateLimit } from "@/lib/rate-limit";
-
-vi.mock("@/lib/auth", () => ({
-  getSessionUser: vi.fn(async () => ({
-    id: "u1",
-    role: "member",
-    orgId: "org-1",
-    editableIds: ["owner-1"],
-    entitlements: {},
-    name: "Test",
-    email: "t@t.t",
-  })),
-  can: vi.fn(() => true),
+import { extractionConfigured, readPostExtraction, submitPostExtraction, ExtractionUnavailable } from "@/lib/research/event-extraction-queue";
+vi.mock("@/lib/auth", () => ({ getSessionUser: vi.fn(), can: vi.fn() }));
+vi.mock("@/lib/rate-limit", () => ({ checkRateLimit: vi.fn() }));
+vi.mock("@/lib/research/event-extraction-queue", () => ({
+  extractionConfigured: vi.fn(), readPostExtraction: vi.fn(), submitPostExtraction: vi.fn(),
+  ExtractionUnavailable: class ExtractionUnavailable extends Error {},
 }));
-
-vi.mock("@/lib/events/extract-post", async (importOriginal) => ({
-  // MAX_POST_CHARS stays real — the size cap under test is the shipped one.
-  ...(await importOriginal<typeof import("@/lib/events/extract-post")>()),
-  extractEventFromPost: vi.fn(async () => ({
-    title: "Crab Feed",
-    start: "2026-10-03T17:00",
-    end: "",
-    venue: "Community Center",
-    description: "",
-    category: "community" as const,
-    url: "",
-    unsure: false,
-    notes: "",
-  })),
-}));
-
-vi.mock("@/lib/rate-limit", () => ({
-  checkRateLimit: vi.fn(async () => ({ ok: true, retryAfterSeconds: 0 })),
-}));
-
-const mockAuth = vi.mocked(getSessionUser);
-const mockCan = vi.mocked(can);
-const mockExtract = vi.mocked(extractEventFromPost);
-const mockLimit = vi.mocked(checkRateLimit);
-
-function post(body: unknown) {
-  return POST(
-    new NextRequest("http://localhost/api/portal/events/extract", {
-      method: "POST",
-      body: JSON.stringify(body),
-      headers: { "content-type": "application/json" },
-    }),
-  );
+const user = { id: "member", role: "member-business" as const, orgId: "org-1", editableIds: ["cafe"], entitlements: {}, name: "Test", email: "member@example.test", orgName: "Test", lastLoginAt: null, createdAt: new Date() };
+const base = { id: randomUUID(), ownerId: "cafe", text: "Crab feed October 3, 2026 at 5pm" };
+function req(method = "POST", body: unknown = base, headers: Record<string, string> = {}) {
+  return new NextRequest("http://localhost/api/portal/events/extract", { method, body: method === "GET" ? undefined : JSON.stringify(body), headers: { "content-type": "application/json", ...headers } });
 }
-
-const BASE = { ownerId: "owner-1", text: "Crab feed Oct 3 at the community center!" };
-
-afterEach(() => {
-  delete process.env.ANTHROPIC_API_KEY;
-});
-
 beforeEach(() => {
   vi.clearAllMocks();
-  process.env.ANTHROPIC_API_KEY = "test-credential-placeholder";
-  mockCan.mockReturnValue(true);
-  mockLimit.mockResolvedValue({ ok: true, retryAfterSeconds: 0 });
+  vi.mocked(getSessionUser).mockResolvedValue(user);
+  vi.mocked(can).mockReturnValue(true);
+  vi.mocked(checkRateLimit).mockResolvedValue({ ok: true, retryAfterSeconds: 0 });
+  vi.mocked(extractionConfigured).mockReturnValue(true);
+  vi.mocked(submitPostExtraction).mockResolvedValue({ id: base.id, state: "queued", revision: 1 });
+  vi.mocked(readPostExtraction).mockResolvedValue({ id: base.id, state: "queued", revision: 1 });
 });
-
-describe("POST /api/portal/events/extract", () => {
-  it("accepts the actual request host when Next normalizes a loopback URL", async () => {
-    const res = await POST(new NextRequest("http://localhost:3114/api/portal/events/extract", {
-      method: "POST",
-      headers: { "content-type": "application/json", host: "127.0.0.1:3114", origin: "http://127.0.0.1:3114" },
-      body: JSON.stringify(BASE),
-    }));
-    expect(res.status).toBe(200);
+describe("private post extraction queue HTTP boundary", () => {
+  it("requires sign-in for every operation", async () => {
+    vi.mocked(getSessionUser).mockResolvedValue(null);
+    for (const handler of [POST, PATCH, GET]) expect((await handler(req())).status).toBe(401);
+    expect(submitPostExtraction).not.toHaveBeenCalled();
+    expect(readPostExtraction).not.toHaveBeenCalled();
   });
-
-  it("accepts the same-origin JSON form with a charset", async () => {
-    const res = await POST(new NextRequest("https://app.explorekingstonwa.com/api/portal/events/extract", {
-      method: "POST",
-      headers: { "content-type": "application/json; charset=utf-8", origin: "https://app.explorekingstonwa.com" },
-      body: JSON.stringify(BASE),
-    }));
-    expect(res.status).toBe(200);
+  it("checks listing permission before configuration or metering", async () => {
+    vi.mocked(can).mockReturnValue(false);
+    expect((await POST(req())).status).toBe(403);
+    expect(extractionConfigured).not.toHaveBeenCalled();
+    expect(checkRateLimit).not.toHaveBeenCalled();
   });
-
-  it("refuses a cross-origin cookie request before the metered call", async () => {
-    const res = await POST(new NextRequest("https://app.explorekingstonwa.com/api/portal/events/extract", {
-      method: "POST",
-      headers: { "content-type": "application/json", origin: "https://unrelated.example" },
-      body: JSON.stringify(BASE),
-    }));
-    expect(res.status).toBe(403);
-    expect(mockExtract).not.toHaveBeenCalled();
-    expect(mockLimit).not.toHaveBeenCalled();
+  it("accepts loopback Host despite Next normalizing the URL", async () => {
+    const request = new NextRequest("http://localhost:3114/api/portal/events/extract", { method: "POST", headers: { host: "127.0.0.1:3114", origin: "http://127.0.0.1:3114", "content-type": "application/json; charset=utf-8" }, body: JSON.stringify(base) });
+    const res = await POST(request);
+    expect(res.status).toBe(202);
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    expect(await res.json()).toEqual({ job: { id: base.id, state: "queued", revision: 1 } });
+    expect(submitPostExtraction).toHaveBeenCalledWith(base, user);
   });
-
-  it("refuses a browser-simple text body even when it contains valid JSON", async () => {
-    const res = await POST(new NextRequest("http://localhost/api/portal/events/extract", {
-      method: "POST", headers: { "content-type": "text/plain" }, body: JSON.stringify(BASE),
-    }));
-    expect(res.status).toBe(415);
-    expect(mockExtract).not.toHaveBeenCalled();
-  });
-
-  it("returns a draft for a member who manages the listing", async () => {
-    const res = await post(BASE);
-    expect(res.status).toBe(200);
-    expect((await res.json()).draft.title).toBe("Crab Feed");
-  });
-
-  // APP-AUTHN: no session, no spend.
-  it("rejects an anonymous caller without calling the model", async () => {
-    mockAuth.mockResolvedValueOnce(null);
-    const res = await post(BASE);
-    expect(res.status).toBe(401);
-    expect(mockExtract).not.toHaveBeenCalled();
-  });
-
-  // APP-AUTHZ: a signed-in member drafting against someone else's listing is
-  // the horizontal case. `can` is the same check the sibling POST makes, so a
-  // member cannot reach a listing they don't manage — and cannot bill us for
-  // the attempt either.
-  it("rejects a member who does not manage that listing", async () => {
-    mockCan.mockReturnValue(false);
-    const res = await post({ ...BASE, ownerId: "someone-elses-listing" });
-    expect(res.status).toBe(403);
-    expect(mockExtract).not.toHaveBeenCalled();
-  });
-
-  it("requires an ownerId", async () => {
-    const res = await post({ text: BASE.text });
-    expect(res.status).toBe(400);
-    expect(mockExtract).not.toHaveBeenCalled();
-  });
-
-  // APP-INPUT: malformed and empty bodies fail closed, before the call.
-  it("rejects malformed and empty input without calling the model", async () => {
-    const bad = await POST(
-      new NextRequest("http://localhost/api/portal/events/extract", {
-        method: "POST",
-        body: "{not json",
-        headers: { "content-type": "application/json" },
-      }),
-    );
-    expect(bad.status).toBe(400);
-
-    expect((await post({ ...BASE, text: "   " })).status).toBe(400);
-    expect((await post({ ...BASE, text: 42 })).status).toBe(400);
-    expect(mockExtract).not.toHaveBeenCalled();
-  });
-
-  // Cost control: an oversized paste is refused at the boundary, so the bill
-  // can't be run up by volume in a single request.
-  it("refuses an oversized post with 413 and no call", async () => {
-    const res = await post({ ...BASE, text: "x".repeat(MAX_POST_CHARS + 1) });
-    expect(res.status).toBe(413);
-    expect(mockExtract).not.toHaveBeenCalled();
-  });
-
-  // ...or by repetition. Keyed on the account, which is the thing we can hold
-  // still — a member on a rotating IP gets the same bucket.
-  it("refuses once the per-account rate limit is spent", async () => {
-    mockLimit.mockResolvedValue({ ok: false, retryAfterSeconds: 90 });
-    const res = await post(BASE);
-    expect(res.status).toBe(429);
-    expect(res.headers.get("Retry-After")).toBe("90");
-    expect(mockExtract).not.toHaveBeenCalled();
-    expect(mockLimit.mock.calls[0][0]).toBe("event-extract:t@t.t");
-  });
-
-  // APP-SECRETS / APP-LOG: an upstream failure can carry request ids and key
-  // fragments. The member gets a sentence; the detail stays in the server log.
-  it("does not leak upstream error detail to the caller", async () => {
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
-    mockExtract.mockRejectedValueOnce(
-      new Error("401 unauthorized: x-api-key CANARY-7f3a91 request_id req_123"),
-    );
-    const res = await post(BASE);
-    expect(res.status).toBe(502);
-    const text = JSON.stringify(await res.json());
-    expect(text).not.toContain("CANARY-7f3a91");
-    expect(text).not.toContain("req_123");
-    expect(consoleError).toHaveBeenCalled();
-    consoleError.mockRestore();
-  });
-
-  it("says so plainly when the post holds no event", async () => {
-    mockExtract.mockResolvedValueOnce(null);
-    expect((await post(BASE)).status).toBe(422);
-  });
-
-  // Same posture as the feedback guardrail: no key is "not switched on", said
-  // plainly, not a crash. It is checked after auth, so a signed-out caller gets
-  // the 401 and learns nothing about configuration.
-  it("says it isn't switched on when no key is set, without calling the model", async () => {
-    delete process.env.ANTHROPIC_API_KEY;
-    const res = await post(BASE);
-    expect(res.status).toBe(503);
-    expect(mockExtract).not.toHaveBeenCalled();
-
-    mockAuth.mockResolvedValueOnce(null);
-    expect((await post(BASE)).status).toBe(401);
-  });
-
-  // Outside review, 2026-09-28: the whole exception was logged. The SDK's errors
-  // carry the upstream body, and an upstream 400 can echo what it was sent, so a
-  // pasted post could end up in the logs. Name, status and request id are enough
-  // to trace a failure.
-  it("logs only the error's name, status and request id", async () => {
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
-    mockExtract.mockRejectedValueOnce(
-      Object.assign(new Error("400 the upstream echoed CANARY-LOG-9921 from the post"), {
-        name: "BadRequestError",
-        status: 400,
-        requestID: "req_abc",
-      }),
-    );
-    expect((await post(BASE)).status).toBe(502);
-    const logged = util.inspect(consoleError.mock.calls, { depth: 6 });
-    expect(logged).not.toContain("CANARY-LOG-9921");
-    expect(logged).not.toContain("the upstream echoed");
-    expect(logged).toContain("BadRequestError");
-    expect(logged).toContain("400");
-    expect(logged).toContain("req_abc");
-    consoleError.mockRestore();
-  });
-
-  // The body used to be read whole before anything else was checked, so a
-  // signed-in caller could send very large bodies without spending any quota.
-  it("refuses an oversized request body before the extractor or the limiter", async () => {
-    const res = await post({ ...BASE, padding: "x".repeat(200_000) });
-    expect(res.status).toBe(413);
-    expect(mockExtract).not.toHaveBeenCalled();
-    expect(mockLimit).not.toHaveBeenCalled();
-  });
-
-  it("answers 400, not a crash, when the body is not an object", async () => {
-    for (const raw of ["null", "[]", "42", '"text"']) {
-      const res = await POST(
-        new NextRequest("http://localhost/api/portal/events/extract", {
-          method: "POST",
-          body: raw,
-          headers: { "content-type": "application/json" },
-        }),
-      );
-      expect(res.status, raw).toBe(400);
+  it("rejects cross-origin and simple-content-type mutations", async () => {
+    for (const handler of [POST, PATCH]) {
+      expect((await handler(req("POST", base, { origin: "https://other.example" }))).status).toBe(403);
+      expect((await handler(req("POST", base, { "content-type": "text/plain" }))).status).toBe(415);
     }
-    expect(mockExtract).not.toHaveBeenCalled();
+    expect(submitPostExtraction).not.toHaveBeenCalled();
+    expect(readPostExtraction).not.toHaveBeenCalled();
   });
-
-  it("says how long to wait, rounded up to whole minutes", async () => {
-    mockLimit.mockResolvedValueOnce({ ok: false, retryAfterSeconds: 90 });
-    expect((await (await post(BASE)).json()).error).toContain("about 2 minutes");
-    mockLimit.mockResolvedValueOnce({ ok: false, retryAfterSeconds: 20 });
-    expect((await (await post(BASE)).json()).error).toContain("about 1 minute");
+  it("keeps manual fallback available when disconnected", async () => {
+    vi.mocked(extractionConfigured).mockReturnValue(false);
+    expect((await POST(req())).status).toBe(503);
+    expect(submitPostExtraction).not.toHaveBeenCalled();
   });
-
-  // The limiter and the listing check are mocked above, so these assert the
-  // ARGUMENTS: a limit raised to 1,200 or a check against the wrong listing
-  // would otherwise pass.
-  it("holds every member to 12 pastes in 10 minutes, keyed on the account", async () => {
-    await post(BASE);
-    expect(mockLimit).toHaveBeenCalledWith("event-extract:t@t.t", { limit: 12, windowMs: 600_000 });
+  it("rejects malformed envelopes and missing request IDs", async () => {
+    for (const body of [null, [], 42, "post", {}, { ...base, id: "bad" }, { ...base, text: " " }])
+      expect((await POST(req("POST", body))).status).toBe(400);
+    expect(submitPostExtraction).not.toHaveBeenCalled();
   });
-
-  it("checks the member against the listing named in the request", async () => {
-    await post(BASE);
-    expect(mockCan).toHaveBeenCalledWith(expect.objectContaining({ email: "t@t.t" }), "edit-record", "owner-1");
+  it("enforces bytes and characters before queue creation", async () => {
+    expect((await POST(req("POST", { ...base, text: "x".repeat(8001) }))).status).toBe(413);
+    expect((await POST(req("POST", { ...base, unused: "x".repeat(40001) }))).status).toBe(413);
+    expect(submitPostExtraction).not.toHaveBeenCalled();
   });
-
-  // A dropped upload (the stream errors part way) used to throw out of the route.
-  it("answers 400, not a crash, when the upload breaks part way", async () => {
-    let sent = false;
-    const body = new ReadableStream<Uint8Array>({
-      pull(controller) {
-        if (!sent) {
-          sent = true;
-          controller.enqueue(new TextEncoder().encode('{"ownerId":"owner-1",'));
-          return;
-        }
-        controller.error(new Error("connection reset"));
-      },
-    });
-    const res = await POST(
-      new NextRequest("http://localhost/api/portal/events/extract", {
-        method: "POST",
-        body,
-        headers: { "content-type": "application/json" },
-        duplex: "half",
-      } as unknown as ConstructorParameters<typeof NextRequest>[1]),
-    );
-    expect(res.status).toBe(400);
-    expect(mockExtract).not.toHaveBeenCalled();
+  it("counts actual bytes without trusting Content-Length", async () => {
+    const stream = new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode(JSON.stringify({ ...base, extra: "x".repeat(40001) }))); controller.close(); } });
+    const request = new NextRequest("http://localhost/api/portal/events/extract", { method: "POST", headers: { "content-type": "application/json", "content-length": "1" }, body: stream, duplex: "half" } as ConstructorParameters<typeof NextRequest>[1]);
+    expect((await POST(request)).status).toBe(413);
+    expect(submitPostExtraction).not.toHaveBeenCalled();
   });
-
-  // The cap has to bite while the bytes arrive. This body is two megabytes long.
-  // With the cap the route stops after a few chunks and answers 413. Without it
-  // the route would read all of it and answer 400 (it is not JSON), so both the
-  // status and the number of chunks pulled give the difference away.
-  it("stops reading a very long body after a few chunks", async () => {
-    let pulls = 0;
-    const body = new ReadableStream<Uint8Array>({
-      pull(controller) {
-        pulls += 1;
-        if (pulls > 200) {
-          controller.close();
-          return;
-        }
-        controller.enqueue(new Uint8Array(10_000));
-      },
-    });
-    const res = await POST(
-      new NextRequest("http://localhost/api/portal/events/extract", {
-        method: "POST",
-        body,
-        headers: { "content-type": "application/json" },
-        duplex: "half",
-      } as unknown as ConstructorParameters<typeof NextRequest>[1]),
-    );
-    expect(res.status).toBe(413);
-    expect(pulls).toBeLessThan(10);
+  it("meters requests per account before enqueueing", async () => {
+    vi.mocked(checkRateLimit).mockResolvedValue({ ok: false, retryAfterSeconds: 75 });
+    const res = await POST(req());
+    expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toBe("75");
+    expect(checkRateLimit).toHaveBeenCalledWith("event-extract:member@example.test", { limit: 12, windowMs: 600000 });
+    expect(submitPostExtraction).not.toHaveBeenCalled();
   });
-
-  // A short post with a huge unused field is not "longer than 8000 characters".
-  it("uses a different sentence for a too-big request than for a too-long post", async () => {
-    const big = await (await post({ ...BASE, padding: "x".repeat(200_000) })).json();
-    expect(big.error).toContain("too much");
-    expect(big.error).not.toContain("8000");
-    const long = await (await post({ ...BASE, text: "x".repeat(MAX_POST_CHARS + 1) })).json();
-    expect(long.error).toContain("8000");
+  it("reads only through the current authenticated subject", async () => {
+    const request = new NextRequest(`http://localhost/api/portal/events/extract?id=${base.id}`);
+    expect((await GET(request)).status).toBe(200);
+    expect(readPostExtraction).toHaveBeenCalledWith(base.id, user);
   });
-
-  // The other listing test uses the same constant the code is given, so it would
-  // pass if the code hard-wired that constant. A different id closes that.
-  it("checks the member against whichever listing the request names", async () => {
-    await post({ ...BASE, ownerId: "listing-xyz" });
-    expect(mockCan).toHaveBeenCalledWith(expect.objectContaining({ email: "t@t.t" }), "edit-record", "listing-xyz");
+  it("does not reveal inaccessible requests even to an authenticated caller", async () => {
+    vi.mocked(readPostExtraction).mockRejectedValue(new ExtractionUnavailable("This post request is unavailable."));
+    expect((await GET(new NextRequest(`http://localhost/api/portal/events/extract?id=${base.id}`))).status).toBe(404);
+    expect((await PATCH(req("PATCH", { id: base.id }))).status).toBe(404);
+  });
+  it("cancels through the scoped helper and returns no-store", async () => {
+    const res = await PATCH(req("PATCH", { id: base.id }));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(readPostExtraction).toHaveBeenCalledWith(base.id, user, true);
   });
 });

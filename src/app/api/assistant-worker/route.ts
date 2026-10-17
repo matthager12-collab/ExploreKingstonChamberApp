@@ -27,11 +27,15 @@ export async function POST(request: Request) {
   try {
     const command = commandSchema.parse(await boundedJson(request));
     const context = await researchContext();
-    if (command.action === "claim")
+    if (command.action === "claim") {
+      const job = await claimResearch(context);
       return Response.json(
-        { job: await claimResearch(context), context },
+        { job, context: job?.payload.extraction
+          ? { now: context.now, timezone: context.timezone }
+          : context },
         { headers: { "Cache-Control": "no-store" } },
       );
+    }
     return Response.json({
       request: await finishResearch(
         command.id,

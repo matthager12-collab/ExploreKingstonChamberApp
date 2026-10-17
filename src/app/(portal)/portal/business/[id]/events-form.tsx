@@ -60,7 +60,13 @@ interface EventDraft {
   repeat: RepeatValue;
 }
 
-type PasteState = { open: boolean; text: string; busy: boolean; error: string };
+type PasteState = { open: boolean; text: string; busy: boolean; error: string; phase?: "queued" | "researching" };
+type ExtractionJob = {
+  id: string;
+  state: "queued" | "researching" | "review" | "failed" | "cancelled";
+  draft?: Omit<EventDraft, "repeat"> & { unsure: boolean; notes: string };
+  error?: string;
+};
 type ManagedEvent = EventItem & { status?: string };
 const PASTE_CLOSED: PasteState = { open: false, text: "", busy: false, error: "" };
 
@@ -88,6 +94,30 @@ export function EventsForm({
   // so a reply that lands late is dropped instead of filling the form over what
   // the member has since typed.
   const readTicket = useRef(0);
+  const activeJob = useRef<string | null>(null);
+  const polling = useRef<AbortController | null>(null);
+
+  useEffect(() => () => {
+    readTicket.current += 1;
+    polling.current?.abort();
+  }, []);
+
+  function cancelJob(id: string) {
+    // Cancellation is best-effort: late responses still cannot replace a draft.
+    void fetch("/api/portal/events/extract", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    }).catch(() => {});
+  }
+
+  function invalidateRead() {
+    readTicket.current += 1;
+    polling.current?.abort();
+    polling.current = null;
+    if (activeJob.current) cancelJob(activeJob.current);
+    activeJob.current = null;
+  }
   // Fetched deconfliction results, remembered with the date they answer for —
   // the visible list is derived, so a date change instantly clears stale hits.
   const [dayCheck, setDayCheck] = useState<{ date: string; events: EventItem[] }>({
@@ -134,37 +164,71 @@ export function EventsForm({
   /** Close the panel and drop any read still in flight, so a late reply neither
    *  fills a form the member has moved on from nor leaves the panel stuck busy. */
   function closePaste() {
-    readTicket.current += 1;
+    invalidateRead();
     setPaste(PASTE_CLOSED);
   }
 
   async function readPost() {
     const ticket = ++readTicket.current;
-    setPaste((p) => ({ ...p, busy: true, error: "" }));
+    const id = activeJob.current ?? crypto.randomUUID();
+    activeJob.current = id;
+    const controller = new AbortController();
+    polling.current?.abort();
+    polling.current = controller;
+    setPaste((p) => ({ ...p, busy: true, phase: "queued", error: "" }));
     try {
-      const res = await fetch("/api/portal/events/extract", {
+      let res = await fetch("/api/portal/events/extract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: paste.text, ownerId: initial.id }),
+        body: JSON.stringify({ id, text: paste.text, ownerId: initial.id }),
       });
-      const data = (await res.json().catch(() => ({}))) as {
-        error?: string;
-        draft?: Omit<EventDraft, "repeat"> & { unsure: boolean; notes: string };
-      };
-      if (ticket !== readTicket.current) return;
-      if (!res.ok || !data.draft) throw new Error(data.error ?? "Couldn't read that one.");
-      const { unsure, notes, ...fields } = data.draft;
-      setDraft({ ...fields, venue: fields.venue || initial.name, repeat: {} });
-      setHint(
-        unsure
-          ? `Check this one before you save${notes ? ` — ${notes}` : ", especially the date."}`
-          : notes,
-      );
-      setFromPaste(true);
-      setPaste(PASTE_CLOSED);
+      let data = (await res.json().catch(() => ({}))) as { error?: string; job?: ExtractionJob };
+      for (;;) {
+        if (ticket !== readTicket.current) {
+          cancelJob(id); // also catches cancellation before submission finished
+          return;
+        }
+        if (!res.ok || !data.job || data.job.id !== id) {
+          throw new Error(data.error ?? "Couldn't check that post. Try again or fill it in by hand.");
+        }
+        const job = data.job;
+        if (job.state === "review" && job.draft) {
+          const { unsure, notes, ...fields } = job.draft;
+          activeJob.current = null;
+          setDraft({ ...fields, venue: fields.venue || initial.name, repeat: {} });
+          setHint(
+            unsure
+              ? `Check this one before you save${notes ? ` — ${notes}` : ", especially the date."}`
+              : notes,
+          );
+          setFromPaste(true);
+          setPaste(PASTE_CLOSED);
+          return;
+        }
+        if (job.state !== "queued" && job.state !== "researching") {
+          activeJob.current = null;
+          throw new Error(job.error ?? "Couldn't read that one. Your text is still here; try again or fill it in by hand.");
+        }
+        setPaste((p) => ({ ...p, phase: job.state as "queued" | "researching" }));
+        await new Promise<void>((resolve, reject) => {
+          const onAbort = () => {
+            clearTimeout(timer);
+            reject(new DOMException("Cancelled", "AbortError"));
+          };
+          const timer = setTimeout(() => {
+            controller.signal.removeEventListener("abort", onAbort);
+            resolve();
+          }, 2000);
+          controller.signal.addEventListener("abort", onAbort, { once: true });
+          if (controller.signal.aborted) onAbort();
+        });
+        if (ticket !== readTicket.current) return;
+        res = await fetch(`/api/portal/events/extract?id=${encodeURIComponent(id)}`, { signal: controller.signal });
+        data = (await res.json().catch(() => ({}))) as { error?: string; job?: ExtractionJob };
+      }
     } catch (err) {
       if (ticket !== readTicket.current) return;
-      setPaste((p) => ({ ...p, busy: false, error: (err as Error).message }));
+      setPaste((p) => ({ ...p, busy: false, error: err instanceof Error ? err.message : "Couldn't check that post. Your pasted text is still here." }));
     }
   }
 
@@ -418,7 +482,8 @@ export function EventsForm({
           <p className="mt-1 text-sm text-ink-soft">
             Copy the text of a Facebook or Instagram post — or an email, or a flyer — and
             we&apos;ll fill the form in. You get to check it before anything is saved.
-            Only the pasted text is sent to Anthropic.
+            The computer reads it through the connected Claude account. The pasted text
+            is sent to Anthropic. Nothing is published automatically.
           </p>
           <TextAreaField
             label="The post"
@@ -427,18 +492,23 @@ export function EventsForm({
             onChange={(e) => {
               // A read in flight is about text that no longer exists: drop it,
               // and stop showing the panel as busy.
-              readTicket.current += 1;
+              invalidateRead();
               const text = e.target.value;
               setPaste((p) => ({ ...p, text, error: "", busy: false }));
             }}
             rows={6}
             error={paste.error || undefined}
           />
+          {paste.busy && (
+            <p role="status" className="mt-3 text-sm text-ink-soft">
+              {paste.phase === "researching" ? "Reading your post. Check the details before saving." : "Waiting for the connected computer. You can cancel or fill it in by hand."}
+            </p>
+          )}
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <Button
               type="button"
               pending={paste.busy}
-              pendingLabel="Reading…"
+              pendingLabel={paste.phase === "researching" ? "Reading post…" : "Waiting for computer…"}
               disabled={paste.busy || !paste.text.trim()}
               onClick={() => void readPost()}
             >

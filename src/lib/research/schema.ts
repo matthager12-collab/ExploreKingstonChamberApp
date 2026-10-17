@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ExtractedDraft } from "@/lib/events/extract-post";
 
 // These URLs are links for review / the web-research provider. The app never
 // fetches arbitrary user URLs with its own network credentials.
@@ -43,6 +44,13 @@ export type Draft = Proposal & {
   publishedAt?: string;
 };
 export type ResearchPayload = {
+  extraction?: {
+    requesterId: string;
+    ownerId: string;
+    textHash: string;
+    expiresAt: string;
+    draft?: ExtractedDraft;
+  };
   prompt: string;
   links: string[];
   summary: string;

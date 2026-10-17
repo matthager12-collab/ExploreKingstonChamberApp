@@ -20,6 +20,7 @@ import {
 import { eventSchema } from "@/lib/schemas/event";
 import { pacificDateKey } from "@/lib/events/tz";
 import { normalizeEventTimestamp } from "@/lib/time";
+import { clampPostExtraction } from "@/lib/events/extract-post";
 
 export class ResearchConflict extends Error {}
 export function publicRequest(row: ResearchRow) {
@@ -32,6 +33,7 @@ export async function listResearch() {
     await getDb()
       .select()
       .from(researchRequest)
+      .where(sql`${researchRequest.payload}->'extraction' IS NULL`)
       .orderBy(desc(researchRequest.createdAt))
       .limit(100)
   ).map(publicRequest);
@@ -60,6 +62,7 @@ export async function createResearch(input: unknown, actor: string) {
     .where(eq(researchRequest.id, parsed.id));
   if (
     !existing ||
+    existing.payload.extraction ||
     existing.createdBy !== actor ||
     existing.payload.prompt !== parsed.prompt ||
     !sameDocument(existing.payload.links, parsed.links)
@@ -72,6 +75,18 @@ export async function createResearch(input: unknown, actor: string) {
 export async function claimResearch(context: ResearchContext) {
   return getDb().transaction(async (tx) => {
     const now = new Date();
+    // Expiration is enforced on reads and worker sweeps, including completed
+    // drafts. Backups keep their ordinary backup retention policy.
+    await tx.execute(sql`
+      UPDATE research_request
+      SET state = 'cancelled', lease_token = NULL, lease_until = NULL,
+          revision = revision + 1, updated_at = ${now},
+          payload = jsonb_set(jsonb_set(payload, '{prompt}', '""'::jsonb),
+                    '{extraction}', (payload->'extraction') - 'draft') - 'error'
+      WHERE payload->'extraction' IS NOT NULL
+        AND payload->'extraction'->>'expiresAt' <= ${now.toISOString()}
+        AND (state <> 'cancelled' OR payload->>'prompt' <> '')
+    `);
     const [row] = await tx
       .select()
       .from(researchRequest)
@@ -111,7 +126,7 @@ export async function claimResearch(context: ResearchContext) {
         state: "researching",
         payload: {
           ...row.payload,
-          baseline: Object.fromEntries([
+          baseline: row.payload.extraction ? undefined : Object.fromEntries([
             ...context.maps.map((r) => [`map:${r.id}`, documentOnly(r)]),
             ...context.events.map((r) => [`event:${r.id}`, documentOnly(r)]),
           ]),
@@ -135,7 +150,6 @@ export async function finishResearch(
   failure = false,
 ) {
   void context; // Completion uses the snapshot captured when the worker claimed the job.
-  const parsed = failure ? null : researchResultSchema.parse(result);
   return getDb().transaction(async (tx) => {
     const [row] = await tx
       .select()
@@ -152,6 +166,26 @@ export async function finishResearch(
       throw new ResearchConflict(
         "This research attempt has expired. Its results were not applied.",
       );
+    if (row.payload.extraction) {
+      const extraction = row.payload.extraction;
+      if (Date.parse(extraction.expiresAt) <= Date.now())
+        throw new ResearchConflict("This post request has expired.");
+      const draft = failure ? null : clampPostExtraction(result);
+      const [saved] = await tx.update(researchRequest).set({
+        state: draft ? "review" : "failed",
+        payload: {
+          ...row.payload,
+          // Successful extraction no longer needs a second raw copy of the post.
+          prompt: draft ? "" : row.payload.prompt,
+          extraction: { ...extraction, draft: draft ?? undefined },
+          error: draft ? undefined : "Couldn't read that post. Try again or fill the form in by hand.",
+        },
+        leaseToken: null, leaseUntil: null,
+        revision: row.revision + 1, updatedAt: new Date(),
+      }).where(eq(researchRequest.id, id)).returning();
+      return publicRequest(saved);
+    }
+    const parsed = failure ? null : researchResultSchema.parse(result);
     const drafts: Draft[] = (parsed?.drafts ?? []).map((p) => {
       const existing = p.targetId
         ? row.payload.baseline?.[`${p.kind}:${p.targetId}`]
@@ -212,6 +246,8 @@ export async function reviewResearch(
       throw new ResearchConflict(
         "This request changed. Refresh before reviewing it.",
       );
+    if (row.payload.extraction)
+      throw new ResearchConflict("Review this extracted post in its event form.");
     const payload = structuredClone(row.payload);
     let state = row.state;
     if (command.action === "retry") {

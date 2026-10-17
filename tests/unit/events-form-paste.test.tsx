@@ -7,7 +7,7 @@
 // error must not outlive the text it was about, and focus must follow the member.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
 
@@ -40,17 +40,22 @@ const CRAB = {
 const reply = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
+const JOB_ID = "a29bd29d-e5ab-4b8b-a76d-fc617f85717e";
 let extract: () => Promise<Response>;
 
 beforeEach(() => {
-  extract = async () => reply(200, { draft: CRAB });
+  vi.stubGlobal("crypto", { randomUUID: () => JOB_ID });
+  extract = async () => reply(202, { job: { id: JOB_ID, state: "review", draft: CRAB } });
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (input: RequestInfo | URL) =>
-      String(input).startsWith("/api/portal/events/extract")
-        ? extract()
-        : reply(200, { events: [] }), // the same-day lookup the form makes for any date
-    ),
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (!String(input).startsWith("/api/portal/events/extract")) return reply(200, { events: [] });
+      if (init?.method === "PATCH") return reply(200, { job: { id: JOB_ID, state: "cancelled" } });
+      const response = await extract();
+      const body = await response.json();
+      // Existing interaction cases return a ready draft; transport now wraps it in a job.
+      return reply(response.status, body.draft ? { job: { id: JOB_ID, state: "review", draft: body.draft } } : body);
+    }),
   );
 });
 
@@ -67,6 +72,74 @@ async function openPanel() {
 }
 
 describe("paste panel", () => {
+  it("submits a stable job ID, shows queued and running states, and polls into an editable draft", async () => {
+    let calls = 0;
+    extract = async () => {
+      calls += 1;
+      return reply(200, { job: { id: JOB_ID, state: calls === 1 ? "queued" : calls === 2 ? "researching" : "review", ...(calls === 3 ? { draft: CRAB } : {}) } });
+    };
+    const user = await openPanel();
+    await user.type(screen.getByLabelText("The post"), "Crab feed Saturday");
+    await user.click(screen.getByRole("button", { name: "Read it" }));
+    expect(screen.getByRole("status")).toHaveTextContent("Waiting for the connected computer");
+    expect(fetch).toHaveBeenCalledWith("/api/portal/events/extract", expect.objectContaining({
+      method: "POST", body: JSON.stringify({ id: JOB_ID, text: "Crab feed Saturday", ownerId: LISTING.id }),
+    }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Reading your post"), { timeout: 3000 });
+    expect(await screen.findByLabelText("Title", {}, { timeout: 3000 })).toHaveValue(CRAB.title);
+    expect(fetch).toHaveBeenCalledWith(`/api/portal/events/extract?id=${JOB_ID}`, expect.objectContaining({ signal: expect.any(AbortSignal) }));
+  });
+
+  it("cancels a queued job and stops polling when the member chooses manual entry", async () => {
+    extract = async () => reply(202, { job: { id: JOB_ID, state: "queued" } });
+    const user = await openPanel();
+    await user.type(screen.getByLabelText("The post"), "Keep these words");
+    await user.click(screen.getByRole("button", { name: "Read it" }));
+    await user.click(screen.getByRole("button", { name: "Fill it in by hand" }));
+    expect(screen.getByLabelText("Description")).toHaveValue("Keep these words");
+    expect(fetch).toHaveBeenCalledWith("/api/portal/events/extract", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ id: JOB_ID }) }));
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("keeps pasted text when a worker fails and offers a fresh attempt", async () => {
+    extract = async () => reply(200, { job: { id: JOB_ID, state: "failed", error: "The computer could not read this post." } });
+    const user = await openPanel();
+    await user.type(screen.getByLabelText("The post"), "Unchanged post");
+    await user.click(screen.getByRole("button", { name: "Read it" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("could not read this post");
+    expect(screen.getByLabelText("The post")).toHaveValue("Unchanged post");
+    expect(screen.getByRole("button", { name: "Read it" })).toBeEnabled();
+  });
+
+  it("retries a lost submission response with the same job ID and keeps the original words", async () => {
+    let calls = 0;
+    extract = async () => {
+      calls += 1;
+      if (calls === 1) throw new Error("Connection interrupted");
+      return reply(200, { job: { id: JOB_ID, state: "review", draft: CRAB } });
+    };
+    const user = await openPanel();
+    await user.type(screen.getByLabelText("The post"), "Original words");
+    await user.click(screen.getByRole("button", { name: "Read it" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Connection interrupted");
+    expect(screen.getByLabelText("The post")).toHaveValue("Original words");
+    await user.click(screen.getByRole("button", { name: "Read it" }));
+    expect(await screen.findByLabelText("Title")).toHaveValue(CRAB.title);
+    const submissions = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "POST");
+    expect(submissions).toHaveLength(2);
+    expect(submissions[0][1]?.body).toBe(submissions[1][1]?.body);
+  });
+
+  it("does not fill a draft from an unexpected job response", async () => {
+    extract = async () => reply(200, { job: { id: "different-job", state: "review", draft: CRAB } });
+    const user = await openPanel();
+    await user.type(screen.getByLabelText("The post"), "Original words");
+    await user.click(screen.getByRole("button", { name: "Read it" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't check that post");
+    expect(screen.queryByLabelText("Title")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("The post")).toHaveValue("Original words");
+  });
+
   it("keeps awaiting-review status visible when saved pending events are loaded", () => {
     const pending = { ...OLD, status: "pending" };
     render(<EventsForm initial={LISTING} initialEvents={[pending]} postExtractionEnabled />);
@@ -91,14 +164,14 @@ describe("paste panel", () => {
     expect(screen.getByLabelText("Title")).toHaveValue("Kingston Crab Feed");
   });
 
-  it("says Reading while it works, never Saving", async () => {
+  it("says Waiting for computer until a worker claims the job, never Saving", async () => {
     let release!: (r: Response) => void;
     extract = () => new Promise<Response>((r) => (release = r));
     const user = await openPanel();
     await user.type(screen.getByLabelText("The post"), "Crab feed Saturday");
     await user.click(screen.getByRole("button", { name: "Read it" }));
-    expect(screen.getByRole("button", { name: "Reading…" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Reading…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Waiting for computer…" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Waiting for computer…" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Saving…" })).not.toBeInTheDocument();
     release(reply(200, { draft: CRAB }));
   });
@@ -192,7 +265,7 @@ describe("paste panel", () => {
     expect(screen.getByLabelText("Title")).toHaveValue("Old event");
     await user.click(screen.getByRole("button", { name: "Cancel" })); // cancels the edit
     expect(screen.queryByLabelText("The post")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Reading…" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Waiting for computer…" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Paste from Facebook or Instagram" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "+ Add an event" })).toBeInTheDocument();
   });

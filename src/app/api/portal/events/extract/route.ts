@@ -1,23 +1,38 @@
-// POST /api/portal/events/extract — paste a social post, get a DRAFT back.
-//
-// Read-only by construction: this route returns form values and writes
-// nothing. Creating the event stays with POST /api/portal/events, which keeps
-// its own validation and the E08 moderation floor. Splitting it that way is
-// the point — the LLM never sits on a write path.
-//
-// Authorization is the same check the sibling POST makes, for the same reason
-// plus one more: this endpoint spends money, so it is not open to anyone with
-// a session, only to someone who manages the listing they are drafting for.
-
+// Cookie-authenticated submission/status for private, tool-free CLI drafts.
+// Only the ordinary event save route can create a pending or live event.
 import { NextRequest, NextResponse } from "next/server";
-
+import { z, ZodError } from "zod";
 import { can, getSessionUser } from "@/lib/auth";
-import {
-  extractEventFromPost,
-  extractionConfigured,
-  MAX_POST_CHARS,
-} from "@/lib/events/extract-post";
+import { MAX_POST_CHARS } from "@/lib/events/extract-post";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { ResearchConflict } from "@/lib/db/research";
+import {
+  extractionConfigured, ExtractionUnavailable, submitPostExtraction, readPostExtraction,
+} from "@/lib/research/event-extraction-queue";
+
+export const dynamic = "force-dynamic";
+function json(value: unknown, status = 200, headers: Record<string, string> = {}) {
+  return NextResponse.json(value, { status, headers: { "Cache-Control": "no-store", ...headers } });
+}
+function errorResponse(error: unknown) {
+  if (error instanceof ExtractionUnavailable) return json({ error: error.message }, 404);
+  if (error instanceof ResearchConflict) return json({ error: error.message }, 409);
+  if (error instanceof ZodError || error instanceof SyntaxError)
+    return json({ error: "Invalid request body" }, 400);
+  // Never log pasted posts, CLI output or credentials.
+  console.error("Post queue failed", error instanceof Error ? error.name : "unknown");
+  return json({ error: "Couldn't save that request. Your post is still in the form." }, 500);
+}
+function mutationGuard(request: NextRequest) {
+  const origin = request.headers.get("origin");
+  const protocol = request.headers.get("x-forwarded-proto") === "https" ? "https:" : request.nextUrl.protocol;
+  const requestOrigin = `${protocol}//${request.headers.get("host") ?? request.nextUrl.host}`;
+  if (origin && origin !== requestOrigin)
+    return json({ error: "Use the event form on this site." }, 403);
+  if (request.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() !== "application/json")
+    return json({ error: "Send the post as JSON." }, 415);
+  return null;
+}
 
 /** Per-member cap. Generous for pasting a few posts in a sitting, low enough
  *  that a scripted loop can't run up a bill. Keyed on the account rather than
@@ -64,107 +79,45 @@ async function readCapped(request: NextRequest, max: number): Promise<string | n
 
 export async function POST(request: NextRequest) {
   const user = await getSessionUser();
-  if (!user) return NextResponse.json({ error: "Sign in first" }, { status: 401 });
-
-  // Cookie-authenticated metered calls accept only the same-origin JSON form.
-  const origin = request.headers.get("origin");
-  // Next normalizes loopback URLs to localhost; retain the incoming host.
-  const protocol = request.headers.get("x-forwarded-proto") === "https" ? "https:" : request.nextUrl.protocol;
-  const requestOrigin = `${protocol}//${request.headers.get("host") ?? request.nextUrl.host}`;
-  if (origin && origin !== requestOrigin) {
-    return NextResponse.json({ error: "Use the event form on this site." }, { status: 403 });
-  }
-  if (request.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() !== "application/json") {
-    return NextResponse.json({ error: "Send the post as JSON." }, { status: 415 });
-  }
-
-  const raw = await readCapped(request, MAX_BODY_BYTES);
-  if (raw === null) {
-    // Not the "longer than N characters" sentence: this fires on bytes, and a
-    // short post with a huge unused field is not too long.
-    return NextResponse.json(
-      { error: "That's too much to read at once — paste just the post." },
-      { status: 413 },
-    );
-  }
-  let parsed: unknown;
+  if (!user) return json({ error: "Sign in first" }, 401);
+  const guard = mutationGuard(request);
+  if (guard) return guard;
   try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
-  }
-  // JSON allows null, a list, a number and a string at the top level; none of
-  // them has an ownerId to read.
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
-  }
-  const body = parsed as Record<string, unknown>;
+    const raw = await readCapped(request, MAX_BODY_BYTES);
+    if (raw === null) return json({ error: "That's too much to read at once — paste just the post." }, 413);
+    const body = JSON.parse(raw);
+    if (!body || typeof body !== "object" || Array.isArray(body)) return json({ error: "Invalid request body" }, 400);
+    if (typeof body.ownerId !== "string" || !body.ownerId) return json({ error: "ownerId required" }, 400);
+    if (!can(user, "edit-record", body.ownerId)) return json({ error: "You don't manage that listing" }, 403);
+    if (!extractionConfigured()) return json({ error: "Reading posts isn't connected yet — fill the form in by hand." }, 503);
+    if (typeof body.text !== "string" || !body.text.trim()) return json({ error: "Paste a post first" }, 400);
+    if (body.text.length > MAX_POST_CHARS) return json({ error: `That's longer than ${MAX_POST_CHARS} characters — paste just the post.` }, 413);
+    z.string().uuid().parse(body.id);
+    const limit = await checkRateLimit(`event-extract:${user.email}`, { limit: LIMIT, windowMs: WINDOW_MS });
+    if (!limit.ok) return json({ error: "That's a lot of posts at once — try again in a few minutes." }, 429,
+      { "Retry-After": String(limit.retryAfterSeconds) });
+    return json({ job: await submitPostExtraction(body, user) }, 202);
+  } catch (error) { return errorResponse(error); }
+}
 
-  const ownerId = typeof body.ownerId === "string" ? body.ownerId : "";
-  if (!ownerId) return NextResponse.json({ error: "ownerId required" }, { status: 400 });
-  if (!can(user, "edit-record", ownerId)) {
-    return NextResponse.json({ error: "You don't manage that listing" }, { status: 403 });
-  }
-
-  // After the auth checks on purpose: whether the feature is configured is not
-  // something an anonymous caller gets to learn.
-  if (!extractionConfigured()) {
-    return NextResponse.json(
-      { error: "Reading posts isn't switched on yet — fill the form in by hand." },
-      { status: 503 },
-    );
-  }
-
-  const text = typeof body.text === "string" ? body.text : "";
-  if (!text.trim()) return NextResponse.json({ error: "Paste a post first" }, { status: 400 });
-  if (text.length > MAX_POST_CHARS) {
-    return NextResponse.json(
-      { error: `That's longer than ${MAX_POST_CHARS} characters — paste just the post.` },
-      { status: 413 },
-    );
-  }
-
-  const limit = await checkRateLimit(`event-extract:${user.email}`, {
-    limit: LIMIT,
-    windowMs: WINDOW_MS,
-  });
-  if (!limit.ok) {
-    const minutes = Math.max(1, Math.ceil(limit.retryAfterSeconds / 60));
-    return NextResponse.json(
-      {
-        error: `That's a lot of posts at once — try again in about ${minutes} ${
-          minutes === 1 ? "minute" : "minutes"
-        }.`,
-      },
-      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } },
-    );
-  }
-
-  let draft;
+export async function GET(request: NextRequest) {
+  const user = await getSessionUser();
+  if (!user) return json({ error: "Sign in first" }, 401);
   try {
-    draft = await extractEventFromPost(text);
-  } catch (err) {
-    // Name, status and request id only. The whole error carries the upstream
-    // body, which can echo what was sent, and this route is sent people's posts.
-    // The member gets a sentence and their form.
-    const e = err as { name?: unknown; status?: unknown; requestID?: unknown } | null;
-    console.error("event extract failed", {
-      name: typeof e?.name === "string" ? e.name : "Error",
-      status: typeof e?.status === "number" ? e.status : undefined,
-      requestId: typeof e?.requestID === "string" ? e.requestID : undefined,
-    });
-    return NextResponse.json(
-      { error: "Couldn't read that one — fill the form in by hand." },
-      { status: 502 },
-    );
-  }
+    const id = z.string().uuid().parse(request.nextUrl.searchParams.get("id"));
+    return json({ job: await readPostExtraction(id, user) });
+  } catch (error) { return errorResponse(error); }
+}
 
-  if (!draft) {
-    return NextResponse.json(
-      { error: "That doesn't look like an event post — fill the form in by hand." },
-      { status: 422 },
-    );
-  }
-
-  return NextResponse.json({ draft });
+export async function PATCH(request: NextRequest) {
+  const user = await getSessionUser();
+  if (!user) return json({ error: "Sign in first" }, 401);
+  const guard = mutationGuard(request);
+  if (guard) return guard;
+  try {
+    const raw = await readCapped(request, MAX_BODY_BYTES);
+    if (raw === null) return json({ error: "Invalid request body" }, 413);
+    const { id } = z.object({ id: z.string().uuid() }).parse(JSON.parse(raw));
+    return json({ job: await readPostExtraction(id, user, true) });
+  } catch (error) { return errorResponse(error); }
 }
