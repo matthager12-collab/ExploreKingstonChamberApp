@@ -61,6 +61,13 @@ export const PORTAL_NAV: readonly PortalNavSection[] = [
     items: [{ href: "/portal/nonprofit", label: "Profile & shifts" }],
   },
   {
+    id: "assistant",
+    label: "Research & drafts",
+    icon: "syndicate",
+    roles: ["admin"],
+    items: [{ href: "/portal/assistant", label: "Maps & site updates" }],
+  },
+  {
     id: "syndicate",
     label: "Syndicate",
     icon: "syndicate",
