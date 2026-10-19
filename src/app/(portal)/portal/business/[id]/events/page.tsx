@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getEventsForOwner } from "@/lib/stores/event-store";
+import { extractionConfigured } from "@/lib/research/event-extraction-queue";
 import { EventsForm } from "../events-form";
 import { requireBusinessRecord } from "../record";
 
@@ -31,5 +32,5 @@ export default async function BusinessEventsPage({
   // Includes this listing's pending event submissions with status surfaced.
   const events = await getEventsForOwner(id);
 
-  return <EventsForm initial={record.restaurant} initialEvents={events} />;
+  return <EventsForm initial={record.restaurant} initialEvents={events} postExtractionEnabled={extractionConfigured()} />;
 }

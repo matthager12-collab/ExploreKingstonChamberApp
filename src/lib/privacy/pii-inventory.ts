@@ -1,3 +1,7 @@
+import {
+  findResearchByEmail,
+  deleteResearchByEmail,
+} from "@/lib/db/research-privacy";
 // E11 PII inventory — the typed manifest of EVERY store holding personal data,
 // each with working find / export / delete handlers. Two jobs:
 //
@@ -381,6 +385,26 @@ const raceRegistrants: PiiStore = {
 };
 
 export const PII_STORES: PiiStore[] = [
+  {
+    store: "research_request",
+    description:
+      "Staff research requests, source links, and unpublished drafts.",
+    hasEmailIdentifier: true,
+    findByIdentifier: findResearchByEmail,
+    async exportRecords(email) {
+      return {
+        store: "research_request",
+        records: await findResearchByEmail(email),
+      };
+    },
+    async deleteOrAnonymize(email) {
+      return {
+        store: "research_request",
+        affected: await deleteResearchByEmail(email),
+        note: "Requests and unpublished drafts removed except records under legal hold. Published content retains its own history.",
+      };
+    },
+  },
   users,
   invites,
   charities,

@@ -8,7 +8,7 @@
 // fetch and the pending-removal behaviour, where a member's delete of a live
 // event keeps the row visible so the portal doesn't pretend it has gone.
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { EventCategory, EventItem, Restaurant } from "@/lib/types";
 import { Badge, Callout } from "@/components/ui";
 import { RepeatField, type RepeatValue } from "@/components/repeat-field";
@@ -60,15 +60,64 @@ interface EventDraft {
   repeat: RepeatValue;
 }
 
+type PasteState = { open: boolean; text: string; busy: boolean; error: string; phase?: "queued" | "researching" };
+type ExtractionJob = {
+  id: string;
+  state: "queued" | "researching" | "review" | "failed" | "cancelled";
+  draft?: Omit<EventDraft, "repeat"> & { unsure: boolean; notes: string };
+  error?: string;
+};
+type ManagedEvent = EventItem & { status?: string };
+const PASTE_CLOSED: PasteState = { open: false, text: "", busy: false, error: "" };
+
 export function EventsForm({
   initial,
   initialEvents,
+  postExtractionEnabled,
 }: {
   initial: Restaurant;
-  initialEvents: EventItem[];
+  initialEvents: ManagedEvent[];
+  postExtractionEnabled: boolean;
 }) {
-  const [events, setEvents] = useState<EventItem[]>(initialEvents);
+  const [events, setEvents] = useState<ManagedEvent[]>(initialEvents);
   const [draft, setDraft] = useState<EventDraft | null>(null);
+  // Paste-a-post: the member brings the text from Facebook or Instagram and we
+  // pre-fill the form from it. `hint` rides along into the draft — what we read
+  // back is a starting point to correct, never an answer to trust.
+  const [paste, setPaste] = useState<PasteState>(PASTE_CLOSED);
+  const [hint, setHint] = useState("");
+  // Focus follows the member: into the box when the paste panel opens, onto the
+  // title when a read post fills the form. Not for a blank or edited event, so
+  // the existing flows behave as they did.
+  const [fromPaste, setFromPaste] = useState(false);
+  // Which read is current. Cancel, or starting a draft of their own, moves it on,
+  // so a reply that lands late is dropped instead of filling the form over what
+  // the member has since typed.
+  const readTicket = useRef(0);
+  const activeJob = useRef<string | null>(null);
+  const polling = useRef<AbortController | null>(null);
+
+  useEffect(() => () => {
+    readTicket.current += 1;
+    polling.current?.abort();
+  }, []);
+
+  function cancelJob(id: string) {
+    // Cancellation is best-effort: late responses still cannot replace a draft.
+    void fetch("/api/portal/events/extract", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    }).catch(() => {});
+  }
+
+  function invalidateRead() {
+    readTicket.current += 1;
+    polling.current?.abort();
+    polling.current = null;
+    if (activeJob.current) cancelJob(activeJob.current);
+    activeJob.current = null;
+  }
   // Fetched deconfliction results, remembered with the date they answer for —
   // the visible list is derived, so a date change instantly clears stale hits.
   const [dayCheck, setDayCheck] = useState<{ date: string; events: EventItem[] }>({
@@ -112,7 +161,81 @@ export function EventsForm({
     };
   }
 
+  /** Close the panel and drop any read still in flight, so a late reply neither
+   *  fills a form the member has moved on from nor leaves the panel stuck busy. */
+  function closePaste() {
+    invalidateRead();
+    setPaste(PASTE_CLOSED);
+  }
+
+  async function readPost() {
+    const ticket = ++readTicket.current;
+    const id = activeJob.current ?? crypto.randomUUID();
+    activeJob.current = id;
+    const controller = new AbortController();
+    polling.current?.abort();
+    polling.current = controller;
+    setPaste((p) => ({ ...p, busy: true, phase: "queued", error: "" }));
+    try {
+      let res = await fetch("/api/portal/events/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, text: paste.text, ownerId: initial.id }),
+      });
+      let data = (await res.json().catch(() => ({}))) as { error?: string; job?: ExtractionJob };
+      for (;;) {
+        if (ticket !== readTicket.current) {
+          cancelJob(id); // also catches cancellation before submission finished
+          return;
+        }
+        if (!res.ok || !data.job || data.job.id !== id) {
+          throw new Error(data.error ?? "Couldn't check that post. Try again or fill it in by hand.");
+        }
+        const job = data.job;
+        if (job.state === "review" && job.draft) {
+          const { unsure, notes, ...fields } = job.draft;
+          activeJob.current = null;
+          setDraft({ ...fields, venue: fields.venue || initial.name, repeat: {} });
+          setHint(
+            unsure
+              ? `Check this one before you save${notes ? ` — ${notes}` : ", especially the date."}`
+              : notes,
+          );
+          setFromPaste(true);
+          setPaste(PASTE_CLOSED);
+          return;
+        }
+        if (job.state !== "queued" && job.state !== "researching") {
+          activeJob.current = null;
+          throw new Error(job.error ?? "Couldn't read that one. Your text is still here; try again or fill it in by hand.");
+        }
+        setPaste((p) => ({ ...p, phase: job.state as "queued" | "researching" }));
+        await new Promise<void>((resolve, reject) => {
+          const onAbort = () => {
+            clearTimeout(timer);
+            reject(new DOMException("Cancelled", "AbortError"));
+          };
+          const timer = setTimeout(() => {
+            controller.signal.removeEventListener("abort", onAbort);
+            resolve();
+          }, 2000);
+          controller.signal.addEventListener("abort", onAbort, { once: true });
+          if (controller.signal.aborted) onAbort();
+        });
+        if (ticket !== readTicket.current) return;
+        res = await fetch(`/api/portal/events/extract?id=${encodeURIComponent(id)}`, { signal: controller.signal });
+        data = (await res.json().catch(() => ({}))) as { error?: string; job?: ExtractionJob };
+      }
+    } catch (err) {
+      if (ticket !== readTicket.current) return;
+      setPaste((p) => ({ ...p, busy: false, error: err instanceof Error ? err.message : "Couldn't check that post. Your pasted text is still here." }));
+    }
+  }
+
   function editEvent(ev: EventItem) {
+    closePaste();
+    setHint("");
+    setFromPaste(false);
     setDraft({
       id: ev.id,
       title: ev.title,
@@ -160,7 +283,7 @@ export function EventsForm({
         pending?: boolean;
       };
       if (!res.ok || !data.event) throw new Error(data.error ?? "Save failed");
-      const saved = data.event;
+      const saved: ManagedEvent = { ...data.event, status: data.pending ? "pending" : "live" };
       setEvents((prev) =>
         prev
           .filter((x) => x.id !== saved.id)
@@ -216,6 +339,7 @@ export function EventsForm({
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-semibold text-primary-deep">{ev.title}</p>
                   <Badge tone="teal">{ev.category}</Badge>
+                  {ev.status === "pending" && <Badge tone="sand">Awaiting review</Badge>}
                 </div>
                 <p className="mt-0.5 text-sm text-ink-soft">
                   {fmtEventDate(ev.start)} · {ev.venue}
@@ -240,7 +364,21 @@ export function EventsForm({
             {draft.id ? "Edit event" : "New event"}
           </p>
           <form onSubmit={saveDraft} className="mt-4 flex flex-col gap-5">
-            <TextField label="Title" value={draft.title} onChange={setE("title")} required />
+            {hint && (
+              // An alert, because it appears after a button press and a member
+              // on a screen reader has to hear it before they save.
+              <div role="alert">
+                <Callout title="Read from your post">{hint}</Callout>
+              </div>
+            )}
+
+            <TextField
+              label="Title"
+              value={draft.title}
+              onChange={setE("title")}
+              required
+              autoFocus={fromPaste}
+            />
 
             <div className="grid gap-5 sm:grid-cols-2">
               <TextField
@@ -322,18 +460,110 @@ export function EventsForm({
               <Button type="submit" pending={eventSave.busy}>
                 {draft.id ? "Save changes" : "Add event"}
               </Button>
-              <Button variant="ghost" type="button" onClick={() => setDraft(null)}>
+              <Button
+                variant="ghost"
+                type="button"
+                onClick={() => {
+                  setDraft(null);
+                  setHint("");
+                }}
+              >
                 Cancel
               </Button>
               <SaveMessage message={eventSave.message} />
             </div>
           </form>
         </div>
+      ) : paste.open ? (
+        <div className="rounded-xl border border-border bg-surface-sunken p-4">
+          <p className="font-display text-lg font-semibold text-primary-deep">
+            Paste your post
+          </p>
+          <p className="mt-1 text-sm text-ink-soft">
+            Copy the text of a Facebook or Instagram post — or an email, or a flyer — and
+            we&apos;ll fill the form in. You get to check it before anything is saved.
+            The computer reads it through the connected Claude account. The pasted text
+            is sent to Anthropic. Nothing is published automatically.
+          </p>
+          <TextAreaField
+            label="The post"
+            autoFocus
+            value={paste.text}
+            onChange={(e) => {
+              // A read in flight is about text that no longer exists: drop it,
+              // and stop showing the panel as busy.
+              invalidateRead();
+              const text = e.target.value;
+              setPaste((p) => ({ ...p, text, error: "", busy: false }));
+            }}
+            rows={6}
+            error={paste.error || undefined}
+          />
+          {paste.busy && (
+            <p role="status" className="mt-3 text-sm text-ink-soft">
+              {paste.phase === "researching" ? "Reading your post. Check the details before saving." : "Waiting for the connected computer. You can cancel or fill it in by hand."}
+            </p>
+          )}
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              pending={paste.busy}
+              pendingLabel={paste.phase === "researching" ? "Reading post…" : "Waiting for computer…"}
+              disabled={paste.busy || !paste.text.trim()}
+              onClick={() => void readPost()}
+            >
+              Read it
+            </Button>
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={() => {
+                const carried = paste.text.trim();
+                if (carried.length > 2000) {
+                  setPaste((p) => ({ ...p, error: "Shorten the text to 2,000 characters before filling it in by hand. Your pasted text is still here." }));
+                  return;
+                }
+                closePaste();
+                setHint("");
+                setFromPaste(true);
+                setDraft({ ...blankDraft(), description: carried });
+              }}
+            >
+              Fill it in by hand
+            </Button>
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={closePaste}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
       ) : (
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" onClick={() => setDraft(blankDraft())}>
+          <Button
+            type="button"
+            onClick={() => {
+              closePaste();
+              setHint("");
+              setFromPaste(false);
+              setDraft(blankDraft());
+            }}
+          >
             + Add an event
           </Button>
+          <Button
+            variant="ghost"
+            type="button"
+            disabled={!postExtractionEnabled}
+            onClick={() => setPaste({ open: true, text: "", busy: false, error: "" })}
+          >
+            Paste from Facebook or Instagram
+          </Button>
+          {!postExtractionEnabled && (
+            <p className="text-sm text-ink-soft">Reading posts isn&apos;t switched on yet. You can still add an event by hand.</p>
+          )}
           <SaveMessage message={eventSave.message} />
         </div>
       )}
