@@ -30,7 +30,8 @@ COPY package.json package-lock.json ./
 
 # `npm ci` installs the EXACT lockfile tree — reproducible and fails if
 # package.json and the lock are out of sync. Needs the lockfile (verified present).
-RUN npm ci
+# Keep dependency inventory local; advisory triage uses approved evidence.
+RUN npm ci --no-audit
 
 # ---------------------------------------------------------------------------
 # Stage 2: build — compile the app and produce .next/standalone + .next/static.

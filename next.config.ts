@@ -4,6 +4,11 @@ const nextConfig: NextConfig = {
   // Emit a self-contained server bundle (.next/standalone) so the production
   // Docker image ships only the files it needs — see Dockerfile / docs/DEPLOY.md.
   output: "standalone",
+  // The patched sharp prebuilt library must ship beside its native binding.
+  // Next's default trace includes the binding but can omit libvips itself.
+  outputFileTracingIncludes: {
+    "/*": ["./node_modules/@img/sharp-libvips-*/lib/**/*"],
+  },
   // NOTE (2026-08-01, perf/home-lcp-headroom): experimental.inlineCss was
   // measured here and REJECTED. It removes the stylesheet request, but the
   // document grew 26KB → 64KB transfer (the RSC flight payload embeds the CSS
