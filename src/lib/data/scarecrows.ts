@@ -86,6 +86,12 @@ export function registrationOpen(now: Date = new Date()): boolean {
   return now.getTime() < Date.parse(CRAWL_START);
 }
 
+/** Explicit late-entry exception for the 2026 crawl only. The voting override
+ * cannot extend this window; Chamber approval still controls publication. */
+export function lateRegistrationOpen(now: Date = new Date()): boolean {
+  return now.getTime() >= Date.parse(CRAWL_START) && now.getTime() < Date.parse(CRAWL_END);
+}
+
 /** Field caps, shared by the form (maxLength) and the route (the real check). */
 export const REGISTRATION_LIMITS = {
   title: 80,

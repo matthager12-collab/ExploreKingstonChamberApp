@@ -10,7 +10,7 @@
 // No account. The gates, in order, none of which the client can talk past:
 //   - rate limit, 5 an hour per connection, before anything else is read;
 //   - the page is visible (a hidden crawl takes no registrations);
-//   - registration window: closes when the crawl opens, by the SERVER's clock;
+//   - normal signup closes at crawl opening; explicit late signup closes at crawl end;
 //   - declared body size, before parsing;
 //   - honeypot, answered with a bland 200 and nothing stored;
 //   - every field required and length-capped; coordinates, if given, inside
@@ -29,6 +29,7 @@ import {
   CRAWL_VIEW_ID,
   REGISTRATION_LIMITS,
   registrationOpen,
+  lateRegistrationOpen,
 } from "@/lib/data/scarecrows";
 import type { MapFeature } from "@/lib/map/types";
 import { holdSuggestedRecord } from "@/lib/moderation";
@@ -84,12 +85,17 @@ export async function POST(request: NextRequest) {
     return Response.json({ ok: false, error: "not found" }, { status: 404 });
   }
 
-  if (!registrationOpen()) {
+  // Only the explicit late endpoint gets the bounded exception. Body fields,
+  // query parameters and the voting override cannot reopen normal signup.
+  const late = request.nextUrl.pathname === "/api/scarecrow/register/late";
+  if (!(late ? lateRegistrationOpen() : registrationOpen())) {
     return Response.json(
       {
         ok: false,
         error:
-          "registration closed when the crawl opened on 17 October — contact the Chamber directly",
+          late
+            ? "late registration is available only during the crawl, until 5pm Pacific on 31 October 2026"
+            : "registration closed when the crawl opened on 17 October — use the late registration page",
       },
       { status: 403 },
     );

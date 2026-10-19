@@ -18,7 +18,7 @@ type Phase = "idle" | "sending" | "done";
 const inputClass =
   "mt-1 block w-full rounded-xl border border-sand-deep bg-white px-3 py-2 text-ink";
 
-export function ScarecrowRegister() {
+export function ScarecrowRegister({ late = false }: { late?: boolean }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState("");
 
@@ -47,7 +47,7 @@ export function ScarecrowRegister() {
 
     setPhase("sending");
     try {
-      const res = await fetch("/api/scarecrow/register", {
+      const res = await fetch(late ? "/api/scarecrow/register/late" : "/api/scarecrow/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

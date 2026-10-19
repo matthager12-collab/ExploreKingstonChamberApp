@@ -15,6 +15,7 @@ import { getCrawlScarecrows } from "@/lib/stores/scarecrow-store";
 import { setPageHidden } from "@/lib/stores/site-store";
 import { listWorklistItems } from "@/lib/stores/worklist-store";
 import { POST } from "@/app/api/scarecrow/register/route";
+import { POST as LATE_POST } from "@/app/api/scarecrow/register/late/route";
 
 const IN_WINDOW = new Date("2026-09-28T12:00:00-07:00");
 const ADMIN = { id: "admin-under-test", email: "admin@example.test" };
@@ -27,9 +28,9 @@ const valid = {
   contact: "pat.registrant@example.test",
 };
 
-function registerRaw(raw: string, ip: string, headers: Record<string, string> = {}) {
-  return POST(
-    new NextRequest("http://localhost/api/scarecrow/register", {
+function registerRaw(raw: string, ip: string, headers: Record<string, string> = {}, late = false) {
+  return (late ? LATE_POST : POST)(
+    new NextRequest(`http://localhost/api/scarecrow/register${late ? "/late" : ""}`, {
       method: "POST",
       body: raw,
       headers: {
@@ -188,5 +189,83 @@ describe("POST /api/scarecrow/register", () => {
     const sixth = await register({ ...valid, title: "Rate 6" }, ip);
     expect(sixth.status).toBe(429);
     expect(sixth.headers.get("Retry-After")).toBeTruthy();
+  });
+});
+
+
+describe("explicit late registration", () => {
+  const late = (body: Record<string, unknown>, ip: string) => registerRaw(JSON.stringify(body), ip, {}, true);
+
+  it("accepts on October 19 as pending, never public, with private contact", async () => {
+    vi.setSystemTime(new Date("2026-10-19T12:00:00-07:00"));
+    const before = (await heldRegistrations()).length;
+    expect((await late({ ...valid, title: "Late Canary", id: "a-live-pin", status: "live", views: ["explore"], link: "javascript:canary" }, "198.51.100.110")).status).toBe(200);
+    const held = await heldRegistrations();
+    expect(held.length).toBe(before + 1);
+    const item = held.find(i => i.subjectLabel.includes("Late Canary"))!;
+    expect((item.payload as { suggest?: { contact?: string } }).suggest?.contact).toBe(valid.contact);
+    const feature = (await getMapFeaturesAdmin()).find(f => f.id === item.subjectId)!;
+    expect(feature.status).toBe("pending");
+    expect(feature.views).toEqual([CRAWL_VIEW_ID]);
+    expect(feature.id).not.toBe("a-live-pin");
+    expect(feature).not.toHaveProperty("contact");
+    expect(feature).not.toHaveProperty("link");
+    expect((await getCrawlScarecrows()).some(s => s.id === item.subjectId)).toBe(false);
+    expect((await getMapFeatures()).some(f => f.id === item.subjectId)).toBe(false);
+    await approveModerationItem(item, ADMIN);
+    expect((await getCrawlScarecrows()).find(s => s.id === item.subjectId)?.title).toBe("Late Canary");
+  });
+
+  it("bounds the late exception to real crawl dates", async () => {
+    for (const [date, status] of [
+      ["2026-10-16T23:59:59-07:00", 403],
+      ["2026-10-17T00:00:00-07:00", 200],
+      ["2026-10-31T16:59:59-07:00", 200],
+      ["2026-10-31T17:00:00-07:00", 403],
+      ["2027-10-19T12:00:00-07:00", 403],
+    ] as const) {
+      vi.setSystemTime(new Date(date));
+      expect((await late({ ...valid, title: `Boundary ${date}` }, `boundary-${date}`)).status).toBe(status);
+    }
+  });
+
+  it("keeps original cutoff and ignores a query-string attempt to reopen it", async () => {
+    vi.setSystemTime(new Date("2026-10-19T12:00:00-07:00"));
+    expect((await register(valid, "198.51.100.120")).status).toBe(403);
+    const raw = JSON.stringify(valid);
+    const request = new NextRequest("http://localhost/api/scarecrow/register?late=true", {
+      method: "POST", body: raw, headers: { "content-length": String(Buffer.byteLength(raw)), "x-forwarded-for": "query-canary" },
+    });
+    expect((await POST(request)).status).toBe(403);
+  });
+
+  it("preserves validation, honeypot, hidden-page gate, and unique pending IDs on repeats", async () => {
+    vi.setSystemTime(new Date("2026-10-19T12:00:00-07:00"));
+    const before = (await heldRegistrations()).length;
+    expect((await late({ ...valid, title: "Repeated Late" }, "repeat-a")).status).toBe(200);
+    expect((await late({ ...valid, title: "Repeated Late" }, "repeat-b")).status).toBe(200);
+    const repeats = (await heldRegistrations()).filter(i => i.subjectLabel.includes("Repeated Late"));
+    expect(repeats.length).toBe(2);
+    expect(new Set(repeats.map(i => i.subjectId)).size).toBe(2);
+    expect((await getCrawlScarecrows()).some(s => repeats.some(i => i.subjectId === s.id))).toBe(false);
+    expect((await late({ ...valid, website2: "bot" }, "late-bot")).status).toBe(200);
+    expect((await late({ ...valid, contact: "" }, "late-invalid")).status).toBe(400);
+    expect((await late({ ...valid, title: "x".repeat(81) }, "late-long")).status).toBe(400);
+    expect((await late({ ...valid, lat: 40, lng: -74 }, "late-coords")).status).toBe(400);
+    expect((await registerRaw("[]", "late-array", {}, true)).status).toBe(400);
+    expect((await late({ ...valid, notes: "x".repeat(9000) }, "late-huge")).status).toBe(413);
+    await setPageHidden("/scarecrow", true);
+    try { expect((await late(valid, "late-hidden")).status).toBe(404); }
+    finally { await setPageHidden("/scarecrow", false); }
+    expect((await heldRegistrations()).length).toBe(before + 2);
+  });
+
+  it("uses the same five/hour rate-limit bucket as normal registration", async () => {
+    const ip = "shared-late-bucket";
+    for (let i=0; i<5; i++) await register({ ...valid, title: `Shared ${i}` }, ip);
+    vi.setSystemTime(new Date("2026-10-19T12:00:00-07:00"));
+    // A later clock is a new window; use failed normal calls at the same instant.
+    for (let i=0; i<5; i++) await register(valid, ip);
+    expect((await late(valid, ip)).status).toBe(429);
   });
 });
