@@ -59,7 +59,14 @@ export default async function BusinessEventsPage({
           category: d.category,
         }))}
       />
-      <EventsForm initial={record.restaurant} initialEvents={events} />
+      {/* Keyed on the event ids: EventsForm copies initialEvents into state once,
+          so a draft published from the panel above (router.refresh) would not
+          show until a full reload without a remount. */}
+      <EventsForm
+        key={events.map((e) => e.id).join(",")}
+        initial={record.restaurant}
+        initialEvents={events}
+      />
     </div>
   );
 }
