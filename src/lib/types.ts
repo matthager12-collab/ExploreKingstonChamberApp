@@ -134,14 +134,17 @@ export interface Lodging {
   images?: string[];
 }
 
-export type EventCategory =
-  | "festival"
-  | "market"
-  | "music"
-  | "community"
-  | "charity"
-  | "sports"
-  | "arts";
+export const EVENT_CATEGORIES = [
+  "festival",
+  "market",
+  "music",
+  "community",
+  "charity",
+  "sports",
+  "arts",
+] as const;
+
+export type EventCategory = (typeof EVENT_CATEGORIES)[number];
 
 export interface EventItem {
   id: string;

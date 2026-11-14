@@ -35,7 +35,7 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 /** Deterministic date-time label straight from the ISO string (no timezone math). */
-function fmtEventDate(iso: string): string {
+export function fmtEventDate(iso: string): string {
   const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
   if (!m) return iso;
   const [, y, mo, d, h, min] = m;
