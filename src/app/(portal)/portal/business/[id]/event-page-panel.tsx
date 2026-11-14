@@ -4,13 +4,18 @@
 // DRAFTS, and nothing publishes until they press Publish. Publish goes through
 // the normal POST /api/portal/events, so the moderation floor applies unchanged
 // (docs/adr/ADR-0009). All text is rendered as React text.
+//
+// Each draft can also be opened in the normal event editor (Edit), pre-filled;
+// the draft list is owned by EventsTab so the editor can retire a draft after it saves.
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
 import { Button, FormSection, TextField } from "@/components/portal/form";
 import { PENDING_TEXT } from "@/components/portal/business-save";
 import { describeRepeat, rruleToPreset } from "@/lib/events/recurrence";
-import { fmtEventDate } from "./events-form";
+import { attachmentPublicUrl } from "@/lib/events/attachment-refs";
+import type { EventCategory } from "@/lib/types";
+import { fmtEventDate, type EventPrefill } from "./events-form";
 
 export interface PanelPage {
   url: string;
@@ -27,6 +32,8 @@ export interface PanelDraft {
   category: string;
   rrule: string | null;
   ticketUrl: string | null;
+  /** Stored artwork pulled from the member's page, if any. */
+  artworkRef: string | null;
   timeMissing: boolean;
 }
 
@@ -39,6 +46,16 @@ type Api = {
 };
 
 const ENDPOINT = "/api/portal/event-page";
+
+/** Retire a draft once its event is saved (publish, or save from the editor). */
+export async function retireDraft(ownerId: string, draftId: string): Promise<void> {
+  const res = await fetch(ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ownerId, action: "published", draftId }),
+  });
+  if (!res.ok) throw new Error("Couldn't clear that suggestion");
+}
 
 /** Model-derived, so only a plain web link ever becomes an href. */
 function webLink(u: string | null): string | null {
@@ -69,16 +86,26 @@ export function EventPagePanel({
   ownerId,
   organizer,
   initialPage,
-  initialDrafts,
+  drafts,
+  setDrafts,
+  onEdit,
+  editing,
 }: {
   ownerId: string;
   organizer: string;
   initialPage: PanelPage | null;
-  initialDrafts: PanelDraft[];
+  drafts: PanelDraft[];
+  setDrafts: Dispatch<SetStateAction<PanelDraft[]>>;
+  /** Hand a pre-filled editor request to the event editor. */
+  onEdit: (prefill: EventPrefill) => void;
+  /** A suggestion is open in the editor: publishing refreshes the page and would wipe it. */
+  editing: boolean;
 }) {
   const router = useRouter();
   const [page, setPage] = useState<PanelPage | null>(initialPage);
-  const [drafts, setDrafts] = useState<PanelDraft[]>(initialDrafts);
+  const [artwork, setArtwork] = useState<Record<string, boolean>>({});
+  const opens = useRef(0);
+  const withArtwork = (d: PanelDraft) => (d.artworkRef && artwork[d.id] !== false ? [d.artworkRef] : undefined);
   const [url, setUrl] = useState(initialPage?.url ?? "");
   const [times, setTimes] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
@@ -141,6 +168,28 @@ export function EventPagePanel({
     });
   }
 
+  function edit(d: PanelDraft) {
+    onEdit({
+      key: `${d.id}#${++opens.current}`,
+      draft: {
+        title: d.title,
+        // A datetime-local cannot hold a date without a time, so an untimed
+        // draft opens with the field empty (the form requires it) and a note.
+        start: d.timeMissing ? "" : d.start.slice(0, 16),
+        end: d.end ? d.end.slice(0, 16) : "",
+        venue: d.venue ?? organizer,
+        description: d.description,
+        category: d.category as EventCategory,
+        url: webLink(d.ticketUrl) ?? page?.url ?? "",
+        repeat: d.rrule ? { rrule: d.rrule } : {},
+        ...(d.timeMissing
+          ? { note: `Your page shows ${whenText(d)} but no start time. Set the date and time below.` }
+          : {}),
+      },
+      attachments: withArtwork(d),
+    });
+  }
+
   function publish(d: PanelDraft) {
     const time = times[d.id];
     if (d.timeMissing && !time) return; // the button is disabled too
@@ -159,6 +208,7 @@ export function EventPagePanel({
           description: d.description,
           category: d.category,
           url: webLink(d.ticketUrl) ?? page?.url,
+          attachments: withArtwork(d),
           organizer,
         }),
       });
@@ -253,6 +303,27 @@ export function EventPagePanel({
                       </a>
                     </p>
                   )}
+                  {d.artworkRef && (
+                    <div className="mt-2 flex items-center gap-3">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={attachmentPublicUrl(d.artworkRef)}
+                        alt={d.title}
+                        loading="lazy"
+                        className="h-16 w-16 rounded-lg object-cover ring-1 ring-border"
+                      />
+                      <label className="flex items-center gap-2 text-sm font-semibold text-primary-deep">
+                        <input
+                          type="checkbox"
+                          checked={artwork[d.id] !== false}
+                          onChange={(e) => setArtwork((prev) => ({ ...prev, [d.id]: e.target.checked }))}
+                        />
+                        <span>
+                          Include artwork<span className="sr-only"> for {d.title}</span>
+                        </span>
+                      </label>
+                    </div>
+                  )}
                   {d.timeMissing && (
                     <div className="mt-2">
                       <p className="text-sm text-ink-soft">No time on your page — add one before publishing</p>
@@ -274,10 +345,19 @@ export function EventPagePanel({
                     onClick={() => publish(d)}
                     pending={busy === `p-${d.id}`}
                     pendingLabel="Publishing…"
-                    disabled={busy !== null || (d.timeMissing && !times[d.id])}
+                    disabled={busy !== null || editing || (d.timeMissing && !times[d.id])}
                     aria-label={`Publish ${d.title}`}
                   >
                     Publish
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => edit(d)}
+                    disabled={busy !== null}
+                    aria-label={`Edit ${d.title} before publishing`}
+                  >
+                    Edit
                   </Button>
                   <Button
                     type="button"

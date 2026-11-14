@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getEventsForOwner } from "@/lib/stores/event-store";
-import { getEventPage, listNewDrafts } from "@/lib/stores/member-event-page-store";
-import { EventPagePanel } from "../event-page-panel";
-import { EventsForm } from "../events-form";
+import {
+  getEventPage,
+  listNewDrafts,
+} from "@/lib/stores/member-event-page-store";
+import { EventsTab } from "../events-tab";
 import { requireBusinessRecord } from "../record";
 
 // Events is a restaurant-only tab — same 404 reasoning as Hours.
@@ -33,43 +35,39 @@ export default async function BusinessEventsPage({
   // Includes this listing's pending event submissions with status surfaced.
   const events = await getEventsForOwner(id);
 
-  const [page, drafts] = await Promise.all([getEventPage(id), listNewDrafts(id)]);
+  const [page, drafts] = await Promise.all([
+    getEventPage(id),
+    listNewDrafts(id),
+  ]);
 
   return (
-    <div className="flex flex-col gap-6">
-      <EventPagePanel
-        ownerId={id}
-        organizer={record.restaurant.name}
-        initialPage={
-          page
-            ? {
-                url: page.url,
-                lastCheckedAt: page.lastCheckedAt?.toISOString() ?? null,
-                lastError: page.lastError,
-              }
-            : null
-        }
-        initialDrafts={drafts.map((d) => ({
-          id: d.id,
-          title: d.title,
-          start: d.start,
-          end: d.end,
-          venue: d.venue,
-          description: d.description,
-          category: d.category,
-          rrule: d.rrule,
-          ticketUrl: d.ticketUrl,
-          timeMissing: d.timeMissing,
-        }))}
-      />
-      {/* Keyed on the event ids: EventsForm copies initialEvents into state once,
-          so a draft published from the panel above (router.refresh) would not
-          show until a full reload without a remount. */}
-      <EventsForm
-        key={events.map((e) => e.id).join(",")}
-        initial={record.restaurant}
-        initialEvents={events}
-      />
-    </div>
+    <EventsTab
+      ownerId={id}
+      organizer={record.restaurant.name}
+      initialPage={
+        page
+          ? {
+              url: page.url,
+              lastCheckedAt: page.lastCheckedAt?.toISOString() ?? null,
+              lastError: page.lastError,
+            }
+          : null
+      }
+      initialDrafts={drafts.map((d) => ({
+        id: d.id,
+        title: d.title,
+        start: d.start,
+        end: d.end,
+        venue: d.venue,
+        description: d.description,
+        category: d.category,
+        rrule: d.rrule,
+        ticketUrl: d.ticketUrl,
+        artworkRef: d.artworkRef,
+        timeMissing: d.timeMissing,
+      }))}
+      events={events}
+      restaurant={record.restaurant}
+    />
   );
 }
