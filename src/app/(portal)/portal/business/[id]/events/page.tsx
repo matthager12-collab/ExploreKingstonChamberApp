@@ -57,6 +57,9 @@ export default async function BusinessEventsPage({
           venue: d.venue,
           description: d.description,
           category: d.category,
+          rrule: d.rrule,
+          ticketUrl: d.ticketUrl,
+          timeMissing: d.timeMissing,
         }))}
       />
       {/* Keyed on the event ids: EventsForm copies initialEvents into state once,

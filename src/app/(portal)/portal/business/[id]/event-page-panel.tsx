@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { Button, FormSection, TextField } from "@/components/portal/form";
 import { PENDING_TEXT } from "@/components/portal/business-save";
+import { describeRepeat, rruleToPreset } from "@/lib/events/recurrence";
 import { fmtEventDate } from "./events-form";
 
 export interface PanelPage {
@@ -24,6 +25,9 @@ export interface PanelDraft {
   venue: string | null;
   description: string;
   category: string;
+  rrule: string | null;
+  ticketUrl: string | null;
+  timeMissing: boolean;
 }
 
 type Api = {
@@ -35,6 +39,27 @@ type Api = {
 };
 
 const ENDPOINT = "/api/portal/event-page";
+
+/** Model-derived, so only a plain web link ever becomes an href. */
+function webLink(u: string | null): string | null {
+  return u && /^https?:\/\//i.test(u) ? u : null;
+}
+
+/** "17:30" -> "5:30 pm", matching fmtEventDate's style. */
+function fmtTime(hhmm: string): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  return `${h % 12 === 0 ? 12 : h % 12}${m === 0 ? "" : `:${String(m).padStart(2, "0")}`} ${h >= 12 ? "pm" : "am"}`;
+}
+
+/** Series: "Every week on Friday · 6:30 pm". One-off: "Fri, Nov 13 · 6:30 pm". */
+function whenText(d: PanelDraft): string {
+  const time = d.timeMissing ? "" : ` · ${fmtTime(d.start.slice(11, 16))}`;
+  if (d.rrule) {
+    const preset = rruleToPreset(d.rrule);
+    return `${preset ? describeRepeat(preset) : "Repeats"}${time}`;
+  }
+  return d.timeMissing ? fmtEventDate(d.start).split(" · ")[0] : fmtEventDate(d.start);
+}
 
 function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -55,6 +80,7 @@ export function EventPagePanel({
   const [page, setPage] = useState<PanelPage | null>(initialPage);
   const [drafts, setDrafts] = useState<PanelDraft[]>(initialDrafts);
   const [url, setUrl] = useState(initialPage?.url ?? "");
+  const [times, setTimes] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -116,6 +142,9 @@ export function EventPagePanel({
   }
 
   function publish(d: PanelDraft) {
+    const time = times[d.id];
+    if (d.timeMissing && !time) return; // the button is disabled too
+    const start = d.timeMissing ? `${d.start.slice(0, 10)}T${time}` : d.start;
     void run(`p-${d.id}`, async () => {
       const res = await fetch("/api/portal/events", {
         method: "POST",
@@ -123,12 +152,13 @@ export function EventPagePanel({
         body: JSON.stringify({
           ownerId,
           title: d.title,
-          start: d.start,
+          start,
           end: d.end ?? undefined,
+          rrule: d.rrule ?? undefined,
           venue: d.venue || undefined,
           description: d.description,
           category: d.category,
-          url: page?.url,
+          url: webLink(d.ticketUrl) ?? page?.url,
           organizer,
         }),
       });
@@ -208,9 +238,35 @@ export function EventPagePanel({
                 <div className="min-w-0">
                   <p className="font-semibold text-primary-deep">{d.title}</p>
                   <p className="mt-0.5 text-sm text-ink-soft">
-                    {fmtEventDate(d.start)}
+                    {whenText(d)}
                     {d.venue ? ` · ${d.venue}` : ""}
                   </p>
+                  {webLink(d.ticketUrl) && (
+                    <p className="mt-0.5 text-sm">
+                      <a
+                        href={webLink(d.ticketUrl)!}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-semibold text-primary-deep underline"
+                      >
+                        Tickets
+                      </a>
+                    </p>
+                  )}
+                  {d.timeMissing && (
+                    <div className="mt-2">
+                      <p className="text-sm text-ink-soft">No time on your page — add one before publishing</p>
+                      <label className="mt-1 flex items-center gap-2 text-sm font-semibold text-primary-deep">
+                        Start time for {d.title}
+                        <input
+                          type="time"
+                          value={times[d.id] ?? ""}
+                          onChange={(e) => setTimes((prev) => ({ ...prev, [d.id]: e.target.value }))}
+                          className="rounded-lg border border-border px-2 py-1 font-normal"
+                        />
+                      </label>
+                    </div>
+                  )}
                 </div>
                 <div className="flex shrink-0 gap-2">
                   <Button
@@ -218,7 +274,7 @@ export function EventPagePanel({
                     onClick={() => publish(d)}
                     pending={busy === `p-${d.id}`}
                     pendingLabel="Publishing…"
-                    disabled={busy !== null}
+                    disabled={busy !== null || (d.timeMissing && !times[d.id])}
                     aria-label={`Publish ${d.title}`}
                   >
                     Publish

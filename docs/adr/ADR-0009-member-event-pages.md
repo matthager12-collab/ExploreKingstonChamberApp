@@ -52,3 +52,12 @@ Consequences that follow from those:
 
 - Adding member hosts to `SOURCE_ALLOWLIST`: it would make a member-typed value a trusted source.
 - Auto-publishing extracted events: removes the human check that makes a model's mistakes cheap.
+
+## Update 2026-11-13: repeats, untimed events, ticket links
+
+A real venue page lost 6 of 7 events to the first rules. Owner ruling:
+
+- **Repeating events become repeating drafts**, using only the existing repeat presets. Any other pattern is dropped. The model names the pattern; the server builds the rule and computes the first date.
+- **Events with no time are kept**, flagged `time_missing`. A time is never guessed. The member must enter one before Publish.
+- **Ticket links are kept** only when the url is exactly one of the page's own links (`extractLinks`). Otherwise the draft links to the member's page.
+- Dedupe keys: timed one-off by start minute, untimed one-off by date, series by rule plus time (never the date, which moves every week).

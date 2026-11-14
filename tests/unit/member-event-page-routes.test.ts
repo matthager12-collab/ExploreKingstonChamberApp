@@ -207,6 +207,46 @@ describe("drafts: dismiss / published / no resurrection", () => {
     expect(r.added).toBe(0);
   });
 
+  it("a dismissed series draft is not resurrected when a later day moves its first date", async () => {
+    const { a } = fresh();
+    asMember(a);
+    const series = (start: string) => ({
+      title: "Fridays with Bruce",
+      start,
+      description: "d",
+      category: "music",
+      rrule: "FREQ=WEEKLY;BYDAY=FR",
+      timeMissing: false,
+    });
+    state.events = [series("2099-01-02T18:30")];
+    await PUT(req("PUT", { ownerId: a, url: URL_A }));
+    const first = await (await POST(req("POST", { ownerId: a, action: "check" }))).json();
+    expect(first.drafts[0].rrule).toBe("FREQ=WEEKLY;BYDAY=FR");
+    expect(first.drafts[0].timeMissing).toBe(false);
+    await POST(req("POST", { ownerId: a, action: "dismiss", draftId: first.drafts[0].id }));
+
+    state.events = [series("2099-01-09T18:30")]; // a week later: same series, new first date
+    await PUT(req("PUT", { ownerId: a, url: URL_A }));
+    const again = await (await POST(req("POST", { ownerId: a, action: "check" }))).json();
+    expect([again.found, again.added]).toEqual([1, 0]);
+    expect(again.drafts).toEqual([]);
+  });
+
+  it("untimed and ticketed drafts round-trip through the payload", async () => {
+    const { a } = fresh();
+    asMember(a);
+    state.events = [
+      { ...ev("Untimed"), start: "2099-01-05T00:00", timeMissing: true, ticketUrl: "https://t.example.com/1" },
+    ];
+    await PUT(req("PUT", { ownerId: a, url: URL_A }));
+    const body = await (await POST(req("POST", { ownerId: a, action: "check" }))).json();
+    expect(body.drafts[0]).toMatchObject({
+      timeMissing: true,
+      ticketUrl: "https://t.example.com/1",
+      rrule: null,
+    });
+  });
+
   it("unknown action is 400", async () => {
     const { a } = fresh();
     asMember(a);
