@@ -1,16 +1,16 @@
 import { createHash } from "node:crypto";
 
 /**
- * Stable identity for a drafted event: lowercased, punctuation-stripped,
- * whitespace-collapsed title + "|" + the YYYY-MM-DD part of start.
- * Re-scrapes of the same page produce the same key, so a dismissed or
- * published draft is never re-created.
+ * Stable identity for a drafted event: its start, `YYYY-MM-DDTHH:MM`.
+ *
+ * Not the title. The model rewords titles between runs ("Jonas Solo" one day,
+ * "Jonas Myers – Solo Piano" the next), and a title-based key would bring a
+ * dismissed or published event back every morning. Combined with the
+ * (owner_id, dedupe_key) unique index, this means one draft per start time per
+ * listing.
+ * ponytail: two different events at the same minute on one page collapse to
+ * one draft; key on venue too if a member ever runs parallel rooms.
  */
-export function draftDedupeKey(title: string, start: string): string {
-  const t = title
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  return createHash("sha256").update(`${t}|${start.slice(0, 10)}`).digest("hex");
+export function draftDedupeKey(start: string): string {
+  return createHash("sha256").update(start.slice(0, 16)).digest("hex");
 }

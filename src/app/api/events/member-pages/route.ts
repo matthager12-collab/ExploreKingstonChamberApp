@@ -22,6 +22,7 @@ const PAUSE_MS = 300;
 // ponytail: one cap per run keeps the cron inside its curl timeout; the rest
 // are picked up next run because they stay "due". Raise or batch if members grow past it.
 const MAX_PER_RUN = 40;
+const RUN_BUDGET_MS = 450_000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -45,7 +46,12 @@ export async function POST(request: NextRequest) {
   let checked = 0;
   let failed = 0;
   let added = 0;
+  // Stop starting new pages well inside the cron's 600 s curl limit: one page
+  // can take ~75 s (15 s fetch + 60 s model). Unchecked pages stay due and,
+  // oldest first, lead the next run.
+  const stopAt = Date.now() + RUN_BUDGET_MS;
   for (const [i, page] of due.entries()) {
+    if (Date.now() > stopAt) break;
     if (i > 0) await sleep(PAUSE_MS);
     try {
       const r = await checkMemberEventPage(page.ownerId);

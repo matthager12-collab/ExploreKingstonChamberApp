@@ -116,7 +116,6 @@ export function EventPagePanel({
   }
 
   function publish(d: PanelDraft) {
-    if (!page) return;
     void run(`p-${d.id}`, async () => {
       const res = await fetch("/api/portal/events", {
         method: "POST",
@@ -129,7 +128,7 @@ export function EventPagePanel({
           venue: d.venue || undefined,
           description: d.description,
           category: d.category,
-          url: page.url,
+          url: page?.url,
           organizer,
         }),
       });

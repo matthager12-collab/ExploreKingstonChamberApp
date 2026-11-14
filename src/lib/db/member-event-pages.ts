@@ -3,7 +3,7 @@
 // delegate). See member-event-page-schema.ts and docs/adr/ADR-0009.
 
 import { randomBytes } from "node:crypto";
-import { and, asc, eq, isNull, lt, or } from "drizzle-orm";
+import { and, asc, eq, isNull, lt, or, sql } from "drizzle-orm";
 
 import { draftDedupeKey } from "@/lib/events/member-page-dedupe";
 import { getDb } from "./client";
@@ -65,7 +65,7 @@ export async function insertDrafts(ownerId: string, drafts: NewDraft[]): Promise
       .values({
         id: randomBytes(9).toString("hex"),
         ownerId,
-        dedupeKey: draftDedupeKey(d.title, d.start),
+        dedupeKey: draftDedupeKey(d.start),
         status: "new",
         title: d.title,
         start: d.start,
@@ -130,5 +130,6 @@ export async function listPagesDue(olderThan: Date): Promise<MemberEventPageRow[
     .select()
     .from(memberEventPage)
     .where(or(isNull(memberEventPage.lastCheckedAt), lt(memberEventPage.lastCheckedAt, olderThan)))
-    .orderBy(asc(memberEventPage.ownerId));
+    // Oldest first (never-checked pages lead): a capped run always serves the longest-waiting pages.
+    .orderBy(sql`${memberEventPage.lastCheckedAt} asc nulls first`);
 }
