@@ -11,7 +11,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { extractPageEvents, MODEL, type DraftEvent } from "@/lib/events/extract-page-events";
-import { extractLinks, htmlToText } from "@/lib/events/member-page-fetch";
+import { extractImages, extractLinks, htmlToText } from "@/lib/events/member-page-fetch";
 
 interface Expected {
   id: string;
@@ -22,9 +22,13 @@ interface Expected {
   endTime?: string | null;
   repeat?: string | null;
   ticketUrl?: string | null;
+  /** The chosen imageUrl must END WITH one of these file names. */
+  artworkAnyOf?: string[];
 }
 interface ExpectedFile {
   today: string;
+  /** Where the snapshot came from: the base url for its relative links and images. */
+  source: string;
   events: Expected[];
   mustNotAppear?: { titleHas: string[]; date?: string }[];
 }
@@ -62,6 +66,10 @@ function score(found: DraftEvent[], expected: ExpectedFile, n: number) {
     checks.push(["time", !!x && timeOf(x) === (e.time ?? null)]);
     if (e.endTime) checks.push(["end", !!x && x.end?.slice(11, 16) === e.endTime]);
     checks.push(["ticket", !!x && (x.ticketUrl ?? null) === (e.ticketUrl ?? null)]);
+    if (e.artworkAnyOf?.length) {
+      const img = x?.imageUrl ? x.imageUrl.split(/[?#]/)[0].toLowerCase() : "";
+      checks.push(["art", !!img && e.artworkAnyOf.some((f) => img.endsWith(f.toLowerCase()))]);
+    }
     total += checks.length;
     got += checks.filter(([, ok]) => ok).length;
     rows.push(`  ${e.id.padEnd(24)} ${checks.map(([k, ok]) => `${k}:${ok ? "ok" : "NO"}`).join("  ")}`);
@@ -78,13 +86,14 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY || !dir)("member page extraction 
     const root = dir as string;
     const html = readFileSync(path.join(root, "page.html"), "utf8");
     const expected = JSON.parse(readFileSync(path.join(root, "expected.json"), "utf8")) as ExpectedFile;
-    const text = htmlToText(html);
-    const links = extractLinks(html);
+    const text = htmlToText(html, expected.source);
+    const links = extractLinks(html, expected.source);
+    const images = extractImages(html, expected.source);
     mkdirSync(path.join(root, "runs"), { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 
     for (let n = 1; n <= runs; n++) {
-      const r = await extractPageEvents(text, { today: expected.today, links });
+      const r = await extractPageEvents(text, { today: expected.today, links, images });
       writeFileSync(
         path.join(root, "runs", `${model.replace(/[^\w.-]/g, "_")}-${stamp}-${n}.json`),
         JSON.stringify(r, null, 2),

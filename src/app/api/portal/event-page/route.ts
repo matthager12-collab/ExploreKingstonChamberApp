@@ -4,7 +4,8 @@
 // GET  ?ownerId=X — the saved page + this owner's 'new' drafts.
 // PUT  { ownerId, url } — save the page url; "" clears it (drafts are kept).
 // POST { ownerId, action: "check" } — run a check now (rate limited).
-// POST { ownerId, action: "dismiss" | "published", draftId } — retire a draft.
+// POST { ownerId, action: "dismiss" | "published", draftId } — retire a draft
+//   (dismiss also deletes its stored artwork; publish leaves it with the event).
 //
 // Every verb needs a session and can(user, "edit-record", ownerId). Drafts are
 // never public: publishing goes through POST /api/portal/events from the
@@ -12,6 +13,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { can, getSessionUser } from "@/lib/auth";
+import { deleteAttachment } from "@/lib/events/attachment-store";
 import { checkMemberEventPage } from "@/lib/events/member-page-check";
 import { parseMemberPageUrl } from "@/lib/events/member-page-fetch";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -49,6 +51,7 @@ async function payload(ownerId: string) {
       category: d.category,
       rrule: d.rrule,
       ticketUrl: d.ticketUrl,
+      artworkRef: d.artworkRef,
       timeMissing: d.timeMissing,
     })),
   };
@@ -154,9 +157,12 @@ export async function POST(request: NextRequest) {
     const status = action === "dismiss" ? "dismissed" : "published";
     // Scoped to ownerId AND status 'new' in one statement: another listing's
     // draft, or one already retired, is simply "not found".
-    if (!draftId || !(await setDraftStatus(ownerId, draftId, status))) {
+    const retired = draftId ? await setDraftStatus(ownerId, draftId, status) : null;
+    if (!retired) {
       return NextResponse.json({ error: "Draft not found" }, { status: 404 });
     }
+    // Dismiss throws the pulled-in artwork away; publish handed it to the event.
+    if (status === "dismissed" && retired.artworkRef) await deleteAttachment(retired.artworkRef);
     return NextResponse.json({ ok: true });
   }
 

@@ -4,7 +4,7 @@
 //      calendar date (the "what else happens that day" deconfliction check).
 // GET  ?ownerId=X                      — auth + can(…, "edit-record"): the events X manages,
 //      including X's own pending submissions (status surfaced).
-// POST                                 — auth: create/update an event whose
+// POST                                 — auth (optional attachments: one draft-artwork ref of this owner): create/update an event whose
 //      ownerId ∈ user.linkedIds (or admin). New events get a slug+random id.
 //      MODERATION (E08): member writes hold for Chamber review — see
 //      src/lib/moderation.ts; admin writes publish directly.
@@ -15,6 +15,9 @@
 import { randomBytes } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { can, getOrg, getSessionUser } from "@/lib/auth";
+import { isTrustedBlobUrl } from "@/lib/blob-store";
+import { isStoredBlobRef } from "@/lib/events/attachment-refs";
+import { getAttachmentAbsolutePath } from "@/lib/events/attachment-store";
 import { normalizedToEventItem } from "@/lib/events/normalize";
 import { isPresetRRule, MAX_SKIPPED_DATES } from "@/lib/events/recurrence";
 import { unifiedEventsSharingDate } from "@/lib/events/unified";
@@ -25,6 +28,7 @@ import {
   getEventsForOwner,
   saveEvent,
 } from "@/lib/stores/event-store";
+import { ownerHasDraftArtwork } from "@/lib/stores/member-event-page-store";
 import { getUnifiedCalendarEnabled } from "@/lib/stores/unified-calendar-store";
 import {
   holdEditProposal,
@@ -169,6 +173,25 @@ export async function POST(request: NextRequest) {
   // rather than storing a set that would revive if the series ever came back.
   const exdates = rrule && exdateList.length > 0 ? exdateList : undefined;
 
+  // Attachments (one, for now): the artwork pulled in for a member-page draft.
+  // VALIDATED, never dropped, and never an arbitrary stored file: the ref must
+  // be well-formed AND be the artwork of a still-new draft of THIS ownerId, so a
+  // member cannot attach another listing's (or the Chamber's) stored files.
+  let attachments: string[] | undefined;
+  if (body.attachments !== undefined && body.attachments !== null) {
+    const list = body.attachments;
+    if (!Array.isArray(list) || list.length > 1 || !list.every((r) => typeof r === "string")) {
+      return NextResponse.json({ error: "attachments must be a list of at most one file reference" }, { status: 400 });
+    }
+    for (const ref of list as string[]) {
+      const wellFormed = isStoredBlobRef(ref) ? isTrustedBlobUrl(ref) : getAttachmentAbsolutePath(ref) !== null;
+      if (!wellFormed || !(await ownerHasDraftArtwork(ownerId, ref))) {
+        return NextResponse.json({ error: "that attachment isn't available" }, { status: 400 });
+      }
+    }
+    if (list.length > 0) attachments = list as string[];
+  }
+
   let event: EventItem;
   let storedStatus: "live" | "pending" | "other" | "none" = "none";
   if (typeof body.id === "string" && body.id) {
@@ -198,6 +221,8 @@ export async function POST(request: NextRequest) {
       ownerId,
       rrule,
       exdates,
+      // No new attachment: keep whatever the stored event already has (via existingDoc).
+      ...(attachments ? { attachments } : {}),
     };
   } else {
     event = {
@@ -213,6 +238,7 @@ export async function POST(request: NextRequest) {
       ownerId,
       rrule,
       exdates,
+      ...(attachments ? { attachments } : {}),
     };
   }
 

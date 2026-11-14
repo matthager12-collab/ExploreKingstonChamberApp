@@ -22,6 +22,8 @@ export interface NewDraft {
   rrule?: string;
   ticketUrl?: string;
   timeMissing?: boolean;
+  /** Not stored: the page image the caller should fetch for this draft. */
+  imageUrl?: string;
 }
 
 export async function getEventPage(ownerId: string): Promise<MemberEventPageRow | null> {
@@ -58,10 +60,13 @@ export async function listNewDrafts(ownerId: string): Promise<MemberEventDraftRo
     .orderBy(asc(memberEventDraft.start));
 }
 
-/** ON CONFLICT DO NOTHING on (owner_id, dedupe_key): returns how many rows
- *  were really added. A dismissed/published draft is never revived. */
-export async function insertDrafts(ownerId: string, drafts: NewDraft[]): Promise<number> {
-  let added = 0;
+/** ON CONFLICT DO NOTHING on (owner_id, dedupe_key): returns the drafts that
+ *  were really added (with their ids). A dismissed/published draft is never revived. */
+export async function insertDrafts(
+  ownerId: string,
+  drafts: NewDraft[],
+): Promise<{ id: string; imageUrl?: string }[]> {
+  const added: { id: string; imageUrl?: string }[] = [];
   for (const d of drafts) {
     const rows = await getDb()
       .insert(memberEventDraft)
@@ -82,17 +87,41 @@ export async function insertDrafts(ownerId: string, drafts: NewDraft[]): Promise
       })
       .onConflictDoNothing({ target: [memberEventDraft.ownerId, memberEventDraft.dedupeKey] })
       .returning({ id: memberEventDraft.id });
-    added += rows.length;
+    if (rows.length > 0) added.push({ id: rows[0].id, ...(d.imageUrl ? { imageUrl: d.imageUrl } : {}) });
   }
   return added;
 }
 
-/** Moves a draft that belongs to ownerId AND is still 'new'. False otherwise. */
+export async function setDraftArtwork(ownerId: string, draftId: string, ref: string): Promise<void> {
+  await getDb()
+    .update(memberEventDraft)
+    .set({ artworkRef: ref })
+    .where(and(eq(memberEventDraft.id, draftId), eq(memberEventDraft.ownerId, ownerId)));
+}
+
+/** True when `ref` is the artwork of one of this owner's still-new drafts. */
+export async function ownerHasDraftArtwork(ownerId: string, ref: string): Promise<boolean> {
+  const rows = await getDb()
+    .select({ id: memberEventDraft.id })
+    .from(memberEventDraft)
+    .where(
+      and(
+        eq(memberEventDraft.ownerId, ownerId),
+        eq(memberEventDraft.artworkRef, ref),
+        eq(memberEventDraft.status, "new"),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
+/** Moves a draft that belongs to ownerId AND is still 'new'. Null otherwise;
+ *  else its artwork ref, so a dismiss can delete the stored file. */
 export async function setDraftStatus(
   ownerId: string,
   draftId: string,
   status: "published" | "dismissed",
-): Promise<boolean> {
+): Promise<{ artworkRef: string | null } | null> {
   const rows = await getDb()
     .update(memberEventDraft)
     .set({ status })
@@ -103,8 +132,8 @@ export async function setDraftStatus(
         eq(memberEventDraft.status, "new"),
       ),
     )
-    .returning({ id: memberEventDraft.id });
-  return rows.length > 0;
+    .returning({ artworkRef: memberEventDraft.artworkRef });
+  return rows[0] ?? null;
 }
 
 export async function recordCheck(ownerId: string, error: string | null): Promise<void> {

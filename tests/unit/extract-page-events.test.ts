@@ -147,6 +147,28 @@ describe("validateEvents", () => {
     expect(out.map((e) => e.title)).toEqual(["keep"]);
   });
 
+  it("keeps an imageUrl only when it is exactly one of the page's images", () => {
+    const images = new Set(["https://venue.example.com/flyer.jpg"]);
+    const out = validateEvents(
+      {
+        events: [
+          ok({ title: "a", imageUrl: "https://venue.example.com/flyer.jpg" }),
+          ok({ title: "b", imageUrl: "https://venue.example.com/flyer.jpg?x=1" }), // near miss
+          ok({ title: "c", imageUrl: "https://evil.test/x.jpg" }),
+          ok({ title: "d", imageUrl: "javascript:alert(1)" }),
+          ok({ title: "e", imageUrl: "" }),
+          ok({ title: "f" }), // field absent entirely
+        ],
+      },
+      TODAY,
+      new Set(),
+      images,
+    )!;
+    expect(out.map((e) => e.imageUrl)).toEqual(["https://venue.example.com/flyer.jpg", undefined, undefined, undefined, undefined, undefined]);
+    // No image set passed: nothing survives.
+    expect(validateEvents({ events: [ok({ imageUrl: "https://venue.example.com/flyer.jpg" })] }, TODAY)![0].imageUrl).toBeUndefined();
+  });
+
   it("keeps a ticketUrl only when it is exactly one of the page's links", () => {
     const links = new Set(["https://tickets.example.com/e/1"]);
     const out = validateEvents(
@@ -235,6 +257,16 @@ describe("extractPageEvents", () => {
     expect(requests[1].model).toBe("m-from-env");
   });
 
+  it("passes the page's images through opts, and asks the model for imageUrl", async () => {
+    nextReply = { text: JSON.stringify({ events: [ok({ imageUrl: "https://v.example.com/f.jpg" }), ok({ title: "b", imageUrl: "https://v.example.com/other.jpg" })] }) };
+    const images = new Set(["https://v.example.com/f.jpg"]);
+    const r = await extractPageEvents('Fiddle Night\n[image: https://v.example.com/f.jpg "Flyer"]', { today: "2026-11-20", images });
+    expect(r.ok && r.events.map((e) => e.imageUrl)).toEqual(["https://v.example.com/f.jpg", undefined]);
+    const schema = JSON.stringify((requests[0].output_config as { format: { schema: unknown } }).format.schema);
+    expect(schema).toContain('"imageUrl"');
+    expect(String(requests[0].system)).toContain("[image:");
+  });
+
   it("keeps the request shape fixed whatever the page says (injection)", async () => {
     nextReply = { text: '{"events":[]}' };
     const evil =
@@ -256,9 +288,9 @@ describe("extractPageEvents", () => {
     expect((req.messages as unknown[]).length).toBe(1);
     expect(content.match(/<\/page_text>/g)).toHaveLength(1);
     expect(content.endsWith("</page_text>")).toBe(true);
-    // …and the only url-ish field is ticketUrl, which the server re-checks against the page's links.
+    // …and the only url-ish fields are ticketUrl and imageUrl, which the server re-checks against the page's links and images.
     const props = JSON.stringify(req.output_config).match(/"\w*(?:url|link)\w*":/gi) ?? [];
-    expect(props).toEqual(['"ticketUrl":']);
+    expect(props).toEqual(['"ticketUrl":', '"imageUrl":']);
   });
 
   it("never throws: API errors and non-JSON become typed failures", async () => {
