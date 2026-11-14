@@ -2,7 +2,7 @@
 // insert drafts. Shared by the member's "Check now" and the daily cron.
 
 import { extractPageEvents } from "./extract-page-events";
-import { fetchMemberPage, htmlToText } from "./member-page-fetch";
+import { extractLinks, fetchMemberPage, htmlToText } from "./member-page-fetch";
 import { getEventPage, insertDrafts, recordCheck } from "@/lib/stores/member-event-page-store";
 
 export type CheckResult =
@@ -24,7 +24,9 @@ export async function checkMemberEventPage(ownerId: string): Promise<CheckResult
     return { ok: false, error: fetched.message };
   }
 
-  const extracted = await extractPageEvents(htmlToText(fetched.html));
+  const extracted = await extractPageEvents(htmlToText(fetched.html), {
+    links: extractLinks(fetched.html),
+  });
   if (!extracted.ok) {
     const error = extracted.reason === "not-configured" ? NOT_CONFIGURED : EXTRACT_FAILED;
     await recordCheck(ownerId, error);

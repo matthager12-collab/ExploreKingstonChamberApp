@@ -30,8 +30,12 @@ const ok = (over: Record<string, unknown> = {}) => ({
   venue: "The Invented Pier Tavern",
   description: "Live fiddle.",
   category: "music",
+  ticketUrl: "",
+  repeat: { kind: "none", weekday: "", ordinal: "" },
   ...over,
 });
+const series = (kind: string, weekday: string, ordinal = "", over: Record<string, unknown> = {}) =>
+  ok({ date: "", repeat: { kind, weekday, ordinal }, ...over });
 
 beforeEach(() => {
   requests.length = 0;
@@ -52,6 +56,7 @@ describe("validateEvents", () => {
         venue: "The Invented Pier Tavern",
         description: "Live fiddle.",
         category: "music",
+        timeMissing: false,
       },
     ]);
   });
@@ -90,12 +95,83 @@ describe("validateEvents", () => {
     expect(out?.map((e) => e.title)).toEqual(["today", "day365"]);
   });
 
-  it("drops an event with no usable start time instead of guessing one", () => {
+  it("keeps an event with no usable time, flagged, with start at midnight; never guesses", () => {
     const out = validateEvents(
-      { events: [ok({ title: "none", time: "" }), ok({ title: "junk", time: "7pm" }), ok({ title: "ok" })] },
+      { events: [ok({ title: "none", time: "", endTime: "21:00" }), ok({ title: "junk", time: "7pm" }), ok({ title: "ok" })] },
       TODAY,
-    );
-    expect(out?.map((e) => e.title)).toEqual(["ok"]);
+    )!;
+    expect(out.map((e) => [e.title, e.start, e.timeMissing, e.end])).toEqual([
+      ["none", "2026-12-01T00:00", true, undefined],
+      ["junk", "2026-12-01T00:00", true, undefined],
+      ["ok", "2026-12-01T19:00", false, "2026-12-01T21:00"],
+    ]);
+  });
+
+  it("still drops a one-off with no valid date", () => {
+    expect(validateEvents({ events: [ok({ date: "" }), ok({ date: "soon" })] }, TODAY)).toEqual([]);
+  });
+
+  it("turns a repeating item into a preset rrule with a server-computed first date", () => {
+    const out = validateEvents(
+      {
+        events: [
+          series("weekly", "FR", "", { title: "Fridays", date: "1999-01-01" }), // model's date ignored
+          series("monthly-weekday", "TH", "1", { title: "First Thursdays", time: "17:30", endTime: "19:30" }),
+          series("biweekly", "TU", "", { title: "Every other Tuesday", time: "" }),
+        ],
+      },
+      TODAY,
+    )!;
+    expect(out.map((e) => [e.title, e.rrule, e.start, e.end, e.timeMissing])).toEqual([
+      ["Fridays", "FREQ=WEEKLY;BYDAY=FR", "2026-11-13T19:00", "2026-11-13T21:00", false],
+      ["First Thursdays", "FREQ=MONTHLY;BYDAY=1TH", "2026-12-03T17:30", "2026-12-03T19:30", false],
+      ["Every other Tuesday", "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU", "2026-11-17T00:00", undefined, true],
+    ]);
+  });
+
+  it("drops unusable repeats without losing the rest", () => {
+    const out = validateEvents(
+      {
+        events: [
+          series("weekly", ""),
+          series("weekly", "XX"),
+          series("monthly-weekday", "TH", "5"),
+          series("daily", "MO"),
+          series("monthly-date", "", "", { date: "" }),
+          series("yearly", "MO"),
+          ok({ title: "keep" }),
+        ],
+      },
+      TODAY,
+    )!;
+    expect(out.map((e) => e.title)).toEqual(["keep"]);
+  });
+
+  it("keeps a ticketUrl only when it is exactly one of the page's links", () => {
+    const links = new Set(["https://tickets.example.com/e/1"]);
+    const out = validateEvents(
+      {
+        events: [
+          ok({ title: "a", ticketUrl: "https://tickets.example.com/e/1" }),
+          ok({ title: "b", ticketUrl: "https://tickets.example.com/e/1/" }), // near miss
+          ok({ title: "c", ticketUrl: "javascript:alert(1)" }),
+          ok({ title: "d", ticketUrl: "https://evil.test/x" }),
+        ],
+      },
+      TODAY,
+      links,
+    )!;
+    expect(out.map((e) => e.ticketUrl)).toEqual(["https://tickets.example.com/e/1", undefined, undefined, undefined]);
+    // no links given at all: nothing survives
+    expect(validateEvents({ events: [ok({ ticketUrl: "https://tickets.example.com/e/1" })] }, TODAY)![0].ticketUrl).toBeUndefined();
+  });
+
+  it("only sets endTime when a time is set and the end is later", () => {
+    const out = validateEvents(
+      { events: [ok({ title: "a", time: "", endTime: "21:00" }), ok({ title: "b", endTime: "18:00" }), ok({ title: "c", endTime: "19:00" })] },
+      TODAY,
+    )!;
+    expect(out.map((e) => e.end)).toEqual([undefined, undefined, undefined]);
   });
 
   it("truncates fields, caps at 30, defaults unknown category, ignores a bad end time", () => {
@@ -144,6 +220,21 @@ describe("extractPageEvents", () => {
     expect(r.ok && r.events.map((e) => e.start)).toEqual(["2026-12-01T19:00"]);
   });
 
+  it("takes today, model and links from opts, and the model from MEMBER_EVENTS_MODEL", async () => {
+    nextReply = {
+      text: JSON.stringify({ events: [ok({ date: "2026-12-01", ticketUrl: "https://t.example.com/1" })] }),
+    };
+    const links = new Set(["https://t.example.com/1"]);
+    const r = await extractPageEvents("Fiddle Night", { today: "2026-11-20", model: "m-explicit", links });
+    expect(requests[0].model).toBe("m-explicit");
+    expect(JSON.stringify(requests[0].messages)).toContain("Friday, 2026-11-20");
+    expect(r.ok && r.events[0].ticketUrl).toBe("https://t.example.com/1");
+    process.env.MEMBER_EVENTS_MODEL = "m-from-env";
+    await extractPageEvents("Fiddle Night", { today: "2026-11-20" });
+    delete process.env.MEMBER_EVENTS_MODEL;
+    expect(requests[1].model).toBe("m-from-env");
+  });
+
   it("keeps the request shape fixed whatever the page says (injection)", async () => {
     nextReply = { text: '{"events":[]}' };
     const evil =
@@ -165,8 +256,9 @@ describe("extractPageEvents", () => {
     expect((req.messages as unknown[]).length).toBe(1);
     expect(content.match(/<\/page_text>/g)).toHaveLength(1);
     expect(content.endsWith("</page_text>")).toBe(true);
-    // …and the schema has no url field for the model to fill.
-    expect(JSON.stringify(req.output_config)).not.toMatch(/url|link/i);
+    // …and the only url-ish field is ticketUrl, which the server re-checks against the page's links.
+    const props = JSON.stringify(req.output_config).match(/"\w*(?:url|link)\w*":/gi) ?? [];
+    expect(props).toEqual(['"ticketUrl":']);
   });
 
   it("never throws: API errors and non-JSON become typed failures", async () => {

@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   fetchMemberPage,
+  extractLinks,
   htmlToText,
   isPublicAddress,
   makeGuardedLookup,
@@ -245,5 +246,47 @@ describe("htmlToText", () => {
 
   it("caps at 30,000 characters", () => {
     expect(htmlToText("<p>" + "word ".repeat(20_000) + "</p>").length).toBeLessThanOrEqual(30_000);
+  });
+});
+
+describe("htmlToText links", () => {
+  const html =
+    '<p>Jam night <a class="x" href="https://tix.example.com/e?id=1&amp;src=pg">Buy tickets</a></p>' +
+    '<p><a href=\'https://single.example.com/a\'><span>Info</span></a></p>' +
+    '<p><a href="/relative/page">Menu</a> <a href="mailto:a@example.com">Email us</a> ' +
+    '<a href="javascript:alert(1)">Click</a> <a href="ftp://x.example.com/f">FTP</a> <a>No href</a></p>' +
+    `<p><a href="https://long.example.com/${"a".repeat(500)}">Too long</a></p>`;
+
+  it("prints absolute http(s) links as text [url], entities decoded", () => {
+    const text = htmlToText(html);
+    expect(text).toContain("Jam night Buy tickets [https://tix.example.com/e?id=1&src=pg]");
+    expect(text).toContain("Info [https://single.example.com/a]");
+  });
+
+  it("keeps the text of other anchors and drops their hrefs", () => {
+    const text = htmlToText(html);
+    for (const t of ["Menu", "Email us", "Click", "FTP", "No href", "Too long"]) expect(text).toContain(t);
+    for (const gone of ["/relative", "mailto", "javascript", "ftp:", "long.example.com"]) {
+      expect(text).not.toContain(gone);
+    }
+    expect(text).not.toMatch(/[<>]/);
+  });
+
+  it("extractLinks returns exactly the urls htmlToText prints", () => {
+    expect([...extractLinks(html)].sort()).toEqual([
+      "https://single.example.com/a",
+      "https://tix.example.com/e?id=1&src=pg",
+    ]);
+  });
+
+  it("ignores links inside comments and scripts", () => {
+    const h = '<!-- <a href="https://c.example.com/">x</a> --><script>"<a href=\'https://s.example.com/\'>y</a>"</script>';
+    expect(extractLinks(h).size).toBe(0);
+    expect(htmlToText(h)).toBe("");
+  });
+
+  it("still caps at 30,000 characters with links present", () => {
+    const big = '<p><a href="https://t.example.com/x">tickets</a> ' + "word ".repeat(20_000) + "</p>";
+    expect(htmlToText(big).length).toBeLessThanOrEqual(30_000);
   });
 });

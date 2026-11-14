@@ -12,6 +12,7 @@
     "check:portal-contrast": "node scripts/check-portal-contrast.mjs",
     "test": "TZ=UTC vitest run --config vitest.config.ts",
     "test:server": "TZ=UTC vitest run --config vitest.server.config.ts",
+    "eval:member-page": "TZ=UTC vitest run --config vitest.eval.config.ts",
     "test:all": "npm run test && npm run test:server",
     "test:watch": "TZ=UTC vitest",
     "ams:checks": "node scripts/ams-ground-truth-checks.mjs",

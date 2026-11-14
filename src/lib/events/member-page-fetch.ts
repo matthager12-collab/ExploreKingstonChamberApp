@@ -309,19 +309,62 @@ function decodeEntities(s: string): string {
   });
 }
 
+const MAX_LINK_LENGTH = 500;
+const ANCHOR = /<a\b([^>]*)>([\s\S]*?)<\/a\s*>/gi;
+const HREF = /\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/i;
+/** No whitespace, angle or square brackets: the link must survive as `text [url]` unambiguously. */
+const SAFE_LINK = /^https?:\/\/[^\s<>[\]]+$/i;
+
+/** The decoded absolute http(s) href of an anchor's attributes, or null. */
+function anchorHref(attrs: string): string | null {
+  const m = HREF.exec(attrs);
+  const raw = m ? (m[1] ?? m[2] ?? m[3]) : undefined;
+  if (raw === undefined) return null;
+  const href = decodeEntities(raw.trim());
+  if (href.length > MAX_LINK_LENGTH || !SAFE_LINK.test(href) || !SAFE_LINK.test(raw.trim())) return null;
+  return href;
+}
+
+function stripNoise(html: string): string {
+  return html
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<(script|style|noscript|svg|template)\b[\s\S]*?<\/\1\s*>/gi, " ");
+}
+
+/**
+ * Every absolute http(s) link on the page, exactly as htmlToText prints it.
+ * The server uses this to accept a model-returned url only if the page really
+ * carried it.
+ */
+export function extractLinks(html: string): Set<string> {
+  const out = new Set<string>();
+  for (const m of stripNoise(html).matchAll(ANCHOR)) {
+    const href = anchorHref(m[1]);
+    if (href) out.add(href);
+  }
+  return out;
+}
+
 /**
  * Page html -> plain text for the model. Regex is enough because the output is
  * only ever handed to the model as inert text; it is never rendered as html.
+ * An anchor with an absolute http(s) href prints as `text [href]`; every other
+ * anchor keeps its text and loses its href.
  */
 export function htmlToText(html: string): string {
-  const text = html
-    .replace(/<!--[\s\S]*?-->/g, " ")
-    .replace(/<(script|style|noscript|svg|template)\b[\s\S]*?<\/\1\s*>/gi, " ")
+  const text = stripNoise(html)
+    // The href is left entity-encoded here: decodeEntities below runs once over everything.
+    .replace(ANCHOR, (_m, attrs: string, inner: string) => {
+      const href = anchorHref(attrs);
+      if (!href) return inner;
+      const raw = HREF.exec(attrs)!;
+      return `${inner} [${(raw[1] ?? raw[2] ?? raw[3]).trim()}] `;
+    })
     // block-ish tags become line breaks so headings and times stay on their own lines
     .replace(/<\/?(p|div|br|li|ul|ol|h[1-6]|tr|section|article|header|footer|table|time)\b[^>]*>/gi, "\n")
     .replace(/<[^>]*>/g, " ");
   return decodeEntities(text)
-    .replace(/[ \t\f\v ]+/g, " ")
+    .replace(/[ \t\f\v ]+/g, " ")
     .replace(/ ?\n ?/g, "\n")
     .replace(/\n{2,}/g, "\n")
     .trim()

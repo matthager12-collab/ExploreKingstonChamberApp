@@ -47,6 +47,9 @@ async function payload(ownerId: string) {
       venue: d.venue,
       description: d.description,
       category: d.category,
+      rrule: d.rrule,
+      ticketUrl: d.ticketUrl,
+      timeMissing: d.timeMissing,
     })),
   };
 }

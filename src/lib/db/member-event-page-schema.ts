@@ -10,7 +10,7 @@
 // extracted from that public page.
 
 import { sql } from "drizzle-orm";
-import { check, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, check, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const MEMBER_EVENT_DRAFT_STATUSES = ["new", "published", "dismissed"] as const;
 export type MemberEventDraftStatus = (typeof MEMBER_EVENT_DRAFT_STATUSES)[number];
@@ -30,8 +30,8 @@ export const memberEventDraft = pgTable(
   {
     id: text("id").primaryKey(),
     ownerId: text("owner_id").notNull(),
-    /** sha256(normalized title | YYYY-MM-DD). With the unique index below, a
-     *  dismissed or published draft is never re-created by a re-scrape. */
+    /** See draftDedupeKey. With the unique index below, a dismissed or
+     *  published draft is never re-created by a re-scrape. */
     dedupeKey: text("dedupe_key").notNull(),
     status: text("status").notNull().default("new"),
     title: text("title").notNull(),
@@ -41,6 +41,12 @@ export const memberEventDraft = pgTable(
     venue: text("venue"),
     description: text("description").notNull().default(""),
     category: text("category").notNull(),
+    /** Preset RRULE for a repeating series; `start` is then its first occurrence. */
+    rrule: text("rrule"),
+    /** A link taken from the page and verified against the page's own links. */
+    ticketUrl: text("ticket_url"),
+    /** No time on the page; `start` carries T00:00 and the member must set one. */
+    timeMissing: boolean("time_missing").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

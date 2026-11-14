@@ -19,6 +19,9 @@ export interface NewDraft {
   venue?: string;
   description: string;
   category: string;
+  rrule?: string;
+  ticketUrl?: string;
+  timeMissing?: boolean;
 }
 
 export async function getEventPage(ownerId: string): Promise<MemberEventPageRow | null> {
@@ -65,7 +68,7 @@ export async function insertDrafts(ownerId: string, drafts: NewDraft[]): Promise
       .values({
         id: randomBytes(9).toString("hex"),
         ownerId,
-        dedupeKey: draftDedupeKey(d.start),
+        dedupeKey: draftDedupeKey(d.start, { rrule: d.rrule, timeMissing: d.timeMissing }),
         status: "new",
         title: d.title,
         start: d.start,
@@ -73,6 +76,9 @@ export async function insertDrafts(ownerId: string, drafts: NewDraft[]): Promise
         venue: d.venue ?? null,
         description: d.description,
         category: d.category,
+        rrule: d.rrule ?? null,
+        ticketUrl: d.ticketUrl ?? null,
+        timeMissing: d.timeMissing ?? false,
       })
       .onConflictDoNothing({ target: [memberEventDraft.ownerId, memberEventDraft.dedupeKey] })
       .returning({ id: memberEventDraft.id });
