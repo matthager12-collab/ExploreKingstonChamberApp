@@ -13,7 +13,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser, requireAdmin, timingSafeEqualStr } from "@/lib/auth";
 import { checkMemberEventPage } from "@/lib/events/member-page-check";
-import { listPagesDue } from "@/lib/stores/member-event-page-store";
+import { listPagesDue, recordCheck } from "@/lib/stores/member-event-page-store";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +58,8 @@ export async function POST(request: NextRequest) {
     } catch {
       // One bad page never stops the loop. No detail logged: errors can echo page content.
       failed += 1;
+      // Stamp it so a page that keeps throwing is not retried every run.
+      await recordCheck(page.ownerId, "We couldn't check that page").catch(() => {});
     }
   }
   return NextResponse.json({ ok: true, checked, failed, added });

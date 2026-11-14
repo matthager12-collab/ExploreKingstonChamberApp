@@ -18,6 +18,7 @@ disagreed, the verified correction is what appears here.
 |---|---|---|---|
 | WSF car ferry (Edmonds–Kingston) | `src/lib/wsf.ts`, `src/lib/ferry-status.ts`, `/api/ferry/{status,vessels}` | `src/lib/data/ferry-fallback.ts` | **wired** (live API w/ `WSDOT_API_KEY`; seeded fallback without) |
 | Kitsap fast ferry (Kingston–Seattle) | `src/lib/kitsap.ts` | times hardcoded from GTFS feed S1000066 | **seeded** |
+| Member event pages | `src/lib/events/member-page-fetch.ts`, `extract-page-events.ts`, `/api/portal/event-page`, cron `/api/events/member-pages` | — (a member-saved url; drafts only, never public until the member publishes) | **wired** (Claude Haiku reads the page text; ADR-0009) |
 | Weather | `src/lib/weather.ts` | — | **wired** (NWS, keyless) |
 | Tides | `src/lib/tides.ts` | — | **wired** (NOAA CO-OPS, keyless) |
 | Ferry busyness forecast | `src/lib/ferry-forecast.ts` (pure model) | calibration = WSF "Best Times to Travel" grid; blends `ferry_observation` log | **wired** (derived; ships behind an admin flag, default OFF) |

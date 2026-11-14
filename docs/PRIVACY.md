@@ -174,6 +174,15 @@ workflow as everything else, and is exportable (vendor-exit). **Money never
 lives here:** dues invoicing and payment happen in QuickBooks (ADR-0003); the
 app stores no payment data (FR-A15/NFR-06).
 
+### Member event pages (ADR-0009)
+
+A business member can save the link to their own public events page. When it is checked, the
+text of that page is sent to Anthropic's Claude to extract the events. The page is public by
+definition, and no member name, email, account or listing id is sent with it. Nothing is
+stored by the call beyond the extracted event drafts in `member_event_draft`, which hold event
+facts only and are not personal data, so the table is not in the PII inventory. The member is
+told this beside the link field.
+
 ## 6. R4 precondition — member-table backup coverage before cancellation
 
 After the R3 SoR flip the app holds the **only** copy of the roster. Therefore

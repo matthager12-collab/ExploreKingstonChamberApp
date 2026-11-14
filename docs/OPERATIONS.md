@@ -651,6 +651,17 @@ has never been edited) carry no database row yet, so the sweep skips them
 until their first edit/verify overlays them — the §6 quarterly hand-check
 still owns those.
 
+### Member event pages (ADR-0009)
+
+A daily Render cron (`member-event-pages`) POSTs `/api/events/member-pages` with
+`Authorization: Bearer $EVENTS_INGEST_TOKEN` — the same token as `events-ingest`, wired from
+the web service's env var, so there is nothing new to set or rotate. The route fails closed
+(503 in production if the token is unset; an admin session also works). It checks each saved
+page not checked in the last 20 hours, one at a time, at least 300 ms apart, at most 40 per run;
+one failing page never stops the rest. It only writes drafts: members publish them from the
+portal events tab. Needs `ANTHROPIC_API_KEY`; without it, checks report "not switched on" to
+the member and nothing else breaks.
+
 ### Unified events calendar & ingest (E12)
 
 **What runs:** an hourly Render cron (`render.yaml`, service `events-ingest`) POSTs the
@@ -1107,6 +1118,7 @@ not run.**
 | Job | Where | Schedule (UTC) | Calls | Token |
 |---|---|---|---|---|
 | `events-ingest` | Render cron | `23 * * * *` hourly | `POST /api/events/ingest` | `EVENTS_INGEST_TOKEN` |
+| `member-event-pages` | Render cron | `41 14 * * *` daily (~7 AM Pacific) | `POST /api/events/member-pages` | `EVENTS_INGEST_TOKEN` (reused; no new secret) |
 | `ferry-observe` | Render cron | `*/15 0-7,11-23 * * *` (every 15 min in service hours; 08–10 UTC skipped — overnight ferry gap) | `POST /api/ferry/observe` | `FERRY_OBSERVE_TOKEN` |
 | `ferry-accuracy` | Render cron | `0 8 * * *` (~1 AM Pacific) | `POST /api/ferry/accuracy` | `FERRY_OBSERVE_TOKEN` |
 | `worklist-sweep` | Render cron | `0 14 * * 1` Mondays (~7 AM Pacific) | `POST /api/admin/worklist/sweep` | `WORKLIST_SWEEP_TOKEN` |

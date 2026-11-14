@@ -51,8 +51,9 @@ async function payload(ownerId: string) {
   };
 }
 
-async function gate(ownerId: string) {
-  const user = await getSessionUser();
+// Each handler calls getSessionUser() itself (the authz coverage test requires a
+// gate in every handler); this applies the rest of the check.
+function gate(user: Awaited<ReturnType<typeof getSessionUser>>, ownerId: string) {
   if (!user) return { error: NextResponse.json({ error: "Sign in first" }, { status: 401 }) };
   if (!ownerId) {
     return { error: NextResponse.json({ error: "ownerId required" }, { status: 400 }) };
@@ -76,7 +77,7 @@ async function readBody(request: NextRequest): Promise<Record<string, unknown> |
 
 export async function GET(request: NextRequest) {
   const ownerId = request.nextUrl.searchParams.get("ownerId") ?? "";
-  const g = await gate(ownerId);
+  const g = gate(await getSessionUser(), ownerId);
   if (g.error) return g.error;
   return NextResponse.json(await payload(ownerId));
 }
@@ -85,7 +86,7 @@ export async function PUT(request: NextRequest) {
   const body = await readBody(request);
   if (!body) return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   const ownerId = typeof body.ownerId === "string" ? body.ownerId : "";
-  const g = await gate(ownerId);
+  const g = gate(await getSessionUser(), ownerId);
   if (g.error) return g.error;
 
   const raw = typeof body.url === "string" ? body.url.trim() : null;
@@ -110,7 +111,7 @@ export async function POST(request: NextRequest) {
   const body = await readBody(request);
   if (!body) return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   const ownerId = typeof body.ownerId === "string" ? body.ownerId : "";
-  const g = await gate(ownerId);
+  const g = gate(await getSessionUser(), ownerId);
   if (g.error) return g.error;
   const { user } = g;
   const action = body.action;

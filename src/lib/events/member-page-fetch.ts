@@ -71,9 +71,8 @@ blocked.addAddress("::", "ipv6");
 blocked.addAddress("::1", "ipv6");
 blocked.addSubnet("fc00::", 7, "ipv6"); // unique local
 blocked.addSubnet("fe80::", 10, "ipv6"); // link local
-// IPv4-mapped. The whole /96 is refused rather than unwrapped: a DNS answer
-// has no business being a mapped address, and unwrapping is where bugs live.
-blocked.addSubnet("::ffff:0:0", 96, "ipv6");
+// IPv4-mapped (::ffff:0:0/96) is refused in isPublicAddress, not here: node's
+// BlockList treats every IPv4 address as mapped, so a rule for it blocks all of IPv4.
 // Forms that can smuggle an embedded IPv4 past a v6 rule.
 blocked.addSubnet("64:ff9b::", 96, "ipv6"); // NAT64
 blocked.addSubnet("2002::", 16, "ipv6"); // 6to4
@@ -83,6 +82,10 @@ blocked.addSubnet("2001::", 32, "ipv6"); // Teredo
 export function isPublicAddress(address: string): boolean {
   const family = net.isIP(address);
   if (family === 0) return false;
+  // Whole mapped /96 refused rather than unwrapped: a DNS answer has no business
+  // being a mapped address, and unwrapping is where bugs live. URL normalises
+  // every spelling (dotted, hex, zero-padded) to one form.
+  if (family === 6 && new URL(`http://[${address}]`).hostname.startsWith("[::ffff:")) return false;
   return !blocked.check(address, family === 4 ? "ipv4" : "ipv6");
 }
 
