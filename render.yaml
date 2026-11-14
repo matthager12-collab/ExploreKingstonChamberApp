@@ -243,6 +243,27 @@ services:
           name: explore-kingston
           envVarKey: EVENTS_INGEST_TOKEN
 
+  # Daily check of member-saved events pages (docs/adr/ADR-0009). Same shape and
+  # the SAME EVENTS_INGEST_TOKEN as events-ingest above — no second secret.
+  # Drafts only: nothing publishes until a member presses Publish.
+  - type: cron
+    name: member-event-pages
+    runtime: image
+    image:
+      url: docker.io/curlimages/curl:8.10.1
+    schedule: "41 14 * * *" # daily, ~7 AM Pacific
+    region: oregon
+    dockerCommand: >-
+      curl --fail --silent --show-error --max-time 600 -X POST
+      -H "Authorization: Bearer $EVENTS_INGEST_TOKEN"
+      https://explore-kingston.onrender.com/api/events/member-pages
+    envVars:
+      - key: EVENTS_INGEST_TOKEN
+        fromService:
+          type: web
+          name: explore-kingston
+          envVarKey: EVENTS_INGEST_TOKEN
+
   # ── App crons: moved off GitHub Actions in E15 slice 4 ────────────────────
   #
   # WHY THEY MOVED: GitHub disables scheduled workflows after 60 days with no

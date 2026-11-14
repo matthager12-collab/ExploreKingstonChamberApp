@@ -44,6 +44,8 @@ export * from "./claim-schema";
 // Directory-public slice: per-listing membership status/dues for ranking.
 export * from "./member-schema";
 export * from "./volunteer-signup-schema";
+// Member-saved events page + the drafts extracted from it (ADR-0009).
+export * from "./member-event-page-schema";
 // Race registrants synced from Zeffy + the race-day check-in link.
 export * from "./race-schema";
 

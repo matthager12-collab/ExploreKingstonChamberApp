@@ -35,17 +35,9 @@ import {
 } from "@/lib/moderation";
 import { RecordValidationError } from "@/lib/db/store-schemas";
 import { normalizeEventTimestamp } from "@/lib/time";
-import type { EventCategory, EventItem } from "@/lib/types";
+import { EVENT_CATEGORIES, type EventCategory, type EventItem } from "@/lib/types";
 
-const CATEGORIES: EventCategory[] = [
-  "festival",
-  "market",
-  "music",
-  "community",
-  "charity",
-  "sports",
-  "arts",
-];
+const CATEGORIES: readonly EventCategory[] = EVENT_CATEGORIES;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
 

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getEventsForOwner } from "@/lib/stores/event-store";
+import { getEventPage, listNewDrafts } from "@/lib/stores/member-event-page-store";
+import { EventPagePanel } from "../event-page-panel";
 import { EventsForm } from "../events-form";
 import { requireBusinessRecord } from "../record";
 
@@ -31,5 +33,33 @@ export default async function BusinessEventsPage({
   // Includes this listing's pending event submissions with status surfaced.
   const events = await getEventsForOwner(id);
 
-  return <EventsForm initial={record.restaurant} initialEvents={events} />;
+  const [page, drafts] = await Promise.all([getEventPage(id), listNewDrafts(id)]);
+
+  return (
+    <div className="flex flex-col gap-6">
+      <EventPagePanel
+        ownerId={id}
+        organizer={record.restaurant.name}
+        initialPage={
+          page
+            ? {
+                url: page.url,
+                lastCheckedAt: page.lastCheckedAt?.toISOString() ?? null,
+                lastError: page.lastError,
+              }
+            : null
+        }
+        initialDrafts={drafts.map((d) => ({
+          id: d.id,
+          title: d.title,
+          start: d.start,
+          end: d.end,
+          venue: d.venue,
+          description: d.description,
+          category: d.category,
+        }))}
+      />
+      <EventsForm initial={record.restaurant} initialEvents={events} />
+    </div>
+  );
 }
