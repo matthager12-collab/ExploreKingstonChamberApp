@@ -45,6 +45,9 @@ export const memberEventDraft = pgTable(
     rrule: text("rrule"),
     /** A link taken from the page and verified against the page's own links. */
     ticketUrl: text("ticket_url"),
+    /** Stored artwork (an attachment ref, see events/attachment-store) pulled from
+     *  the member's own page. Handed to the event on publish, deleted on dismiss. */
+    artworkRef: text("artwork_ref"),
     /** No time on the page; `start` carries T00:00 and the member must set one. */
     timeMissing: boolean("time_missing").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

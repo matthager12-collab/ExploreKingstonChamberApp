@@ -8,7 +8,7 @@
 // fetch and the pending-removal behaviour, where a member's delete of a live
 // event keeps the row visible so the portal doesn't pretend it has gone.
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { EventCategory, EventItem, Restaurant } from "@/lib/types";
 import { Badge, Callout } from "@/components/ui";
 import { RepeatField, type RepeatValue } from "@/components/repeat-field";
@@ -20,6 +20,7 @@ import {
   TextField,
 } from "@/components/portal/form";
 import { SaveMessage, useSave } from "@/components/portal/business-save";
+import { attachmentPublicUrl } from "@/lib/events/attachment-refs";
 
 const CATEGORIES: EventCategory[] = [
   "festival",
@@ -47,7 +48,7 @@ export function fmtEventDate(iso: string): string {
   return `${weekday}, ${MONTHS[+mo - 1]} ${+d} · ${time}`;
 }
 
-interface EventDraft {
+export interface EventDraft {
   id?: string;
   title: string;
   start: string; // datetime-local value
@@ -58,17 +59,55 @@ interface EventDraft {
   url: string;
   /** Repeat rule + skipped dates, straight from RepeatField. */
   repeat: RepeatValue;
+  /** Stored artwork to attach on save (a suggested event's pulled-in image). */
+  artworkRef?: string;
+  /** Set when the editor was opened from a suggested event; see `prefill`. */
+  prefillKey?: string;
+  /** One line shown above the form, e.g. "your page shows no time". */
+  note?: string;
+}
+
+/** Opens the editor in "new event" mode with these values. `key` must be
+ *  different on every open, so the same suggestion can be reopened after Cancel. */
+export interface EventPrefill {
+  key: string;
+  draft: EventDraft;
+  attachments?: string[];
 }
 
 export function EventsForm({
   initial,
   initialEvents,
+  prefill,
+  onSaved,
+  onCancel,
 }: {
   initial: Restaurant;
   initialEvents: EventItem[];
+  prefill?: EventPrefill | null;
+  /** Called after a successful save; `prefillKey` is set only when the editor was opened from `prefill`. */
+  onSaved?: (event: EventItem, prefillKey: string | undefined) => void;
+  /** Called when the member closes the editor without saving. */
+  onCancel?: () => void;
 }) {
   const [events, setEvents] = useState<EventItem[]>(initialEvents);
   const [draft, setDraft] = useState<EventDraft | null>(null);
+  // Adopt a new prefill during render (React's "adjust state when a prop changes"):
+  // an effect would paint the empty editor first.
+  const [adoptedKey, setAdoptedKey] = useState<string | null>(null);
+  if (prefill && prefill.key !== adoptedKey) {
+    setAdoptedKey(prefill.key);
+    setDraft({ ...prefill.draft, prefillKey: prefill.key, artworkRef: prefill.attachments?.[0] });
+  }
+  const editorRef = useRef<HTMLDivElement>(null);
+  const openedFrom = draft?.prefillKey;
+  // A suggestion's editor can open far below the panel that launched it: bring it into view
+  // and put the caret in its first field. Only for prefill — "+ Add an event" is unchanged.
+  useEffect(() => {
+    if (!openedFrom) return;
+    editorRef.current?.scrollIntoView?.({ block: "start" });
+    editorRef.current?.querySelector<HTMLElement>("input")?.focus();
+  }, [openedFrom]);
   // Fetched deconfliction results, remembered with the date they answer for —
   // the visible list is derived, so a date change instantly clears stale hits.
   const [dayCheck, setDayCheck] = useState<{ date: string; events: EventItem[] }>({
@@ -152,6 +191,7 @@ export function EventsForm({
           organizer: initial.name,
           rrule: current.repeat.rrule,
           exdates: current.repeat.exdates,
+          attachments: current.artworkRef ? [current.artworkRef] : undefined,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as {
@@ -168,6 +208,7 @@ export function EventsForm({
           .sort((a, b) => a.start.localeCompare(b.start)),
       );
       setDraft(null);
+      onSaved?.(saved, current.prefillKey);
       return Boolean(data.pending);
     }, "Event saved — it's on the town calendar now.");
   }
@@ -235,10 +276,22 @@ export function EventsForm({
       )}
 
       {draft ? (
-        <div className="rounded-xl border border-border bg-surface-sunken p-4">
+        <div ref={editorRef} className="rounded-xl border border-border bg-surface-sunken p-4">
           <p className="font-display text-lg font-semibold text-primary-deep">
             {draft.id ? "Edit event" : "New event"}
           </p>
+          {draft.note && <p className="mt-2 text-sm text-ink-soft">{draft.note}</p>}
+          {draft.artworkRef && (
+            <p className="mt-2 flex items-center gap-2 text-sm text-ink-soft">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={attachmentPublicUrl(draft.artworkRef)}
+                alt={`${draft.title} artwork`}
+                className="h-12 w-12 rounded-lg object-cover"
+              />
+              Artwork from your page will be attached.
+            </p>
+          )}
           <form onSubmit={saveDraft} className="mt-4 flex flex-col gap-5">
             <TextField label="Title" value={draft.title} onChange={setE("title")} required />
 
@@ -322,7 +375,14 @@ export function EventsForm({
               <Button type="submit" pending={eventSave.busy}>
                 {draft.id ? "Save changes" : "Add event"}
               </Button>
-              <Button variant="ghost" type="button" onClick={() => setDraft(null)}>
+              <Button
+                variant="ghost"
+                type="button"
+                onClick={() => {
+                  setDraft(null);
+                  onCancel?.();
+                }}
+              >
                 Cancel
               </Button>
               <SaveMessage message={eventSave.message} />

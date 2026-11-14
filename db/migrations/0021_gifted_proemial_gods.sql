@@ -1,0 +1,1 @@
+ALTER TABLE "member_event_draft" ADD COLUMN "artwork_ref" text;

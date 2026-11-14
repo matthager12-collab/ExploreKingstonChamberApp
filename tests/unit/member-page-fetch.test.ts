@@ -9,12 +9,15 @@ import { Readable } from "node:stream";
 import { describe, expect, it } from "vitest";
 
 import {
+  fetchMemberImage,
   fetchMemberPage,
+  extractImages,
   extractLinks,
   htmlToText,
   isPublicAddress,
   makeGuardedLookup,
   MAX_BODY_BYTES,
+  MAX_IMAGE_BYTES,
   parseMemberPageUrl,
 } from "@/lib/events/member-page-fetch";
 
@@ -109,7 +112,7 @@ describe("fetchMemberPage", () => {
       { "example.com": ["93.184.216.34"] },
     );
     const r = await fetchMemberPage("https://example.com/events", f);
-    expect(r).toEqual({ ok: true, html: "<p>hi</p>" });
+    expect(r).toEqual({ ok: true, html: "<p>hi</p>", finalUrl: "https://example.com/events" });
     expect(f.seen).toEqual(["GET example.com/events"]);
   });
 
@@ -153,7 +156,8 @@ describe("fetchMemberPage", () => {
       },
       { "a.test": ["93.184.216.34"], "b.test": ["93.184.216.35"] },
     );
-    expect(await fetchMemberPage("https://a.test/", f)).toEqual({ ok: true, html: "ok" });
+    // finalUrl is where the redirects ended: the base for relative links and images.
+    expect(await fetchMemberPage("https://a.test/", f)).toEqual({ ok: true, html: "ok", finalUrl: "https://b.test/new" });
     expect(f.seen).toEqual(["GET a.test/", "GET b.test/new"]);
   });
 
@@ -288,5 +292,135 @@ describe("htmlToText links", () => {
   it("still caps at 30,000 characters with links present", () => {
     const big = '<p><a href="https://t.example.com/x">tickets</a> ' + "word ".repeat(20_000) + "</p>";
     expect(htmlToText(big).length).toBeLessThanOrEqual(30_000);
+  });
+});
+
+describe("htmlToText / extractLinks / extractImages with a base url", () => {
+  const BASE = "https://venue.example.com/whats-on/";
+  const html =
+    '<h2>Fiddle Night</h2><img src="/img/fiddle-poster.jpg" alt="Poster for &quot;Fiddle&quot; night">' +
+    '<p><a href="tickets/1?a=1&amp;b=2">Buy</a> <a href="//cdn.example.com/x">Protocol-relative</a> ' +
+    '<a href="mailto:a@example.com">Mail</a> <a href="javascript:alert(1)">JS</a></p>' +
+    '<img srcset="img/small.jpg 1x, img/big.jpg 2x" alt="Srcset one">' +
+    '<img src="https://other.example.com/a.png" srcset="/s.png 1x" alt="Both">' +
+    '<img src="data:image/png;base64,AAAA" alt="Inline">' +
+    '<img src="/img/diagram.svg" alt="Vector">' +
+    '<img src="/img/site-logo.png" alt="Logo">' +
+    '<svg><image href="/inside-svg.png"/></svg><!-- <img src="/in-comment.png"> -->';
+
+  it("resolves relative links against the base and keeps only http(s)", () => {
+    expect([...extractLinks(html, BASE)].sort()).toEqual([
+      "https://cdn.example.com/x",
+      "https://venue.example.com/whats-on/tickets/1?a=1&b=2",
+    ]);
+    const text = htmlToText(html, BASE);
+    expect(text).toContain("Buy [https://venue.example.com/whats-on/tickets/1?a=1&b=2]");
+    expect(text).not.toMatch(/mailto|javascript/);
+    // With no base, a relative href is dropped exactly as before.
+    expect(extractLinks(html).size).toBe(0);
+  });
+
+  it("prints images as [image: url \"alt\"] in place, absolute", () => {
+    const text = htmlToText(html, BASE);
+    expect(text).toContain('Fiddle Night\n[image: https://venue.example.com/img/fiddle-poster.jpg "Poster for \'Fiddle\' night"]');
+    expect(text).toContain('[image: https://venue.example.com/whats-on/img/small.jpg "Srcset one"]');
+  });
+
+  it("extractImages: src, and the first srcset url; never data:, svg, logo, comments or inline svg", () => {
+    expect([...extractImages(html, BASE)].sort()).toEqual([
+      "https://other.example.com/a.png",
+      "https://venue.example.com/img/fiddle-poster.jpg",
+      "https://venue.example.com/s.png",
+      "https://venue.example.com/whats-on/img/small.jpg",
+    ]);
+    const text = htmlToText(html, BASE);
+    for (const gone of ["data:", ".svg", "logo", "inside-svg", "in-comment"]) expect(text).not.toContain(gone);
+  });
+
+  it("a hostile alt cannot forge another [image: ...] line or close the marker", () => {
+    const evil = '<img src="/real.jpg" alt="x&quot;]\n[image: https://evil.test/forged.jpg &quot;y">';
+    const text = htmlToText(evil, BASE);
+    expect(text.match(/\[image:/g)).toHaveLength(1);
+    expect(text.split("\n").filter((l) => l.startsWith("[image:"))).toHaveLength(1);
+    expect(extractImages(evil, BASE).has("https://evil.test/forged.jpg")).toBe(false);
+  });
+
+  it("every printed image url is in extractImages (the server's allowlist)", () => {
+    const printed = [...htmlToText(html, BASE).matchAll(/\[image: (\S+) "/g)].map((m) => m[1]);
+    const allowed = extractImages(html, BASE);
+    expect(printed.length).toBe(3);
+    for (const u of printed) expect(allowed.has(u)).toBe(true);
+  });
+});
+
+// ---- fetchMemberImage -------------------------------------------------------
+
+const bytes = (head: number[], size = 12_000) => Buffer.concat([Buffer.from(head), Buffer.alloc(size - head.length, 1)]);
+const JPEG = bytes([0xff, 0xd8, 0xff, 0xe0]);
+const PNG = bytes([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const GIF = bytes([...Buffer.from("GIF89a")]);
+const WEBP = bytes([...Buffer.from("RIFF"), 0, 0, 0, 0, ...Buffer.from("WEBP")]);
+const SVG = Buffer.concat([Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'), Buffer.alloc(12_000, 32)]);
+const PUBLIC = { "img.test": ["93.184.216.34"] };
+const img = (type: string, body: Buffer, extra: Record<string, string> = {}) =>
+  fakes({ "img.test": { status: 200, headers: { "content-type": type, ...extra }, chunks: [body] } }, PUBLIC);
+
+describe("fetchMemberImage", () => {
+  it.each([
+    ["image/jpeg", JPEG, "jpg"],
+    ["image/png", PNG, "png"],
+    ["image/gif", GIF, "gif"],
+    ["image/webp", WEBP, "webp"],
+    ["image/jpeg; charset=binary", JPEG, "jpg"],
+  ])("accepts %s and names the extension from the bytes", async (type, body, ext) => {
+    const f = img(type, body);
+    const r = await fetchMemberImage("https://img.test/a", f);
+    expect(r.ok && r.ext).toBe(ext);
+    expect(r.ok && r.bytes.length).toBe(body.length);
+    expect(f.seen).toEqual(["GET img.test/a"]);
+  });
+
+  it("refuses a private address, at connect time and as a literal; refuses http:", async () => {
+    const f = fakes({ "evil.test": { status: 200, headers: { "content-type": "image/png" }, chunks: [PNG] } }, { "evil.test": ["10.0.0.1"] });
+    expect(await fetchMemberImage("https://evil.test/a.png", f)).toEqual({ ok: false, code: "unreachable" });
+    expect(await fetchMemberImage("https://127.0.0.1/a.png", f)).toEqual({ ok: false, code: "not-allowed" });
+    expect(await fetchMemberImage("http://img.test/a.png", f)).toEqual({ ok: false, code: "not-allowed" });
+  });
+
+  it("refuses a redirect to a private address", async () => {
+    const f = fakes(
+      { "img.test": { status: 302, headers: { location: "https://internal.test/a.png" } }, "internal.test": { status: 200, headers: { "content-type": "image/png" }, chunks: [PNG] } },
+      { ...PUBLIC, "internal.test": ["10.0.0.9"] },
+    );
+    expect((await fetchMemberImage("https://img.test/a.png", f)).ok).toBe(false);
+    const g = fakes({ "img.test": { status: 302, headers: { location: "https://10.0.0.5/a.png" } } }, PUBLIC);
+    expect(await fetchMemberImage("https://img.test/a.png", g)).toEqual({ ok: false, code: "not-allowed" });
+  });
+
+  it("refuses non-image types, SVG (declared or disguised), and a type the bytes do not match", async () => {
+    expect(await fetchMemberImage("https://img.test/a", img("text/html", PNG))).toEqual({ ok: false, code: "bad-type" });
+    expect(await fetchMemberImage("https://img.test/a", img("image/svg+xml", SVG))).toEqual({ ok: false, code: "bad-type" });
+    // declared PNG, really SVG
+    expect(await fetchMemberImage("https://img.test/a", img("image/png", SVG))).toEqual({ ok: false, code: "bad-type" });
+    // declared JPEG, really PNG
+    expect(await fetchMemberImage("https://img.test/a", img("image/jpeg", PNG))).toEqual({ ok: false, code: "bad-type" });
+  });
+
+  it("refuses anything under 10 KB", async () => {
+    expect(await fetchMemberImage("https://img.test/a", img("image/png", bytes([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 10 * 1024 - 1)))).toEqual({ ok: false, code: "too-small" });
+    expect((await fetchMemberImage("https://img.test/a", img("image/png", bytes([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 10 * 1024)))).ok).toBe(true);
+  });
+
+  it("refuses more than 8 MB, streamed or declared", async () => {
+    const half = Buffer.alloc(MAX_IMAGE_BYTES / 2 + 1, 1);
+    const streamed = fakes({ "img.test": { status: 200, headers: { "content-type": "image/png" }, chunks: [half, half] } }, PUBLIC);
+    expect(await fetchMemberImage("https://img.test/a", streamed)).toEqual({ ok: false, code: "too-large" });
+    const declared = img("image/png", PNG, { "content-length": String(MAX_IMAGE_BYTES + 1) });
+    expect(await fetchMemberImage("https://img.test/a", declared)).toEqual({ ok: false, code: "too-large" });
+  });
+
+  it("never throws on a failing request", async () => {
+    const f = fakes({}, PUBLIC);
+    expect(await fetchMemberImage("https://img.test/a", f)).toEqual({ ok: false, code: "unreachable" });
   });
 });
