@@ -28,7 +28,7 @@ import {
   getEventsForOwner,
   saveEvent,
 } from "@/lib/stores/event-store";
-import { ownerHasDraftArtwork } from "@/lib/stores/member-event-page-store";
+import { ownerHasDraftArtwork, releaseDraftArtwork } from "@/lib/stores/member-event-page-store";
 import { getUnifiedCalendarEnabled } from "@/lib/stores/unified-calendar-store";
 import {
   holdEditProposal,
@@ -277,6 +277,9 @@ export async function POST(request: NextRequest) {
     }
     throw err;
   }
+  // The event now holds the file: detach it from the draft, so dismissing or
+  // retiring that draft can never delete an artwork a saved event uses.
+  if (attachments) await releaseDraftArtwork(ownerId, attachments[0]);
   return NextResponse.json(
     isAdmin || trusted ? { ok: true, event } : { ok: true, event, pending: true },
   );

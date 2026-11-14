@@ -35,6 +35,9 @@ const PAUSE_MS = 300;
 // ponytail: at most this many image downloads per check keeps a run inside the
 // cron's time budget; later drafts simply get no artwork. Raise if pages carry more.
 const MAX_ARTWORK_PER_CHECK = 12;
+// No new download starts after this, so artwork adds ~a minute at worst (one in-flight
+// download can still take its 15 s) to a check that already budgets ~75 s per page.
+const ARTWORK_BUDGET_MS = 45_000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -49,7 +52,9 @@ async function fetchArtwork(ownerId: string, drafts: { id: string; imageUrl?: st
 
   const fetched = new Map<string, Awaited<ReturnType<typeof fetchMemberImage>>>();
   let downloads = 0;
+  const stopAt = Date.now() + ARTWORK_BUDGET_MS;
   for (const d of withImage) {
+    if (Date.now() > stopAt) break;
     try {
       let img = fetched.get(d.imageUrl!);
       if (!img) {

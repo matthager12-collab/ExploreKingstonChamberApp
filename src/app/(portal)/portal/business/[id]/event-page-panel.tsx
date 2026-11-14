@@ -98,7 +98,8 @@ export function EventPagePanel({
   setDrafts: Dispatch<SetStateAction<PanelDraft[]>>;
   /** Hand a pre-filled editor request to the event editor. */
   onEdit: (prefill: EventPrefill) => void;
-  /** A suggestion is open in the editor: publishing refreshes the page and would wipe it. */
+  /** A suggestion is open in the editor: publish (refreshes the page), dismiss (the save would
+   *  then fail) and a second Edit (replaces the open one) are all off until it closes. */
   editing: boolean;
 }) {
   const router = useRouter();
@@ -354,7 +355,7 @@ export function EventPagePanel({
                     type="button"
                     variant="ghost"
                     onClick={() => edit(d)}
-                    disabled={busy !== null}
+                    disabled={busy !== null || editing}
                     aria-label={`Edit ${d.title} before publishing`}
                   >
                     Edit
@@ -363,7 +364,7 @@ export function EventPagePanel({
                     type="button"
                     variant="ghost"
                     onClick={() => dismiss(d)}
-                    disabled={busy !== null}
+                    disabled={busy !== null || editing}
                     aria-label={`Dismiss ${d.title}`}
                   >
                     Dismiss

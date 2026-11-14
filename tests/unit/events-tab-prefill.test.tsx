@@ -117,6 +117,19 @@ describe("Edit a suggested event", () => {
     await waitFor(() => expect(screen.queryByRole("button", { name: "Dismiss Fiddle night" })).not.toBeInTheDocument());
   });
 
+  it("while the editor is open, Publish, Dismiss and Edit are off; Cancel turns them back on", async () => {
+    const user = userEvent.setup();
+    renderTab([draft()]);
+    await user.click(screen.getByRole("button", { name: "Edit Fiddle night before publishing" }));
+    for (const name of ["Publish Fiddle night", "Dismiss Fiddle night", "Edit Fiddle night before publishing"]) {
+      expect(screen.getByRole("button", { name })).toBeDisabled();
+    }
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    for (const name of ["Publish Fiddle night", "Dismiss Fiddle night", "Edit Fiddle night before publishing"]) {
+      expect(screen.getByRole("button", { name })).toBeEnabled();
+    }
+  });
+
   it("Cancel leaves the draft and sends nothing", async () => {
     const user = userEvent.setup();
     renderTab([draft()]);

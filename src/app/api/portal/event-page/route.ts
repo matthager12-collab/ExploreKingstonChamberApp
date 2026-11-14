@@ -5,7 +5,7 @@
 // PUT  { ownerId, url } — save the page url; "" clears it (drafts are kept).
 // POST { ownerId, action: "check" } — run a check now (rate limited).
 // POST { ownerId, action: "dismiss" | "published", draftId } — retire a draft
-//   (dismiss also deletes its stored artwork; publish leaves it with the event).
+//   (artwork an event didn't take is deleted; one an event took was detached from the draft).
 //
 // Every verb needs a session and can(user, "edit-record", ownerId). Drafts are
 // never public: publishing goes through POST /api/portal/events from the
@@ -161,8 +161,10 @@ export async function POST(request: NextRequest) {
     if (!retired) {
       return NextResponse.json({ error: "Draft not found" }, { status: 404 });
     }
-    // Dismiss throws the pulled-in artwork away; publish handed it to the event.
-    if (status === "dismissed" && retired.artworkRef) await deleteAttachment(retired.artworkRef);
+    // A draft still holding artwork was not given it to an event (dismissed, or
+    // published with "Include artwork" off): delete the file. An event that took
+    // the artwork already detached it from the draft (POST /api/portal/events).
+    if (retired.artworkRef) await deleteAttachment(retired.artworkRef);
     return NextResponse.json({ ok: true });
   }
 

@@ -39,7 +39,7 @@ export function EventsTab({
       setNotice("");
     } catch {
       // The event IS saved; keep the draft visible so nothing is lost, and say so.
-      setNotice("Your event was saved, but its suggestion is still listed. Dismiss it to clear it.");
+      setNotice("Your event was saved, but its suggestion is still listed. Dismiss it to clear it. Its artwork stays with your event.");
     }
   }
 

@@ -10,6 +10,7 @@ export {
   listPagesDue,
   ownerHasDraftArtwork,
   recordCheck,
+  releaseDraftArtwork,
   saveEventPage,
   setDraftArtwork,
   setDraftStatus,

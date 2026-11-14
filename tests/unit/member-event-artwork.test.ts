@@ -103,6 +103,7 @@ const eventReq = (body: unknown) =>
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
+const NEW_EVENT = { title: "Fiddle night", start: "2099-03-01T19:00", description: "d", category: "music" };
 const ev = (title: string, imageUrl?: string, date = "2099-01-05") => ({
   title,
   start: `${date}T19:00`,
@@ -207,11 +208,29 @@ describe("dismiss / publish and the stored artwork", () => {
     expect(state.deleted).toEqual([d.artworkRef]);
   });
 
-  it("publishing hands the artwork to the event: nothing is deleted", async () => {
+  it("publishing with the artwork hands it to the event: the draft lets go, nothing is deleted", async () => {
     const { a } = fresh();
     const d = await seed(a);
+    const saved = await eventsPOST(eventReq({ ...NEW_EVENT, ownerId: a, attachments: [d.artworkRef] }));
+    expect(saved.status).toBe(200);
     expect((await POST(req("POST", { ownerId: a, action: "published", draftId: d.id }))).status).toBe(200);
     expect(state.deleted).toEqual([]);
+  });
+
+  it("dismissing after the event took the artwork (retire had failed) deletes nothing", async () => {
+    const { a } = fresh();
+    const d = await seed(a);
+    await eventsPOST(eventReq({ ...NEW_EVENT, ownerId: a, attachments: [d.artworkRef] }));
+    expect((await POST(req("POST", { ownerId: a, action: "dismiss", draftId: d.id }))).status).toBe(200);
+    expect(state.deleted).toEqual([]);
+  });
+
+  it("publishing with 'Include artwork' off deletes the file the event did not take", async () => {
+    const { a } = fresh();
+    const d = await seed(a);
+    await eventsPOST(eventReq({ ...NEW_EVENT, ownerId: a })); // no attachments
+    expect((await POST(req("POST", { ownerId: a, action: "published", draftId: d.id }))).status).toBe(200);
+    expect(state.deleted).toEqual([d.artworkRef]);
   });
 
   it("another owner cannot dismiss a draft (and so cannot delete its artwork)", async () => {
@@ -259,6 +278,12 @@ describe("POST /api/portal/events attachments", () => {
     asMember(b);
     const res = await eventsPOST(eventReq({ ...NEW, ownerId: b, attachments: [ref] }));
     expect(res.status).toBe(400);
+  });
+
+  it("once an event has taken the artwork, the same ref cannot be attached again", async () => {
+    const { a, ref } = await ownerWithArtwork();
+    expect((await eventsPOST(eventReq({ ...NEW, ownerId: a, attachments: [ref] }))).status).toBe(200);
+    expect((await eventsPOST(eventReq({ ...NEW, ownerId: a, attachments: [ref] }))).status).toBe(400);
   });
 
   it("a dismissed draft's ref is a 400 (the file is gone)", async () => {

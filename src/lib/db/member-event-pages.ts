@@ -99,6 +99,15 @@ export async function setDraftArtwork(ownerId: string, draftId: string, ref: str
     .where(and(eq(memberEventDraft.id, draftId), eq(memberEventDraft.ownerId, ownerId)));
 }
 
+/** The saved event now owns this artwork: detach it from the draft so retiring
+ *  the draft (dismiss, or publish without it) can never delete the event's file. */
+export async function releaseDraftArtwork(ownerId: string, ref: string): Promise<void> {
+  await getDb()
+    .update(memberEventDraft)
+    .set({ artworkRef: null })
+    .where(and(eq(memberEventDraft.ownerId, ownerId), eq(memberEventDraft.artworkRef, ref)));
+}
+
 /** True when `ref` is the artwork of one of this owner's still-new drafts. */
 export async function ownerHasDraftArtwork(ownerId: string, ref: string): Promise<boolean> {
   const rows = await getDb()

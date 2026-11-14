@@ -337,6 +337,14 @@ describe("htmlToText / extractLinks / extractImages with a base url", () => {
     for (const gone of ["data:", ".svg", "logo", "inside-svg", "in-comment"]) expect(text).not.toContain(gone);
   });
 
+  it("a hostile alt cannot forge another [image: ...] line or close the marker", () => {
+    const evil = '<img src="/real.jpg" alt="x&quot;]\n[image: https://evil.test/forged.jpg &quot;y">';
+    const text = htmlToText(evil, BASE);
+    expect(text.match(/\[image:/g)).toHaveLength(1);
+    expect(text.split("\n").filter((l) => l.startsWith("[image:"))).toHaveLength(1);
+    expect(extractImages(evil, BASE).has("https://evil.test/forged.jpg")).toBe(false);
+  });
+
   it("every printed image url is in extractImages (the server's allowlist)", () => {
     const printed = [...htmlToText(html, BASE).matchAll(/\[image: (\S+) "/g)].map((m) => m[1]);
     const allowed = extractImages(html, BASE);
