@@ -30,7 +30,8 @@ import { buildSeries, dayNumber } from "./member-page-series";
 /** Pinned on purpose: a silent model upgrade would change what lands in members' draft lists.
  *  MEMBER_EVENTS_MODEL overrides it for evaluation runs only. */
 export const MODEL = "claude-haiku-5-5";
-const MAX_OUTPUT_TOKENS = 4_000;
+// 4k truncated real pages once image urls were added (Cellar Cat eval, 2026-11-13).
+const MAX_OUTPUT_TOKENS = 8_000;
 const TIMEOUT_MS = 60_000;
 export const MAX_EVENTS = 30;
 const MAX_DAYS_AHEAD = 365;
@@ -55,7 +56,7 @@ export interface DraftEvent {
 
 export type ExtractResult =
   | { ok: true; events: DraftEvent[] }
-  | { ok: false; reason: "not-configured" | "failed" | "bad-reply" };
+  | { ok: false; reason: "not-configured" | "failed" | "bad-reply" | "truncated" };
 
 const SYSTEM = [
   "You read the text of a business's events web page and list its upcoming events.",
@@ -249,13 +250,23 @@ export async function extractPageEvents(
       ],
       output_config: { format: { type: "json_schema", schema: OUTPUT_SCHEMA as never } },
     });
+    // A reply cut off at the token cap is unparseable; say so instead of "failed".
+    if (response.stop_reason === "max_tokens") {
+      console.warn("member event page extraction truncated at max_tokens");
+      return { ok: false, reason: "truncated" };
+    }
     const block = response.content.find((b) => b.type === "text");
     if (!block || block.type !== "text") return { ok: false, reason: "bad-reply" };
     const events = validateEvents(JSON.parse(block.text), today, opts.links, opts.images);
     return events ? { ok: true, events } : { ok: false, reason: "bad-reply" };
-  } catch {
-    // Unlogged detail on purpose: an error can echo the page back.
-    console.warn("member event page extraction unavailable");
+  } catch (err) {
+    // Only the error class and HTTP status: the message can echo the page back.
+    const status = (err as { status?: unknown })?.status;
+    console.warn(
+      "member event page extraction unavailable",
+      err instanceof Error ? err.constructor.name : typeof err,
+      typeof status === "number" ? status : "",
+    );
     return { ok: false, reason: "failed" };
   }
 }
